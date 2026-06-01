@@ -20,9 +20,6 @@ import objects.Note;
 import objects.NoteSplash;
 #if HSCRIPT_ALLOWED
 import psychlua.HScript;
-import crowplexus.iris.Iris;
-import crowplexus.hscript.Expr.Error as IrisError;
-import crowplexus.hscript.Printer;
 #end
 
 #if cpp
@@ -102,24 +99,18 @@ class LoadingState extends MusicBeatState {
 		if (Mods.currentModDirectory != null && Mods.currentModDirectory.trim().length > 0) {
 			var scriptPath:String = 'mods/${Mods.currentModDirectory}/data/LoadingScreen.hx'; // mods/My-Mod/data/LoadingScreen.hx
 			if (FileSystem.exists(scriptPath)) {
-				try {
-					hscript = new HScript(null, scriptPath);
-					hscript.set('getLoaded', function() return loaded);
-					hscript.set('getLoadMax', function() return loadMax);
-					hscript.set('barBack', barBack);
-					hscript.set('bar', bar);
+				hscript = new HScript(null, scriptPath);
+				hscript.set('getLoaded', function() return loaded);
+				hscript.set('getLoadMax', function() return loadMax);
+				hscript.set('barBack', barBack);
+				hscript.set('bar', bar);
 
-					if (hscript.exists('onCreate')) {
-						hscript.call('onCreate');
-						trace('initialized hscript interp successfully: $scriptPath');
-						return super.create();
-					} else {
-						trace('"$scriptPath" contains no \"onCreate" function, stopping script.');
-					}
-				} catch (e:IrisError) {
-					var pos:HScriptInfos = cast {fileName: scriptPath, showLine: false};
-					Iris.error(Printer.errorToString(e, false), pos);
-					var hscript:HScript = cast(Iris.instances.get(scriptPath), HScript);
+				if (!hscript.failed && hscript.exists('onCreate')) {
+					hscript.call('onCreate');
+					trace('initialized hscript interp successfully: $scriptPath');
+					return super.create();
+				} else if (!hscript.failed) {
+					trace('"$scriptPath" contains no \"onCreate" function, stopping script.');
 				}
 				if (hscript != null)
 					hscript.destroy();

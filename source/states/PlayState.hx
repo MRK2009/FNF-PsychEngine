@@ -40,10 +40,7 @@ import psychlua.LuaUtils;
 import psychlua.HScript;
 #end
 #if HSCRIPT_ALLOWED
-import psychlua.HScript.HScriptInfos;
-import crowplexus.iris.Iris;
-import crowplexus.hscript.Expr.Error as IrisError;
-import crowplexus.hscript.Printer;
+import psychlua.HScript;
 #end
 
 /**
@@ -819,7 +816,7 @@ class PlayState extends MusicBeatState {
 		}
 
 		if (doPush) {
-			if (Iris.instances.exists(scriptFile))
+			if (HScript.instances.exists(scriptFile))
 				doPush = false;
 
 			if (doPush)
@@ -3433,7 +3430,7 @@ class PlayState extends MusicBeatState {
 		#end
 
 		if (FileSystem.exists(scriptToLoad)) {
-			if (Iris.instances.exists(scriptToLoad))
+			if (HScript.instances.exists(scriptToLoad))
 				return false;
 
 			initHScript(scriptToLoad);
@@ -3443,22 +3440,19 @@ class PlayState extends MusicBeatState {
 	}
 
 	public function initHScript(file:String) {
-		var newScript:HScript = null;
-		try {
-			newScript = new HScript(null, file);
-			if (!newScript.blocked) {
-				if (newScript.exists('onCreate'))
-					newScript.call('onCreate');
-				trace('initialized hscript interp successfully: $file');
-			}
-			hscriptArray.push(newScript);
-		} catch (e:IrisError) {
-			var pos:HScriptInfos = cast {fileName: file, showLine: false};
-			Iris.error(Printer.errorToString(e, false), pos);
-			var newScript:HScript = cast(Iris.instances.get(file), HScript);
-			if (newScript != null)
-				newScript.destroy();
+		// insanity.Script reports parse/exec errors through HScript's static
+		// loggers instead of throwing, so we check `failed` rather than catch.
+		var newScript:HScript = new HScript(null, file);
+		if (newScript.failed) {
+			newScript.destroy();
+			return;
 		}
+		if (!newScript.blocked) {
+			if (newScript.exists('onCreate'))
+				newScript.call('onCreate');
+			trace('initialized hscript interp successfully: $file');
+		}
+		hscriptArray.push(newScript);
 	}
 	#end
 

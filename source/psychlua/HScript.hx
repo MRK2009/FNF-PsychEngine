@@ -8,11 +8,9 @@ import psychlua.CustomSubstate;
 import psychlua.FunkinLua;
 #end
 #if HSCRIPT_ALLOWED
-import crowplexus.iris.Iris;
-import crowplexus.iris.IrisConfig;
-import crowplexus.hscript.Expr.Error as IrisError;
-import crowplexus.hscript.Printer;
-import haxe.ValueException;
+import insanity.Script;
+import insanity.backend.Interp;
+import insanity.Config.ConfigBlacklistKind;
 
 typedef HScriptInfos = {
 	> haxe.PosInfos,
@@ -23,10 +21,65 @@ typedef HScriptInfos = {
 	#end
 }
 
-class HScript extends Iris {
+// Result of calling a function inside an HScript.
+// Mirrors the old crowplexus IrisCall shape so call sites are unchanged.
+typedef HScriptCall = {
+	var funName:String;
+	var signature:Dynamic;
+	var returnValue:Dynamic;
+}
+
+// Wraps an insanity.Script (formerly extended crowplexus.iris.Iris).
+// The public surface (preset() globals, call/set/exists, the runHaxeCode
+// Lua bridge, the `instances` registry and the static error/warn loggers)
+// is kept identical so the rest of the engine doesn't need to know which
+// interpreter backs it.
+class HScript {
+	public var script:Script;
+
+	public var interp(get, never):Interp;
+	inline function get_interp():Interp
+		return (script != null ? script.interp : null);
+
+	public var name:String; // registry key (script path or parent Lua name)
 	public var filePath:String;
 	public var modFolder:String;
 	public var returnValue:Dynamic;
+	public var scriptCode:String;
+
+	public var origin:String;
+	public var blocked:Bool = false;
+	public var failed:Bool = false;
+
+	// Replaces crowplexus Iris.instances -- lets PlayState/LoadingState/FunkinLua
+	// check whether a script path is already running and fetch it by name.
+	public static var instances:Map<String, HScript> = new Map();
+
+	/**
+	 * One-time setup of insanity's global scripting config. Mirrors
+	 * ModSecurity.BLOCKED_CLASSES into insanity's type blacklist so that scripts
+	 * resolving them through the Type/Reflect/Std proxies get null back -- the
+	 * defense-in-depth equivalent of the old PatchIris macro. The primary gate
+	 * (per-mod trust + source pattern scanning) still lives in ModSecurity and
+	 * is interpreter-agnostic, so it is unaffected by the Iris -> insanity swap.
+	 *
+	 * Call once at boot (see Main.setupGame).
+	 */
+	public static function setupConfig():Void {
+		// Use our interpreter so scripts can reference the creating state's
+		// fields as bare identifiers (hscript-iris CustomInterp back-compat).
+		insanity.Config.interpClass = PsychInterp;
+		#if MODS_ALLOWED
+		var byType:Array<String> = insanity.Config.blacklist.get(ByType);
+		if (byType == null) {
+			byType = [];
+			insanity.Config.blacklist.set(ByType, byType);
+		}
+		for (name => _ in backend.ModSecurity.BLOCKED_CLASSES)
+			if (name.indexOf('.') >= 0 && !byType.contains(name)) // fully-qualified names only
+				byType.push(name);
+		#end
+	}
 
 	#if LUA_ALLOWED
 	public var parentLua:FunkinLua;
@@ -42,38 +95,17 @@ class HScript extends Iris {
 		var hs:HScript = try parent.hscript catch (e) null;
 		if (hs == null) {
 			trace('initializing haxe interp for: ${parent.scriptName}');
-			try {
-				parent.hscript = new HScript(parent, code, varsToBring);
-			} catch (e:IrisError) {
-				var pos:HScriptInfos = cast {fileName: parent.scriptName, isLua: true};
-				if (parent.lastCalledFunction != '')
-					pos.funcName = parent.lastCalledFunction;
-				Iris.error(Printer.errorToString(e, false), pos);
-				parent.hscript = null;
-			}
+			parent.hscript = new HScript(parent, code, varsToBring);
 		} else {
-			try {
-				hs.scriptCode = code;
-				hs.varsToBring = varsToBring;
-				hs.parse(true);
-				var ret:Dynamic = hs.execute();
-				hs.returnValue = ret;
-			} catch (e:IrisError) {
-				var pos:HScriptInfos = cast hs.interp.posInfos();
-				pos.isLua = true;
-				if (parent.lastCalledFunction != '')
-					pos.funcName = parent.lastCalledFunction;
-				Iris.error(Printer.errorToString(e, false), pos);
-				hs.returnValue = null;
-			}
+			hs.scriptCode = code;
+			hs.varsToBring = varsToBring;
+			hs.script.parse(code);
+			hs.run();
 		}
 	}
 	#end
 
-	public var origin:String;
-	public var blocked:Bool = false;
-
-	override public function new(?parent:Dynamic, ?file:String, ?varsToBring:Any = null, ?manualRun:Bool = false) {
+	public function new(?parent:Dynamic, ?file:String, ?varsToBring:Any = null, ?manualRun:Bool = false) {
 		if (file == null)
 			file = '';
 
@@ -92,11 +124,6 @@ class HScript extends Iris {
 		// Security gate: standalone HScripts loaded from a blocked mod are not run.
 		// HScripts spawned by a Lua parent inherit the parent's already-vetted trust state.
 		if (parent == null && this.modFolder != null && backend.ModSecurity.isBlocked(this.modFolder)) {
-			super('', new IrisConfig(file, false, false));
-			var customInterp:CustomInterp = new CustomInterp();
-			customInterp.parentInstance = FlxG.state;
-			customInterp.showPosOnLog = false;
-			this.interp = customInterp;
 			this.blocked = true;
 			trace('HScript: blocked $file -- mod "${this.modFolder}" not trusted');
 			return;
@@ -116,11 +143,20 @@ class HScript extends Iris {
 		if (scriptName == null && parent != null)
 			scriptName = parent.scriptName;
 		#end
-		super(scriptThing, new IrisConfig(scriptName, false, false));
-		var customInterp:CustomInterp = new CustomInterp();
-		customInterp.parentInstance = FlxG.state;
-		customInterp.showPosOnLog = false;
-		this.interp = customInterp;
+
+		this.scriptCode = scriptThing;
+		this.name = (scriptName != null ? scriptName : (origin != null ? origin : 'hscript'));
+
+		script = new Script(scriptThing, this.name);
+		hookErrors();
+		// Bare-identifier access to the creating state's fields (back-compat).
+		if (interp != null && (interp is PsychInterp))
+			cast(interp, PsychInterp).parentInstance = FlxG.state;
+		// insanity.Script parses in its constructor with the default (trace)
+		// handler; re-parse so parse errors reach our debug-console logger.
+		if (script.program == null)
+			script.parse(scriptThing);
+
 		#if LUA_ALLOWED
 		parentLua = parent;
 		if (parent != null) {
@@ -128,35 +164,89 @@ class HScript extends Iris {
 			this.modFolder = parent.modFolder;
 		}
 		#end
-		preset();
+
+		instances.set(this.name, this);
+
 		this.varsToBring = varsToBring;
-		if (!manualRun) {
-			try {
-				var ret:Dynamic = execute();
-				returnValue = ret;
-			} catch (e:IrisError) {
-				returnValue = null;
-				this.destroy();
-				throw e;
-			} catch (e:Dynamic) {
-				// Iris.execute can also throw ValueException / generic
-				// haxe.Exception (e.g. from Reflect.callMethod inside the
-				// interpreter); without this catch the partially-constructed
-				// HScript leaks and its global Iris listener stays registered.
-				returnValue = null;
-				this.destroy();
-				throw e;
-			}
+
+		if (!manualRun)
+			run();
+	}
+
+	/**
+	 * Executes the parsed program. We deliberately bypass `insanity.Script.start()`
+	 * because it calls `interp.setDefaults()` which WIPES the variables map -- that
+	 * would erase every global we inject in `preset()`. Instead we run setDefaults
+	 * first, then inject our globals, then execute.
+	 */
+	public function run():Dynamic {
+		returnValue = null;
+		if (script == null || script.program == null)
+			return null;
+
+		script.setDefaults(); // wipes variables + restores this/script/interp + Config globals
+		preset(); // inject engine globals AFTER the wipe
+		applyVarsToBring();
+
+		try {
+			returnValue = interp.execute(script.program);
+		} catch (e:haxe.Exception) {
+			failed = true;
+			returnValue = null;
+			HScript.error('${e.message}', errorPos());
+		}
+		return returnValue;
+	}
+
+	function applyVarsToBring():Void {
+		if (varsToBring == null)
+			return;
+		for (key in Reflect.fields(varsToBring)) {
+			var k:String = key.trim();
+			set(k, Reflect.field(varsToBring, k));
 		}
 	}
 
-	var varsToBring(default, set):Any = null;
+	function hookErrors() {
+		script.onParsingError = function(e:haxe.Exception) {
+			failed = true;
+			HScript.error('${e.message}', errorPos());
+		};
+		script.onProgramError = function(e:haxe.Exception) {
+			failed = true;
+			HScript.error('${e.message}', errorPos());
+		};
+	}
 
-	override function preset() {
-		super.preset();
+	function errorPos(?funcName:String):HScriptInfos {
+		var pos:HScriptInfos = (interp != null) ? cast interp.posInfos() : cast {fileName: this.name, showLine: false};
+		if (funcName != null)
+			pos.funcName = funcName;
+		#if LUA_ALLOWED
+		if (parentLua != null) {
+			pos.isLua = true;
+			if (parentLua.lastCalledFunction != '')
+				pos.funcName = parentLua.lastCalledFunction;
+		}
+		#end
+		return pos;
+	}
 
+	public var varsToBring:Any = null;
+
+	public function set(name:String, value:Dynamic):Void {
+		if (script != null)
+			script.variables.set(name, value);
+	}
+
+	public function get(name:String):Dynamic
+		return (script != null) ? script.variables.get(name) : null;
+
+	public function exists(name:String):Bool
+		return (script != null && script.variables.exists(name));
+
+	function preset() {
 		// Some very commonly used classes
-		set('Type', Type);
 		#if sys
 		set('File', File);
 		set('FileSystem', FileSystem);
@@ -188,7 +278,6 @@ class HScript extends Iris {
 		set('ErrorHandledRuntimeShader', shaders.ErrorHandledShader.ErrorHandledRuntimeShader);
 		#end
 		set('ShaderFilter', openfl.filters.ShaderFilter);
-		set('StringTools', StringTools);
 		#if flixel_animate
 		set('FlxAnimate', FlxAnimate);
 		#end
@@ -219,7 +308,7 @@ class HScript extends Iris {
 		set('getModSetting', function(saveTag:String, ?modName:String = null) {
 			if (modName == null) {
 				if (this.modFolder == null) {
-					Iris.error('getModSetting: Argument #2 is null and script is not inside a packed Mod folder!', this.interp.posInfos());
+					HScript.error('getModSetting: Argument #2 is null and script is not inside a packed Mod folder!', errorPos());
 					return null;
 				}
 				modName = this.modFolder;
@@ -340,7 +429,7 @@ class HScript extends Iris {
 			if (funk != null)
 				funk.addLocalCallback(name, func);
 			else
-				Iris.error('createCallback ($name): 3rd argument is null', this.interp.posInfos());
+				HScript.error('createCallback ($name): 3rd argument is null', errorPos());
 		});
 		#end
 
@@ -351,8 +440,8 @@ class HScript extends Iris {
 					str = libPackage + '.';
 
 				set(libName, #if MODS_ALLOWED backend.ModSecurity.safeResolveClass(str + libName) #else Type.resolveClass(str + libName) #end);
-			} catch (e:IrisError) {
-				Iris.error(Printer.errorToString(e, false), this.interp.posInfos());
+			} catch (e:haxe.Exception) {
+				HScript.error('${e.message}', errorPos());
 			}
 		});
 		#if LUA_ALLOWED
@@ -368,6 +457,10 @@ class HScript extends Iris {
 		set('customSubstate', CustomSubstate.instance);
 		set('customSubstateName', CustomSubstate.name);
 
+		// Class-based scripted states (states/<Name>.hx extending ScriptedMusicBeatState).
+		set('switchToState', function(name:String, ?args:Array<Dynamic>) return scripting.ScriptedStates.switchToState(name, args));
+		set('openScriptedSubstate', function(name:String, ?args:Array<Dynamic>) return scripting.ScriptedStates.openSubstate(name, args));
+
 		set('Function_Stop', LuaUtils.Function_Stop);
 		set('Function_Continue', LuaUtils.Function_Continue);
 		set('Function_StopLua', LuaUtils.Function_StopLua); // doesnt do much cuz HScript has a lower priority than Lua
@@ -381,7 +474,7 @@ class HScript extends Iris {
 			function(codeToRun:String, ?varsToBring:Any = null, ?funcToRun:String = null, ?funcArgs:Array<Dynamic> = null):Dynamic {
 				initHaxeModuleCode(funk, codeToRun, varsToBring);
 				if (funk.hscript != null) {
-					final retVal:IrisCall = funk.hscript.call(funcToRun, funcArgs);
+					final retVal:HScriptCall = funk.hscript.call(funcToRun, funcArgs);
 					if (retVal != null) {
 						return (LuaUtils.isLuaSupported(retVal.returnValue)) ? retVal.returnValue : null;
 					} else if (funk.hscript.returnValue != null) {
@@ -393,7 +486,7 @@ class HScript extends Iris {
 
 		funk.addLocalCallback("runHaxeFunction", function(funcToRun:String, ?funcArgs:Array<Dynamic> = null) {
 			if (funk.hscript != null) {
-				final retVal:IrisCall = funk.hscript.call(funcToRun, funcArgs);
+				final retVal:HScriptCall = funk.hscript.call(funcToRun, funcArgs);
 				if (retVal != null) {
 					return (LuaUtils.isLuaSupported(retVal.returnValue)) ? retVal.returnValue : null;
 				}
@@ -401,7 +494,7 @@ class HScript extends Iris {
 				var pos:HScriptInfos = cast {fileName: funk.scriptName, showLine: false};
 				if (funk.lastCalledFunction != '')
 					pos.funcName = funk.lastCalledFunction;
-				Iris.error("runHaxeFunction: HScript has not been initialized yet! Use \"runHaxeCode\" to initialize it", pos);
+				HScript.error("runHaxeFunction: HScript has not been initialized yet! Use \"runHaxeCode\" to initialize it", pos);
 			}
 			return null;
 		});
@@ -425,7 +518,7 @@ class HScript extends Iris {
 			if (funk.hscript == null)
 				return;
 
-			var pos:HScriptInfos = cast funk.hscript.interp.posInfos();
+			var pos:HScriptInfos = funk.hscript.errorPos();
 			pos.showLine = false;
 			if (funk.lastCalledFunction != '')
 				pos.funcName = funk.lastCalledFunction;
@@ -433,82 +526,78 @@ class HScript extends Iris {
 			try {
 				if (c != null)
 					funk.hscript.set(libName, c);
-			} catch (e:IrisError) {
-				Iris.error(Printer.errorToString(e, false), pos);
+			} catch (e:haxe.Exception) {
+				HScript.error('${e.message}', pos);
 			}
 			FunkinLua.lastCalledScript = funk;
 			if (FunkinLua.getBool('luaDebugMode') && FunkinLua.getBool('luaDeprecatedWarnings'))
-				Iris.warn("addHaxeLibrary is deprecated! Import classes through \"import\" in HScript!", pos);
+				HScript.warn("addHaxeLibrary is deprecated! Import classes through \"import\" in HScript!", pos);
 		});
 	}
 	#end
 
-	override function call(funcToRun:String, ?args:Array<Dynamic>):IrisCall {
-		if (funcToRun == null || interp == null)
+	public function call(funcToRun:String, ?args:Array<Dynamic>):HScriptCall {
+		if (funcToRun == null || script == null)
 			return null;
 
 		if (!exists(funcToRun)) {
-			Iris.error('No function named: $funcToRun', this.interp.posInfos());
+			HScript.error('No function named: $funcToRun', errorPos());
 			return null;
 		}
 
 		try {
-			var func:Dynamic = interp.variables.get(funcToRun); // function signature
+			var func:Dynamic = script.variables.get(funcToRun); // function signature
 			if (!Reflect.isFunction(func)) {
-				// `exists()` returns true for any variable; Reflect.callMethod
-				// on a non-function value throws a generic exception that the
-				// IrisError/ValueException catch arms below don't cover, which
-				// then propagates out and breaks the calling Lua frame.
+				// `exists()` is true for any variable; calling a non-function
+				// would throw a generic exception, so bail quietly instead.
 				return null;
 			}
 			final ret = Reflect.callMethod(null, func, args ?? []);
 			return {funName: funcToRun, signature: func, returnValue: ret};
-		} catch (e:IrisError) {
-			var pos:HScriptInfos = cast this.interp.posInfos();
-			pos.funcName = funcToRun;
-			#if LUA_ALLOWED
-			if (parentLua != null) {
-				pos.isLua = true;
-				if (parentLua.lastCalledFunction != '')
-					pos.funcName = parentLua.lastCalledFunction;
-			}
-			#end
-			Iris.error(Printer.errorToString(e, false), pos);
-		} catch (e:ValueException) {
-			var pos:HScriptInfos = cast this.interp.posInfos();
-			pos.funcName = funcToRun;
-			#if LUA_ALLOWED
-			if (parentLua != null) {
-				pos.isLua = true;
-				if (parentLua.lastCalledFunction != '')
-					pos.funcName = parentLua.lastCalledFunction;
-			}
-			#end
-			Iris.error('$e', pos);
+		} catch (e:haxe.Exception) {
+			HScript.error('${e.message}', errorPos(funcToRun));
 		}
 		return null;
 	}
 
-	override public function destroy() {
+	public function destroy():Void {
+		if (this.name != null && instances.get(this.name) == this)
+			instances.remove(this.name);
 		origin = null;
 		#if LUA_ALLOWED parentLua = null; #end
-		super.destroy();
+		script = null;
 	}
 
-	function set_varsToBring(values:Any) {
-		if (varsToBring != null)
-			for (key in Reflect.fields(varsToBring))
-				if (exists(key.trim()))
-					interp.variables.remove(key.trim());
+	// ___________________________ Debug-console logging ___________________________
+	// Replaces the crowplexus Iris.error / Iris.warn / Iris.fatal hooks that
+	// Main.hx used to wire up. Formats a position-aware message and mirrors it
+	// to the in-game debug overlay.
+	public static function error(x:String, ?pos:HScriptInfos):Void
+		logToDebug('ERROR', x, pos, FlxColor.RED);
 
-		if (values != null) {
-			for (key in Reflect.fields(values)) {
-				key = key.trim();
-				set(key, Reflect.field(values, key));
-			}
+	public static function warn(x:String, ?pos:HScriptInfos):Void
+		logToDebug('WARNING', x, pos, FlxColor.YELLOW);
+
+	public static function fatal(x:String, ?pos:HScriptInfos):Void
+		logToDebug('FATAL', x, pos, 0xFFBB0000);
+
+	static function logToDebug(level:String, x:String, ?pos:HScriptInfos, color:FlxColor):Void {
+		var newPos:HScriptInfos = (pos != null) ? pos : cast {fileName: 'hscript', showLine: false};
+		if (newPos.showLine == null)
+			newPos.showLine = true;
+		var msgInfo:String = (newPos.funcName != null ? '(${newPos.funcName}) - ' : '') + '${newPos.fileName}:';
+		#if LUA_ALLOWED
+		if (newPos.isLua == true) {
+			msgInfo += 'HScript:';
+			newPos.showLine = false;
 		}
-
-		return varsToBring = values;
+		#end
+		if (newPos.showLine == true)
+			msgInfo += '${newPos.lineNumber}:';
+		msgInfo += ' $x';
+		trace('$level: $msgInfo');
+		if (PlayState.instance != null)
+			PlayState.instance.addTextToDebug('$level: $msgInfo', color);
 	}
 }
 
@@ -550,69 +639,6 @@ class CustomFlxColor {
 
 	public static function fromString(str:String):Int
 		return cast FlxColor.fromString(str);
-}
-
-class CustomInterp extends crowplexus.hscript.Interp {
-	public var parentInstance(default, set):Dynamic = [];
-
-	private var _instanceFields:Array<String>;
-
-	function set_parentInstance(inst:Dynamic):Dynamic {
-		parentInstance = inst;
-		if (parentInstance == null) {
-			_instanceFields = [];
-			return inst;
-		}
-		_instanceFields = Type.getInstanceFields(Type.getClass(inst));
-		return inst;
-	}
-
-	public function new() {
-		super();
-	}
-
-	override function fcall(o:Dynamic, funcToRun:String, args:Array<Dynamic>):Dynamic {
-		for (_using in usings) {
-			var v = _using.call(o, funcToRun, args);
-			if (v != null)
-				return v;
-		}
-
-		var f = get(o, funcToRun);
-
-		if (f == null) {
-			Iris.error('Tried to call null function $funcToRun', posInfos());
-			return null;
-		}
-
-		return Reflect.callMethod(o, f, args);
-	}
-
-	override function resolve(id:String):Dynamic {
-		if (locals.exists(id)) {
-			var l = locals.get(id);
-			return l.r;
-		}
-
-		if (variables.exists(id)) {
-			var v = variables.get(id);
-			return v;
-		}
-
-		if (imports.exists(id)) {
-			var v = imports.get(id);
-			return v;
-		}
-
-		if (parentInstance != null && _instanceFields.contains(id)) {
-			var v = Reflect.getProperty(parentInstance, id);
-			return v;
-		}
-
-		error(EUnknownVariable(id));
-
-		return null;
-	}
 }
 #else
 class HScript {

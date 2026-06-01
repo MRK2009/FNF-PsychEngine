@@ -23,8 +23,9 @@ Project version bumped: **1.0.4 → 1.1.1**
 | `flixel`             | 5.6.1              | **6.1.2**       | **Major** upgrade                                                                              |
 | `flixel-addons`      | 3.2.2              | **4.0.1**       | **Major** upgrade                                                                              |
 | `flixel-tools`       | 1.5.1              | 1.5.1           | unchanged                                                                                      |
-| `hscript-iris`       | 1.1.3              | 1.1.3           | unchanged                                                                                      |
-| `hscript`            | (transitive)       | **2.7.0**       | Now explicitly pinned                                                                          |
+| `hscript-iris`       | 1.1.3              | **removed**     | Replaced by `hscript-insanity` to gain class-based scripted states                              |
+| `hscript-insanity`   | —                  | **git (pinned)**| New: [`inky03/hscript-insanity`](https://github.com/inky03/hscript-insanity); the script interpreter, supports scripting whole classes/states |
+| `hscript`            | (transitive)       | 2.7.0           | Still a transitive dep; no longer the script interpreter                                        |
 | `tjson`              | 1.4.0              | 1.4.0           | unchanged                                                                                      |
 | `hxdiscord_rpc`      | 1.2.4              | **1.3.0**       | Minor upgrade                                                                                  |
 | `hxvlc`              | 2.0.1              | **2.2.6**       | Patch upgrades                                                                                 |

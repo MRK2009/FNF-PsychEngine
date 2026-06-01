@@ -61,11 +61,6 @@
 
 	<classpath name="source" />
 
-	<!-- Reroute every Type.resolveClass() call inside hscript-iris through
-	     ModSecurity.safeResolveClass so mod scripts can't import / instantiate
-	     blocklisted classes (ModSecurity itself, etc). -->
-	<haxeflag name="--macro" value="macros.PatchIris.patch()" if="MODS_ALLOWED" />
-
 	<!-- __________________________ Game Assets & Etc. __________________________ -->
 	
 	<!-- Turn on Crash Handler -->
@@ -123,7 +118,7 @@
 	<!--Psych stuff needed-->
 	<haxelib name="hxluajit" if="LUA_ALLOWED"/>
 	<haxelib name="hxluajit-wrapper" if="LUA_ALLOWED"/>
-	<haxelib name="hscript-iris" if="HSCRIPT_ALLOWED"/>
+	<haxelib name="hscript-insanity" if="HSCRIPT_ALLOWED"/>
 	<haxelib name="hxvlc" if="VIDEOS_ALLOWED"/>
 	<haxelib name="hxdiscord_rpc" if="DISCORD_ALLOWED"/>
 	<haxelib name="flixel-animate"/>
@@ -188,8 +183,6 @@
 	<!--Macro fixes-->
 	<haxeflag name="--macro" value="allowPackage('flash')" />
 	<haxeflag name="--macro" value="include('my.pack')" />
-
-	<haxedef name="hscriptPos" if="HSCRIPT_ALLOWED" />
 
 	<!-- _________________________________ Custom _______________________________ -->
 

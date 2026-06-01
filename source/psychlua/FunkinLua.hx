@@ -304,6 +304,16 @@ class FunkinLua {
 			return false;
 		});
 
+		#if HSCRIPT_ALLOWED
+		// Class-based scripted states (states/<Name>.hx extending ScriptedMusicBeatState).
+		Lua_helper.add_callback(lua, "switchToState", function(name:String, ?args:Array<Dynamic>) {
+			return scripting.ScriptedStates.switchToState(name, args);
+		});
+		Lua_helper.add_callback(lua, "openScriptedSubstate", function(name:String, ?args:Array<Dynamic>) {
+			return scripting.ScriptedStates.openSubstate(name, args);
+		});
+		#end
+
 		Lua_helper.add_callback(lua, "setVar", function(varName:String, value:Dynamic) {
 			MusicBeatState.getVariables().set(varName, ReflectionFunctions.parseSingleInstance(value));
 			return value;
