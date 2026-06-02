@@ -11,6 +11,15 @@ typedef ModsList = {
 
 class Mods {
 	static public var currentModDirectory:String = '';
+
+	// ── Scripted state-source (session-only) ──────────────────────────────────
+	// Controls whether/which scripted states may override the engine's core menus.
+	// `Psych (Default)` => NONE (no overrides). A launched mod => MOD(launchedMod).
+	// A scriptpack/global setup => GLOBAL. Reset every launch; never persisted.
+	public static var launchedMod:String = null;
+	public static var stateSourceMode:StateSourceMode = NONE;
+	// Entry-state name used when a mod's pack.json omits "entryState".
+	public static inline var DEFAULT_ENTRY_STATE:String = 'MainMenuState';
 	public static final ignoreModFolders:Array<String> = [
 		'characters',
 		'custom_events',
@@ -262,4 +271,58 @@ class Mods {
 			Mods.currentModDirectory = list[0];
 		#end
 	}
+
+	/** Entry-state name for a mod: pack.json "entryState", else DEFAULT_ENTRY_STATE. */
+	public static function getEntryState(?folder:String = null):String {
+		var pack:Dynamic = getPack(folder);
+		if (pack != null && pack.entryState != null) {
+			var s:String = Std.string(pack.entryState);
+			if (s.length > 0)
+				return s;
+		}
+		return DEFAULT_ENTRY_STATE;
+	}
+
+	/** A mod is launchable if it ships its entry state at states/<entry>.hx. */
+	public static function isLaunchable(?folder:String = null):Bool {
+		#if (MODS_ALLOWED && HSCRIPT_ALLOWED)
+		if (folder == null)
+			folder = currentModDirectory;
+		if (folder == null || folder.length < 1)
+			return false;
+		return FileSystem.exists(Paths.mods(folder + '/states/' + getEntryState(folder) + '.hx'));
+		#else
+		return false;
+		#end
+	}
+
+	/**
+	 * Sets the session state-source mode from ClientPrefs.stateSource.
+	 * Call once at boot (after loadTopMod) and whenever the pref changes.
+	 */
+	public static function applyStateSourcePref():Void {
+		launchedMod = null;
+		switch (Std.string(ClientPrefs.data.stateSource)) {
+			case 'From Mod':
+				#if (MODS_ALLOWED && HSCRIPT_ALLOWED)
+				if (currentModDirectory != null && currentModDirectory.length > 0 && isLaunchable(currentModDirectory)) {
+					launchedMod = currentModDirectory;
+					stateSourceMode = MOD;
+				} else
+					stateSourceMode = NONE;
+				#else
+				stateSourceMode = NONE;
+				#end
+			case 'Global Script':
+				stateSourceMode = GLOBAL;
+			default: // 'Psych (Default)' / unknown -> built-in states only
+				stateSourceMode = NONE;
+		}
+	}
+}
+
+enum StateSourceMode {
+	NONE;
+	MOD;
+	GLOBAL;
 }

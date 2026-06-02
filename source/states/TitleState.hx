@@ -65,6 +65,9 @@ class TitleState extends MusicBeatState {
 			ClientPrefs.loadPrefs();
 			flixel.FlxSprite.defaultAntialiasing = ClientPrefs.data.antialiasing;
 			Language.reloadPhrases();
+			// Decide the scripted state-source from the pref now, before the intro
+			// switches into MainMenuState (so 'From Mod' can redirect that switch).
+			#if MODS_ALLOWED Mods.applyStateSourcePref(); #end
 		}
 
 		curWacky = FlxG.random.getObject(getIntroTextShit());

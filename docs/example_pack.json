@@ -1,0 +1,20 @@
+{
+	"name": "My Awesome Mod",
+	"description": "A short blurb shown in the Mod Browser's description panel.\nUse \\n for line breaks.",
+	"color": [170, 0, 255],
+
+	"restart": false,
+	"runsGlobally": false,
+	"type": "modpack",
+
+	"iconFramerate": 10,
+	"discordRPC": "1234567890123456789",
+
+	"entryState": "MainMenuState",
+	"features": [
+		"Custom main menu",
+		"New scoring system",
+		"Extra characters"
+	],
+	"changelog": "v1.2 - added banner art\nv1.1 - new freeplay menu\nv1.0 - initial release"
+}

@@ -16,6 +16,17 @@ class MiscSettingsSubState extends BaseOptionsMenu {
 			BOOL);
 		addOption(option);
 
+		#if (MODS_ALLOWED && HSCRIPT_ALLOWED)
+		// Controls whether a mod's scripted states may take over the core menus.
+		var stateSourceOption:Option = new Option('State Source',
+			"Where the engine loads its core menu states from.\n'Psych (Default)': built-in menus only (mods provide assets).\n'From Mod': the top/launched mod's scripted states override menus.\n'Global Script': scriptpack/global mods override menus.",
+			'stateSource',
+			STRING,
+			['Psych (Default)', 'From Mod', 'Global Script']);
+		stateSourceOption.onChange = function() Mods.applyStateSourcePref();
+		addOption(stateSourceOption);
+		#end
+
 		#if MODS_ALLOWED
 		// Opener row for the per-check toggles submenu. Uses a BOOL row that
 		// always reports `true` so the checkbox is just decorative; the real

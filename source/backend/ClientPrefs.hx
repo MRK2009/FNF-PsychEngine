@@ -78,6 +78,11 @@ import states.TitleState;
 	public var discordRPC:Bool = true;
 	public var loadingScreen:Bool = true;
 	public var language:String = 'en-US';
+	// Where the engine sources its core menu states from:
+	//   'Psych (Default)' - built-in states only; mods never auto-override menus.
+	//   'From Mod'        - the launched/top mod's scripted states override menus.
+	//   'Global Script'   - scriptpack/global mods + shared scripted states override menus.
+	public var stateSource:String = 'Psych (Default)';
 	public var modSecurityEnabled:Bool = true;
 	// Per-pattern toggles for mod-security scanning. Key = ModSecurity pattern
 	// name (e.g. "saveFile", "Sys.command"). Missing entries default to enabled
