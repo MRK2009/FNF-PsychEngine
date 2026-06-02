@@ -24,7 +24,6 @@ call haxelib install openfl             9.5.2  --quiet --always --skip-dependenc
 call haxelib install flixel             6.1.2  --quiet --always --skip-dependencies
 call haxelib install flixel-addons      4.0.1  --quiet --always --skip-dependencies
 call haxelib install flixel-tools       1.5.1  --quiet --always --skip-dependencies
-call haxelib install hscript-iris       1.1.3  --quiet --always --skip-dependencies
 call haxelib install hscript            2.7.0  --quiet --always --skip-dependencies
 call haxelib install hxcpp-debug-server 1.2.4  --quiet --always --skip-dependencies
 call haxelib install hxdiscord_rpc      1.3.0  --quiet --always --skip-dependencies
@@ -42,6 +41,8 @@ call :installGit funkin.vis       https://github.com/FunkinCrew/funkVis
 call :installGit grig.audio       https://gitlab.com/haxe-grig/grig.audio
 call :installGit hxluajit         https://github.com/MAJigsaw77/hxluajit
 call :installGit hxluajit-wrapper https://github.com/MAJigsaw77/hxluajit-wrapper
+rem Script interpreter (replaces hscript-iris); pinned to match hmm.json.
+call :installGit hscript-insanity https://github.com/inky03/hscript-insanity 9b3c9f82cac3e5929ed965fdb5fbef7bbd35d41b
 
 echo.
 echo Re-asserting hxcpp = 'git' just in case and wipe any 4.3.2 version if it somehow snuck in.
@@ -76,7 +77,7 @@ pause
 exit /b 0
 
 :installGit
-rem %1 = library name, %2 = git url
+rem %1 = library name, %2 = git url, %3 = optional git ref/commit to pin
 rem Translate dots in lib name to commas for the on-disk folder (haxelib's encoding).
 set "LIB_DIR=%~1"
 set "LIB_DIR=!LIB_DIR:.=,!"
@@ -86,5 +87,5 @@ if exist ".haxelib\!LIB_DIR!" (
 	attrib -r -s -h ".haxelib\!LIB_DIR!\*.*" /s /d >nul 2>&1
 	rmdir /s /q ".haxelib\!LIB_DIR!"
 )
-call haxelib git %~1 %~2 --skip-dependencies
+call haxelib git %~1 %~2 %~3 --skip-dependencies
 exit /b 0

@@ -13,13 +13,14 @@ haxelib newrepo
 install_git () {
 	name="$1"
 	url="$2"
+	ref="$3" # optional git ref/commit to pin
 	repo_root="$(haxelib config 2>/dev/null | tr -d '\r')"
 	if [ -n "$repo_root" ] && [ -d "$repo_root/$name" ]; then
 		echo "Cleaning existing $repo_root/$name ..."
 		chmod -R u+w "$repo_root/$name" 2>/dev/null || true
 		rm -rf "$repo_root/$name"
 	fi
-	haxelib git "$name" "$url" --skip-dependencies
+	haxelib git "$name" "$url" $ref --skip-dependencies
 }
 
 echo
@@ -35,7 +36,6 @@ haxelib install openfl             9.5.2  --quiet --always --skip-dependencies
 haxelib install flixel             6.1.2  --quiet --always --skip-dependencies
 haxelib install flixel-addons      4.0.1  --quiet --always --skip-dependencies
 haxelib install flixel-tools       1.5.1  --quiet --always --skip-dependencies
-haxelib install hscript-iris       1.1.3  --quiet --always --skip-dependencies
 haxelib install hscript            2.7.0  --quiet --always --skip-dependencies
 haxelib install hxcpp-debug-server 1.2.4  --quiet --always --skip-dependencies
 haxelib install hxdiscord_rpc      1.3.0  --quiet --always --skip-dependencies
@@ -51,6 +51,8 @@ install_git funkin.vis       https://github.com/FunkinCrew/funkVis
 install_git grig.audio       https://gitlab.com/haxe-grig/grig.audio
 install_git hxluajit         https://github.com/MAJigsaw77/hxluajit
 install_git hxluajit-wrapper https://github.com/MAJigsaw77/hxluajit-wrapper
+# Script interpreter (replaces hscript-iris); pinned to match hmm.json.
+install_git hscript-insanity https://github.com/inky03/hscript-insanity 9b3c9f82cac3e5929ed965fdb5fbef7bbd35d41b
 
 echo
 echo "Re-asserting hxcpp = git and wiping any release version folders that snuck in..."
