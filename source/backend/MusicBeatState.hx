@@ -142,6 +142,15 @@ class MusicBeatState extends FlxState {
 	public static function switchState(nextState:FlxState = null) {
 		if (nextState == null)
 			nextState = FlxG.state;
+		#if HSCRIPT_ALLOWED
+		else {
+			// Let the active state-source (a launched mod / scriptpack) replace a
+			// built-in core menu with its scripted override, if one exists.
+			var scripted:MusicBeatState = scripting.ScriptedStates.coreOverride(nextState);
+			if (scripted != null)
+				nextState = scripted;
+		}
+		#end
 		if (nextState == FlxG.state) {
 			resetState();
 			return;

@@ -9,8 +9,17 @@ import insanity.Module;
 import insanity.Environment;
 import insanity.backend.types.Scripted.InsanityScriptedClass;
 import insanity.backend.types.Scripted.IInsanityType;
+import backend.Mods;
+import backend.Mods.StateSourceMode;
 import psychlua.HScript;
 import psychlua.HScript.HScriptInfos;
+
+// Which folders a scripted state may be resolved from.
+enum ResolveScope {
+	ANY; // current mod -> global mods -> shared (default, for explicit switchToState)
+	LAUNCHED; // the launched mod only (From Mod overrides)
+	GLOBALS; // global/scriptpack mods + shared (Global Script overrides)
+}
 #end
 
 /**
@@ -45,8 +54,8 @@ class ScriptedStates {
 	 * Returns null (and logs to the debug console) if the script is missing,
 	 * fails to parse, or doesn't declare a matching scripted-state class.
 	 */
-	public static function loadState(name:String, ?args:Array<Dynamic>):MusicBeatState {
-		var inst:Dynamic = instantiate('states/', name, args);
+	public static function loadState(name:String, ?args:Array<Dynamic>, scope:ResolveScope = ANY):MusicBeatState {
+		var inst:Dynamic = instantiate('states/', name, args, scope);
 		if (inst == null)
 			return null;
 		if (!(inst is MusicBeatState)) {
@@ -69,12 +78,73 @@ class ScriptedStates {
 	}
 
 	/** Loads `states/<name>.hx` and switches to it. */
-	public static function switchToState(name:String, ?args:Array<Dynamic>):Bool {
-		var state:MusicBeatState = loadState(name, args);
+	public static function switchToState(name:String, ?args:Array<Dynamic>, scope:ResolveScope = ANY):Bool {
+		var state:MusicBeatState = loadState(name, args, scope);
 		if (state == null)
 			return false;
 		MusicBeatState.switchState(state);
 		return true;
+	}
+
+	// ── Core-state override system ────────────────────────────────────────────
+	// Core engine menus that may NEVER be overridden by a mod, so the user can
+	// always reach the mods menu (and from there exit a launched mod).
+	static final NON_OVERRIDABLE:Array<String> = ['ModsMenuState'];
+
+	/**
+	 * Called from `MusicBeatState.switchState` for every state transition.
+	 * If the active state-source provides a scripted replacement for the given
+	 * built-in state, returns it; otherwise null (caller keeps the built-in).
+	 * A missing override is the common case and is handled silently.
+	 */
+	public static function coreOverride(builtin:FlxState):MusicBeatState {
+		if (Mods.stateSourceMode == NONE || builtin == null)
+			return null;
+		if (builtin is ScriptedMusicBeatState)
+			return null; // already a scripted override -- don't recurse
+
+		var clsName:String = Type.getClassName(Type.getClass(builtin));
+		if (clsName == null)
+			return null;
+		var name:String = clsName.split('.').pop();
+		if (NON_OVERRIDABLE.contains(name))
+			return null;
+
+		var scope:ResolveScope = (Mods.stateSourceMode == MOD) ? LAUNCHED : GLOBALS;
+		if (resolvePath('states/' + name + '.hx', scope) == null)
+			return null; // no override file -> stay built-in, no error
+		return loadState(name, null, scope);
+	}
+
+	/**
+	 * Enters a mod's scripted states: makes it the active source and switches to
+	 * its entry state (pack.json "entryState", default MainMenuState). One mod at
+	 * a time, so different mods never boot their own menus simultaneously.
+	 */
+	public static function launchMod(folder:String):Bool {
+		#if MODS_ALLOWED
+		if (!Mods.isLaunchable(folder))
+			return false;
+		Mods.currentModDirectory = folder;
+		Mods.launchedMod = folder;
+		Mods.stateSourceMode = MOD;
+		Mods.pushGlobalMods();
+		return switchToState(Mods.getEntryState(folder), null, LAUNCHED);
+		#else
+		return false;
+		#end
+	}
+
+	/**
+	 * Leaves a launched mod and returns to the engine's mods menu. Forces the
+	 * built-in states for the rest of the session (a full restart re-applies the
+	 * stateSource pref). Intended as the BACK target for a mod's top menu.
+	 */
+	public static function exitToEngine():Void {
+		Mods.launchedMod = null;
+		Mods.stateSourceMode = NONE;
+		Mods.loadTopMod();
+		MusicBeatState.switchState(new states.ModsMenuState());
 	}
 
 	/** Loads `substates/<name>.hx` and opens it over the current state. */
@@ -87,8 +157,8 @@ class ScriptedStates {
 	}
 
 	// Shared load/parse/instantiate pipeline for states and substates.
-	static function instantiate(subfolder:String, name:String, ?args:Array<Dynamic>):Dynamic {
-		var path:String = resolvePath(subfolder + name + '.hx');
+	static function instantiate(subfolder:String, name:String, ?args:Array<Dynamic>, scope:ResolveScope = ANY):Dynamic {
+		var path:String = resolvePath(subfolder + name + '.hx', scope);
 		if (path == null) {
 			HScript.error('Scripted state not found: ${subfolder}${name}.hx', errPos(name));
 			return null;
@@ -130,6 +200,15 @@ class ScriptedStates {
 			return null;
 		}
 
+		// Run the scripted class's methods in "safe" mode so a runtime error in
+		// create/update/beatHit/etc. is caught and logged to the debug console
+		// instead of crashing the game. Must be set after init() (which resets it
+		// from the class metadata) and before the instance is constructed.
+		cls.safe = true;
+		cls.onInstanceError = function(e:Dynamic, fun:String, ?inst:Dynamic) {
+			HScript.error('$name.$fun(): $e', errPos(name));
+		};
+
 		try {
 			return cls.typeCreateInstance(args != null ? args : []);
 		} catch (e:haxe.Exception) {
@@ -141,13 +220,32 @@ class ScriptedStates {
 	static inline function errPos(name:String):HScriptInfos
 		return cast {fileName: name, showLine: false};
 
-	// Resolves a script path: prefers the current/global mod folders, then
-	// falls back to shared assets. Mirrors PlayState.startHScriptsNamed().
-	static function resolvePath(relative:String):String {
+	// Resolves a script path within the requested scope:
+	//   ANY      - current mod -> global mods -> shared (Paths.modFolders order)
+	//   LAUNCHED - the launched mod folder only (no shared fallback)
+	//   GLOBALS  - global/scriptpack mods (in order) -> shared
+	static function resolvePath(relative:String, scope:ResolveScope = ANY):String {
 		#if MODS_ALLOWED
-		var modPath:String = Paths.modFolders(relative);
-		if (FileSystem.exists(modPath))
-			return modPath;
+		switch (scope) {
+			case LAUNCHED:
+				if (Mods.launchedMod != null && Mods.launchedMod.length > 0) {
+					var p:String = Paths.mods(Mods.launchedMod + '/' + relative);
+					if (FileSystem.exists(p))
+						return p;
+				}
+				return null; // launched-mod scope: never fall back to shared
+			case GLOBALS:
+				for (mod in Mods.getGlobalMods()) {
+					var p:String = Paths.mods(mod + '/' + relative);
+					if (FileSystem.exists(p))
+						return p;
+				}
+			// falls through to shared below
+			case ANY:
+				var modPath:String = Paths.modFolders(relative);
+				if (FileSystem.exists(modPath))
+					return modPath;
+		}
 		#end
 		var sharedPath:String = Paths.getSharedPath(relative);
 		if (FileSystem.exists(sharedPath))
@@ -207,6 +305,9 @@ class ScriptedStates {
 		s('switchToState', function(name:String, ?args:Array<Dynamic>):Bool return switchToState(name, args));
 		s('openScriptedSubstate', function(name:String, ?args:Array<Dynamic>):Bool return openSubstate(name, args));
 		s('switchState', function(state:FlxState) MusicBeatState.switchState(state));
+		// Mod launch/exit (for a mod's scripted menus to implement BACK etc.).
+		s('exitToEngine', function() exitToEngine());
+		s('launchMod', function(folder:String):Bool return launchMod(folder));
 	}
 	#end
 }

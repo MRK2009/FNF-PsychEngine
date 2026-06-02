@@ -4,10 +4,10 @@ import backend.MusicBeatSubstate;
 
 #if HSCRIPT_ALLOWED
 /**
- * Substate counterpart to `ScriptedMusicBeatState`. Lets modders script a
- * whole substate as a class:
+ * Substate counterpart to `ScriptedMusicBeatState`. Modders extend the real
+ * base (`MusicBeatSubstate`); the engine instantiates this bridge for them:
  *
- *     class MyPause extends ScriptedMusicBeatSubstate {
+ *     class MyPause extends MusicBeatSubstate {
  *         override function create() { super.create(); ... }
  *     }
  *

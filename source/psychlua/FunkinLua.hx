@@ -312,6 +312,12 @@ class FunkinLua {
 		Lua_helper.add_callback(lua, "openScriptedSubstate", function(name:String, ?args:Array<Dynamic>) {
 			return scripting.ScriptedStates.openSubstate(name, args);
 		});
+		Lua_helper.add_callback(lua, "exitToEngine", function() {
+			scripting.ScriptedStates.exitToEngine();
+		});
+		Lua_helper.add_callback(lua, "launchMod", function(folder:String) {
+			return scripting.ScriptedStates.launchMod(folder);
+		});
 		#end
 
 		Lua_helper.add_callback(lua, "setVar", function(varName:String, value:Dynamic) {

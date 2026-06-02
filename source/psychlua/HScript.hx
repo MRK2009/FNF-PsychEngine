@@ -11,6 +11,7 @@ import psychlua.FunkinLua;
 import insanity.Script;
 import insanity.backend.Interp;
 import insanity.Config.ConfigBlacklistKind;
+import insanity.backend.Expr.ImportMode;
 
 typedef HScriptInfos = {
 	> haxe.PosInfos,
@@ -69,6 +70,17 @@ class HScript {
 		// Use our interpreter so scripts can reference the creating state's
 		// fields as bare identifiers (hscript-iris CustomInterp back-compat).
 		insanity.Config.interpClass = PsychInterp;
+
+		// Auto-import the state base classes so scripts can write
+		// `class MyMenu extends MusicBeatState` without an explicit import.
+		// insanity makes a class scriptable by registering its BASE class
+		// (here backend.MusicBeatState -> the ScriptedMusicBeatState bridge), so
+		// scripts extend the real base, not the bridge. insanity resolves bare
+		// names through imports and these are packaged (backend.*), so import
+		// each explicitly (a package IAll import skips packaged classes).
+		insanity.Config.globalImports.set('backend.MusicBeatState', INormal);
+		insanity.Config.globalImports.set('backend.MusicBeatSubstate', INormal);
+
 		#if MODS_ALLOWED
 		var byType:Array<String> = insanity.Config.blacklist.get(ByType);
 		if (byType == null) {
@@ -460,6 +472,8 @@ class HScript {
 		// Class-based scripted states (states/<Name>.hx extending ScriptedMusicBeatState).
 		set('switchToState', function(name:String, ?args:Array<Dynamic>) return scripting.ScriptedStates.switchToState(name, args));
 		set('openScriptedSubstate', function(name:String, ?args:Array<Dynamic>) return scripting.ScriptedStates.openSubstate(name, args));
+		set('exitToEngine', function() scripting.ScriptedStates.exitToEngine());
+		set('launchMod', function(folder:String) return scripting.ScriptedStates.launchMod(folder));
 
 		set('Function_Stop', LuaUtils.Function_Stop);
 		set('Function_Continue', LuaUtils.Function_Continue);

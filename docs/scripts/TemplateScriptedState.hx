@@ -3,7 +3,7 @@
 // ----------------------------------------------------------------------------
 //  Put this in a mod at:  mods/<YourMod>/states/MyMenu.hx
 //  The class name MUST match the file name (here: MyMenu) and MUST extend
-//  ScriptedMusicBeatState.
+//  MusicBeatState (the engine makes that class scriptable for you).
 //
 //  Switch to it from any Lua or HScript with:
 //      switchToState('MyMenu');
@@ -11,7 +11,7 @@
 //  Unlike the old onCreate()/onUpdate() callback scripts, this is a REAL class:
 //  you `override` the state's lifecycle methods and call `super` like in Haxe.
 // ============================================================================
-class MyMenu extends ScriptedMusicBeatState {
+class MyMenu extends MusicBeatState {
 	var text:FlxText;
 	var bopSize:Float = 1.0;
 

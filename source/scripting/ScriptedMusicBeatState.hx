@@ -4,11 +4,12 @@ import backend.MusicBeatState;
 
 #if HSCRIPT_ALLOWED
 /**
- * Bridge that makes `MusicBeatState` scriptable as a class.
+ * Internal bridge that makes `MusicBeatState` scriptable as a class.
  *
- * Modders write, in a `states/<Name>.hx` file:
+ * insanity registers a scriptable class by its BASE class, so modders extend the
+ * real base (`MusicBeatState`) and the engine instantiates THIS bridge for them:
  *
- *     class MyMenu extends ScriptedMusicBeatState {
+ *     class MyMenu extends MusicBeatState {   // <- the real base, not the bridge
  *         override function create() { super.create(); ... }
  *         override function update(elapsed:Float) { super.update(elapsed); ... }
  *     }
