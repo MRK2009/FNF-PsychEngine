@@ -2178,8 +2178,7 @@ class PlayState extends MusicBeatState {
 					case 'gf' | 'girlfriend': 2;
 					case 'dad' | 'opponent': 1;
 					default:
-						var val1:Int = Std.parseInt(value1) ?? 0;
-						val1 != null ? 0 : val1;
+						Std.parseInt(value1) ?? 0;
 				}
 
 				var characterName:String = 'boyfriend';
