@@ -226,7 +226,7 @@ class ModsMenuState extends MusicBeatState {
 		add(hintBar);
 
 		// align right-aligned header labels
-		searchTxt.x = FlxG.width - margin - 18 - filterWidthOf('FILTER: LAUNCHABLE') - 24 - searchTxt.width;
+		searchTxt.x = FlxG.width - margin - 18 - filterWidthOf('FILTER: LAUNCHABLE') - 120 - searchTxt.width;
 		filterTxt.x = FlxG.width - margin - 18 - filterTxt.width;
 
 		// no-mods overlay
