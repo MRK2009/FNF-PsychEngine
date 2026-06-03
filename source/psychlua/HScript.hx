@@ -185,19 +185,28 @@ class HScript {
 			run();
 	}
 
+	var _presetDone:Bool = false;
+
 	/**
 	 * Executes the parsed program. We deliberately bypass `insanity.Script.start()`
 	 * because it calls `interp.setDefaults()` which WIPES the variables map -- that
-	 * would erase every global we inject in `preset()`. Instead we run setDefaults
-	 * first, then inject our globals, then execute.
+	 * would erase every global we inject in `preset()`.
+	 *
+	 * setDefaults()/preset() run ONCE, on the first execution. Re-runs (e.g.
+	 * `runHaxeCode` re-using a Lua parent's HScript) must NOT wipe, otherwise
+	 * variables set between runs -- like classes added via `addHaxeLibrary` -- are
+	 * lost before the new code executes.
 	 */
 	public function run():Dynamic {
 		returnValue = null;
 		if (script == null || script.program == null)
 			return null;
 
-		script.setDefaults(); // wipes variables + restores this/script/interp + Config globals
-		preset(); // inject engine globals AFTER the wipe
+		if (!_presetDone) {
+			script.setDefaults(); // wipes variables + restores this/script/interp + Config globals
+			preset(); // inject engine globals AFTER the wipe
+			_presetDone = true;
+		}
 		applyVarsToBring();
 
 		try {
