@@ -134,6 +134,7 @@ class Character extends FlxSprite {
 
 	public function loadCharacterFile(json:Dynamic) {
 		isAnimateAtlas = false;
+		swfMode = (json.swfMode == true);
 
 		#if flixel_animate
 		var animToFind:String = Paths.getPath('images/' + json.image + '/Animation.json', TEXT);
@@ -151,7 +152,7 @@ class Character extends FlxSprite {
 		else {
 			atlas = new FlxAnimate();
 			try {
-				Paths.loadAnimateAtlas(atlas, json.image);
+				Paths.loadAnimateAtlas(atlas, json.image, null, null, swfMode);
 			} catch (e:haxe.Exception) {
 				FlxG.log.warn('Could not load atlas ${json.image}: $e');
 				trace(e.stack);
@@ -169,24 +170,6 @@ class Character extends FlxSprite {
 		// positioning
 		positionArray = json.position;
 		cameraPosition = json.camera_position;
-
-		#if flixel_animate
-		// Cache the Animate timeline bounds so copyAtlasValues() can compensate
-		// every frame. Old Dot-Stuff `flxanimate` did NOT subtract
-		// `timeline._bounds` before drawing -- the new `flixel-animate`
-		// (MaybeMaru) does (see drawAnimate -> matrix.translate(-bounds.x, -bounds.y)).
-		// That makes the visible art appear shifted by (-bounds * scale) in
-		// screen pixels relative to the legacy library. We compensate by adding
-		// the inverse to `atlas.offset` (which only affects rendering, NOT the
-		// camera-follow target getMidpoint() / sprite.x).
-		if (isAnimateAtlas && atlas != null) {
-			@:privateAccess if (atlas.timeline != null && atlas.timeline._bounds != null) {
-				_atlasBoundsX = atlas.timeline._bounds.x;
-				_atlasBoundsY = atlas.timeline._bounds.y;
-				_atlasNeedsBoundsComp = (_atlasBoundsX != 0 || _atlasBoundsY != 0);
-			}
-		}
-		#end
 
 		// data
 		healthIcon = json.healthicon;
@@ -454,16 +437,18 @@ class Character extends FlxSprite {
 
 	// Atlas support
 	// special thanks ne_eo for the references, you're the goat!!
+	/**
+	 * SWF-style rendering for Animate atlases: nested movieclips advance their own
+	 * timelines and bake every frame (like a real SWF player) instead of rendering
+	 * statically. Load-time setting; toggling it requires reloading the atlas.
+	 * Persisted in the character JSON as `swfMode`.
+	 */
+	public var swfMode:Bool = false;
+
 	@:allow(states.editors.CharacterEditorState)
 	public var isAnimateAtlas(default, null):Bool = false;
 	#if flixel_animate
 	public var atlas:FlxAnimate;
-
-	// Cached `timeline._bounds` for flixel-animate -> Dot-Stuff render parity.
-	// See loadCharacterFile() for details. Applied in copyAtlasValues().
-	var _atlasBoundsX:Float = 0;
-	var _atlasBoundsY:Float = 0;
-	var _atlasNeedsBoundsComp:Bool = false;
 
 	public override function draw() {
 		var lastAlpha:Float = alpha;
@@ -509,21 +494,39 @@ class Character extends FlxSprite {
 		@:privateAccess
 		{
 			atlas.cameras = cameras;
-			atlas.scrollFactor = scrollFactor;
-			atlas.scale = scale;
-			if (_atlasNeedsBoundsComp) {
-				// flixel-animate subtracts `timeline._bounds` from the render
-				// matrix before scaling; the legacy flxanimate did not. Add the
-				// inverse to offset so the visible art lands where the legacy
-				// library placed it. Offset is subtracted in prepareDrawMatrix
-				// (`_point.x -= offset.x`), so `+(-bounds*scale)` cancels the
-				// `-bounds*scale` baked into the matrix.
-				atlas.offset.set(offset.x - _atlasBoundsX * scale.x,
-				                 offset.y - _atlasBoundsY * scale.y);
-			} else {
-				atlas.offset = offset;
+			// IMPORTANT: copy FlxPoint *values* -- never assign the references
+			// (`atlas.scale = scale`). Aliasing the character's points onto the
+			// atlas means destroying the atlas (e.g. the editor's
+			// reloadCharacterImage()) returns the character's live points to the
+			// FlxPoint pool, which then get recycled and corrupted -- that was the
+			// editor "scale shrinks every reload" bug. Gameplay never hit it
+			// because the atlas isn't destroyed/recreated mid-life there.
+			atlas.scrollFactor.set(scrollFactor.x, scrollFactor.y);
+			atlas.scale.set(scale.x, scale.y);
+			// flixel-animate (MaybeMaru) subtracts `timeline._bounds` from the
+			// render matrix before scaling; the legacy flxanimate did not. Add the
+			// inverse to offset so the visible art lands where the legacy library
+			// placed it. Offset is subtracted in prepareDrawMatrix
+			// (`_point.x -= offset.x`), so `+(-bounds*scale)` cancels the
+			// `-bounds*scale` baked into the matrix.
+			//
+			// This is read LIVE every draw (instead of cached at load) so the
+			// compensation is always correct no matter how/when the atlas was
+			// (re)built -- e.g. the character editor's reloadCharacterImage()
+			// rebuilds the atlas without going through loadCharacterFile(). A
+			// stale/missing snapshot was making editor offsets differ from
+			// in-game offsets on reload.
+			var boundsX:Float = 0;
+			var boundsY:Float = 0;
+			if (atlas.timeline != null && atlas.timeline._bounds != null) {
+				boundsX = atlas.timeline._bounds.x;
+				boundsY = atlas.timeline._bounds.y;
 			}
-			atlas.origin = origin;
+			if (boundsX != 0 || boundsY != 0)
+				atlas.offset.set(offset.x - boundsX * scale.x, offset.y - boundsY * scale.y);
+			else
+				atlas.offset.set(offset.x, offset.y);
+			atlas.origin.set(origin.x, origin.y);
 			atlas.x = x;
 			atlas.y = y;
 			atlas.angle = angle;

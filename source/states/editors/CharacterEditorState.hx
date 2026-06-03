@@ -251,7 +251,7 @@ class CharacterEditorState extends MusicBeatState implements PsychUIEventHandler
 		UI_box.scrollFactor.set();
 		UI_box.cameras = [camHUD];
 
-		UI_characterbox = new PsychUIBox(UI_box.x - 100, UI_box.y + UI_box.height + 10, 350, 280, ['Animations', 'Character']);
+		UI_characterbox = new PsychUIBox(UI_box.x - 100, UI_box.y + UI_box.height + 10, 350, 320, ['Animations', 'Character']);
 		UI_characterbox.scrollFactor.set();
 		UI_characterbox.cameras = [camHUD];
 		add(UI_characterbox);
@@ -314,9 +314,33 @@ class CharacterEditorState extends MusicBeatState implements PsychUIEventHandler
 					spr.alpha = ghostAlpha;
 
 					spr.scale.set(character.scale.x, character.scale.y);
-					spr.updateHitbox();
 
-					spr.offset.set(character.offset.x, character.offset.y);
+					#if flixel_animate
+					if (spr == animateGhost) {
+						// Mirror exactly what Character.copyAtlasValues() does for
+						// the live atlas: use the character's origin (NOT a centered
+						// updateHitbox() origin) and the same bounds-compensated
+						// offset, so the ghost overlays the character precisely.
+						animateGhost.origin.set(character.origin.x, character.origin.y);
+
+						var bx:Float = 0;
+						var by:Float = 0;
+						@:privateAccess
+						if (animateGhost.timeline != null && animateGhost.timeline._bounds != null) {
+							bx = animateGhost.timeline._bounds.x;
+							by = animateGhost.timeline._bounds.y;
+						}
+						if (bx != 0 || by != 0)
+							animateGhost.offset.set(character.offset.x - bx * character.scale.x,
+							                        character.offset.y - by * character.scale.y);
+						else
+							animateGhost.offset.set(character.offset.x, character.offset.y);
+					} else
+					#end
+					{
+						spr.updateHitbox();
+						spr.offset.set(character.offset.x, character.offset.y);
+					}
 					spr.visible = true;
 
 					var otherSpr:FlxSprite = (spr == animateGhost) ? ghost : animateGhost;
@@ -592,6 +616,7 @@ class CharacterEditorState extends MusicBeatState implements PsychUIEventHandler
 
 	var flipXCheckBox:PsychUICheckBox;
 	var noAntialiasingCheckBox:PsychUICheckBox;
+	var swfModeCheckBox:PsychUICheckBox;
 
 	var healthColorStepperR:PsychUINumericStepper;
 	var healthColorStepperG:PsychUINumericStepper;
@@ -656,6 +681,31 @@ class CharacterEditorState extends MusicBeatState implements PsychUIEventHandler
 		});
 
 		healthColorStepperR = new PsychUINumericStepper(singDurationStepper.x, saveCharacterButton.y, 20, character.healthColorArray[0], 0, 255, 0);
+		// SWF Mode: only meaningful for Animate atlas characters; reload the atlas
+		// so the change (movieclip timelines baked vs. static) takes effect live.
+		swfModeCheckBox = new PsychUICheckBox(15, saveCharacterButton.y + 35, "SWF Mode (Animate)", 110);
+		swfModeCheckBox.checked = character.swfMode;
+		swfModeCheckBox.onClick = function() {
+			character.swfMode = swfModeCheckBox.checked;
+			if (character.isAnimateAtlas) {
+				var lastAnim:String = character.getAnimationName();
+				// swfMode is baked at parse time, so the cached atlas must be
+				// evicted to take effect. Reset the ghost first -- it shares the
+				// cached frames, and drawing a dangling reference after the evict
+				// would throw "sprite was destroyed".
+				if (animateGhost != null) {
+					remove(animateGhost);
+					animateGhost = FlxDestroyUtil.destroy(animateGhost);
+					animateGhostImage = null;
+				}
+				ghost.visible = false;
+				Paths.clearAnimateAtlasCache(character.imageFile);
+				reloadCharacterImage();
+				if (!character.isAnimationNull() && lastAnim != null && lastAnim != '')
+					character.playAnim(lastAnim, true);
+			}
+			unsavedProgress = true;
+		};
 		healthColorStepperG = new PsychUINumericStepper(singDurationStepper.x + 65, saveCharacterButton.y, 20, character.healthColorArray[1], 0, 255, 0);
 		healthColorStepperB = new PsychUINumericStepper(singDurationStepper.x + 130, saveCharacterButton.y, 20, character.healthColorArray[2], 0, 255, 0);
 
@@ -676,6 +726,7 @@ class CharacterEditorState extends MusicBeatState implements PsychUIEventHandler
 		tab_group.add(scaleStepper);
 		tab_group.add(flipXCheckBox);
 		tab_group.add(noAntialiasingCheckBox);
+		tab_group.add(swfModeCheckBox);
 		tab_group.add(positionXStepper);
 		tab_group.add(positionYStepper);
 		tab_group.add(positionCameraXStepper);
@@ -761,7 +812,7 @@ class CharacterEditorState extends MusicBeatState implements PsychUIEventHandler
 		if (Paths.fileExists('images/' + character.imageFile + '/Animation.json', TEXT)) {
 			character.atlas = new FlxAnimate();
 			try {
-				Paths.loadAnimateAtlas(character.atlas, character.imageFile);
+				Paths.loadAnimateAtlas(character.atlas, character.imageFile, null, null, character.swfMode);
 			} catch (e:Dynamic) {
 				FlxG.log.warn('Could not load atlas ${character.imageFile}: $e');
 			}
@@ -799,6 +850,8 @@ class CharacterEditorState extends MusicBeatState implements PsychUIEventHandler
 		scaleStepper.value = character.jsonScale;
 		flipXCheckBox.checked = character.originalFlipX;
 		noAntialiasingCheckBox.checked = character.noAntialiasing;
+		if (swfModeCheckBox != null)
+			swfModeCheckBox.checked = character.swfMode;
 		positionXStepper.value = character.positionArray[0];
 		positionYStepper.value = character.positionArray[1];
 		positionCameraXStepper.value = character.cameraPosition[0];
@@ -1242,6 +1295,7 @@ class CharacterEditorState extends MusicBeatState implements PsychUIEventHandler
 
 			"flip_x": character.originalFlipX,
 			"no_antialiasing": character.noAntialiasing,
+			"swfMode": character.swfMode,
 			"healthbar_colors": character.healthColorArray,
 			"vocals_file": character.vocalsFile,
 			"_editor_isPlayer": character.isPlayer

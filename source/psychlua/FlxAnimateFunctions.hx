@@ -6,27 +6,29 @@ import openfl.utils.Assets;
 class FlxAnimateFunctions {
 	public static function implement(funk:FunkinLua) {
 		var lua:State = funk.lua;
-		Lua_helper.add_callback(lua, "makeFlxAnimateSprite", function(tag:String, ?x:Float = 0, ?y:Float = 0, ?loadFolder:String = null) {
-			tag = tag.replace('.', '');
-			var lastSprite = MusicBeatState.getVariables().get(tag);
-			if (lastSprite != null) {
-				lastSprite.kill();
-				PlayState.instance.remove(lastSprite);
-				lastSprite.destroy();
-			}
+		Lua_helper.add_callback(lua, "makeFlxAnimateSprite",
+			function(tag:String, ?x:Float = 0, ?y:Float = 0, ?loadFolder:String = null, ?swfMode:Bool = false) {
+				tag = tag.replace('.', '');
+				var lastSprite = MusicBeatState.getVariables().get(tag);
+				if (lastSprite != null) {
+					lastSprite.kill();
+					PlayState.instance.remove(lastSprite);
+					lastSprite.destroy();
+				}
 
-			var mySprite:ModchartAnimateSprite = new ModchartAnimateSprite(x, y);
-			if (loadFolder != null)
-				Paths.loadAnimateAtlas(mySprite, loadFolder);
-			MusicBeatState.getVariables().set(tag, mySprite);
-			mySprite.active = true;
-		});
+				var mySprite:ModchartAnimateSprite = new ModchartAnimateSprite(x, y);
+				if (loadFolder != null)
+					Paths.loadAnimateAtlas(mySprite, loadFolder, null, null, swfMode);
+				MusicBeatState.getVariables().set(tag, mySprite);
+				mySprite.active = true;
+			});
 
-		Lua_helper.add_callback(lua, "loadAnimateAtlas", function(tag:String, folderOrImg:String, ?spriteJson:String = null, ?animationJson:String = null) {
-			var spr:FlxAnimate = MusicBeatState.getVariables().get(tag);
-			if (spr != null)
-				Paths.loadAnimateAtlas(spr, folderOrImg, spriteJson, animationJson);
-		});
+		Lua_helper.add_callback(lua, "loadAnimateAtlas",
+			function(tag:String, folderOrImg:String, ?spriteJson:String = null, ?animationJson:String = null, ?swfMode:Bool = false, ?unique:Bool = false) {
+				var spr:FlxAnimate = MusicBeatState.getVariables().get(tag);
+				if (spr != null)
+					Paths.loadAnimateAtlas(spr, folderOrImg, spriteJson, animationJson, swfMode, unique);
+			});
 
 		Lua_helper.add_callback(lua, "addAnimationBySymbol",
 			function(tag:String, name:String, symbol:String, ?framerate:Float = 24, ?loop:Bool = false, ?matX:Float = 0, ?matY:Float = 0) {

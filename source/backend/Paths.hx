@@ -506,7 +506,22 @@ class Paths {
 	 * @param spriteJson      Optional override path or raw JSON string for `spritemap0.json`.
 	 * @param animationJson   Optional override path or raw JSON string for `Animation.json`.
 	 */
-	public static function loadAnimateAtlas(spr:FlxAnimate, folderOrImg:Dynamic, spriteJson:Dynamic = null, animationJson:Dynamic = null) {
+	/**
+	 * Loads an Adobe Animate texture atlas into `spr`.
+	 *
+	 * @param swfMode  When true, nested movieclip symbols advance their own
+	 *                 timelines and bake every frame, rendering like a real SWF
+	 *                 player. When false (default) movieclips render statically
+	 *                 (first frame only). This is a *load-time* setting baked into
+	 *                 the atlas, so changing it requires a fresh parse.
+	 * @param unique   Force a fresh parse instead of returning the cached atlas.
+	 *                 Needed when toggling `swfMode` on an already-cached atlas
+	 *                 (e.g. the character editor). Leave false for gameplay so the
+	 *                 atlas is loaded once and reused.
+	 */
+	public static function loadAnimateAtlas(spr:FlxAnimate, folderOrImg:Dynamic, spriteJson:Dynamic = null, animationJson:Dynamic = null,
+			?swfMode:Bool = false, ?unique:Bool = false) {
+		var settings:animate.FlxAnimateFrames.FlxAnimateSettings = {swfMode: swfMode};
 		var animationContent:String = null;
 		var spritemaps:Array<animate.FlxAnimateFrames.SpritemapInput> = [];
 		var cacheKey:String = null;
@@ -570,11 +585,31 @@ class Paths {
 				}
 			}
 
-			spr.frames = animate.FlxAnimateFrames.fromAnimate(animationContent, spritemaps, metadataContent, cacheKey);
+			spr.frames = animate.FlxAnimateFrames.fromAnimate(animationContent, spritemaps, metadataContent, cacheKey, unique, settings);
 		} else {
 			// folderOrImg is a FlxGraphic/BitmapData – caller is supplying inputs directly.
 			spritemaps.push({source: folderOrImg, json: resolveJson(spriteJson)});
-			spr.frames = animate.FlxAnimateFrames.fromAnimate(animationContent, spritemaps);
+			spr.frames = animate.FlxAnimateFrames.fromAnimate(animationContent, spritemaps, null, null, unique, settings);
+		}
+	}
+
+	/**
+	 * Evicts a cached Animate atlas so the next `loadAnimateAtlas` re-parses it
+	 * from scratch (e.g. after changing a load-time setting like `swfMode`).
+	 *
+	 * IMPORTANT: this destroys the cached `FlxAnimateFrames` and its graphics, so
+	 * every live `FlxAnimate` still pointing at this atlas must be reloaded right
+	 * after — otherwise drawing a dangling reference throws "sprite was destroyed".
+	 */
+	public static function clearAnimateAtlasCache(folderOrImg:String):Void {
+		if (folderOrImg == null) return;
+		var key:String = 'images/$folderOrImg';
+		@:privateAccess {
+			var cached = animate.FlxAnimateFrames._cachedAtlases.get(key);
+			if (cached != null) {
+				animate.FlxAnimateFrames._cachedAtlases.remove(key);
+				cached.destroy();
+			}
 		}
 	}
 	#end
