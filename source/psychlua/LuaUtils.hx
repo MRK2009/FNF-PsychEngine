@@ -429,7 +429,7 @@ class LuaUtils {
 		return 'air';
 		#elseif flash
 		return 'flash';
-		#elseif (ios || iphoneos || iphonesim)
+		#elseif (ios || iphonesim)
 		return 'ios';
 		#elseif neko
 		return 'neko';
