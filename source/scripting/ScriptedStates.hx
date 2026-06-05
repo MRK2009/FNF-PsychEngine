@@ -49,6 +49,12 @@ class ScriptedStates {
 	// would be invisible to `extends ScriptedMusicBeatState` in scripts.
 	@:keep static var __forceTyping:Array<Class<Dynamic>> = [ScriptedMusicBeatState, ScriptedMusicBeatSubstate];
 
+	// The most-recently-built scripted STATE (name + owning mod). Used to auto-route
+	// "exit to menu" back to the scripted state a song was launched from, so mods
+	// don't have to set anything manually. Cleared on exitToEngine().
+	public static var activeScriptedState:String = null;
+	public static var activeScriptedMod:String = null;
+
 	/**
 	 * Builds a live `MusicBeatState` from `states/<name>.hx`.
 	 * Returns null (and logs to the debug console) if the script is missing,
@@ -62,7 +68,12 @@ class ScriptedStates {
 			HScript.error('Scripted state "$name" must extend ScriptedMusicBeatState', errPos(name));
 			return null;
 		}
-		return cast inst;
+		var state:MusicBeatState = cast inst;
+		// Remember this as the active scripted state so a song launched from it can
+		// be auto-routed back here on exit (see PlayState.exitToScriptedStateIfNeeded).
+		activeScriptedState = name;
+		activeScriptedMod = state.scriptOwnerMod;
+		return state;
 	}
 
 	/** Builds a live `MusicBeatSubstate` from `substates/<name>.hx`. */
@@ -141,6 +152,9 @@ class ScriptedStates {
 	 * stateSource pref). Intended as the BACK target for a mod's top menu.
 	 */
 	public static function exitToEngine():Void {
+		PlayState.returnToScriptedState = null;
+		activeScriptedState = null;
+		activeScriptedMod = null;
 		Mods.launchedMod = null;
 		Mods.stateSourceMode = NONE;
 		Mods.loadTopMod();
@@ -210,11 +224,32 @@ class ScriptedStates {
 		};
 
 		try {
-			return cls.typeCreateInstance(args != null ? args : []);
+			var inst:Dynamic = cls.typeCreateInstance(args != null ? args : []);
+			// Tag the instance with the mod it came from so the engine can auto-scope
+			// asset/script lookups to that mod (see the preStateCreate hook in Main).
+			#if MODS_ALLOWED
+			var ownerMod:String = ownerModOf(path);
+			if (ownerMod != null) {
+				if (inst is MusicBeatState) cast(inst, MusicBeatState).scriptOwnerMod = ownerMod;
+				else if (inst is MusicBeatSubstate) cast(inst, MusicBeatSubstate).scriptOwnerMod = ownerMod;
+			}
+			#end
+			return inst;
 		} catch (e:haxe.Exception) {
 			HScript.error('Failed to instantiate scripted state "$name": ${e.message}', errPos(name));
 			return null;
 		}
+	}
+
+	// The mod folder a resolved script path belongs to, or null if it's a shared
+	// (non-mod) path. e.g. "mods/MyMod/states/X.hx" -> "MyMod".
+	static function ownerModOf(path:String):String {
+		#if MODS_ALLOWED
+		var parts:Array<String> = path.split('/');
+		if (parts.length > 2 && parts[0] + '/' == Paths.mods())
+			return parts[1];
+		#end
+		return null;
 	}
 
 	static inline function errPos(name:String):HScriptInfos
@@ -285,6 +320,27 @@ class ScriptedStates {
 		s('Alphabet', Alphabet);
 		s('FlxSpriteGroup', flixel.group.FlxSpriteGroup);
 
+		// Curated extra types. Referencing the classes here ALSO keeps them from
+		// dead-code elimination (e.g. FlxButton is otherwise never used by the
+		// engine and would be stripped), so scripts can both `new` them and use
+		// them as real field types -- no `import` and no `Dynamic` workaround.
+		s('FlxObject', flixel.FlxObject);
+		s('FlxGroup', flixel.group.FlxGroup);
+		s('FlxTypedGroup', flixel.group.FlxGroup.FlxTypedGroup);
+		s('FlxButton', flixel.ui.FlxButton);
+		s('FlxBar', flixel.ui.FlxBar);
+		s('FlxBackdrop', flixel.addons.display.FlxBackdrop);
+		s('FlxFlicker', flixel.effects.FlxFlicker);
+		// NOTE: FlxPoint/FlxRect/FlxAxes are abstracts and can't be injected as
+		// values; scripts can `import` them if needed.
+		s('FlxSort', flixel.util.FlxSort);
+		s('FlxStringUtil', flixel.util.FlxStringUtil);
+		// Common engine classes for the menu -> song flow.
+		s('Song', backend.Song);
+		s('LoadingState', states.LoadingState);
+		s('Difficulty', backend.Difficulty);
+		s('Highscore', backend.Highscore);
+
 		s('controls', Controls.instance);
 		s('getVar', function(name:String):Dynamic {
 			return MusicBeatState.getVariables().exists(name) ? MusicBeatState.getVariables().get(name) : null;
@@ -311,3 +367,40 @@ class ScriptedStates {
 	}
 	#end
 }
+
+#if HSCRIPT_ALLOWED
+/**
+ * Tiny native intermediate state used to (re)enter a scripted state from a CLEAN
+ * context. Switching to a scripted state directly from gameplay builds the
+ * scripted instance while the previous state (PlayState + its mod scripts) is
+ * still alive, so the instance captures references that the subsequent teardown
+ * destroys -> its update()/draw() then null-ref. Routing through this native
+ * state means the previous state is fully destroyed FIRST; we then build the
+ * scripted state from create() with nothing stale on the stack -- the same clean
+ * conditions as a fresh launch from the Mods menu.
+ */
+class ScriptedReturnState extends MusicBeatState {
+	var target:String;
+	var args:Array<Dynamic>;
+	var done:Bool = false;
+
+	public function new(target:String, ?args:Array<Dynamic>) {
+		this.target = target;
+		this.args = args;
+		super();
+	}
+
+	override function update(elapsed:Float) {
+		super.update(elapsed);
+		// Do the switch from update() (a clean frame, previous state fully gone),
+		// not create(), so we never build/switch mid-state-creation. One-shot.
+		if (done)
+			return;
+		done = true;
+		if (!ScriptedStates.switchToState(target, args, LAUNCHED)) {
+			// Scripted state failed to load -> fall back to the engine main menu.
+			MusicBeatState.switchState(new states.MainMenuState());
+		}
+	}
+}
+#end

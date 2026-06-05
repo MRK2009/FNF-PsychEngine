@@ -128,6 +128,12 @@ class PlayState extends MusicBeatState {
 
 	public static var SONG:SwagSong = null;
 	public static var isStoryMode:Bool = false;
+
+	// When a song is launched from a mod's scripted state (e.g. a custom main
+	// menu), this holds the scripted-state name to return to on exit instead of
+	// the built-in Freeplay/Story menus. Set it before switching to PlayState;
+	// it is honoured only while a mod is actually launched (Mods.launchedMod).
+	public static var returnToScriptedState:String = null;
 	public static var storyWeek:Int = 0;
 	public static var storyPlaylist:Array<String> = [];
 	public static var storyDifficulty:Int = 1;
@@ -248,9 +254,9 @@ class PlayState extends MusicBeatState {
 
 	#if LUA_ALLOWED public var luaArray:Array<FunkinLua> = []; #end
 
-	#if (LUA_ALLOWED || HSCRIPT_ALLOWED)
-	private var luaDebugGroup:FlxTypedGroup<psychlua.DebugLuaText>;
-	#end
+	// luaDebugGroup + addTextToDebug now live on MusicBeatState (every state gets
+	// the on-screen script-error overlay). PlayState still targets it at camOther
+	// in create() so it ignores gameplay camera zoom.
 
 	public var introSoundsSuffix:String = '';
 
@@ -699,23 +705,7 @@ class PlayState extends MusicBeatState {
 		return playbackRate;
 	}
 
-	#if (LUA_ALLOWED || HSCRIPT_ALLOWED)
-	public function addTextToDebug(text:String, color:FlxColor) {
-		var newText:psychlua.DebugLuaText = luaDebugGroup.recycle(psychlua.DebugLuaText);
-		newText.text = text;
-		newText.color = color;
-		newText.disableTime = 6;
-		newText.alpha = 1;
-		newText.setPosition(10, 8 - newText.height);
-
-		luaDebugGroup.forEachAlive(function(spr:psychlua.DebugLuaText) {
-			spr.y += newText.height + 2;
-		});
-		luaDebugGroup.add(newText);
-
-		Sys.println(text);
-	}
-	#end
+	// addTextToDebug is inherited from MusicBeatState now.
 
 	public function reloadHealthBarColors() {
 		healthBar.setColors(FlxColor.fromRGB(dad.healthColorArray[0], dad.healthColorArray[1], dad.healthColorArray[2]),
@@ -2388,6 +2378,50 @@ class PlayState extends MusicBeatState {
 
 	public var transitioning = false;
 
+	/**
+	 * Routes an exit-to-menu back to a mod's scripted state when the song was
+	 * launched from one (returnToScriptedState + a launched mod). Returns true if
+	 * it handled the transition; callers fall back to Story/Freeplay otherwise.
+	 */
+	public static function exitToScriptedStateIfNeeded():Bool {
+		#if HSCRIPT_ALLOWED
+		// Only return to a scripted menu while a mod is actually launched.
+		if (Mods.launchedMod == null || Mods.launchedMod.length < 1)
+			return false;
+		// A launchable mod ships its entry state at states/<entry>.hx -- use that
+		// as the "can we return to a scripted menu?" gate so callers fall back to
+		// Story/Freeplay cleanly when there's no scripted menu to return to.
+		if (!Mods.isLaunchable(Mods.launchedMod))
+			return false;
+		// Target priority: explicit override set by the mod -> the scripted state
+		// the song was actually launched from (auto-tracked) -> the mod's declared
+		// entry state (pack.json "entryState", default MainMenuState). The mod
+		// normally needs to set nothing; auto-tracking + entry fallback cover it.
+		var target:String = null;
+		if (returnToScriptedState != null && returnToScriptedState.length > 0)
+			target = returnToScriptedState;
+		else if (scripting.ScriptedStates.activeScriptedState != null && scripting.ScriptedStates.activeScriptedState.length > 0)
+			target = scripting.ScriptedStates.activeScriptedState;
+		else
+			target = Mods.getEntryState(Mods.launchedMod);
+		if (target == null || target.length < 1)
+			return false;
+
+		FlxG.sound.playMusic(Paths.music('freakyMenu'), 0);
+
+		// IMPORTANT: don't build the scripted state here. From gameplay the
+		// previous state (this PlayState + its mod scripts) is still alive, so a
+		// scripted instance built now captures references that get destroyed on
+		// teardown -> its update()/draw() null-ref. Route through a tiny native
+		// state that builds the scripted state from its own create(), AFTER this
+		// state is fully destroyed (same clean conditions as a fresh launch).
+		MusicBeatState.switchState(new scripting.ScriptedStates.ScriptedReturnState(target));
+		return true;
+		#else
+		return false;
+		#end
+	}
+
 	public function endSong() {
 		// Should kill you if you tried to cheat
 		if (!startingSong) {
@@ -2485,14 +2519,17 @@ class PlayState extends MusicBeatState {
 					LoadingState.loadAndSwitchState(new PlayState(), false, false);
 				}
 			} else {
-				trace('WENT BACK TO FREEPLAY??');
-				Mods.loadTopMod();
 				#if DISCORD_ALLOWED DiscordClient.resetClientID(); #end
-
 				canResync = false;
-				MusicBeatState.switchState(new FreeplayState());
-				FlxG.sound.playMusic(Paths.music('freakyMenu'));
-				changedDifficulty = false;
+				if (exitToScriptedStateIfNeeded()) {
+					changedDifficulty = false;
+				} else {
+					trace('WENT BACK TO FREEPLAY??');
+					Mods.loadTopMod();
+					MusicBeatState.switchState(new FreeplayState());
+					FlxG.sound.playMusic(Paths.music('freakyMenu'));
+					changedDifficulty = false;
+				}
 			}
 			transitioning = true;
 		}

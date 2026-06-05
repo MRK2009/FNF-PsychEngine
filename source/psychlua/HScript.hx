@@ -619,7 +619,11 @@ class HScript {
 			msgInfo += '${newPos.lineNumber}:';
 		msgInfo += ' $x';
 		trace('$level: $msgInfo');
-		if (PlayState.instance != null)
+		// Show on-screen in WHATEVER state is active (scripted menus included),
+		// not just PlayState -- every MusicBeatState now has addTextToDebug.
+		if (FlxG.state != null && (FlxG.state is backend.MusicBeatState))
+			cast(FlxG.state, backend.MusicBeatState).addTextToDebug('$level: $msgInfo', color);
+		else if (PlayState.instance != null)
 			PlayState.instance.addTextToDebug('$level: $msgInfo', color);
 	}
 }

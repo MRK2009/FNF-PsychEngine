@@ -41,6 +41,12 @@ class FunkinLua {
 	public var modFolder:String = null;
 	public var closed:Bool = false;
 
+	// "Real Lua" mode: when true, the legacy PsychLua callback API is NOT
+	// registered and scripts rely solely on direct object access (game.boyfriend.x,
+	// import('pkg.Class'), ...). Resolved per-script > per-mod > global. The proxy
+	// object bridge (LuaProxy) is available in BOTH modes.
+	public var rawLua:Bool = false;
+
 	#if HSCRIPT_ALLOWED
 	public var hscript:HScript = null;
 	#end
@@ -73,6 +79,11 @@ class FunkinLua {
 
 		lua = LuaL.newstate();
 		LuaL.openlibs(lua);
+
+		// Install the real-Lua object bridge (metatables + `import`) and decide
+		// whether the legacy callback API should be registered for this script.
+		LuaProxy.setup(lua);
+		rawLua = resolveLuaMode();
 
 		// trace('Lua version: ' + Lua.version());
 		// trace("LuaJIT version: " + Lua.versionJIT());
@@ -213,6 +224,21 @@ class FunkinLua {
 		// build target (windows, mac, linux, etc.)
 		set('buildTarget', LuaUtils.getBuildTarget());
 
+		// Live PlayState proxy + the variable store + class importing. `import`
+		// itself is installed by LuaProxy.setup().
+		set('game', game);
+		set('instance', game);
+		Lua_helper.add_callback(lua, "getVar", function(varName:String) return MusicBeatState.getVariables().get(varName));
+		Lua_helper.add_callback(lua, "setVar", function(varName:String, value:Dynamic) {
+			MusicBeatState.getVariables().set(varName, value);
+			return value;
+		});
+		Lua_helper.add_callback(lua, "removeVar", function(varName:String) {
+			return MusicBeatState.getVariables().remove(varName);
+		});
+
+		// ── Legacy PsychLua callback API (skipped entirely in raw mode) ──────
+		if (!rawLua) {
 		//
 		Lua_helper.add_callback(lua, "getRunningScripts", function() {
 			var runningScripts:Array<String> = [];
@@ -1550,7 +1576,10 @@ class FunkinLua {
 		CustomSubstate.implement(this);
 		ShaderFunctions.implement(this);
 		DeprecatedFunctions.implement(this);
+		} // end if (!rawLua) -- legacy PsychLua callback API
 
+		// User-defined global callbacks (createGlobalCallback) stay available in
+		// both modes; they are explicitly registered by scripts, not engine API.
 		for (name => func in customFunctions) {
 			if (func != null)
 				Lua_helper.add_callback(lua, name, func);
@@ -1643,8 +1672,46 @@ class FunkinLua {
 			return;
 		}
 
-		Convert.toLua(lua, data);
+		// Push Haxe objects as live proxies (game, characters, ...) instead of nil.
+		LuaProxy.pushHaxe(lua, data);
 		Lua.setglobal(lua, variable);
+	}
+
+	// Resolves real-Lua vs legacy mode. Precedence: per-script directive >
+	// per-mod pack.json ("luaMode") > global ClientPrefs.data.luaMode.
+	function resolveLuaMode():Bool {
+		var dir:Null<Bool> = scanLuaDirective();
+		if (dir != null)
+			return dir;
+
+		#if MODS_ALLOWED
+		if (modFolder != null) {
+			var pack:Dynamic = Mods.getPack(modFolder);
+			if (pack != null && pack.luaMode != null)
+				return Std.string(pack.luaMode).toLowerCase() == 'raw';
+		}
+		#end
+
+		return Std.string(ClientPrefs.data.luaMode).toLowerCase() == 'raw';
+	}
+
+	// Looks for `-- @luamode raw` / `-- @luamode compat` near the top of the
+	// script file. Returns null if absent (or the script is inline source).
+	function scanLuaDirective():Null<Bool> {
+		try {
+			if (!FileSystem.exists(scriptName))
+				return null;
+			var head:String = sys.io.File.getContent(scriptName);
+			var idx:Int = head.indexOf('@luamode');
+			if (idx < 0)
+				return null;
+			var rest:String = head.substr(idx + 8, 16).toLowerCase();
+			if (rest.indexOf('raw') >= 0)
+				return true;
+			if (rest.indexOf('compat') >= 0)
+				return false;
+		} catch (e:Dynamic) {}
+		return null;
 	}
 
 	public function stop() {

@@ -405,13 +405,17 @@ class PauseSubState extends MusicBeatSubstate {
 					PlayState.seenCutscene = false;
 
 					PlayState.instance.canResync = false;
-					Mods.loadTopMod();
-					if (PlayState.isStoryMode)
-						MusicBeatState.switchState(new StoryMenuState());
-					else
-						MusicBeatState.switchState(new FreeplayState());
+					if (PlayState.exitToScriptedStateIfNeeded()) {
+						// returned to the launching mod's scripted state
+					} else {
+						Mods.loadTopMod();
+						if (PlayState.isStoryMode)
+							MusicBeatState.switchState(new StoryMenuState());
+						else
+							MusicBeatState.switchState(new FreeplayState());
 
-					FlxG.sound.playMusic(Paths.music('freakyMenu'));
+						FlxG.sound.playMusic(Paths.music('freakyMenu'));
+					}
 					PlayState.changedDifficulty = false;
 					PlayState.chartingMode = false;
 					FlxG.camera.followLerp = 0;

@@ -83,6 +83,12 @@ import states.TitleState;
 	//   'From Mod'        - the launched/top mod's scripted states override menus.
 	//   'Global Script'   - scriptpack/global mods + shared scripted states override menus.
 	public var stateSource:String = 'Psych (Default)';
+	// Default Lua script mode:
+	//   'compat' - legacy PsychLua callback API + the real-Lua object proxies.
+	//   'raw'    - real Lua only (direct object access via game.*, import('...'));
+	//              the legacy callback API is not registered.
+	// Overridable per-mod (pack.json "luaMode") and per-script (-- @luamode ...).
+	public var luaMode:String = 'compat';
 	public var modSecurityEnabled:Bool = true;
 	// Per-pattern toggles for mod-security scanning. Key = ModSecurity pattern
 	// name (e.g. "saveFile", "Sys.command"). Missing entries default to enabled
