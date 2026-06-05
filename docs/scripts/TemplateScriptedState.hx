@@ -22,8 +22,8 @@ class MyMenu extends MusicBeatState {
 	}
 
 	override function create() {
-		super.create(); // sets up the camera / transition -- keep this first
-
+		// super.create() is OPTIONAL -- the engine sets up the camera before
+		// create() runs. Call it if you also want the built-in fade-in transition.
 		var bg:FlxSprite = new FlxSprite().loadGraphic(Paths.image('menuBG'));
 		bg.screenCenter();
 		add(bg);

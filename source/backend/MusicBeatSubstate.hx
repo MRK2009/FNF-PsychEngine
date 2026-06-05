@@ -3,6 +3,10 @@ package backend;
 import flixel.FlxSubState;
 
 class MusicBeatSubstate extends FlxSubState {
+	// The mod folder a scripted substate was loaded from (null for built-in ones).
+	// Set by scripting.ScriptedStates; used for auto mod-scoping of asset lookups.
+	public var scriptOwnerMod:String = null;
+
 	public function new() {
 		super();
 	}

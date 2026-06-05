@@ -134,6 +134,27 @@ class Main extends Sprite {
 			if (FlxG.game != null)
 				resetSpriteCache(FlxG.game);
 		});
+
+		// Scripted-state setup: runs right BEFORE a scripted state's create(), so
+		// the state is mod-sandboxed and has a camera even if the script never calls
+		// super.create(). A scripted state carries the mod it was loaded from in
+		// `scriptOwnerMod` (set by scripting.ScriptedStates).
+		FlxG.signals.preStateCreate.add(function(state:flixel.FlxState) {
+			if (state != null && (state is backend.MusicBeatState)) {
+				var st:backend.MusicBeatState = cast state;
+				if (st.scriptOwnerMod != null) {
+					#if MODS_ALLOWED
+					// Auto-scope asset/script lookups to the state's own mod (its
+					// folder first, shared engine assets as fallback) so scripts
+					// never need to touch Mods.* manually.
+					backend.Mods.currentModDirectory = st.scriptOwnerMod;
+					backend.Mods.pushGlobalMods();
+					#end
+					// Guarantee a camera before the (possibly super-less) create().
+					st.initPsychCamera();
+				}
+			}
+		});
 	}
 
 	static function resetSpriteCache(sprite:Sprite):Void {
