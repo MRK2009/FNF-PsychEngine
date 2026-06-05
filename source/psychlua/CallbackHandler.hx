@@ -60,7 +60,7 @@ class CallbackHandler {
 			if (args.length != nparams) args.resize(nparams);
 
 			for (i in 0...nparams)
-				args[i] = Convert.fromLua(L, i + 1);
+				args[i] = LuaProxy.unwrap(L, i + 1);
 
 			final ret:Dynamic = Reflect.callMethod(null, cbf, args);
 
@@ -68,7 +68,7 @@ class CallbackHandler {
 			argPool.push(args);
 
 			if (ret != null) {
-				Convert.toLua(L, ret);
+				LuaProxy.pushHaxe(L, ret); // live proxy for returned Haxe objects (e.g. getVar)
 				return 1;
 			}
 		} catch (e:haxe.Exception) {

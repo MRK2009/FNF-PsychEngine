@@ -27,6 +27,16 @@ class MiscSettingsSubState extends BaseOptionsMenu {
 		addOption(stateSourceOption);
 		#end
 
+		#if LUA_ALLOWED
+		// Default Lua scripting mode (mods/scripts can override this).
+		var luaModeOption:Option = new Option('Lua Mode',
+			"Default mode for Lua scripts.\n'compat': legacy PsychLua callbacks + direct object access.\n'raw': real Lua only (game.boyfriend.x, import('...')) -- legacy callback API disabled.\nMods can override via pack.json \"luaMode\", scripts via -- @luamode.",
+			'luaMode',
+			STRING,
+			['compat', 'raw']);
+		addOption(luaModeOption);
+		#end
+
 		#if MODS_ALLOWED
 		// Opener row for the per-check toggles submenu. Uses a BOOL row that
 		// always reports `true` so the checkbox is just decorative; the real
