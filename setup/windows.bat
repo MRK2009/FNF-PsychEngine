@@ -42,7 +42,7 @@ call :installGit grig.audio       https://gitlab.com/haxe-grig/grig.audio
 call :installGit hxluajit         https://github.com/MAJigsaw77/hxluajit
 call :installGit hxluajit-wrapper https://github.com/MAJigsaw77/hxluajit-wrapper
 rem Script interpreter (replaces hscript-iris); pinned to match hmm.json.
-call :installGit hscript-insanity https://github.com/inky03/hscript-insanity 9b3c9f82cac3e5929ed965fdb5fbef7bbd35d41b
+call :installGit hscript-insanity https://github.com/MeguminBOT/hscript-insanity
 
 echo.
 echo Re-asserting hxcpp = 'git' just in case and wipe any 4.3.2 version if it somehow snuck in.

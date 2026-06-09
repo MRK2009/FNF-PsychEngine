@@ -52,8 +52,7 @@
 			"name": "hscript-insanity",
 			"type": "git",
 			"dir": null,
-			"url": "https://github.com/inky03/hscript-insanity",
-			"ref": "9b3c9f82cac3e5929ed965fdb5fbef7bbd35d41b"
+			"url": "https://github.com/MeguminBOT/hscript-insanity"
 		},
 		{
 			"name": "hxcpp-debug-server",

@@ -52,7 +52,7 @@ install_git grig.audio       https://gitlab.com/haxe-grig/grig.audio
 install_git hxluajit         https://github.com/MAJigsaw77/hxluajit
 install_git hxluajit-wrapper https://github.com/MAJigsaw77/hxluajit-wrapper
 # Script interpreter (replaces hscript-iris); pinned to match hmm.json.
-install_git hscript-insanity https://github.com/inky03/hscript-insanity 9b3c9f82cac3e5929ed965fdb5fbef7bbd35d41b
+install_git hscript-insanity https://github.com/MeguminBOT/hscript-insanity
 
 echo
 echo "Re-asserting hxcpp = git and wiping any release version folders that snuck in..."
