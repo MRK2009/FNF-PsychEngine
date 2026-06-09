@@ -283,6 +283,17 @@ class Mods {
 		return DEFAULT_ENTRY_STATE;
 	}
 
+	/** Menu-music name for a mod: pack.json "menuMusic", else 'freakyMenu'. */
+	public static function getMenuMusic(?folder:String = null):String {
+		var pack:Dynamic = getPack(folder);
+		if (pack != null && pack.menuMusic != null) {
+			var s:String = Std.string(pack.menuMusic);
+			if (s.length > 0)
+				return s;
+		}
+		return 'freakyMenu';
+	}
+
 	/** A mod is launchable if it ships its entry state at states/<entry>.hx. */
 	public static function isLaunchable(?folder:String = null):Bool {
 		#if (MODS_ALLOWED && HSCRIPT_ALLOWED)

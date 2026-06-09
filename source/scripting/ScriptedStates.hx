@@ -60,8 +60,21 @@ class ScriptedStates {
 	 * Returns null (and logs to the debug console) if the script is missing,
 	 * fails to parse, or doesn't declare a matching scripted-state class.
 	 */
+	// When the default (ANY) scope is used from inside a launched/global mod,
+	// resolve from that mod's STABLE source rather than Mods.currentModDirectory,
+	// which engine helpers (e.g. WeekData.setDirectoryFromWeek) repoint at will.
+	static inline function sourceScope(scope:ResolveScope):ResolveScope {
+		if (scope != ANY)
+			return scope;
+		return switch (Mods.stateSourceMode) {
+			case MOD: LAUNCHED;
+			case GLOBAL: GLOBALS;
+			default: ANY;
+		}
+	}
+
 	public static function loadState(name:String, ?args:Array<Dynamic>, scope:ResolveScope = ANY):MusicBeatState {
-		var inst:Dynamic = instantiate('states/', name, args, scope);
+		var inst:Dynamic = instantiate('states/', name, args, sourceScope(scope));
 		if (inst == null)
 			return null;
 		if (!(inst is MusicBeatState)) {
@@ -78,7 +91,7 @@ class ScriptedStates {
 
 	/** Builds a live `MusicBeatSubstate` from `substates/<name>.hx`. */
 	public static function loadSubstate(name:String, ?args:Array<Dynamic>):MusicBeatSubstate {
-		var inst:Dynamic = instantiate('substates/', name, args);
+		var inst:Dynamic = instantiate('substates/', name, args, sourceScope(ANY));
 		if (inst == null)
 			return null;
 		if (!(inst is MusicBeatSubstate)) {
@@ -140,6 +153,18 @@ class ScriptedStates {
 		Mods.launchedMod = folder;
 		Mods.stateSourceMode = MOD;
 		Mods.pushGlobalMods();
+
+		// Swap to the launched mod's menu music (if it ships one) so its menu opens
+		// with its own track instead of the engine's freakyMenu still playing. Only
+		// when the mod actually provides the file, to avoid restarting the base track.
+		var menuMusic:String = Mods.getMenuMusic(folder);
+		if (FileSystem.exists(Paths.mods('$folder/music/$menuMusic.${Paths.SOUND_EXT}'))) {
+			// Keep the current menu volume so the swap is seamless (and the mod menu's
+			// own volume ramp, if any, carries on from here).
+			var vol:Float = (FlxG.sound.music != null) ? FlxG.sound.music.volume : 1;
+			FlxG.sound.playMusic(Paths.music(menuMusic), vol);
+		}
+
 		return switchToState(Mods.getEntryState(folder), null, LAUNCHED);
 		#else
 		return false;
@@ -157,8 +182,33 @@ class ScriptedStates {
 		activeScriptedMod = null;
 		Mods.launchedMod = null;
 		Mods.stateSourceMode = NONE;
-		Mods.loadTopMod();
+
+		#if MODS_ALLOWED
+		// Back to base defaults: only GLOBAL (scriptpack / runsGlobally) mods keep
+		// overriding assets after this point. Most assets re-resolve by path key once
+		// currentModDirectory is cleared; the rest is reset below.
+		Mods.currentModDirectory = '';
+		Mods.pushGlobalMods();
+		#end
+		resetEngineDefaults();
+
 		MusicBeatState.switchState(new states.ModsMenuState());
+	}
+
+	/**
+	 * Undoes a launched modpack's GLOBAL side effects so the engine returns to its
+	 * default look/sound (unless a GLOBAL mod still overrides an asset):
+	 *  - swapped menu music -> back to the default freakyMenu,
+	 *  - the static Alphabet letter data (loaded from the mod's alphabet.json) ->
+	 *    reloaded from base/global (this is the "global alphabet" leak),
+	 *  - cached mod graphics/sounds -> dropped so defaults reload by path.
+	 */
+	static function resetEngineDefaults():Void {
+		FlxG.sound.playMusic(Paths.music('freakyMenu'));
+		objects.Alphabet.AlphaCharacter.loadAlphabetData(); // letter data lives on AlphaCharacter
+		#if MODS_ALLOWED
+		Paths.clearStoredMemory();
+		#end
 	}
 
 	/** Loads `substates/<name>.hx` and opens it over the current state. */
@@ -340,6 +390,8 @@ class ScriptedStates {
 		s('LoadingState', states.LoadingState);
 		s('Difficulty', backend.Difficulty);
 		s('Highscore', backend.Highscore);
+		s('WeekData', backend.WeekData);
+		s('CoolUtil', backend.CoolUtil);
 
 		s('controls', Controls.instance);
 		s('getVar', function(name:String):Dynamic {

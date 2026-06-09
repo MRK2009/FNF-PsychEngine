@@ -79,17 +79,30 @@ class WeekData {
 		weeksList = [];
 		weeksLoaded.clear();
 		#if MODS_ALLOWED
-		var directories:Array<String> = [Paths.mods(), Paths.getSharedPath()];
-		var originalLength:Int = directories.length;
-
-		for (mod in Mods.parseList().enabled)
-			directories.push(Paths.mods(mod + '/'));
+		// A launched modpack should only ever see ITS OWN weeks -- never base-game
+		// or other enabled mods' weeks. `launchedMod` is set only while a mod is
+		// launched (Mods.launchMod / "From Mod"), so this is the modpack check.
+		var scopedToMod:Bool = (Mods.launchedMod != null && Mods.launchedMod.length > 0);
+		var directories:Array<String>;
+		var originalLength:Int;
+		if (scopedToMod) {
+			directories = [Paths.mods(Mods.launchedMod + '/')];
+			originalLength = 0; // everything here is a mod dir -> weekFile.folder gets tagged
+		} else {
+			directories = [Paths.mods(), Paths.getSharedPath()];
+			originalLength = directories.length;
+			for (mod in Mods.parseList().enabled)
+				directories.push(Paths.mods(mod + '/'));
+		}
 		#else
+		var scopedToMod:Bool = false;
 		var directories:Array<String> = [Paths.getSharedPath()];
 		var originalLength:Int = directories.length;
 		#end
 
-		var sexList:Array<String> = CoolUtil.coolTextFile(Paths.getSharedPath('weeks/weekList.txt'));
+		// The shared (base-game) canonical week list is skipped when scoped to a
+		// launched modpack; that pack's own weekList.txt / week jsons drive it below.
+		var sexList:Array<String> = scopedToMod ? [] : CoolUtil.coolTextFile(Paths.getSharedPath('weeks/weekList.txt'));
 		for (i in 0...sexList.length) {
 			for (j in 0...directories.length) {
 				var fileToCheck:String = directories[j] + 'weeks/' + sexList[i] + '.json';
