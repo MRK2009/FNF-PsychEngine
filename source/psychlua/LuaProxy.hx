@@ -120,6 +120,7 @@ class LuaProxy {
 		if (raw == null) return null;
 		var ptr:cpp.Pointer<Int> = cast cpp.Pointer.fromRaw(raw);
 		return states.get(ptr[0]);
+	}
 
 	public static function pushHaxe(L:cpp.RawPointer<Lua_State>, v:Dynamic, cached:Bool = true):Void {
 		if (v == null) {
