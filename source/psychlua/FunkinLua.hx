@@ -1720,6 +1720,7 @@ class FunkinLua {
 		if (lua == null) {
 			return;
 		}
+		LuaProxy.dispose(lua); // drop this state's proxy registry before closing
 		Lua.close(lua);
 		lua = null;
 		#if HSCRIPT_ALLOWED

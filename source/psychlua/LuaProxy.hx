@@ -59,6 +59,7 @@ class LuaProxy {
 		if (LuaL.newmetatable(L, INST_META) == 1) {
 			setMeta(L, "__index", cpp.Callable.fromStaticFunction(instanceIndex));
 			setMeta(L, "__newindex", cpp.Callable.fromStaticFunction(instanceNewIndex));
+			setMeta(L, "__len", cpp.Callable.fromStaticFunction(instanceLen));
 			setMeta(L, "__tostring", cpp.Callable.fromStaticFunction(proxyToString));
 			setMeta(L, "__gc", cpp.Callable.fromStaticFunction(proxyGc));
 		}
@@ -122,7 +123,13 @@ class LuaProxy {
 		return states.get(ptr[0]);
 	}
 
-	public static function pushHaxe(L:cpp.RawPointer<Lua_State>, v:Dynamic, cached:Bool = true):Void {
+	// `proxyContainers`: whether Array/Map values are pushed as LIVE proxies
+	// (direct-access path, default) or as native 1-based Lua tables. The
+	// traditional psychlua API (CallbackHandler) passes `false` so stock scripts
+	// get real tables -- with working `#`, `ipairs`, `table.*` -- exactly like
+	// upstream Psych; class instances stay proxies regardless so `getProperty`
+	// can still return a live object.
+	public static function pushHaxe(L:cpp.RawPointer<Lua_State>, v:Dynamic, cached:Bool = true, proxyContainers:Bool = true):Void {
 		if (v == null) {
 			Lua.pushnil(L);
 			return;
@@ -139,7 +146,10 @@ class LuaProxy {
 			case TBool:
 				Lua.pushboolean(L, v == true ? 1 : 0);
 			case TClass(_):
-				pushObject(L, v, INST_META, cached);
+				if (!proxyContainers && (v is Array || v is haxe.Constraints.IMap))
+					Convert.toLua(L, v); // native 1-based table for the traditional API
+				else
+					pushObject(L, v, INST_META, cached);
 			default:
 				Convert.toLua(L, v); // anonymous structures / unknowns
 		}
@@ -237,7 +247,9 @@ class LuaProxy {
 
 		if (Lua.type(L, 2) == Lua.TNUMBER && (obj is Array)) {
 			var arr:Array<Dynamic> = obj;
-			var i:Int = Lua.tointeger(L, 2);
+			// Lua is 1-based; map to the Haxe array's 0-based index so direct
+			// access matches Lua/Psych convention (e.g. arr[1] is the first item).
+			var i:Int = Lua.tointeger(L, 2) - 1;
 			pushHaxe(L, (i >= 0 && i < arr.length) ? arr[i] : null);
 			return 1;
 		}
@@ -322,6 +334,17 @@ class LuaProxy {
 		return 1;
 	}
 
+	// `#proxy` for proxied arrays so length and `for i = 1, #arr` loops work on
+	// the direct-access path. LuaJIT (5.1 core) honours __len on userdata.
+	// Non-array objects report 0. Note: pairs/ipairs over a proxy still need a
+	// numeric loop -- their metamethods are Lua 5.2 and not honoured by LuaJIT
+	// without the 5.2-compat build flag (not enabled here).
+	static function instanceLen(L:cpp.RawPointer<Lua_State>):Int {
+		var obj:Dynamic = objAt(L, 1);
+		Lua.pushinteger(L, (obj is Array) ? (obj : Array<Dynamic>).length : 0);
+		return 1;
+	}
+
 	static function instanceNewIndex(L:cpp.RawPointer<Lua_State>):Int {
 		var obj:Dynamic = objAt(L, 1);
 		if (obj == null)
@@ -329,7 +352,7 @@ class LuaProxy {
 
 		if (Lua.type(L, 2) == Lua.TNUMBER && (obj is Array)) {
 			var arr:Array<Dynamic> = obj;
-			arr[Lua.tointeger(L, 2)] = unwrap(L, 3);
+			arr[Lua.tointeger(L, 2) - 1] = unwrap(L, 3); // 1-based Lua -> 0-based Haxe
 			return 0;
 		}
 

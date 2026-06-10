@@ -68,7 +68,11 @@ class CallbackHandler {
 			argPool.push(args);
 
 			if (ret != null) {
-				LuaProxy.pushHaxe(L, ret); // live proxy for returned Haxe objects (e.g. getVar)
+				// Traditional psychlua return boundary: data containers (arrays/maps)
+				// come back as native 1-based Lua tables so stock mods get real
+				// tables; class instances stay live proxies (e.g. getVar). This keeps
+				// the direct-access proxy system from leaking into the classic API.
+				LuaProxy.pushHaxe(L, ret, true, false);
 				return 1;
 			}
 		} catch (e:haxe.Exception) {
