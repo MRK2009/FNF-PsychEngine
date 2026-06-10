@@ -249,6 +249,9 @@ class ModSecuritySubstate extends MusicBeatSubstate {
 			return;
 		}
 		final folder = pending[currentIdx];
+		// Ensure the mod has been scanned so a proactively-opened review (no prior
+		// record) shows accurate findings rather than a false "clean".
+		ModSecurity.isBlocked(folder);
 		final rec = ModSecurity.records.get(folder);
 
 		counterTxt.text = 'Mod ${currentIdx + 1} / ${pending.length}';
@@ -258,13 +261,8 @@ class ModSecuritySubstate extends MusicBeatSubstate {
 		displayFindings = [];
 		listScroll = 0;
 
-		final body = new StringBuf();
-		body.add('This mod\'s scripts use APIs that can be abused for harm.\n');
-		body.add('TRUST = scripts run normally.   BLOCK = mod stays enabled, scripts skipped.\n');
-
+		final seenCat = new Map<String, Bool>();
 		if (rec != null) {
-			final seenCat = new Map<String, Bool>();
-			final cats:Array<String> = [];
 			final findings = rec.findings;
 			final fLen = findings.length;
 			for (i in 0...fLen) {
@@ -272,15 +270,28 @@ class ModSecuritySubstate extends MusicBeatSubstate {
 				if (HIDDEN_FROM_DISPLAY.exists(f.pattern)) continue;
 				displayFindings.push(f);
 				final cat = PATTERN_CATEGORY.exists(f.pattern) ? PATTERN_CATEGORY.get(f.pattern) : "other";
-				if (!seenCat.exists(cat)) {
+				if (!seenCat.exists(cat))
 					seenCat.set(cat, true);
-					cats.push(cat);
-				}
 			}
-			// Always print categories in the canonical order, only the ones present.
-			final orderLen = CATEGORY_ORDER.length;
+		}
+
+		final hasFindings:Bool = displayFindings.length > 0;
+		final body = new StringBuf();
+
+		if (!hasFindings) {
+			// Clean mod (or all findings filtered): this reads as a settings view,
+			// letting the user proactively trust/block even with nothing flagged.
+			titleTxt.text = 'Mod Security';
+			body.add('No sensitive APIs were detected in this mod\'s scripts.\n\n');
+			body.add('TRUST = scripts run normally.\n');
+			body.add('BLOCK = mod stays enabled, scripts skipped.');
+		} else {
+			titleTxt.text = 'Sensitive API Warning';
+			body.add('This mod\'s scripts use APIs that can be abused for harm.\n');
+			body.add('TRUST = scripts run normally.   BLOCK = mod stays enabled, scripts skipped.\n');
 			body.add('\nThis mod can:');
 			var anyCat:Bool = false;
+			final orderLen = CATEGORY_ORDER.length;
 			for (i in 0...orderLen) {
 				final cat = CATEGORY_ORDER[i];
 				if (!seenCat.exists(cat)) continue;
@@ -288,7 +299,6 @@ class ModSecuritySubstate extends MusicBeatSubstate {
 				body.add('\n  ');
 				body.add(CATEGORY_LABELS.get(cat));
 			}
-			// Catch-all for patterns not in PATTERN_CATEGORY.
 			if (seenCat.exists("other")) {
 				body.add('\n  [*] Other sensitive APIs (see list below)');
 				anyCat = true;
@@ -298,17 +308,20 @@ class ModSecuritySubstate extends MusicBeatSubstate {
 		}
 
 		bodyTxt.text = body.toString();
-		// Cursor defaults to reflect current state: TRUST highlighted only if mod
-		// is already trusted (i.e. user previously decided to allow). Brand-new
-		// prompts (no decision yet) start on BLOCK as the safer default.
-		onTrust = (rec != null && rec.allowed && rec.decided);
+		// Default cursor: for a clean mod (or one the user already decided on),
+		// reflect the CURRENT trust state. A brand-new prompt that actually has
+		// findings starts on BLOCK as the safer default.
+		if (!hasFindings || (rec != null && rec.decided))
+			onTrust = (rec == null || rec.allowed);
+		else
+			onTrust = false;
 		refreshList();
 	}
 
 	function refreshList():Void {
 		final total:Int = displayFindings.length;
 		if (total == 0) {
-			listTxt.text = '  (no displayable findings)';
+			listTxt.text = '  (no sensitive APIs detected)';
 			listScrollHint.text = '';
 			return;
 		}

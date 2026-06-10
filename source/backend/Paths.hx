@@ -322,7 +322,7 @@ class Paths {
 				if (FileSystem.exists(mods('$mod/$modKey')))
 					return true;
 
-			if (FileSystem.exists(mods(Mods.currentModDirectory + '/' + modKey)) || FileSystem.exists(mods(modKey)))
+			if ((Mods.allowCurrentModAssets && FileSystem.exists(mods(Mods.currentModDirectory + '/' + modKey))) || FileSystem.exists(mods(modKey)))
 				return true;
 		}
 		#end
@@ -476,7 +476,7 @@ class Paths {
 		return modFolders('images/' + key + '.json');
 
 	static public function modFolders(key:String) {
-		if (Mods.currentModDirectory != null && Mods.currentModDirectory.length > 0) {
+		if (Mods.allowCurrentModAssets && Mods.currentModDirectory != null && Mods.currentModDirectory.length > 0) {
 			var fileToCheck:String = mods(Mods.currentModDirectory + '/' + key);
 			if (FileSystem.exists(fileToCheck))
 				return fileToCheck;

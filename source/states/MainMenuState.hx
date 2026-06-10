@@ -40,6 +40,7 @@ class MainMenuState extends MusicBeatState {
 	static var showOutdatedWarning:Bool = true;
 
 	override function create() {
+		backend.Mods.allowCurrentModAssets = false; // core menu: engine + global mods only
 		super.create();
 
 		#if MODS_ALLOWED

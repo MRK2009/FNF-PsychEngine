@@ -177,6 +177,9 @@ class MusicBeatState extends FlxState {
 	}
 
 	public static function switchState(nextState:FlxState = null) {
+		// Default every state to full mod-asset resolution; core-menu states opt
+		// out in their create() so non-global mods can't override menu assets.
+		Mods.allowCurrentModAssets = true;
 		if (nextState == null)
 			nextState = FlxG.state;
 		#if HSCRIPT_ALLOWED

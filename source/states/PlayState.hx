@@ -284,6 +284,7 @@ class PlayState extends MusicBeatState {
 
 	override public function create() {
 		// trace('Playback Rate: ' + playbackRate);
+		Mods.allowCurrentModAssets = true; // gameplay: ensure the active mod's assets resolve
 		_lastLoadedModDirectory = Mods.currentModDirectory;
 		Paths.clearStoredMemory();
 		if (nextReloadAll) {

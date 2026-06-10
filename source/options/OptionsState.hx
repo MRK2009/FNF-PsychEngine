@@ -45,6 +45,7 @@ class OptionsState extends MusicBeatState {
 	var selectorRight:Alphabet;
 
 	override function create() {
+		backend.Mods.allowCurrentModAssets = false; // core menu: engine + global mods only
 		#if DISCORD_ALLOWED
 		DiscordClient.changePresence("Options Menu", null);
 		#end

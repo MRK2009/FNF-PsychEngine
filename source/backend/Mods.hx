@@ -12,6 +12,12 @@ typedef ModsList = {
 class Mods {
 	static public var currentModDirectory:String = '';
 
+	// When false, asset resolution (Paths) ignores `currentModDirectory` so a
+	// non-global mod can't override engine assets in core menus. Global mods are
+	// unaffected. Reset to true on every state switch (MusicBeatState.switchState);
+	// core-menu states set it false in create(). See plan: menu asset isolation.
+	static public var allowCurrentModAssets:Bool = true;
+
 	// ── Scripted state-source (session-only) ──────────────────────────────────
 	// Controls whether/which scripted states may override the engine's core menus.
 	// `Psych (Default)` => NONE (no overrides). A launched mod => MOD(launchedMod).
@@ -171,6 +177,22 @@ class Mods {
 		return null;
 	}
 
+	/** Writes a mod's pack.json to disk (pretty-printed). Returns false on failure. */
+	public static function savePack(folder:String, data:Dynamic):Bool {
+		#if MODS_ALLOWED
+		if (folder == null || folder.length < 1 || data == null)
+			return false;
+		try {
+			var path:String = Paths.mods(folder + '/pack.json');
+			File.saveContent(path, Json.stringify(data, null, '\t'));
+			return true;
+		} catch (e:Dynamic) {
+			trace('savePack failed for $folder: $e');
+		}
+		#end
+		return false;
+	}
+
 	public static var updatedOnState(default, set):Bool = false;
 	private static var cachedList:ModsList = null;
 
@@ -285,6 +307,12 @@ class Mods {
 
 	/** Menu-music name for a mod: pack.json "menuMusic", else 'freakyMenu'. */
 	public static function getMenuMusic(?folder:String = null):String {
+		// In core menus a non-global current mod must not dictate the menu music.
+		// When suppressed and no explicit folder was requested, fall back to the
+		// stock track (global-mod assets still resolve via Paths normally).
+		if (folder == null && !allowCurrentModAssets)
+			return 'freakyMenu';
+
 		var pack:Dynamic = getPack(folder);
 		if (pack != null && pack.menuMusic != null) {
 			var s:String = Std.string(pack.menuMusic);

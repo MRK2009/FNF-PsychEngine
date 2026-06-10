@@ -17,6 +17,7 @@ class CreditsState extends MusicBeatState {
 	var offsetThing:Float = -75;
 
 	override function create() {
+		backend.Mods.allowCurrentModAssets = false; // core menu: engine + global mods only
 		#if DISCORD_ALLOWED
 		// Updating Discord Rich Presence
 		DiscordClient.changePresence("In the Menus", null);

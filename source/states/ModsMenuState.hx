@@ -80,6 +80,7 @@ class ModsMenuState extends MusicBeatState {
 	}
 
 	override function create() {
+		backend.Mods.allowCurrentModAssets = false; // core menu: engine + global mods only
 		Paths.clearStoredMemory();
 		Paths.clearUnusedMemory();
 		persistentUpdate = false;
@@ -220,7 +221,7 @@ class ModsMenuState extends MusicBeatState {
 		add(modsGroup);
 
 		hintBar = new FlxText(margin, FlxG.height - 18, FlxG.width - margin * 2,
-			'UP/DOWN Select   LEFT/RIGHT Reorder   ENTER Launch   SPACE On/Off   TAB Settings   F Filter   / Search   ESC Exit', 15);
+			'UP/DOWN Select   L/R Reorder   ENTER Launch   SPACE On/Off (SHIFT=All)   TAB Settings   Y Security   P Pack   F Filter   / Search   ESC Exit', 15);
 		hintBar.setFormat(Paths.font("vcr.ttf"), 15, FlxColor.WHITE, CENTER, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 		hintBar.alpha = 0.7;
 		add(hintBar);
@@ -371,14 +372,19 @@ class ModsMenuState extends MusicBeatState {
 			// Actions. Space/Y (toggle) is checked BEFORE Accept (launch): ACCEPT
 			// is bound to both Enter AND Space, so otherwise Space would launch and
 			// never toggle.
-			if (FlxG.keys.justPressed.SPACE || FlxG.gamepads.anyJustPressed(Y))
-				toggleSelected();
-			else if (controls.ACCEPT)
+			if (FlxG.keys.justPressed.SPACE || FlxG.gamepads.anyJustPressed(Y)) {
+				if (FlxG.keys.pressed.SHIFT)
+					toggleAll();
+				else
+					toggleSelected();
+			} else if (controls.ACCEPT)
 				launchSelected();
 			else if (FlxG.keys.justPressed.TAB || FlxG.gamepads.anyJustPressed(X))
 				openSelectedSettings();
 			else if (FlxG.keys.justPressed.Y)
 				openSelectedSecurity();
+			else if (FlxG.keys.justPressed.P)
+				openSelectedPackSettings();
 			else if (FlxG.keys.justPressed.F)
 				cycleFilter();
 			else if (FlxG.keys.justPressed.SLASH)
@@ -670,12 +676,89 @@ class ModsMenuState extends MusicBeatState {
 		var m = currentMod();
 		if (m == null)
 			return;
-		if (!ClientPrefs.data.modSecurityEnabled || !backend.ModSecurity.hasFindings(m.folder)) {
+		// Reachable per-pack regardless of findings: lets users proactively
+		// trust/block a mod's scripts. Only the master toggle gates it.
+		if (!ClientPrefs.data.modSecurityEnabled) {
 			FlxG.sound.play(Paths.sound('cancelMenu'), 0.6);
+			launchStatus.text = 'Mod Security is disabled (enable it in Options)';
+			launchStatus.color = FlxColor.YELLOW;
 			return;
 		}
 		FlxG.sound.play(Paths.sound('confirmMenu'), 0.6);
 		openSubState(new substates.ModSecuritySubstate([m.folder]));
+	}
+
+	function openSelectedPackSettings() {
+		var m = currentMod();
+		if (m == null)
+			return;
+		FlxG.sound.play(Paths.sound('confirmMenu'), 0.6);
+		openSubState(new substates.PackSettingsSubState(m.folder, onPackSettingsChanged));
+	}
+
+	// Called by PackSettingsSubState after writing pack.json. Rebuilds that mod's
+	// row so edited name/description/color/icon show immediately, and flags a
+	// restart when global/restart-affecting fields changed (they take effect at boot).
+	function onPackSettingsChanged(folder:String, needsRestart:Bool) {
+		if (needsRestart)
+			waitingToRestart = true;
+
+		var idx:Int = -1;
+		for (i in 0...modsGroup.members.length)
+			if (modsGroup.members[i] != null && modsGroup.members[i].folder == folder) {
+				idx = i;
+				break;
+			}
+		if (idx >= 0) {
+			var old = modsGroup.members[idx];
+			modsGroup.remove(old, true);
+			old.destroy();
+			modsGroup.insert(idx, new ModItem(folder));
+		}
+		applyView();
+
+		// applyView can't preserve selection across the rebuild (old object gone),
+		// so re-point curSel at the edited mod by folder.
+		for (vi in 0...view.length)
+			if (view[vi].folder == folder) {
+				curSel = vi;
+				break;
+			}
+		layoutList();
+		updateDetail();
+	}
+
+	// Bulk toggle over the current view: if anything visible is disabled, enable
+	// all; otherwise disable all. Composes with filters/search (e.g. filter to
+	// DISABLED then bulk-enable). Restart-flagging mirrors toggleSelected.
+	function toggleAll() {
+		if (view.length < 1)
+			return;
+
+		var anyDisabled:Bool = false;
+		for (item in view)
+			if (modsList.disabled.contains(item.folder)) {
+				anyDisabled = true;
+				break;
+			}
+
+		for (item in view) {
+			var mod = item.folder;
+			var isDisabled = modsList.disabled.contains(mod);
+			if (anyDisabled && isDisabled) {
+				modsList.disabled.remove(mod);
+				modsList.enabled.push(mod);
+				if (item.mustRestart)
+					waitingToRestart = true;
+			} else if (!anyDisabled && !isDisabled) {
+				modsList.enabled.remove(mod);
+				modsList.disabled.push(mod);
+				if (item.mustRestart)
+					waitingToRestart = true;
+			}
+		}
+		FlxG.sound.play(Paths.sound('scrollMenu'), 0.6);
+		applyView();
 	}
 
 	function cycleFilter() {

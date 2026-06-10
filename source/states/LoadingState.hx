@@ -79,6 +79,7 @@ class LoadingState extends MusicBeatState {
 	#end
 
 	override function create() {
+		backend.Mods.allowCurrentModAssets = true; // loading gameplay assets: keep active mod resolution
 		persistentUpdate = true;
 		barGroup = new FlxSpriteGroup();
 		add(barGroup);

@@ -57,6 +57,7 @@ class TitleState extends MusicBeatState {
 	#end
 
 	override public function create():Void {
+		backend.Mods.allowCurrentModAssets = false; // core menu: engine + global mods only
 		Paths.clearStoredMemory();
 		super.create();
 		Paths.clearUnusedMemory();
