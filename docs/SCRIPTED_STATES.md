@@ -5,6 +5,11 @@ This fork swaps the HScript interpreter from **hscript-iris** to
 can script **whole classes** — most usefully, entire game **states** (custom
 menus, etc.), not just `onCreate`/`onUpdate` callback hooks.
 
+> **Porting a compiled state?** See
+> [SCRIPTED_STATES_VS_HARDCODED.md](SCRIPTED_STATES_VS_HARDCODED.md) first — it lists
+> what the engine already does for you (so you don't re-script it) and what moves to
+> `pack.json` instead of code.
+
 ## Writing a scripted state
 
 Create `mods/<YourMod>/states/MyMenu.hx`. The class name must match the file
@@ -82,7 +87,8 @@ and can be used as real field types (not `Dynamic`):
 `FlxSort`, `FlxStringUtil`, `PsychCamera`, `Paths`,
 `Conductor`, `ClientPrefs`, `Alphabet`, `PlayState`, `MusicBeatState`,
 `MusicBeatSubstate`, `Song`, `LoadingState`, `Difficulty`, `Highscore`,
-`controls`, plus the `getVar`/`setVar`/`switchToState`/`launchMod`/… helpers.
+`WeekData`, `CoolUtil`, `controls`, plus the
+`getVar`/`setVar`/`switchToState`/`launchMod`/… helpers.
 
 Anything else still needs an `import` (see the import notes below).
 
