@@ -2,7 +2,7 @@
 
 Psych's `LuaProxy` bridge pushes **live Haxe objects** into Lua, so most of the
 classic string-based callbacks (`getProperty`, `callMethod`, `makeLuaSprite`, …)
-have a shorter, faster equivalent: just touch the object directly.
+may have a shorter (or longer!) but faster equivalent: just touch the object directly.
 
 This is a **cookbook of equivalents**. Each entry shows the common task, the
 classic way (as an anchor), and the LuaProxy way you should reach for.
