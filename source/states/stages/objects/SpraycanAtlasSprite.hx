@@ -16,7 +16,7 @@ class SpraycanAtlasSprite extends FlxSpriteGroup {
 	public function new(x:Float = 0, y:Float = 0) {
 		super();
 
-		canAtlas = new FlxAnimate(x, y);
+		canAtlas = new PsychFlxAnimate(x, y);
 		Paths.loadAnimateAtlas(canAtlas, 'spraycanAtlas');
 		canAtlas.anim.addBySymbolIndices('Can Start', 'Can with Labels', [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18], 24, false);
 		canAtlas.anim.addBySymbolIndices('Hit Pico', 'Can with Labels', [19, 20, 21, 22, 23, 24, 25], 24, false);

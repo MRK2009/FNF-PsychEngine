@@ -74,10 +74,11 @@ class Limo extends BaseStage {
 
 	override function createPost() {
 		resetFastCar();
-		addBehindGF(fastCar);
 
 		var limo:BGSprite = new BGSprite('limo/limoDrive', -120, 550, 1, 1, ['Limo stage'], true);
-		addBehindGF(limo); // Shitty layering but whatev it works LOL
+		addBehindDad(limo); // In front of GF (so she sits behind the limo), behind dad/bf
+
+		add(fastCar); // In front of everything (characters + limo)
 	}
 
 	var limoSpeed:Float = 0;

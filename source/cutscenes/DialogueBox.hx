@@ -59,6 +59,7 @@ class DialogueBox extends FlxSpriteGroup {
 
 				var face:FlxSprite = new FlxSprite(320, 170).loadGraphic(Paths.image('weeb/spiritFaceForward'));
 				face.setGraphicSize(Std.int(face.width * 6));
+				face.antialiasing = false;
 				add(face);
 			default:
 				hasDialog = false;
@@ -81,6 +82,7 @@ class DialogueBox extends FlxSpriteGroup {
 		portraitLeft.setGraphicSize(Std.int(portraitLeft.width * PlayState.daPixelZoom * 0.9));
 		portraitLeft.updateHitbox();
 		portraitLeft.scrollFactor.set();
+		portraitLeft.antialiasing = false;
 		add(portraitLeft);
 		portraitLeft.visible = false;
 
@@ -90,12 +92,14 @@ class DialogueBox extends FlxSpriteGroup {
 		portraitRight.setGraphicSize(Std.int(portraitRight.width * PlayState.daPixelZoom * 0.9));
 		portraitRight.updateHitbox();
 		portraitRight.scrollFactor.set();
+		portraitRight.antialiasing = false;
 		add(portraitRight);
 		portraitRight.visible = false;
 
 		box.animation.play('normalOpen');
 		box.setGraphicSize(Std.int(box.width * PlayState.daPixelZoom * 0.9));
 		box.updateHitbox();
+		box.antialiasing = false;
 		add(box);
 
 		box.screenCenter(X);
@@ -104,6 +108,7 @@ class DialogueBox extends FlxSpriteGroup {
 		handSelect = new FlxSprite(1042, 590).loadGraphic(Paths.image('weeb/pixelUI/hand_textbox'));
 		handSelect.setGraphicSize(Std.int(handSelect.width * PlayState.daPixelZoom * 0.9));
 		handSelect.updateHitbox();
+		handSelect.antialiasing = false;
 		handSelect.visible = false;
 		add(handSelect);
 

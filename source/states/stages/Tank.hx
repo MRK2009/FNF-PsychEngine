@@ -143,7 +143,7 @@ class Tank extends BaseStage {
 		camHUD.visible = false;
 		// inCutscene = true; //this would stop the camera movement, oops
 
-		tankman = new FlxAnimate(dad.x + 419, dad.y + 225);
+		tankman = new PsychFlxAnimate(dad.x + 419, dad.y + 225);
 		Paths.loadAnimateAtlas(tankman, 'cutscenes/tankman');
 		tankman.antialiasing = ClientPrefs.data.antialiasing;
 		addBehindDad(tankman);
@@ -280,7 +280,7 @@ class Tank extends BaseStage {
 		});
 		Paths.sound('stressCutscene');
 
-		pico = new FlxAnimate(gf.x + 150, gf.y + 450);
+		pico = new PsychFlxAnimate(gf.x + 150, gf.y + 450);
 		Paths.loadAnimateAtlas(pico, 'cutscenes/picoAppears');
 		pico.antialiasing = ClientPrefs.data.antialiasing;
 		pico.anim.addBySymbol('dance', 'GF Dancing at Gunpoint', 24, true);

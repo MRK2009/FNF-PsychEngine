@@ -34,13 +34,18 @@ class Mall extends BaseStage {
 		var fgSnow:BGSprite = new BGSprite('christmas/fgSnow', -600, 700);
 		add(fgSnow);
 
-		santa = new BGSprite('christmas/santa', -840, 150, 1, 1, ['santa idle in fear']);
-		add(santa);
 		Paths.sound('Lights_Shut_off');
 		setDefaultGF('gf-christmas');
 
 		if (isStoryMode && !seenCutscene)
 			setEndCallback(eggnogEndCutscene);
+	}
+
+	override function createPost() {
+		// Add santa after the characters exist so it renders in front of dad
+		// (dad sits behind santa) while staying behind bf.
+		santa = new BGSprite('christmas/santa', -840, 150, 1, 1, ['santa idle in fear']);
+		addBehindBF(santa);
 	}
 
 	override function countdownTick(count:Countdown, num:Int)
