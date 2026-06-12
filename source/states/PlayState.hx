@@ -449,7 +449,7 @@ class PlayState extends MusicBeatState {
 		#if (LUA_ALLOWED || HSCRIPT_ALLOWED)
 		// "SCRIPTS FOLDER" SCRIPTS
 		for (folder in Mods.directoriesWithFile(Paths.getSharedPath(), 'scripts/'))
-			for (file in FileSystem.readDirectory(folder)) {
+			for (file in getScriptLoadOrder(folder)) {
 				#if LUA_ALLOWED
 				if (file.toLowerCase().endsWith('.lua'))
 					new FunkinLua(folder + file);
@@ -3442,6 +3442,61 @@ class PlayState extends MusicBeatState {
 		setOnScripts('curSection', curSection);
 		callOnScripts('onSectionHit');
 	}
+
+	#if (LUA_ALLOWED || HSCRIPT_ALLOWED)
+	/**
+	 * Returns the files in a `scripts/` folder in load order.
+	 *
+	 * If the folder contains an order file -- `_order.txt` (checked first) or
+	 * `_loadorder.txt` -- the script filenames listed in it load FIRST, in that
+	 * exact order; every other file follows in the normal filesystem order. Blank
+	 * lines and lines starting with `#` or `//` are ignored, matching is
+	 * case-insensitive, and listed names that don't exist are skipped with a warning.
+	 *
+	 * With no order file present, the filesystem order is returned unchanged, so
+	 * existing mods are unaffected.
+	 */
+	function getScriptLoadOrder(folder:String):Array<String> {
+		var files:Array<String> = FileSystem.readDirectory(folder);
+
+		var orderPath:String = folder + '_order.txt';
+		if (!FileSystem.exists(orderPath)) {
+			orderPath = folder + '_loadorder.txt';
+			if (!FileSystem.exists(orderPath))
+				return files; // no override -> keep filesystem order
+		}
+
+		// lowercase filename -> actual filename, for case-insensitive matching
+		var lookup:Map<String, String> = new Map();
+		for (file in files)
+			lookup.set(file.toLowerCase(), file);
+
+		var ordered:Array<String> = [];
+		var used:Map<String, Bool> = new Map();
+		for (rawLine in sys.io.File.getContent(orderPath).split('\n')) {
+			var line:String = rawLine.trim();
+			if (line.length == 0 || line.startsWith('#') || line.startsWith('//'))
+				continue;
+
+			var actual:String = lookup.get(line.toLowerCase());
+			if (actual == null) {
+				FlxG.log.warn('Script load order: "$line" listed in $orderPath was not found in $folder');
+				continue;
+			}
+			if (!used.exists(actual)) {
+				ordered.push(actual);
+				used.set(actual, true);
+			}
+		}
+
+		// everything not explicitly ordered keeps its filesystem position
+		for (file in files)
+			if (!used.exists(file))
+				ordered.push(file);
+
+		return ordered;
+	}
+	#end
 
 	#if LUA_ALLOWED
 	public function startLuasNamed(luaFile:String) {
