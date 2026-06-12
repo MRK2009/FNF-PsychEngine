@@ -399,6 +399,7 @@ class CharacterEditorState extends MusicBeatState implements PsychUIEventHandler
 		check_player.onClick = function() {
 			character.isPlayer = !character.isPlayer;
 			character.flipX = !character.flipX;
+			reapplyCurrentOffset();
 			updateCharacterPositions();
 			updatePointerPos(false);
 		};
@@ -658,6 +659,7 @@ class CharacterEditorState extends MusicBeatState implements PsychUIEventHandler
 		flipXCheckBox.onClick = function() {
 			character.originalFlipX = !character.originalFlipX;
 			character.flipX = (character.originalFlipX != character.isPlayer);
+			reapplyCurrentOffset();
 		};
 
 		noAntialiasingCheckBox = new PsychUICheckBox(flipXCheckBox.x, flipXCheckBox.y + 40, "No Antialiasing", 80);
@@ -763,6 +765,7 @@ class CharacterEditorState extends MusicBeatState implements PsychUIEventHandler
 				character.jsonScale = sender.value;
 				character.scale.set(character.jsonScale, character.jsonScale);
 				character.updateHitbox();
+				reapplyCurrentOffset(); // width changed -> refresh flipped offset
 				updatePointerPos(false);
 				unsavedProgress = true;
 			} else if (sender == positionXStepper) {
@@ -989,10 +992,14 @@ class CharacterEditorState extends MusicBeatState implements PsychUIEventHandler
 
 		var anim = anims[curAnim];
 		if (changedOffset && anim != null && anim.offsets != null) {
-			anim.offsets[0] = Std.int(character.offset.x);
-			anim.offsets[1] = Std.int(character.offset.y);
+			// `character.offset` is the live (possibly flipped/scaled) value; store
+			// the authored equivalent so the JSON keeps flipX==false / base-scale
+			// offsets that applyAnimOffset re-derives in-game and in this editor.
+			var authored = character.getAuthoredOffset();
+			anim.offsets[0] = Std.int(authored[0]);
+			anim.offsets[1] = Std.int(authored[1]);
 
-			character.addOffset(anim.anim, character.offset.x, character.offset.y);
+			character.addOffset(anim.anim, authored[0], authored[1]);
 			updateText();
 		}
 
@@ -1163,6 +1170,19 @@ class CharacterEditorState extends MusicBeatState implements PsychUIEventHandler
 				intendText += anim.anim + ": " + anim.offsets;
 		}
 		animsTxt.text = intendText;
+	}
+
+	// Recompute the current animation's live offset so the preview reflects the
+	// flip/scale offset correction after toggling Playable / Flip X, without
+	// restarting the animation.
+	function reapplyCurrentOffset() {
+		if (character == null)
+			return;
+		var name = character.getAnimationName();
+		if (name != null && name.length > 0 && character.animOffsets.exists(name)) {
+			var raw = character.animOffsets.get(name);
+			character.applyAnimOffset(raw[0], raw[1]);
+		}
 	}
 
 	inline function updateCharacterPositions() {

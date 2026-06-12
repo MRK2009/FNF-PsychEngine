@@ -38,6 +38,7 @@ import states.LoadingState;
 #if flixel_animate
 import animate.FlxAnimate;
 import animate.FlxAnimateFrames;
+import backend.PsychFlxAnimate;
 #end
 // Flixel
 import flixel.sound.FlxSound;

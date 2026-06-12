@@ -77,6 +77,9 @@ class Character extends FlxSprite {
 	public var originalFlipX:Bool = false;
 	public var editorIsPlayer:Null<Bool> = null;
 
+	public var correctFlippedOffsets:Bool = true;
+	public var scalableOffsets:Bool = true;
+
 	public function new(x:Float, y:Float, ?character:String = 'bf', ?isPlayer:Bool = false) {
 		super(x, y);
 
@@ -184,6 +187,12 @@ class Character extends FlxSprite {
 		noAntialiasing = (json.no_antialiasing == true);
 		antialiasing = ClientPrefs.data.antialiasing ? !noAntialiasing : false;
 
+		// offset auto-correction opt-outs
+		if (json.correctFlippedOffsets != null)
+			correctFlippedOffsets = (json.correctFlippedOffsets == true);
+		if (json.scalableOffsets != null)
+			scalableOffsets = (json.scalableOffsets == true);
+
 		// animations
 		animationsArray = json.animations;
 		if (animationsArray != null && animationsArray.length > 0) {
@@ -230,9 +239,7 @@ class Character extends FlxSprite {
 		if (isAnimateAtlas)
 			atlas.update(elapsed);
 
-		if (debugMode
-			|| (!isAnimateAtlas && animation.curAnim == null)
-			|| (isAnimateAtlas && !atlas.isAnimate)) {
+		if (debugMode || (!isAnimateAtlas && animation.curAnim == null) || (isAnimateAtlas && !atlas.isAnimate)) {
 			super.update(elapsed);
 			return;
 		}
@@ -373,7 +380,7 @@ class Character extends FlxSprite {
 
 		if (hasAnimation(AnimName)) {
 			var daOffset = animOffsets.get(AnimName);
-			offset.set(daOffset[0], daOffset[1]);
+			applyAnimOffset(daOffset[0], daOffset[1]);
 		}
 		// else offset.set(0, 0);
 
@@ -429,6 +436,59 @@ class Character extends FlxSprite {
 
 	public function addOffset(name:String, x:Float = 0, y:Float = 0) {
 		animOffsets[name] = [x, y];
+	}
+
+	/**
+	 * Applies a stored (authored) animation offset to the live `offset`,
+	 * scaling it by the ratio to the authored `jsonScale` and mirroring it when
+	 * the sprite is flipped. Offsets are authored at flipX == false / base
+	 * scale, so a character can be reused flipped or at another scale without a
+	 * separate hand-tuned JSON. Atlas characters position through
+	 * copyAtlasValues, so flip mirroring (frameWidth/width based) is skipped.
+	 */
+	public function applyAnimOffset(rawX:Float, rawY:Float) {
+		var ox:Float = rawX;
+		var oy:Float = rawY;
+
+		if (scalableOffsets) {
+			var base:Float = (jsonScale > 0) ? jsonScale : 1;
+			ox *= scale.x / base;
+			oy *= scale.y / base;
+		}
+
+		if (correctFlippedOffsets && !isAnimateAtlas) {
+			if (flipX)
+				ox = (frameWidth * scale.x - width) - ox;
+			if (flipY)
+				oy = (frameHeight * scale.y - height) - oy;
+		}
+
+		offset.set(ox, oy);
+	}
+
+	/**
+	 * Inverse of `applyAnimOffset`: converts the current live `offset` (e.g. one
+	 * dragged in the character editor while flipped/scaled) back into the
+	 * authored value that belongs in the JSON. Returns `[x, y]`.
+	 */
+	public function getAuthoredOffset():Array<Float> {
+		var ox:Float = offset.x;
+		var oy:Float = offset.y;
+
+		if (correctFlippedOffsets && !isAnimateAtlas) {
+			if (flipX)
+				ox = (frameWidth * scale.x - width) - ox;
+			if (flipY)
+				oy = (frameHeight * scale.y - height) - oy;
+		}
+
+		if (scalableOffsets) {
+			var base:Float = (jsonScale > 0) ? jsonScale : 1;
+			ox /= scale.x / base;
+			oy /= scale.y / base;
+		}
+
+		return [ox, oy];
 	}
 
 	public function quickAnimAdd(name:String, anim:String) {
