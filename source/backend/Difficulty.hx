@@ -62,4 +62,103 @@ class Difficulty {
 	inline public static function getDefault():String {
 		return defaultDifficulty;
 	}
+
+	// Builds the per-song difficulty list shown in Freeplay, derived from the
+	// charts that actually exist on disk:
+	//   1. start from the week's declared difficulties (order/casing hints),
+	//   2. drop any whose chart file is missing,
+	//   3. append any extra `<song>-<diff>.json` charts not declared by the week.
+	// `weekDiffs` is the raw week list (may be null/empty -> defaultList). The
+	// data subfolder + filename base is the formatted song name; mod resolution
+	// uses the globally-set Mods.currentModDirectory.
+	public static function getDifficultiesForSong(song:String, ?weekDiffs:Array<String>):Array<String> {
+		var key:String = Paths.formatToSongPath(song);
+
+		var declared:Array<String> = [];
+		if (weekDiffs != null) {
+			for (d in weekDiffs)
+				if (d != null && d.trim().length > 0)
+					declared.push(d.trim());
+		}
+		if (declared.length < 1)
+			declared = defaultList.copy();
+
+		var result:Array<String> = [];
+		for (diff in declared)
+			if (chartExists(key, diff) && !containsDiff(result, diff))
+				result.push(diff);
+
+		// Discover undeclared charts on disk (e.g. a song-only "Insane").
+		#if sys
+		for (dir in songChartDirs(key)) {
+			if (!FileSystem.exists(dir) || !FileSystem.isDirectory(dir))
+				continue;
+			for (file in FileSystem.readDirectory(dir)) {
+				if (!file.endsWith('.json'))
+					continue;
+				var name:String = file.substr(0, file.length - 5);
+				var diffName:String = null;
+				if (name == key)
+					diffName = defaultDifficulty;
+				else if (name.startsWith(key + '-'))
+					diffName = titleCase(name.substr(key.length + 1));
+				else
+					continue; // a json that isn't a chart for this song
+
+				if (diffName.length > 0 && !containsDiff(result, diffName))
+					result.push(diffName);
+			}
+		}
+		#end
+
+		if (result.length < 1)
+			result.push(defaultDifficulty);
+		return result;
+	}
+
+	// The Highscore.songScores map key for a song at a named difficulty, without
+	// touching the global `list` (used by Freeplay's score sort across songs that
+	// each have their own difficulty list). Mirrors Highscore.formatSong/getFilePath.
+	public static function scoreKey(song:String, diffName:String):String {
+		var postfix:String = '';
+		if (diffName != null && Paths.formatToSongPath(diffName) != Paths.formatToSongPath(defaultDifficulty))
+			postfix = '-' + Paths.formatToSongPath(diffName);
+		return Paths.formatToSongPath(song) + postfix;
+	}
+
+	// Does the chart file for this song+difficulty exist (mods or shared)?
+	static function chartExists(key:String, diff:String):Bool {
+		var postfix:String = '';
+		if (Paths.formatToSongPath(diff) != Paths.formatToSongPath(defaultDifficulty))
+			postfix = '-' + Paths.formatToSongPath(diff);
+		return Paths.fileExists('data/$key/$key$postfix.json', TEXT);
+	}
+
+	// Case-insensitive (via formatToSongPath) membership test.
+	static function containsDiff(list:Array<String>, diff:String):Bool {
+		var fmt:String = Paths.formatToSongPath(diff);
+		for (d in list)
+			if (Paths.formatToSongPath(d) == fmt)
+				return true;
+		return false;
+	}
+
+	static inline function titleCase(s:String):String
+		return s.length > 0 ? s.charAt(0).toUpperCase() + s.substr(1) : s;
+
+	#if sys
+	// All data subfolders where this song's charts could live, in the same
+	// precedence order Paths uses (shared, then global mods, bare mods, current mod).
+	static function songChartDirs(key:String):Array<String> {
+		var dirs:Array<String> = [Paths.getSharedPath('data/$key')];
+		#if MODS_ALLOWED
+		for (mod in Mods.getGlobalMods())
+			dirs.push(Paths.mods('$mod/data/$key'));
+		dirs.push(Paths.mods('data/$key'));
+		if (Mods.currentModDirectory != null && Mods.currentModDirectory.length > 0)
+			dirs.push(Paths.mods('${Mods.currentModDirectory}/data/$key'));
+		#end
+		return dirs;
+	}
+	#end
 }
