@@ -612,7 +612,7 @@ class HScript {
 		#if LUA_ALLOWED
 		if (newPos.isLua == true) {
 			msgInfo += 'HScript:';
-			newPos.showLine = false;
+			newPos.showLine = true;
 		}
 		#end
 		if (newPos.showLine == true)
