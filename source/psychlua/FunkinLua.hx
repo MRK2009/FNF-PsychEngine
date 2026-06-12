@@ -256,6 +256,16 @@ class FunkinLua {
 		// itself is installed by LuaProxy.setup().
 		set('game', game);
 		set('instance', game);
+
+		// Two most-used classes available without an explicit import() -- pushed as
+		// CLASS_META proxies (not via set(), which proxies instances) so statics,
+		// methods and `new` work: FlxG.sound:play(...), Paths.image(...), etc.
+		// A script doing `local FlxG = import('flixel.FlxG')` just shadows these
+		// with the same proxy, so it stays backward-compatible.
+		LuaProxy.pushClass(lua, FlxG);
+		Lua.setglobal(lua, 'FlxG');
+		LuaProxy.pushClass(lua, Paths);
+		Lua.setglobal(lua, 'Paths');
 		Lua_helper.add_callback(lua, "getVar", function(varName:String) return MusicBeatState.getVariables().get(varName));
 		Lua_helper.add_callback(lua, "setVar", function(varName:String, value:Dynamic) {
 			MusicBeatState.getVariables().set(varName, value);
