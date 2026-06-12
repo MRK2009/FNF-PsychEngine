@@ -114,6 +114,22 @@ class ModSecurity {
 		"backend.ModSecurity" => true,
 		"ModSecuritySubstate" => true,
 		"substates.ModSecuritySubstate" => true,
+		// Performance overlay + its native hardware helpers. Mods have no business
+		// reflecting into these (e.g. swapping the counter out, reading raw native
+		// memory/CPU/GPU handles). The bare hxhardware names (CPU/GPU/Memory) are
+		// common words that RTTI never resolves on their own, so only the
+		// fully-qualified forms are listed for those.
+		"FPSCounter" => true,
+		"debug.FPSCounter" => true,
+		"GPUMemory" => true,
+		"debug.GPUMemory" => true,
+		"hxhardware.CPU" => true,
+		"hxhardware.GPU" => true,
+		"hxhardware.Memory" => true,
+		// Debug-counter settings store. Lives outside ClientPrefs.data precisely so
+		// scripts can't tamper with it; block resolution so they can't reach it here.
+		"DebugPrefs" => true,
+		"backend.DebugPrefs" => true,
 	];
 
 	/**
