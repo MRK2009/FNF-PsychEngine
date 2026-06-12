@@ -73,14 +73,14 @@ maintain, riskier for "fire and forget" releases meant to run on future builds.
 
 If you remember those two, every pattern below is just a combination of them.
 
-> **You import almost everything yourself.** On the Lua side the proxy only adds
-> two things to the global scope: `game` and `import`. There is **no preset list
-> of classes** — `FlxSprite`, `FlxTween`, `FlxG`, `FlxColor`, `Paths`, etc. are
-> *not* globals until you `local FlxSprite = import('flixel.FlxSprite')`. (This is
-> the opposite of HScript, which injects a big preset list — see
-> [`HScript.hx → preset()`](../source/psychlua/HScript.hx). That list does **not**
-> apply to Lua.) When in doubt, `import` it. That's why nearly every pattern below
-> opens with an `import(...)` line.
+> **You import most things yourself.** On the Lua side the proxy presets only a
+> small set of globals: `game`, `import`, and the two most-used classes **`FlxG`**
+> and **`Paths`**. Everything else — `FlxSprite`, `FlxTween`, `FlxText`,
+> `FlxColor`, … — is **not** a global until you `local FlxSprite =
+> import('flixel.FlxSprite')`. (HScript, by contrast, injects a big preset list —
+> see [`HScript.hx → preset()`](../source/psychlua/HScript.hx) — which does **not**
+> apply to Lua.) When in doubt, `import` it. That's why most patterns below open
+> with an `import(...)` line.
 
 ---
 
@@ -141,7 +141,7 @@ game.camHUD.filters = { ... }
 game.boyfriend.animation.finishCallback = function(name) ... end
 game.vocals.pitch = 1.05
 game.camGame.flashSprite.scaleX = 1.02         -- reach into the underlying OpenFL sprite
-import('flixel.FlxG').timeScale = 0.5          -- static field, slow-mo everything
+FlxG.timeScale = 0.5                           -- preset global, slow-mo everything
 ```
 
 If Haxe can see it and a script can resolve it, you can touch it — fields,
@@ -220,11 +220,10 @@ local beat = Conductor.getBeatRounded(pos)          -- static method
 local step = Conductor.crochet / 4
 ```
 
-`Paths` is another all-static helper class — and a reminder that it is **not** a
-Lua global, so import it before use:
+`Paths` is another all-static helper class. It's one of the **preset globals**
+(along with `FlxG`), so no import is needed:
 
 ```lua
-local Paths = import('backend.Paths')
 local img = Paths.image('myImage')          -- static method, returns a graphic
 local atlas = Paths.getSparrowAtlas('BOYFRIEND')
 ```
@@ -246,9 +245,8 @@ createInstance('bg', 'flixel.addons.display.FlxBackdrop')
 addInstance('bg')
 
 -- LuaProxy: construct it, then touch its fields/points directly
+-- (Paths is a preset global, no import needed)
 local FlxBackdrop = import('flixel.addons.display.FlxBackdrop')
-
-local Paths = import('backend.Paths')
 
 -- new(?graphic, repeatAxes = XY, spacingX = 0, spacingY = 0)
 -- repeatAxes is the FlxAxes enum-abstract, which import() can't resolve (see the
@@ -271,10 +269,8 @@ makeLuaSprite('bg', 'menuBG', 0, 0)
 setProperty('bg.alpha', 0.5)
 addLuaSprite('bg', false)
 
--- LuaProxy
+-- LuaProxy (Paths is a preset global, no import needed)
 local FlxSprite = import('flixel.FlxSprite')
-
-local Paths = import('backend.Paths')
 
 local bg = FlxSprite.new(0, 0)
 bg:loadGraphic(Paths.image('menuBG'))
@@ -286,8 +282,6 @@ Animated sprite (Sparrow atlas):
 
 ```lua
 local FlxSprite = import('flixel.FlxSprite')
-
-local Paths = import('backend.Paths')
 
 local spr = FlxSprite.new(100, 100)
 spr.frames = Paths.getSparrowAtlas('myAtlas')
@@ -304,10 +298,8 @@ makeLuaText('label', 'Hello', 400, 0, 0)
 setTextSize('label', 32)
 addLuaText('label')
 
--- LuaProxy
+-- LuaProxy (Paths is a preset global, no import needed)
 local FlxText = import('flixel.text.FlxText')
-
-local Paths = import('backend.Paths')
 
 local label = FlxText.new(0, 0, 400, 'Hello', 32)
 label:setFormat(Paths.font('vcr.ttf'), 32, 0xFFFFFFFF, 'center')
@@ -354,16 +346,14 @@ end, 1)
 
 ## 9. Sound
 
+Sound is a case where the classic callback is usually the better tool — it
+resolves the asset path and tracks the sound by tag for you, with no imports:
+
 ```lua
--- classic
-playSound('cheer', 0.7)
-
--- LuaProxy
-local FlxG = import('flixel.FlxG')
-
-local Paths = import('backend.Paths')
-
-FlxG.sound:play(Paths.sound('cheer'), 0.7)
+playSound('cheer', 0.7)          -- one-shot
+playSound('loop', 1, 'myLoop')   -- tagged, so you can control it later
+setSoundPitch('myLoop', 1.2)
+stopSound('myLoop')
 ```
 
 Keep a handle if you need to control it later:
@@ -515,9 +505,9 @@ reflection the string API does on every call.
 
 ## Gotchas
 
-- **Almost nothing is preset on the Lua side** — only `game` and `import` are
-  global. Import every class yourself (`FlxSprite`, `FlxG`, `FlxColor`, …); the
-  HScript preset list does not apply here.
+- **Little is preset on the Lua side** — the globals are `game`, `import`, `FlxG`
+  and `Paths`. Import everything else yourself (`FlxSprite`, `FlxTween`,
+  `FlxColor`, …); the HScript preset list does not apply here.
 - **Method `:`, property `.`** — the single most common mistake.
 - **1-based + numeric loops** on proxies; no `pairs`/`ipairs`.
 - **`import` can return `nil`** (blocked or misspelled class) — guard before
