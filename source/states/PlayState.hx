@@ -2386,25 +2386,47 @@ class PlayState extends MusicBeatState {
 	 */
 	public static function exitToScriptedStateIfNeeded():Bool {
 		#if HSCRIPT_ALLOWED
-		// Only return to a scripted menu while a mod is actually launched.
-		if (Mods.launchedMod == null || Mods.launchedMod.length < 1)
-			return false;
-		// A launchable mod ships its entry state at states/<entry>.hx -- use that
-		// as the "can we return to a scripted menu?" gate so callers fall back to
-		// Story/Freeplay cleanly when there's no scripted menu to return to.
-		if (!Mods.isLaunchable(Mods.launchedMod))
-			return false;
-		// Target priority: explicit override set by the mod -> the scripted state
-		// the song was actually launched from (auto-tracked) -> the mod's declared
-		// entry state (pack.json "entryState", default MainMenuState). The mod
-		// normally needs to set nothing; auto-tracking + entry fallback cover it.
+		// Target priority (both modes): explicit override set by the mod -> the
+		// scripted state the song was actually launched from (auto-tracked) -> the
+		// mod's declared entry state. The scope decides where it resolves from.
 		var target:String = null;
-		if (returnToScriptedState != null && returnToScriptedState.length > 0)
-			target = returnToScriptedState;
-		else if (scripting.ScriptedStates.activeScriptedState != null && scripting.ScriptedStates.activeScriptedState.length > 0)
-			target = scripting.ScriptedStates.activeScriptedState;
-		else
-			target = Mods.getEntryState(Mods.launchedMod);
+		var scope:scripting.ScriptedStates.ResolveScope = null;
+
+		// One-shot: an explicit override applies to THIS song only. Consume it now so a
+		// stale value can't follow the player into another mod/menu that lacks that
+		// state (e.g. a global menu's target leaking into a launched modpack).
+		var explicitTarget:String = returnToScriptedState;
+		returnToScriptedState = null;
+
+		switch (Mods.stateSourceMode) {
+			case MOD:
+				// Only return to a scripted menu while a mod is actually launched, and
+				// only if it ships an entry state (states/<entry>.hx) -- otherwise let
+				// callers fall back to Story/Freeplay cleanly.
+				if (Mods.launchedMod == null || Mods.launchedMod.length < 1 || !Mods.isLaunchable(Mods.launchedMod))
+					return false;
+				if (explicitTarget != null && explicitTarget.length > 0)
+					target = explicitTarget;
+				else if (scripting.ScriptedStates.activeScriptedState != null && scripting.ScriptedStates.activeScriptedState.length > 0)
+					target = scripting.ScriptedStates.activeScriptedState;
+				else
+					target = Mods.getEntryState(Mods.launchedMod);
+				scope = scripting.ScriptedStates.ResolveScope.LAUNCHED;
+
+			case GLOBAL:
+				// "Global Script" mode: the song was launched from a global scripted
+				// override of a core menu (e.g. mods/states/FreeplayState.hx). There's
+				// no launchedMod, but we still must rebuild that override cleanly rather
+				// than let coreOverride build it mid-teardown (-> update() null-ref).
+				if (explicitTarget != null && explicitTarget.length > 0)
+					target = explicitTarget;
+				else
+					target = scripting.ScriptedStates.activeScriptedState;
+				scope = scripting.ScriptedStates.ResolveScope.GLOBALS;
+
+			default: // NONE -> built-in menus only
+				return false;
+		}
 		if (target == null || target.length < 1)
 			return false;
 
@@ -2416,7 +2438,7 @@ class PlayState extends MusicBeatState {
 		// teardown -> its update()/draw() null-ref. Route through a tiny native
 		// state that builds the scripted state from its own create(), AFTER this
 		// state is fully destroyed (same clean conditions as a fresh launch).
-		MusicBeatState.switchState(new scripting.ScriptedStates.ScriptedReturnState(target));
+		MusicBeatState.switchState(new scripting.ScriptedStates.ScriptedReturnState(target, scope));
 		return true;
 		#else
 		return false;

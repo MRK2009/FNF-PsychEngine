@@ -140,20 +140,31 @@ class Main extends Sprite {
 		// super.create(). A scripted state carries the mod it was loaded from in
 		// `scriptOwnerMod` (set by scripting.ScriptedStates).
 		FlxG.signals.preStateCreate.add(function(state:flixel.FlxState) {
-			if (state != null && (state is backend.MusicBeatState)) {
+			#if HSCRIPT_ALLOWED
+			// Only SCRIPTED states need this prep (compiled states set up their own
+			// camera in super.create()). Detect them by the scriptable bridge base
+			// class -- NOT by scriptOwnerMod: a bare-root global script
+			// (mods/states/X.hx) has no owning mod but STILL needs a guaranteed
+			// camera. Without it, it renders/updates against whatever camera the
+			// previous state left -- fine coming from a menu, but a torn-down camera
+			// when returned to from gameplay -> update()/draw() null-ref.
+			if (state != null && (state is scripting.ScriptedMusicBeatState)) {
 				var st:backend.MusicBeatState = cast state;
-				if (st.scriptOwnerMod != null) {
-					#if MODS_ALLOWED
-					// Auto-scope asset/script lookups to the state's own mod (its
-					// folder first, shared engine assets as fallback) so scripts
-					// never need to touch Mods.* manually.
-					backend.Mods.currentModDirectory = st.scriptOwnerMod;
-					backend.Mods.pushGlobalMods();
-					#end
-					// Guarantee a camera before the (possibly super-less) create().
-					st.initPsychCamera();
-				}
+				#if MODS_ALLOWED
+				// Re-establish the mod context for EVERY scripted state -- including
+				// bare-root global ones (scriptOwnerMod == null -> '' = no mod, just
+				// global mods + shared). This must run for ALL of them, not only
+				// mod-owned ones: leaving the previous (gameplay) state's mod context
+				// in place left a bare-root menu's interpreter pointing at torn-down
+				// global state, so its NEXT update() null-ref'd. Mod-owned states
+				// additionally scope to their own folder.
+				backend.Mods.currentModDirectory = (st.scriptOwnerMod != null) ? st.scriptOwnerMod : '';
+				backend.Mods.pushGlobalMods();
+				#end
+				// Guarantee a camera before the (possibly super-less) create().
+				st.initPsychCamera();
 			}
+			#end
 		});
 	}
 

@@ -292,11 +292,13 @@ class ScriptedStates {
 	}
 
 	// The mod folder a resolved script path belongs to, or null if it's a shared
-	// (non-mod) path. e.g. "mods/MyMod/states/X.hx" -> "MyMod".
+	// (non-mod) path. e.g. "mods/MyMod/states/X.hx" -> "MyMod". A bare-root global
+	// script ("mods/states/X.hx", 3 segments) has no owning mod -> null, so it's
+	// not mistaken for a mod literally named "states".
 	static function ownerModOf(path:String):String {
 		#if MODS_ALLOWED
 		var parts:Array<String> = path.split('/');
-		if (parts.length > 2 && parts[0] + '/' == Paths.mods())
+		if (parts.length > 3 && parts[0] + '/' == Paths.mods())
 			return parts[1];
 		#end
 		return null;
@@ -308,7 +310,7 @@ class ScriptedStates {
 	// Resolves a script path within the requested scope:
 	//   ANY      - current mod -> global mods -> shared (Paths.modFolders order)
 	//   LAUNCHED - the launched mod folder only (no shared fallback)
-	//   GLOBALS  - global/scriptpack mods (in order) -> shared
+	//   GLOBALS  - global/scriptpack mods (in order) -> bare mods/ root -> shared
 	static function resolvePath(relative:String, scope:ResolveScope = ANY):String {
 		#if MODS_ALLOWED
 		switch (scope) {
@@ -325,6 +327,12 @@ class ScriptedStates {
 					if (FileSystem.exists(p))
 						return p;
 				}
+				// Global scripts placed directly at the bare mods/ root (outside any
+				// modpack) -- e.g. mods/states/FreeplayState.hx -- also count as a
+				// global source, mirroring how mods/<asset> root overrides resolve.
+				var rootPath:String = Paths.mods(relative);
+				if (FileSystem.exists(rootPath))
+					return rootPath;
 			// falls through to shared below
 			case ANY:
 				var modPath:String = Paths.modFolders(relative);
@@ -433,11 +441,16 @@ class ScriptedStates {
  */
 class ScriptedReturnState extends MusicBeatState {
 	var target:String;
+	var scope:ResolveScope;
 	var args:Array<Dynamic>;
 	var done:Bool = false;
 
-	public function new(target:String, ?args:Array<Dynamic>) {
+	// `scope` selects where the target state resolves from: LAUNCHED for a launched
+	// modpack's own menus (default), GLOBALS for a global scripted override (e.g. a
+	// mods/states/FreeplayState.hx returned to under "Global Script" mode).
+	public function new(target:String, ?scope:ResolveScope, ?args:Array<Dynamic>) {
 		this.target = target;
+		this.scope = (scope != null) ? scope : LAUNCHED;
 		this.args = args;
 		super();
 	}
@@ -449,7 +462,7 @@ class ScriptedReturnState extends MusicBeatState {
 		if (done)
 			return;
 		done = true;
-		if (!ScriptedStates.switchToState(target, args, LAUNCHED)) {
+		if (!ScriptedStates.switchToState(target, args, scope)) {
 			// Scripted state failed to load -> fall back to the engine main menu.
 			MusicBeatState.switchState(new states.MainMenuState());
 		}
