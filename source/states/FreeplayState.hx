@@ -669,16 +669,22 @@ class FreeplayState extends MusicBeatState {
 		_lastVisibles = [];
 
 		for (i in 0...songs.length) {
-			var songText:Alphabet = new Alphabet(90, 320, songs[i].songName, true);
+			var songText:Alphabet = new Alphabet(LIST_X, LIST_Y, songs[i].songName, true);
 			songText.targetY = i;
+			// x: 0 removes the left-stagger; y: compact row step
+			songText.distancePerItem.set(0, LIST_STEP);
 			grpSongs.add(songText);
 
-			songText.scaleX = Math.min(1, 980 / songText.width);
+			songText.setScale(Math.min(LIST_SCALE, 900 / songText.width));
 			songText.snapToPosition();
 
 			Mods.currentModDirectory = songs[i].folder;
 			var icon:HealthIcon = new HealthIcon(songs[i].songCharacter);
-			icon.sprTracker = songText;
+			// Positioned manually in updateTexts and shrunk to the row height.
+			// autoAdjustOffset off so the scaled-down hitbox keeps x/y as top-left.
+			icon.autoAdjustOffset = false;
+			icon.setGraphicSize(LIST_ICON, LIST_ICON);
+			icon.updateHitbox();
 
 			// too laggy with a lot of songs, so i had to recode the logic for it
 			songText.visible = songText.active = songText.isMenuItem = false;
@@ -809,7 +815,16 @@ class FreeplayState extends MusicBeatState {
 		updateHeader();
 	}
 
-	var _drawDistance:Int = 4;
+	// Compact list layout: left margin, selected-row baseline, per-row step
+	// (multiplied by 1.3 in the position formula -> ~78px rows), text scale and
+	// icon size. Halving the old sizes roughly doubles how many songs fit.
+	static final LIST_X:Float = 90;
+	static final LIST_Y:Float = 320;
+	static final LIST_STEP:Float = 90;
+	static final LIST_SCALE:Float = 0.75;
+	static final LIST_ICON:Int = 90;
+
+	var _drawDistance:Int = 7;
 	var _lastVisibles:Array<Int> = [];
 
 	public function updateTexts(elapsed:Float = 0.0) {
@@ -830,6 +845,8 @@ class FreeplayState extends MusicBeatState {
 
 			var icon:HealthIcon = iconArray[i];
 			icon.visible = icon.active = true;
+			icon.x = item.x + item.width + 10;
+			icon.y = item.y + (item.height - icon.height) * 0.5;
 			_lastVisibles.push(i);
 		}
 	}
