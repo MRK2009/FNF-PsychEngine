@@ -21,8 +21,6 @@
 -- import() returns a class "proxy": use Class.new(...) to construct and
 -- Class.staticField / Class.staticMethod() for statics.
 local FlxSprite = import('flixel.FlxSprite')
-local FlxG      = import('flixel.FlxG')
-local Paths     = import('backend.Paths')
 local Conductor = import('backend.Conductor')
 
 -- Keep references to anything we add so we can remove it later.
