@@ -80,6 +80,9 @@ class Character extends FlxSprite {
 	public var correctFlippedOffsets:Bool = true;
 	public var scalableOffsets:Bool = true;
 
+	public var baseFlipX:Bool = false;
+	public var baseFlipY:Bool = false;
+
 	public function new(x:Float, y:Float, ?character:String = 'bf', ?isPlayer:Bool = false) {
 		super(x, y);
 
@@ -178,6 +181,8 @@ class Character extends FlxSprite {
 		healthIcon = json.healthicon;
 		singDuration = json.sing_duration;
 		flipX = (json.flip_x != isPlayer);
+		baseFlipX = flipX;
+		baseFlipY = flipY;
 		healthColorArray = (json.healthbar_colors != null && json.healthbar_colors.length > 2) ? json.healthbar_colors : [161, 161, 161];
 		vocalsFile = json.vocals_file != null ? json.vocals_file : '';
 		originalFlipX = (json.flip_x == true);
@@ -439,12 +444,14 @@ class Character extends FlxSprite {
 	}
 
 	/**
-	 * Applies a stored (authored) animation offset to the live `offset`,
-	 * scaling it by the ratio to the authored `jsonScale` and mirroring it when
-	 * the sprite is flipped. Offsets are authored at flipX == false / base
-	 * scale, so a character can be reused flipped or at another scale without a
-	 * separate hand-tuned JSON. Atlas characters position through
-	 * copyAtlasValues, so flip mirroring (frameWidth/width based) is skipped.
+	 * Applies a stored (authored) animation offset to the live `offset`, scaling
+	 * it by the ratio to the authored `jsonScale` and mirroring it only when the
+	 * live flip differs from the load-time flip (baseFlipX/Y). Offsets stay as
+	 * authored for a normally-loaded character (flipped-by-design ones like Pico
+	 * included); the mirror only applies once flipX/flipY is changed after load,
+	 * so a flipped duplicate or a setProperty('flipX', ...) reuses the same JSON
+	 * without re-tuning. Atlas characters position through copyAtlasValues, so
+	 * flip mirroring (frameWidth/width based) is skipped.
 	 */
 	public function applyAnimOffset(rawX:Float, rawY:Float) {
 		var ox:Float = rawX;
@@ -457,9 +464,9 @@ class Character extends FlxSprite {
 		}
 
 		if (correctFlippedOffsets && !isAnimateAtlas) {
-			if (flipX)
+			if (flipX != baseFlipX)
 				ox = (frameWidth * scale.x - width) - ox;
-			if (flipY)
+			if (flipY != baseFlipY)
 				oy = (frameHeight * scale.y - height) - oy;
 		}
 
@@ -476,9 +483,9 @@ class Character extends FlxSprite {
 		var oy:Float = offset.y;
 
 		if (correctFlippedOffsets && !isAnimateAtlas) {
-			if (flipX)
+			if (flipX != baseFlipX)
 				ox = (frameWidth * scale.x - width) - ox;
-			if (flipY)
+			if (flipY != baseFlipY)
 				oy = (frameHeight * scale.y - height) - oy;
 		}
 
