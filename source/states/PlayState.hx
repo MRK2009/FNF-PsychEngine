@@ -302,7 +302,13 @@ class PlayState extends MusicBeatState {
 		PauseSubState.songName = null; // Reset to default
 		playbackRate = ClientPrefs.getGameplaySetting('songspeed');
 
-		keysArray = ['note_left', 'note_down', 'note_up', 'note_right'];
+		// Multikey: derive the column count from the chart (absent == 4K) and feed
+		// every keycount-dependent global from the Mania tables. 4K resolves to the
+		// classic values, so the default path is unchanged.
+		totalColumns = Mania.clamp((SONG != null && SONG.keyCount != null) ? SONG.keyCount : Mania.DEFAULT);
+		applyKeyCountGlobals(totalColumns);
+
+		keysArray = Mania.keyNames(totalColumns);
 		rebuildKeyToStrumMap();
 
 		// Reset Note's per-song hitsound dedupe set so the next song
@@ -1261,6 +1267,12 @@ class PlayState extends MusicBeatState {
 	private var eventsPushed:Array<String> = [];
 	private var totalColumns:Int = 4;
 
+	// Multikey mid-song lane changes: sorted (songPosition ms -> new key count),
+	// built from per-section changeKeyCount flags + 'Change Key Amount' events.
+	// nextKeyChange marks the next pending entry as the song plays.
+	private var keyCountChanges:Array<{time:Float, count:Int}> = [];
+	private var nextKeyChange:Int = 0;
+
 	private function generateSong():Void {
 		// FlxG.log.add(ChartParser.parse());
 		songSpeed = PlayState.SONG.speed;
@@ -1320,20 +1332,41 @@ class PlayState extends MusicBeatState {
 		var ghostNotesCaught:Int = 0;
 		var daBpm:Float = Conductor.bpm;
 
+		// Multikey: running per-section key count + the accumulated start time of the
+		// current section, used to decode note columns and schedule lane changes.
+		keyCountChanges = [];
+		nextKeyChange = 0;
+		var curKeyCount:Int = totalColumns;
+		var sectionStartTime:Float = 0;
+		var secIndex:Int = 0;
+
 		for (section in sectionsData) {
 			if (section.changeBPM != null && section.changeBPM && section.bpm != null && daBpm != section.bpm)
 				daBpm = section.bpm;
 
+			// Per-section key count override: switch the decoding count and remember
+			// the boundary so gameplay can rebuild the lanes when it's reached.
+			if (section.changeKeyCount == true && section.keyCount != null) {
+				var newCount:Int = Mania.clamp(section.keyCount);
+				if (newCount != curKeyCount) {
+					curKeyCount = newCount;
+					keyCountChanges.push({time: sectionStartTime, count: curKeyCount});
+				}
+			}
+			// Bake the section's notes with this key count's visuals (each note keeps
+			// its frames/anims/scale after creation, so later sections don't disturb it).
+			applyKeyCountGlobals(curKeyCount);
+
 			for (i in 0...section.sectionNotes.length) {
 				final songNotes:Array<Dynamic> = section.sectionNotes[i];
 				var spawnTime:Float = songNotes[0];
-				var noteColumn:Int = Std.int(songNotes[1] % totalColumns);
+				var noteColumn:Int = Std.int(songNotes[1] % curKeyCount);
 				var holdLength:Float = songNotes[2];
 				var noteType:String = !Std.isOfType(songNotes[3], String) ? Note.defaultNoteTypes[songNotes[3]] : songNotes[3];
 				if (Math.isNaN(holdLength))
 					holdLength = 0.0;
 
-				var gottaHitNote:Bool = (songNotes[1] < totalColumns);
+				var gottaHitNote:Bool = (songNotes[1] < curKeyCount);
 
 				if (i != 0) {
 					// CLEAR ANY POSSIBLE GHOST NOTES
@@ -1405,7 +1438,7 @@ class PlayState extends MusicBeatState {
 							sustainNote.x += FlxG.width / 2; // general offset
 						else if (ClientPrefs.data.middleScroll) {
 							sustainNote.x += 310;
-							if (noteColumn > 1) // Up and Right
+							if (noteColumn > Math.floor(curKeyCount / 2) - 1) // right-hand half
 								sustainNote.x += FlxG.width / 2 + 25;
 						}
 					}
@@ -1415,7 +1448,7 @@ class PlayState extends MusicBeatState {
 					swagNote.x += FlxG.width / 2; // general offset
 				} else if (ClientPrefs.data.middleScroll) {
 					swagNote.x += 310;
-					if (noteColumn > 1) // Up and Right
+					if (noteColumn > Math.floor(curKeyCount / 2) - 1) // right-hand half
 					{
 						swagNote.x += FlxG.width / 2 + 25;
 					}
@@ -1425,7 +1458,18 @@ class PlayState extends MusicBeatState {
 
 				oldNote = swagNote;
 			}
+
+			// Advance to the next section's start time (section duration at its BPM).
+			var beats:Float = Conductor.getSectionBeats(SONG, secIndex);
+			var denom:Int = Conductor.getSectionDenominator(SONG, secIndex);
+			sectionStartTime += (beats * Conductor.stepsPerBeat(denom)) * ((60 / daBpm * 1000) / 4);
+			secIndex++;
 		}
+
+		// Restore the song's base key count globals so the initial strums
+		// (generateStaticArrows) and pre-first-change gameplay use it.
+		applyKeyCountGlobals(totalColumns);
+		keyCountChanges.sort(function(a, b) return Std.int(a.time - b.time));
 		trace('["${SONG.song.toUpperCase()}" CHART INFO]: Ghost Notes Cleared: $ghostNotesCaught');
 		for (event in songData.events) // Event Notes
 			for (i in 0...event[1].length)
@@ -1505,10 +1549,61 @@ class PlayState extends MusicBeatState {
 
 	public var skipArrowStartTween:Bool = false; // for lua
 
+	// Multikey: point every keycount-dependent global at `count`. Notes bake their
+	// visuals at creation, so changing this later only affects newly-made objects.
+	private function applyKeyCountGlobals(count:Int) {
+		count = Mania.clamp(count);
+		Mania.current = count;
+		Note.colArray = Mania.colArray[count - 1];
+		Note.swagWidth = 160 * Mania.noteSizes[count - 1];
+		singAnimations = Mania.singAnimations[count - 1];
+	}
+
+	// Multikey mid-song lane change: switch to `count` columns and rebuild the
+	// strums + input map. Called from the per-section schedule and the
+	// 'Change Key Amount' event.
+	public function changeKeyCount(count:Int) {
+		count = Mania.clamp(count);
+		if (count == totalColumns)
+			return;
+
+		totalColumns = count;
+		applyKeyCountGlobals(count);
+		keysArray = Mania.keyNames(count);
+		rebuildKeyToStrumMap();
+
+		// Tear down the old strums (strumLineNotes owns the sprites; the player/
+		// opponent groups just reference them).
+		playerStrums.clear();
+		opponentStrums.clear();
+		for (s in strumLineNotes.members)
+			if (s != null)
+				s.destroy();
+		strumLineNotes.clear();
+
+		var prevSkip:Bool = skipArrowStartTween;
+		skipArrowStartTween = true; // no intro tween mid-song
+		generateStaticArrows(0);
+		generateStaticArrows(1);
+		skipArrowStartTween = prevSkip;
+
+		setOnScripts('keyCount', totalColumns);
+		setOnScripts('mania', totalColumns - 1);
+		callOnScripts('onKeyCountChange', [totalColumns]);
+	}
+
+	// Apply any per-section key-count changes whose time the song has reached.
+	private function processKeyCountChanges() {
+		while (nextKeyChange < keyCountChanges.length && Conductor.songPosition >= keyCountChanges[nextKeyChange].time) {
+			changeKeyCount(keyCountChanges[nextKeyChange].count);
+			nextKeyChange++;
+		}
+	}
+
 	private function generateStaticArrows(player:Int):Void {
 		var strumLineX:Float = ClientPrefs.data.middleScroll ? STRUM_X_MIDDLESCROLL : STRUM_X;
 		var strumLineY:Float = ClientPrefs.data.downScroll ? (FlxG.height - 150) : 50;
-		for (i in 0...4) {
+		for (i in 0...totalColumns) {
 			// FlxG.log.add(i);
 			var targetAlpha:Float = 1;
 			if (player < 1) {
@@ -1532,7 +1627,7 @@ class PlayState extends MusicBeatState {
 			else {
 				if (ClientPrefs.data.middleScroll) {
 					babyArrow.x += 310;
-					if (i > 1) { // Up and Right
+					if (i > Math.floor(totalColumns / 2) - 1) { // right-hand half of the columns
 						babyArrow.x += FlxG.width / 2 + 25;
 					}
 				}
@@ -1798,7 +1893,13 @@ class PlayState extends MusicBeatState {
 							if (!daNote.mustPress)
 								strumGroup = opponentStrums;
 
+							// During a multikey lane change a leftover note can briefly
+							// reference a column that no longer has a strum -- skip it.
 							var strum:StrumNote = strumGroup.members[daNote.noteData];
+							if (strum == null) {
+								i++;
+								continue;
+							}
 							daNote.followStrumNote(strum, fakeCrochet, songSpeed / playbackRate);
 
 							if (daNote.mustPress) {
@@ -1832,6 +1933,8 @@ class PlayState extends MusicBeatState {
 					}
 				}
 			}
+			if (startedCountdown)
+				processKeyCountChanges();
 			checkEventNote();
 		}
 
@@ -2249,6 +2352,10 @@ class PlayState extends MusicBeatState {
 							}
 						});
 				}
+
+			case 'Change Key Amount':
+				if (flValue1 != null)
+					changeKeyCount(Std.int(flValue1));
 
 			case 'Set Property':
 				try {
@@ -3350,6 +3457,12 @@ class PlayState extends MusicBeatState {
 		Note.globalRgbShaders = [];
 		backend.NoteTypesConfig.clearNoteTypesData();
 
+		// Multikey: restore the classic 4K globals so later states aren't left
+		// using a previous song's keycount palette/anim tables.
+		Mania.current = Mania.DEFAULT;
+		Note.colArray = Mania.colArray[Mania.DEFAULT - 1];
+		Note.swagWidth = 160 * Mania.noteSizes[Mania.DEFAULT - 1];
+
 		NoteSplash.configs.clear();
 		instance = null;
 		super.destroy();
@@ -3432,6 +3545,14 @@ class PlayState extends MusicBeatState {
 				setOnScripts('curBpm', Conductor.bpm);
 				setOnScripts('crochet', Conductor.crochet);
 				setOnScripts('stepCrochet', Conductor.stepCrochet);
+			}
+
+			// Per-section scroll speed override (gated by changeScrollSpeed). Skipped
+			// under the constant-speed mod, matching the Change Scroll Speed event.
+			if (SONG.notes[curSection].changeScrollSpeed == true
+				&& SONG.notes[curSection].scrollSpeed != null
+				&& songSpeedType != "constant") {
+				songSpeed = SONG.speed * ClientPrefs.getGameplaySetting('scrollspeed') * SONG.notes[curSection].scrollSpeed;
 			}
 			setOnScripts('mustHitSection', SONG.notes[curSection].mustHitSection);
 			setOnScripts('altAnim', SONG.notes[curSection].altAnim);

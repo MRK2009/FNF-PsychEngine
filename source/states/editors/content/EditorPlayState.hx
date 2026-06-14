@@ -38,6 +38,7 @@ class EditorPlayState extends MusicBeatSubstate {
 	var lastCombo:FlxSprite;
 	var lastScore:Array<FlxSprite> = [];
 	var keysArray:Array<String> = ['note_left', 'note_down', 'note_up', 'note_right'];
+	var totalColumns:Int = 4;
 
 	var songHits:Int = 0;
 	var songMisses:Int = 0;
@@ -75,6 +76,13 @@ class EditorPlayState extends MusicBeatSubstate {
 	}
 
 	override function create() {
+		// Multikey: derive columns + binds from the chart (absent == 4K).
+		totalColumns = Mania.clamp((PlayState.SONG != null && PlayState.SONG.keyCount != null) ? PlayState.SONG.keyCount : Mania.DEFAULT);
+		Mania.current = totalColumns;
+		Note.colArray = Mania.colArray[totalColumns - 1];
+		Note.swagWidth = 160 * Mania.noteSizes[totalColumns - 1];
+		keysArray = Mania.keyNames(totalColumns);
+
 		Conductor.safeZoneOffset = (ClientPrefs.data.safeFrames / 60) * 1000 * playbackRate;
 		Conductor.songPosition -= startOffset;
 		startOffset = Conductor.crochet;
@@ -307,7 +315,7 @@ class EditorPlayState extends MusicBeatSubstate {
 				if (PlayState.SONG.notes[noteSec].changeBPM == true)
 					tempBpm = PlayState.SONG.notes[noteSec].bpm;
 
-				secTime += Conductor.calculateCrochet(tempBpm) * (Math.round(4 * section.sectionBeats) / 4);
+				secTime += Conductor.calculateCrochet(tempBpm) * (Math.round(Conductor.stepsPerBeat(Conductor.getSectionDenominator(PlayState.SONG, secNum)) * section.sectionBeats) / 4);
 				cachedSectionTimes.push(secTime);
 			}
 		}
@@ -386,7 +394,7 @@ class EditorPlayState extends MusicBeatSubstate {
 						sustainNote.x += FlxG.width / 2; // general offset
 					else if (ClientPrefs.data.middleScroll) {
 						sustainNote.x += 310;
-						if (sustainNote.noteData > 1) // Up and Right
+						if (sustainNote.noteData > Math.floor(totalColumns / 2) - 1) // right-hand half
 							sustainNote.x += FlxG.width / 2 + 25;
 					}
 				}
@@ -396,7 +404,7 @@ class EditorPlayState extends MusicBeatSubstate {
 				swagNote.x += FlxG.width / 2; // general offset
 			} else if (ClientPrefs.data.middleScroll) {
 				swagNote.x += 310;
-				if (swagNote.noteData > 1) // Up and Right
+				if (swagNote.noteData > Math.floor(totalColumns / 2) - 1) // right-hand half
 				{
 					swagNote.x += FlxG.width / 2 + 25;
 				}
@@ -409,7 +417,7 @@ class EditorPlayState extends MusicBeatSubstate {
 	private function generateStaticArrows(player:Int):Void {
 		var strumLineX:Float = ClientPrefs.data.middleScroll ? PlayState.STRUM_X_MIDDLESCROLL : PlayState.STRUM_X;
 		var strumLineY:Float = ClientPrefs.data.downScroll ? (FlxG.height - 150) : 50;
-		for (i in 0...4) {
+		for (i in 0...totalColumns) {
 			// FlxG.log.add(i);
 			var targetAlpha:Float = 1;
 			if (player < 1) {
@@ -428,7 +436,7 @@ class EditorPlayState extends MusicBeatSubstate {
 			else {
 				if (ClientPrefs.data.middleScroll) {
 					babyArrow.x += 310;
-					if (i > 1) { // Up and Right
+					if (i > Math.floor(totalColumns / 2) - 1) { // right-hand half
 						babyArrow.x += FlxG.width / 2 + 25;
 					}
 				}

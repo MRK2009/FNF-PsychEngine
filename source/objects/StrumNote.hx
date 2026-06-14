@@ -36,9 +36,14 @@ class StrumNote extends FlxSprite {
 		if (PlayState.SONG != null && PlayState.SONG.disableNoteRGB)
 			useRGBShader = false;
 
-		var arr:Array<FlxColor> = ClientPrefs.data.arrowRGB[leData];
-		if (PlayState.isPixelStage)
-			arr = ClientPrefs.data.arrowRGBPixel[leData];
+		var arr:Array<FlxColor>;
+		if (Mania.current != Mania.DEFAULT && !PlayState.isPixelStage)
+			arr = Mania.getColors(Mania.current)[leData]; // multikey palette
+		else {
+			arr = ClientPrefs.data.arrowRGB[leData];
+			if (PlayState.isPixelStage)
+				arr = ClientPrefs.data.arrowRGBPixel[leData];
+		}
 
 		// `arr` is the per-direction RGB triple ([r,g,b], length 3); the
 		// previous `leData < arr.length` guard rejected leData == 3 (right
@@ -118,6 +123,21 @@ class StrumNote extends FlxSprite {
 					animation.add('pressed', [7, 11], 12, false);
 					animation.add('confirm', [15, 19], 24, false);
 			}
+		} else if (Mania.current != Mania.DEFAULT) {
+			// Multikey: keep the 4 arrows from the note skin and merge in the
+			// square atlas (which adds the centre "square" note + arrowSQUARE);
+			// the per-column anim name comes from the Mania table.
+			var atlas:flixel.graphics.frames.FlxAtlasFrames = Paths.getSparrowAtlas(texture);
+			atlas.addAtlas(Paths.getSparrowAtlas(Mania.ATLAS));
+			frames = atlas;
+			antialiasing = ClientPrefs.data.antialiasing;
+
+			var anim:String = Mania.noteAnimations[Mania.current - 1][Std.int(Math.abs(noteData)) % Mania.current];
+			animation.addByPrefix('static', 'arrow' + anim.toUpperCase(), 24, false);
+			animation.addByPrefix('pressed', anim + ' press', 24, false);
+			animation.addByPrefix('confirm', anim + ' confirm', 24, false);
+
+			setGraphicSize(Std.int(width * Mania.noteSizes[Mania.current - 1]));
 		} else {
 			frames = Paths.getSparrowAtlas(texture);
 			animation.addByPrefix('green', 'arrowUP');
@@ -155,9 +175,21 @@ class StrumNote extends FlxSprite {
 	}
 
 	public function playerPosition() {
-		x += Note.swagWidth * noteData;
+		final kc:Int = Mania.current;
+		switch (kc - 1) {
+			case 3: // 4K -- unchanged classic spacing
+				x += Note.swagWidth * noteData;
+			case 0 | 1 | 2: // 1K-3K -- snug spacing
+				x += width * noteData;
+			default: // 5K+ -- spacing tightened by the Mania offset table
+				x += (width - Mania.strumOffsets[kc - 1]) * noteData;
+		}
 		x += 50;
 		x += ((FlxG.width / 2) * player);
+		if (kc != Mania.DEFAULT) {
+			x -= Mania.noteOffsetsX[kc - 1];
+			y += Mania.noteOffsetsY[kc - 1];
+		}
 	}
 
 	override function update(elapsed:Float) {

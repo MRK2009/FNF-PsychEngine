@@ -66,6 +66,17 @@ class ControlsSubState extends MusicBeatSubstate {
 		DiscordClient.changePresence("Controls Menu", null);
 		#end
 
+		// Multikey note binds (keyboard only -- option[0] == false hides them in
+		// gamepad mode). One sub-section per non-4K keycount; 4K uses the NOTES rows.
+		for (count in Mania.MIN...Mania.MAX + 1) {
+			if (count == Mania.DEFAULT)
+				continue;
+			options.push([false]);
+			options.push([false, '${count}K NOTES']);
+			for (col in 0...count)
+				options.push([false, 'Key ${col + 1}', Mania.bindName(count, col), '${count}K Key ${col + 1}']);
+		}
+
 		options.push([true]);
 		options.push([true]);
 		options.push([true, defaultKey]);

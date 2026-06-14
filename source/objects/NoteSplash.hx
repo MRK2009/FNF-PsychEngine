@@ -44,6 +44,12 @@ class NoteSplash extends FlxSprite {
 	public static var defaultNoteSplash(default, never):String = "noteSplashes/noteSplashes";
 	public static var configs:Map<String, NoteSplashConfig> = new Map();
 
+	// Splash anim/colour basis. Splash atlases only carry the 4 cardinal colours,
+	// so splashes always map columns via `% 4` -- this is deliberately NOT
+	// colArray, which becomes longer (purple/blue/green/red/square/...) under
+	// multikey and would break the splash config build (no 'square' splash anim).
+	public static var colArray:Array<String> = ['purple', 'blue', 'green', 'red'];
+
 	public function new(?x:Float = 0, ?y:Float = 0, ?splash:String) {
 		super(x, y);
 
@@ -158,7 +164,7 @@ class NoteSplash extends FlxSprite {
 
 		var failedToFind:Bool = false;
 		while (true) {
-			for (v in Note.colArray) {
+			for (v in colArray) {
 				if (!checkForAnim('$anim $v ${maxAnims + 1}')) {
 					failedToFind = true;
 					break;
@@ -170,8 +176,8 @@ class NoteSplash extends FlxSprite {
 		}
 
 		for (animNum in 0...maxAnims) {
-			for (i => col in Note.colArray) {
-				var data:Int = i % Note.colArray.length + (animNum * Note.colArray.length);
+			for (i => col in colArray) {
+				var data:Int = i % colArray.length + (animNum * colArray.length);
 				var name:String = animNum > 0 ? '$col' + (animNum + 1) : col;
 				var offset:Array<Float> = offsets[FlxMath.wrap(data, 0, Std.int(offsets.length - 1))];
 				addAnimationToConfig(tempConfig, 1, name, '$anim $col ${animNum + 1}', fps, offset, [], data);
@@ -208,14 +214,14 @@ class NoteSplash extends FlxSprite {
 			noteData = note.noteData;
 
 		if (randomize && maxAnims > 1)
-			noteData = noteData % Note.colArray.length + (FlxG.random.int(0, maxAnims - 1) * Note.colArray.length);
+			noteData = noteData % colArray.length + (FlxG.random.int(0, maxAnims - 1) * colArray.length);
 
 		this.noteData = noteData;
 		var anim:String = playDefaultAnim();
 
 		var tempShader:RGBPalette = null;
 		if (config.allowRGB) {
-			Note.initializeGlobalRGBShader(noteData % Note.colArray.length);
+			Note.initializeGlobalRGBShader(noteData % colArray.length);
 			if (inEditor
 				|| (note == null || note.noteSplashData.useRGBShader)
 				&& (PlayState.SONG == null || !PlayState.SONG.disableNoteRGB)) {
@@ -228,9 +234,9 @@ class NoteSplash extends FlxSprite {
 							if (i > 2)
 								break;
 
-							var arr:Array<FlxColor> = ClientPrefs.data.arrowRGB[noteData % Note.colArray.length];
+							var arr:Array<FlxColor> = ClientPrefs.data.arrowRGB[noteData % colArray.length];
 							if (PlayState.isPixelStage)
-								arr = ClientPrefs.data.arrowRGBPixel[noteData % Note.colArray.length];
+								arr = ClientPrefs.data.arrowRGBPixel[noteData % colArray.length];
 
 							var rgb = colors[i];
 							if (rgb == null) {
@@ -263,7 +269,7 @@ class NoteSplash extends FlxSprite {
 								tempShader.b = color;
 						}
 					} else
-						tempShader.copyValues(Note.globalRgbShaders[noteData % Note.colArray.length]);
+						tempShader.copyValues(Note.globalRgbShaders[noteData % colArray.length]);
 
 					if (note != null) {
 						if (note.noteSplashData.r != -1)
@@ -274,7 +280,7 @@ class NoteSplash extends FlxSprite {
 							tempShader.b = note.noteSplashData.b;
 					}
 				} else
-					tempShader.copyValues(Note.globalRgbShaders[noteData % Note.colArray.length]);
+					tempShader.copyValues(Note.globalRgbShaders[noteData % colArray.length]);
 			}
 		}
 		rgbShader.copyValues(tempShader);
@@ -322,6 +328,17 @@ class NoteSplash extends FlxSprite {
 
 		if (animation.curAnim != null)
 			animation.curAnim.frameRate = FlxG.random.int(minFps, maxFps);
+
+		// Multikey: scale the splash down to match the smaller notes and nudge it
+		// into place. 4K keeps the config scale/offsets untouched.
+		if (!inEditor && Mania.current != Mania.DEFAULT) {
+			var ratio:Float = Mania.noteSizes[Mania.current - 1] / 0.7;
+			scale.set(config.scale * ratio, config.scale * ratio);
+			centerOffsets();
+			var mOff:Array<Float> = Mania.splashOffsets[Mania.current - 1];
+			offset.x += mOff[0];
+			offset.y += mOff[1];
+		}
 
 		spawned = true;
 	}
@@ -425,7 +442,7 @@ class NoteSplash extends FlxSprite {
 
 	function set_maxAnims(value:Int) {
 		if (value > 0)
-			noteData = Std.int(FlxMath.wrap(noteData, 0, (value * Note.colArray.length) - 1));
+			noteData = Std.int(FlxMath.wrap(noteData, 0, (value * colArray.length) - 1));
 		else
 			noteData = 0;
 

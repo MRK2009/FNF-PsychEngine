@@ -183,9 +183,14 @@ class Note extends FlxSprite {
 	}
 
 	public function defaultRGB() {
-		var arr:Array<FlxColor> = ClientPrefs.data.arrowRGB[noteData];
-		if (PlayState.isPixelStage)
-			arr = ClientPrefs.data.arrowRGBPixel[noteData];
+		var arr:Array<FlxColor>;
+		if (Mania.current != Mania.DEFAULT && !PlayState.isPixelStage)
+			arr = Mania.getColors(Mania.current)[noteData]; // multikey palette
+		else {
+			arr = ClientPrefs.data.arrowRGB[noteData];
+			if (PlayState.isPixelStage)
+				arr = ClientPrefs.data.arrowRGBPixel[noteData];
+		}
 
 		// `arr` is the per-direction RGB triple ([r,g,b], length 3); guarding
 		// `noteData < arr.length` rejected noteData == 3 (right arrow) and
@@ -195,6 +200,15 @@ class Note extends FlxSprite {
 			rgbShader.r = arr[0];
 			rgbShader.g = arr[1];
 			rgbShader.b = arr[2];
+
+			// Multikey: the splash atlas only has 4 colours, so the splash anim is
+			// chosen by column % 4 -- tint it with this note's actual palette so a
+			// 6th/7th-column splash isn't recoloured to the wrong cardinal hue.
+			if (Mania.current != Mania.DEFAULT && !PlayState.isPixelStage) {
+				noteSplashData.r = arr[0];
+				noteSplashData.g = arr[1];
+				noteSplashData.b = arr[2];
+			}
 		} else {
 			rgbShader.r = 0xFFFF0000;
 			rgbShader.g = 0xFF00FF00;
@@ -343,7 +357,11 @@ class Note extends FlxSprite {
 	public static function initializeGlobalRGBShader(noteData:Int) {
 		if (globalRgbShaders[noteData] == null) {
 			var newRGB:RGBPalette = new RGBPalette();
-			var arr:Array<FlxColor> = (!PlayState.isPixelStage) ? ClientPrefs.data.arrowRGB[noteData] : ClientPrefs.data.arrowRGBPixel[noteData];
+			var arr:Array<FlxColor>;
+			if (Mania.current != Mania.DEFAULT && !PlayState.isPixelStage)
+				arr = Mania.getColors(Mania.current)[noteData]; // multikey palette
+			else
+				arr = (!PlayState.isPixelStage) ? ClientPrefs.data.arrowRGB[noteData] : ClientPrefs.data.arrowRGBPixel[noteData];
 
 			if (arr != null && arr.length >= 3) {
 				newRGB.r = arr[0];
@@ -424,7 +442,14 @@ class Note extends FlxSprite {
 				offsetX -= _lastNoteOffX;
 			}
 		} else {
-			frames = Paths.getSparrowAtlas(skin);
+			// Multikey: notes on the default skin merge in the square atlas (centre
+			// "square" note). Custom per-note textures are left alone.
+			if (Mania.current != Mania.DEFAULT && (texture == null || texture.length < 1)) {
+				var atlas:flixel.graphics.frames.FlxAtlasFrames = Paths.getSparrowAtlas(skin);
+				atlas.addAtlas(Paths.getSparrowAtlas(Mania.ATLAS));
+				frames = atlas;
+			} else
+				frames = Paths.getSparrowAtlas(skin);
 			loadNoteAnims();
 			if (!isSustainNote) {
 				centerOffsets();
@@ -459,7 +484,8 @@ class Note extends FlxSprite {
 		} else
 			animation.addByPrefix(colArray[noteData] + 'Scroll', colArray[noteData] + '0');
 
-		setGraphicSize(Std.int(width * 0.7));
+		// 4K resolves to 0.7 (the classic size); multikey notes shrink per the table.
+		setGraphicSize(Std.int(width * Mania.noteSizes[Mania.current - 1]));
 		updateHitbox();
 	}
 
