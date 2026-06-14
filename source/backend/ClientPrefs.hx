@@ -164,7 +164,24 @@ class ClientPrefs {
 			gamepadBind.remove(NONE);
 	}
 
+	// Seed default note binds for every non-4K keycount (multikey support). 4K
+	// reuses the classic note_left/down/up/right binds, so it's skipped. Only
+	// fills in binds that don't already exist so saved overrides aren't clobbered.
+	public static function generateManiaBinds() {
+		for (count in Mania.MIN...Mania.MAX + 1) {
+			if (count == Mania.DEFAULT)
+				continue;
+			var binds:Array<FlxKey> = Mania.defaultBinds[count - 1];
+			for (col in 0...count) {
+				var name:String = Mania.bindName(count, col);
+				if (!keyBinds.exists(name))
+					keyBinds.set(name, [binds[col]]);
+			}
+		}
+	}
+
 	public static function loadDefaultKeys() {
+		generateManiaBinds();
 		defaultKeys = keyBinds.copy();
 		defaultButtons = gamepadBinds.copy();
 	}

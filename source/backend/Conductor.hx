@@ -121,17 +121,53 @@ class Conductor {
 				bpmChangeMap.push(event);
 			}
 
-			var deltaSteps:Int = Math.round(getSectionBeats(song, i) * 4);
+			var deltaSteps:Int = Math.round(getSectionBeats(song, i) * stepsPerBeat(getSectionDenominator(song, i)));
 			totalSteps += deltaSteps;
 			totalPos += ((60 / curBPM) * 1000 / 4) * deltaSteps;
 		}
 	}
 
-	static function getSectionBeats(song:SwagSong, section:Int) {
+	// The song's base time signature [numerator, denominator]; defaults to 4/4 when
+	// unset or invalid. Sections fall back to this when they don't carry their own.
+	public static function getBaseTimeSignature(song:SwagSong):Array<Int> {
+		if (song != null && song.timeSignature != null && song.timeSignature.length > 1
+			&& song.timeSignature[0] > 0 && isValidDenominator(song.timeSignature[1]))
+			return song.timeSignature;
+		return [4, 4];
+	}
+
+	public static function getSectionBeats(song:SwagSong, section:Int):Float {
+		var sec = song.notes[section];
+		// Per-section time-sig override is gated by changeTimeSignature. Explicit
+		// false == inherit base; absent (legacy charts) keeps honoring sectionBeats.
+		if (sec != null && sec.changeTimeSignature == false)
+			return getBaseTimeSignature(song)[0];
 		var val:Null<Float> = null;
-		if (song.notes[section] != null)
-			val = song.notes[section].sectionBeats;
-		return val != null ? val : 4;
+		if (sec != null)
+			val = sec.sectionBeats;
+		return val != null ? val : getBaseTimeSignature(song)[0];
+	}
+
+	// Time-signature denominator helpers. The denominator is the time-signature
+	// bottom number; "steps per beat" is 16/denominator while a grid step stays a
+	// 16th note. Only powers of two {1,2,4,8,16} keep 16/d an integer, so anything
+	// else (or absent) falls back to 4 -- i.e. plain X/4, today's behaviour.
+	public static function isValidDenominator(denominator:Null<Int>):Bool {
+		return denominator != null && (denominator == 1 || denominator == 2 || denominator == 4 || denominator == 8 || denominator == 16);
+	}
+
+	public static function getSectionDenominator(song:SwagSong, section:Int):Int {
+		var sec = (song != null) ? song.notes[section] : null;
+		if (sec != null && sec.changeTimeSignature == false)
+			return getBaseTimeSignature(song)[1];
+		var val:Null<Int> = null;
+		if (sec != null)
+			val = sec.sectionDenominator;
+		return isValidDenominator(val) ? val : getBaseTimeSignature(song)[1];
+	}
+
+	inline public static function stepsPerBeat(denominator:Int):Int {
+		return isValidDenominator(denominator) ? Std.int(16 / denominator) : 4;
 	}
 
 	inline public static function calculateCrochet(bpm:Float) {

@@ -26,6 +26,7 @@ import backend.CustomFadeTransition;
 import backend.ClientPrefs;
 import backend.DebugPrefs;
 import backend.Conductor;
+import backend.Mania;
 import backend.BaseStage;
 import backend.Difficulty;
 import backend.Mods;

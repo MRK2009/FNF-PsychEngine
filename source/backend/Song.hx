@@ -19,6 +19,15 @@ typedef SwagSong = {
 	var stage:String;
 	var format:String;
 
+	// Song-wide base time signature [numerator, denominator]. Sections fall back to
+	// this when they don't specify their own. Absent == 4/4 (every existing chart).
+	@:optional var timeSignature:Array<Int>;
+
+	// Number of note columns per side (multikey support). Absent == 4, so every
+	// existing chart stays 4K. Legacy charts may instead carry `mania` (keyCount-1),
+	// which parseJSON normalizes onto this field.
+	@:optional var keyCount:Int;
+
 	@:optional var gameOverChar:String;
 	@:optional var gameOverSound:String;
 	@:optional var gameOverLoop:String;
@@ -38,6 +47,22 @@ typedef SwagSection = {
 	@:optional var gfSection:Bool;
 	@:optional var bpm:Float;
 	@:optional var changeBPM:Bool;
+	// Time-signature denominator (the bottom number). Absent == 4, so every
+	// existing chart stays implicitly X/4. Only powers of two {1,2,4,8,16} are
+	// valid (so 16/denominator -- the steps-per-beat -- is always an integer).
+	@:optional var sectionDenominator:Int;
+
+	// Per-section overrides, each gated by its own toggle (like changeBPM). Absent
+	// flag == inherit the song/running value, so every existing chart is unaffected.
+	// changeTimeSignature gates whether sectionBeats/sectionDenominator apply.
+	@:optional var changeTimeSignature:Bool;
+	// changeScrollSpeed + scrollSpeed: set the song's scroll speed at this section.
+	@:optional var changeScrollSpeed:Bool;
+	@:optional var scrollSpeed:Float;
+	// changeKeyCount + keyCount: change the number of columns/lanes from this
+	// section onward (multikey mid-song lane change).
+	@:optional var changeKeyCount:Bool;
+	@:optional var keyCount:Int;
 }
 
 class Song {
@@ -59,9 +84,14 @@ class Song {
 	public var player2:String = 'dad';
 	public var gfVersion:String = 'gf';
 	public var format:String = 'psych_v1';
+	public var timeSignature:Array<Int> = [4, 4];
+	public var keyCount:Int = 4;
 
 	public static function convert(songJson:Dynamic) // Convert old charts to psych_v1 format
 	{
+		// Number of columns per side; multikey charts carry it, plain charts are 4K.
+		var keyCount:Int = (songJson.keyCount != null) ? Std.int(songJson.keyCount) : 4;
+
 		if (songJson.gfVersion == null) {
 			songJson.gfVersion = songJson.player3;
 			if (Reflect.hasField(songJson, 'player3'))
@@ -101,8 +131,8 @@ class Song {
 			}
 
 			for (note in section.sectionNotes) {
-				var gottaHitNote:Bool = (note[1] < 4) ? section.mustHitSection : !section.mustHitSection;
-				note[1] = (note[1] % 4) + (gottaHitNote ? 0 : 4);
+				var gottaHitNote:Bool = (note[1] < keyCount) ? section.mustHitSection : !section.mustHitSection;
+				note[1] = (note[1] % keyCount) + (gottaHitNote ? 0 : keyCount);
 
 				if (!Std.isOfType(note[3], String))
 					note[3] = (note[3] != null) ? Note.defaultNoteTypes[note[3]] : ''; // compatibility with Week 7 and 0.1-0.3 psych charts
@@ -155,6 +185,19 @@ class Song {
 			if (subSong != null && Type.typeof(subSong) == TObject)
 				songJson = subSong;
 		}
+
+		// Resolve the keycount (multikey support): explicit `keyCount`, else legacy
+		// `mania` (keyCount - 1), else 4. Normalize onto `keyCount` so the rest of
+		// the engine has a single field to read, and drop the legacy `mania` field.
+		if (!Reflect.hasField(songJson, 'keyCount') || songJson.keyCount == null) {
+			if (Reflect.hasField(songJson, 'mania') && Reflect.field(songJson, 'mania') != null)
+				songJson.keyCount = Std.int(Reflect.field(songJson, 'mania')) + 1;
+			else
+				songJson.keyCount = 4;
+		}
+		songJson.keyCount = Mania.clamp(songJson.keyCount);
+		if (Reflect.hasField(songJson, 'mania'))
+			Reflect.deleteField(songJson, 'mania');
 
 		if (convertTo != null && convertTo.length > 0) {
 			var fmt:String = songJson.format;
