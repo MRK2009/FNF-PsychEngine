@@ -14,6 +14,14 @@ class MusicBeatState extends FlxState {
 	private var curDecStep:Float = 0;
 	private var curDecBeat:Float = 0;
 
+	// Time-signature beat tracking. A "beat" is `stepsPerBeatCur` 16th-note steps
+	// (= 16/denominator), and the beat phase resets at each section boundary so a
+	// meter change (e.g. 4/4 -> 6/8) doesn't drift the beat. For all-4/4 charts
+	// these reduce to curStep/4 and curStep % 4 (today's behaviour) exactly.
+	private var sectionStartStep:Int = 0;
+	private var beatsBeforeSection:Int = 0;
+	private var stepsPerBeatCur:Int = 4;
+
 	public var controls(get, never):Controls;
 
 	private function get_controls() {
@@ -128,12 +136,20 @@ class MusicBeatState extends FlxState {
 	}
 
 	private function updateSection():Void {
-		if (stepsToDo < 1)
-			stepsToDo = Math.round(getBeatsOnSection() * 4);
+		if (stepsToDo < 1) {
+			sectionStartStep = 0;
+			beatsBeforeSection = 0;
+			stepsPerBeatCur = Conductor.stepsPerBeat(Conductor.getSectionDenominator(PlayState.SONG, curSection));
+			stepsToDo = sectionStartStep + Math.round(getBeatsOnSection() * stepsPerBeatCur);
+		}
 		while (curStep >= stepsToDo) {
+			// Tally the beats of the section we're leaving (ceil so a fractional
+			// section still advances by the number of beat ticks it actually fired).
+			beatsBeforeSection += (stepsPerBeatCur > 0) ? Math.ceil((stepsToDo - sectionStartStep) / stepsPerBeatCur) : 0;
+			sectionStartStep = stepsToDo;
 			curSection++;
-			var beats:Float = getBeatsOnSection();
-			stepsToDo += Math.round(beats * 4);
+			stepsPerBeatCur = Conductor.stepsPerBeat(Conductor.getSectionDenominator(PlayState.SONG, curSection));
+			stepsToDo += Math.round(getBeatsOnSection() * stepsPerBeatCur);
 			sectionHit();
 		}
 	}
@@ -145,12 +161,21 @@ class MusicBeatState extends FlxState {
 		var lastSection:Int = curSection;
 		curSection = 0;
 		stepsToDo = 0;
+		sectionStartStep = 0;
+		beatsBeforeSection = 0;
+		stepsPerBeatCur = Conductor.stepsPerBeat(Conductor.getSectionDenominator(PlayState.SONG, 0));
 		for (i in 0...PlayState.SONG.notes.length) {
 			if (PlayState.SONG.notes[i] != null) {
-				stepsToDo += Math.round(getBeatsOnSection() * 4);
-				if (stepsToDo > curStep)
+				var spb:Int = Conductor.stepsPerBeat(Conductor.getSectionDenominator(PlayState.SONG, curSection));
+				var secSteps:Int = Math.round(getBeatsOnSection() * spb);
+				if (stepsToDo + secSteps > curStep) {
+					sectionStartStep = stepsToDo;
+					stepsPerBeatCur = spb;
+					stepsToDo += secSteps;
 					break;
-
+				}
+				stepsToDo += secSteps;
+				beatsBeforeSection += (spb > 0) ? Math.ceil(secSteps / spb) : 0;
 				curSection++;
 			}
 		}
@@ -164,8 +189,9 @@ class MusicBeatState extends FlxState {
 	}
 
 	private function updateBeat():Void {
-		curBeat = Math.floor(curStep / 4);
-		curDecBeat = curDecStep / 4;
+		var spb:Int = (stepsPerBeatCur > 0) ? stepsPerBeatCur : 4;
+		curBeat = beatsBeforeSection + Math.floor((curStep - sectionStartStep) / spb);
+		curDecBeat = beatsBeforeSection + (curDecStep - sectionStartStep) / spb;
 	}
 
 	private function updateCurStep():Void {
@@ -236,7 +262,7 @@ class MusicBeatState extends FlxState {
 			stage.stepHit();
 		}
 
-		if (curStep % 4 == 0)
+		if (stepsPerBeatCur > 0 && (curStep - sectionStartStep) % stepsPerBeatCur == 0)
 			beatHit();
 	}
 
@@ -269,9 +295,10 @@ class MusicBeatState extends FlxState {
 	}
 
 	function getBeatsOnSection() {
-		var val:Null<Float> = 4;
+		var fallback:Float = (PlayState.SONG != null) ? Conductor.getBaseTimeSignature(PlayState.SONG)[0] : 4;
+		var val:Null<Float> = fallback;
 		if (PlayState.SONG != null && PlayState.SONG.notes[curSection] != null)
 			val = PlayState.SONG.notes[curSection].sectionBeats;
-		return val == null ? 4 : val;
+		return val == null ? fallback : val;
 	}
 }
