@@ -1,4 +1,5 @@
 # LuaProxy Patterns — doing things the direct way
+NOTE THAT THIS DOC WAS HALF WRITTEN BY AI AND JUST QUICKLY CHECKED OVER, THERE MAY BE SLIGHTLY INACCURATE INFO HERE
 
 Psych's `LuaProxy` bridge pushes **live Haxe objects** into Lua, so most of the
 classic string-based callbacks (`getProperty`, `callMethod`, `makeLuaSprite`, …)

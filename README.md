@@ -2,6 +2,27 @@
 
 Engine originally used on [Mind Games Mod](https://gamebanana.com/mods/301107), intended to be a fix for the vanilla version's many issues while keeping the casual play aspect of it. Also aiming to be an easier alternative to newbie coders.
 
+## About This Fork
+
+This is a maintained fork of Psych Engine (by [MeguminBOT](https://github.com/MeguminBOT/FNF-PsychEngine)), branched from the archived upstream repo. It modernizes the toolchain, hardens the engine, and extends what mods can do — while staying a drop-in upgrade for existing Psych mods.
+
+**Goals**
+- **Stay current & buildable** — track up-to-date library versions (HaxeFlixel 6, OpenFL 9.5, Lime 8.3, LuaJIT via `hxluajit`, scripting via `hscript-insanity`) with a self-contained, reproducible setup that won't collide with other Haxe projects.
+- **Stability first** — fix the long tail of vanilla crashes, null-pointer faults, off-by-one and mid-iteration bugs (80+ targeted fixes so far).
+- **Performance** — cut per-frame allocations and redundant work across input, scripting, note spawning and the HUD (30+ perf commits).
+- **Safer mods** — let players run community mods with less risk via an opt-in script-scanning sandbox.
+- **Better scripting & modding ergonomics** — class/state-level scripting, a real-Lua mode, modpack types, and more configurable engine features.
+
+**Headline changes**
+- **Modernized dependencies** — major upgrades to Flixel/Flixel-Addons, OpenFL, Lime; `linc_luajit` → `hxluajit`, `hscript-iris` → `hscript-insanity`, `flxanimate` → `flixel-animate`.
+- **ModSecurity** — scans a mod's Lua/HScript on enable, flags risky calls (`os.execute`, reflection tampering, etc.), and prompts to **Trust** or **Block** per mod. Configurable in *Misc* options.
+- **Modpack types** — `pack.json` now distinguishes globally-running *Script Packs* from local *Mod Packs* (with opt-in `runsGlobally`).
+- **Scripting upgrades** — class/state-based scripted states, plus selectable Lua modes (`compat` legacy callbacks vs. `raw` real-Lua object access) and a configurable *State Source*.
+- **Configurable FPS / performance counter** — position, color, font size, update rate, and toggleable FPS / Memory / Peak / CPU / GPU / VRAM readouts (CPU/GPU/VRAM via the optional `hxhardware` lib).
+- **Setup overhaul** — pinned, dependency-isolated `haxelib` setup with a project-local `.haxelib/` repo and `hxcpp` built from source.
+
+See [docs/FORK_CHANGES.md](docs/FORK_CHANGES.md) for the full changelog and [docs/MIGRATION_1.0.4_to_1.1.md](docs/MIGRATION_1.0.4_to_1.1.md) for migration notes.
+
 ## Installation:
 
 Refer to [the Build Instructions](/docs/BUILDING.md)
@@ -33,7 +54,9 @@ There you can learn how to use the 212 PlayState funcions in your mod!
 * Keoiki - Note Splash Animations and Latin Alphabet.
 * SqirraRNG - Crash Handler and Base code for Chart Editor's Waveform.
 * EliteMasterEric - Runtime Shaders support and Other PRs.
-* MAJigsaw77 - .MP4 Video Loader Library (hxvlc).
+* MAJigsaw77 - .MP4 Video Loader Library (hxvlc) and LuaJIT bindings (hxluajit / hxluajit-wrapper).
+* Vortex2Oblivion - hxhardware, the native CPU/GPU/Memory library powering the FPS counter.
+* inky03 - hscript-insanity, the HScript extension fork used for scripting.
 * iFlicky - Composer of Psync, Tea Time and some sound effects.
 * KadeDev - Fixed some issues on Chart Editor and Other PRs.
 * superpowers04 - LUA JIT Fork.
