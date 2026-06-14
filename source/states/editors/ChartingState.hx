@@ -72,6 +72,7 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 		['Screen Shake', "Value 1: Camera shake\nValue 2: HUD shake\n\nEvery value works as the following example: \"1, 0.05\".\nThe first number (1) is the duration.\nThe second number (0.05) is the intensity."],
 		['Change Character', "Value 1: Character to change (Dad, BF, GF)\nValue 2: New character's name"],
 		['Change Scroll Speed', "Value 1: Scroll Speed Multiplier (1 is default)\nValue 2: Time it takes to change fully in seconds."],
+		['Change Key Amount', "Multikey: rebuilds the lanes to a new key count (1-9).\nValue 1: New key count (number of columns per side)."],
 		['Set Property', "Value 1: Variable name\nValue 2: New value"],
 		['Play Sound', "Value 1: Sound file name\nValue 2: Volume (Default: 1), ranges from 0 to 1"]
 	];
@@ -124,6 +125,23 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 	var upperBox:PsychUIBox;
 
 	var camUI:FlxCamera;
+	var camChars:FlxCamera;
+
+	// Bottom-left character preview (Options > Characters). gf/dad/bf, reloaded when the
+	// song's characters change. Driven manually: dance on beat, sing on note pass. Each
+	// character is moved independently with the mouse; its position is saved per slot.
+	var editorChars:Array<Character> = [];
+	var editorCharBaseScale:Array<Float> = []; // each char's own json scale, before charsScale
+	var charBF:Character;
+	var charDad:Character;
+	var charGF:Character;
+	var draggingCharIndex:Int = -1;
+	var dragCharOffX:Float = 0;
+	var dragCharOffY:Float = 0;
+	var charDragOutline:FlxSprite; // shown around the character currently being dragged
+	var _outlineW:Int = -1;
+	var _outlineH:Int = -1;
+	static final SING_ANIMS:Array<String> = ['singLEFT', 'singDOWN', 'singUP', 'singRIGHT'];
 
 	var prevGridBg:ChartingGridSprite;
 	var gridBg:ChartingGridSprite;
@@ -191,6 +209,10 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 			Difficulty.resetList();
 		_keysPressedBuffer.resize(keysArray.length);
 
+		// Multikey: drive the editor grid + strums off the chart's keycount (absent
+		// == 4K). Everything downstream reads GRID_COLUMNS_PER_PLAYER / Mania.current.
+		applyEditorKeyCount(Mania.clamp((PlayState.SONG != null && PlayState.SONG.keyCount != null) ? PlayState.SONG.keyCount : Mania.DEFAULT));
+
 		if (_shouldReset)
 			Conductor.songPosition = 0;
 		persistentUpdate = false;
@@ -204,6 +226,10 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 		opponentVocals.looped = true;
 
 		initPsychCamera();
+		// Characters render on their own camera between the grid and the UI panels.
+		camChars = new FlxCamera();
+		camChars.bgColor.alpha = 0;
+		FlxG.cameras.add(camChars, false);
 		camUI = new FlxCamera();
 		camUI.bgColor.alpha = 0;
 		FlxG.cameras.add(camUI, false);
@@ -282,22 +308,7 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 		if (SHOW_EVENT_COLUMN)
 			startX += GRID_SIZE;
 
-		for (i in 0...Std.int(GRID_PLAYERS * GRID_COLUMNS_PER_PLAYER)) {
-			var note:StrumNote = new StrumNote(startX + (GRID_SIZE * i), startY, i % GRID_COLUMNS_PER_PLAYER, 0);
-			note.scrollFactor.set();
-			note.playAnim('static');
-			note.alpha = 0.4;
-			note.updateHitbox();
-			if (note.width > note.height)
-				note.setGraphicSize(GRID_SIZE);
-			else
-				note.setGraphicSize(0, GRID_SIZE);
-
-			note.updateHitbox();
-			note.x += GRID_SIZE / 2 - note.width / 2;
-			note.y += GRID_SIZE / 2 - note.height / 2;
-			strumLineNotes.add(note);
-		}
+		createStrumLineNotes();
 
 		var columns:Int = 0;
 		var iconX:Float = gridBg.x;
@@ -359,7 +370,7 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 		infoBox.getTab('Information').menu.add(infoText);
 		add(infoBox);
 
-		mainBox = new PsychUIBox(mainBoxPosition.x, mainBoxPosition.y, 300, 280, ['Charting', 'Data', 'Events', 'Note', 'Section', 'Song']);
+		mainBox = new PsychUIBox(mainBoxPosition.x, mainBoxPosition.y, 300, 320, ['Charting', 'Data', 'Events', 'Note', 'Section', 'Song']);
 		mainBox.selectedName = 'Song';
 		mainBox.scrollFactor.set();
 		mainBox.cameras = [camUI];
@@ -379,7 +390,7 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 		if (chartEditorSave.data.infoBoxPosition != null && chartEditorSave.data.infoBoxPosition.length > 1)
 			infoBox.setPosition(chartEditorSave.data.infoBoxPosition[0], chartEditorSave.data.infoBoxPosition[1]);
 
-		upperBox = new PsychUIBox(40, 40, 330, 300, ['File', 'Edit', 'View']);
+		upperBox = new PsychUIBox(40, 40, 520, 300, ['File', 'Edit', 'View', 'Options']);
 		upperBox.scrollFactor.set();
 		upperBox.isMinimized = true;
 		upperBox.minimizeOnFocusLost = true;
@@ -416,6 +427,7 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 		addFileTab();
 		addEditTab();
 		addViewTab();
+		addOptionsTab();
 		//
 
 		loadMusic();
@@ -430,6 +442,9 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 
 		reloadNotes();
 		updateGridVisibility();
+
+		// Build the bottom-left character preview if it was left enabled.
+		updateCharsVisibility();
 
 		// CHARACTERS FOR THE DROP DOWNS
 		var gameOverCharacters:Array<String> = loadFileList('characters/', 'data/characterList.txt');
@@ -614,6 +629,10 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 		audioOffsetStepper.value = Reflect.hasField(PlayState.SONG, 'offset') ? PlayState.SONG.offset : 0;
 		Conductor.offset = audioOffsetStepper.value;
 
+		var baseSig:Array<Int> = Conductor.getBaseTimeSignature(PlayState.SONG);
+		timeSigNumStepper.value = baseSig[0];
+		timeSigDenStepper.value = baseSig[1];
+
 		playerDropDown.selectedLabel = PlayState.SONG.player1;
 		opponentDropDown.selectedLabel = PlayState.SONG.player2;
 		girlfriendDropDown.selectedLabel = PlayState.SONG.gfVersion;
@@ -652,6 +671,8 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 			lastFocus = PsychUIInputText.focusOn;
 			return;
 		}
+
+		updateEditorChars(elapsed);
 
 		for (num => key in keysArray)
 			_keysPressedBuffer[num] = FlxG.keys.checkStatus(key, JUST_PRESSED);
@@ -1366,8 +1387,15 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 			var hitSoundPlayer:Bool = (hitsoundPlayerStepper.value > 0);
 			var hitSoundOpp:Bool = (hitsoundOpponentStepper.value > 0);
 			for (note in curRenderedNotes) {
-				if (note == null || note.isEvent)
+				if (note == null)
 					continue;
+
+				if (note.isEvent) {
+					// Route passing 'Play Animation' events to the preview characters.
+					if (canPlayHitSound && Conductor.songPosition > note.strumTime && lastTime <= note.strumTime)
+						editorEventAnim(cast note);
+					continue;
+				}
 
 				note.alpha = (note.strumTime >= Conductor.songPosition) ? 1 : 0.6;
 				if (Conductor.songPosition > note.strumTime && lastTime <= note.strumTime) {
@@ -1388,13 +1416,45 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 							strumNote.resetAnim = Math.max(Conductor.stepCrochet * 1.25, note.sustainLength) / 1000 / playbackRate;
 						}
 					}
+
+					// Preview characters sing as notes pass (forward playback only).
+					if (canPlayHitSound)
+						editorCharSing(note);
 				}
 			}
 			forceDataUpdate = false;
 
 			// moved from beatHit()
-			if (metronomeStepper.value > 0 && lastBeatHit != curBeat)
-				FlxG.sound.play(Paths.sound('Metronome_Tick'), metronomeStepper.value);
+			if (metronomeStepper.value > 0 && lastBeatHit != curBeat) {
+				var preset = METRONOME_PRESETS[metronomePresetIndex];
+				// The downbeat is the first beat of the section/measure; sectionStartStep
+				// is maintained by MusicBeatState and is meter (denominator) aware.
+				var isDownbeat:Bool = (curStep == sectionStartStep);
+				var vol:Float = metronomeStepper.value;
+				if (metronomeAccent && isDownbeat)
+					vol = Math.min(1, vol * 1.5);
+				var sndAsset = Paths.sound(preset.sound);
+				if (sndAsset == null) // missing preset file -> fall back to the stock tick
+					sndAsset = Paths.sound('Metronome_Tick');
+				if (sndAsset != null) {
+					var snd = FlxG.sound.play(sndAsset, vol);
+					#if FLX_PITCH
+					if (snd != null)
+						snd.pitch = (metronomeAccent && isDownbeat) ? preset.accentPitch : 1.0;
+					#end
+				}
+			}
+
+			// Preview characters dance on the beat (unless mid-sing).
+			if (showChars && editorChars.length > 0 && lastBeatHit != curBeat) {
+				for (c in editorChars) {
+					if (c == null)
+						continue;
+					var anim:String = c.getAnimationName();
+					if (anim == null || !anim.startsWith('sing'))
+						c.dance();
+				}
+			}
 
 			lastBeatHit = curBeat;
 		}
@@ -1662,6 +1722,173 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 		}
 	}
 
+	// Multikey: set every keycount-dependent global the editor relies on. Shared by
+	// initial create and the Key Count stepper. 4K resolves to the classic values.
+	function applyEditorKeyCount(count:Int) {
+		count = Mania.clamp(count);
+		GRID_COLUMNS_PER_PLAYER = count;
+		Mania.current = count;
+		Note.colArray = Mania.colArray[count - 1];
+		Note.swagWidth = 160 * Mania.noteSizes[count - 1];
+	}
+
+	// (Re)build the bottom strum-line preview for the current column count. Strums
+	// pick up the right atlas/anims/colours automatically from Mania.current.
+	function createStrumLineNotes() {
+		for (note in strumLineNotes)
+			note.destroy();
+		strumLineNotes.clear();
+
+		var startX:Float = gridBg.x;
+		var startY:Float = FlxG.height / 2;
+		if (SHOW_EVENT_COLUMN)
+			startX += GRID_SIZE;
+
+		for (i in 0...Std.int(GRID_PLAYERS * GRID_COLUMNS_PER_PLAYER)) {
+			var note:StrumNote = new StrumNote(startX + (GRID_SIZE * i), startY, i % GRID_COLUMNS_PER_PLAYER, 0);
+			note.scrollFactor.set();
+			note.playAnim('static');
+			note.alpha = 0.4;
+			note.updateHitbox();
+			if (note.width > note.height)
+				note.setGraphicSize(GRID_SIZE);
+			else
+				note.setGraphicSize(0, GRID_SIZE);
+
+			note.updateHitbox();
+			note.x += GRID_SIZE / 2 - note.width / 2;
+			note.y += GRID_SIZE / 2 - note.height / 2;
+			strumLineNotes.add(note);
+		}
+	}
+
+	// Live-apply a new keycount from the Song-tab stepper: rebuild grid + strums,
+	// reposition the column-dependent overlays/icons, and stamp it onto the chart.
+	// Song-tab Key Count stepper: set the chart's base key count, then refresh the
+	// grid to whatever the currently-viewed section resolves to.
+	function changeKeyCount(count:Int) {
+		count = Mania.clamp(count);
+		updateChartData();
+		var old:Array<Int> = snapshotEffectives();
+		if (PlayState.SONG != null)
+			PlayState.SONG.keyCount = count;
+		commitKeyCountChange(old);
+		showOutput('Key Count changed to $count.');
+	}
+
+	// The key count in effect at a section = the chart base with every earlier
+	// section's changeKeyCount override applied in order (mirrors gameplay).
+	function getEditorSectionKeyCount(secIndex:Int):Int {
+		var count:Int = Mania.clamp((PlayState.SONG != null && PlayState.SONG.keyCount != null) ? PlayState.SONG.keyCount : Mania.DEFAULT);
+		if (PlayState.SONG == null || PlayState.SONG.notes == null)
+			return count;
+		for (i in 0...(secIndex + 1)) {
+			if (i >= PlayState.SONG.notes.length)
+				break;
+			var s = PlayState.SONG.notes[i];
+			if (s != null && s.changeKeyCount == true && s.keyCount != null)
+				count = Mania.clamp(s.keyCount);
+		}
+		return count;
+	}
+
+	// Snapshot the effective key count of every section (before a change).
+	function snapshotEffectives():Array<Int> {
+		return [for (i in 0...PlayState.SONG.notes.length) getEditorSectionKeyCount(i)];
+	}
+
+	// Re-encode a section's raw notes for a key-count change: keep each note on its
+	// side (left = gotta-hit, right = opponent) and wrap any column that no longer
+	// fits into range, so notes on now-invalid columns move onto valid ones.
+	function reencodeSectionNotes(secIndex:Int, oldK:Int, newK:Int) {
+		if (oldK == newK || PlayState.SONG.notes[secIndex] == null)
+			return;
+		var arr:Array<Dynamic> = PlayState.SONG.notes[secIndex].sectionNotes;
+		if (arr == null)
+			return;
+		for (n in arr) {
+			if (n == null)
+				continue;
+			var d:Int = Std.int(n[1]);
+			if (d < 0)
+				continue;
+			var side:Int = (d >= oldK) ? 1 : 0;
+			var col:Int = d - side * oldK;
+			if (col >= newK)
+				col = col % newK; // pull invalid columns back into range
+			n[1] = side * newK + col;
+		}
+	}
+
+	// Commit a key-count change (already written to the song/section): sync the
+	// notes to raw data, re-encode every section whose effective count changed, and
+	// rebuild. `oldEffectives` must be snapshotted BEFORE the change was applied.
+	function commitKeyCountChange(oldEffectives:Array<Int>) {
+		for (i in 0...PlayState.SONG.notes.length) {
+			var newE:Int = getEditorSectionKeyCount(i);
+			if (i < oldEffectives.length && oldEffectives[i] != newE)
+				reencodeSectionNotes(i, oldEffectives[i], newE);
+		}
+		reloadNotes(); // rebuilds MetaNotes (per-section decode) + loadSection -> grid refresh
+	}
+
+	var _rebuildingGrid:Bool = false;
+
+	// Make the editor grid + strums match the current section's effective key count.
+	function refreshEditorKeyCount() {
+		if (_rebuildingGrid)
+			return;
+		var count:Int = getEditorSectionKeyCount(curSec);
+		if (count != GRID_COLUMNS_PER_PLAYER)
+			rebuildEditorGrid(count);
+	}
+
+	function rebuildEditorGrid(count:Int) {
+		_rebuildingGrid = true;
+		count = Mania.clamp(count);
+		applyEditorKeyCount(count);
+
+		createGrids();
+		createStrumLineNotes();
+
+		// Recompute stripe positions + reposition the section icons/event icon.
+		var columns:Int = 0;
+		var iconX:Float = gridBg.x;
+		if (SHOW_EVENT_COLUMN) {
+			if (eventIcon != null)
+				eventIcon.x = iconX + (GRID_SIZE * 0.5) - eventIcon.width / 2;
+			iconX += GRID_SIZE;
+			columns++;
+		}
+		var gridStripes:Array<Int> = [];
+		for (i in 0...GRID_PLAYERS) {
+			if (columns > 0)
+				gridStripes.push(columns);
+			columns += GRID_COLUMNS_PER_PLAYER;
+			if (icons[i] != null)
+				icons[i].x = iconX + GRID_SIZE * (GRID_COLUMNS_PER_PLAYER / 2) - icons[i].width / 2;
+			iconX += GRID_SIZE * GRID_COLUMNS_PER_PLAYER;
+		}
+		prevGridBg.stripes = nextGridBg.stripes = gridBg.stripes = gridStripes;
+
+		// Realign the column-width-dependent overlays.
+		if (waveformSprite != null)
+			waveformSprite.x = gridBg.x + (SHOW_EVENT_COLUMN ? GRID_SIZE : 0);
+		if (eventLockOverlay != null) {
+			eventLockOverlay.x = gridBg.x;
+			eventLockOverlay.scale.x = GRID_SIZE;
+			eventLockOverlay.updateHitbox();
+		}
+		if (timeLine != null) {
+			timeLine.x = gridBg.x;
+			timeLine.setGraphicSize(Std.int(gridBg.width), 4);
+			timeLine.updateHitbox();
+			timeLine.screenCenter(X);
+		}
+		updateWaveform();
+		_rebuildingGrid = false;
+	}
+
 	var cachedSectionRow:Array<Int>;
 	var cachedSectionTimes:Array<Float>;
 	var cachedSectionCrochets:Array<Float>;
@@ -1671,6 +1898,8 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 		PlayState.SONG = song;
 		StageData.loadDirectory(PlayState.SONG);
 		Conductor.bpm = PlayState.SONG.bpm;
+		if (showChars)
+			reloadEditorChars();
 	}
 
 	function loadMusic(?killAudio:Bool = false) {
@@ -1835,8 +2064,11 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 		var section = PlayState.SONG.notes[secNum];
 
 		var daStrumTime:Float = note[0];
-		var daNoteData:Int = Std.int(note[1] % GRID_COLUMNS_PER_PLAYER);
-		var gottaHitNote:Bool = (note[1] < GRID_COLUMNS_PER_PLAYER);
+		// Decode against THIS section's effective key count (multikey), not the
+		// global grid -- sections can carry different key counts.
+		var secKeys:Int = getEditorSectionKeyCount(secNum);
+		var daNoteData:Int = Std.int(note[1] % secKeys);
+		var gottaHitNote:Bool = (note[1] < secKeys);
 
 		var swagNote:MetaNote = new MetaNote(daStrumTime, daNoteData, note);
 		swagNote.mustPress = gottaHitNote;
@@ -1858,6 +2090,8 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 		swagNote.active = false;
 		positionNoteXByData(swagNote);
 		positionNoteYOnTime(swagNote, secNum);
+		if (quantNoteColors && isPlainNote(swagNote))
+			swagNote.applyQuantColor(getQuantColor(daStrumTime));
 		return swagNote;
 	}
 
@@ -1913,7 +2147,7 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 			cachedSectionBPMs.push(bpm);
 
 			var lastTime:Float = time;
-			var rowRound:Int = Math.round(4 * section.sectionBeats);
+			var rowRound:Int = Math.round(Conductor.stepsPerBeat(Conductor.getSectionDenominator(PlayState.SONG, secNum)) * section.sectionBeats);
 			row += rowRound;
 			time += beat * (rowRound / 4);
 
@@ -1947,7 +2181,8 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 			var lastSection = PlayState.SONG.notes[PlayState.SONG.notes.length - 1];
 			var beat:Float = Conductor.calculateCrochet(bpm);
 			var sectionBeats:Float = lastSection != null ? lastSection.sectionBeats : 4;
-			var rowRound:Int = Math.round(4 * sectionBeats);
+			var denominator:Int = (lastSection != null && Conductor.isValidDenominator(lastSection.sectionDenominator)) ? lastSection.sectionDenominator : 4;
+			var rowRound:Int = Math.round(Conductor.stepsPerBeat(denominator) * sectionBeats);
 			var timeAdd:Float = beat * (rowRound / 4);
 			var mustHitSec:Bool = lastSection != null ? lastSection.mustHitSection : true;
 			var changeBpmSec:Bool = lastSection != null ? lastSection.changeBPM : false;
@@ -1958,6 +2193,7 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 				PlayState.SONG.notes.push({
 					sectionNotes: [],
 					sectionBeats: sectionBeats,
+					sectionDenominator: denominator,
 					mustHitSection: mustHitSec,
 					bpm: bpm,
 					changeBPM: changeBpmSec,
@@ -1992,12 +2228,19 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 		if (sec != null)
 			curSec = sec;
 		curSec = Std.int(FlxMath.bound(curSec, 0, PlayState.SONG.notes.length - 1));
+		// Multikey: make the grid follow this section's effective key count so notes
+		// can be placed in its lanes. Guarded against re-entry from createGrids.
+		refreshEditorKeyCount();
 		Conductor.bpm = cachedSectionBPMs[curSec];
+
+		var prevStepsPerBeat:Int = Conductor.stepsPerBeat(Conductor.getSectionDenominator(PlayState.SONG, curSec - 1));
+		var curStepsPerBeat:Int = Conductor.stepsPerBeat(Conductor.getSectionDenominator(PlayState.SONG, curSec));
+		var nextStepsPerBeat:Int = Conductor.stepsPerBeat(Conductor.getSectionDenominator(PlayState.SONG, curSec + 1));
 
 		var hei:Float = 0;
 		if (curSec > 0) {
 			prevGridBg.y = cachedSectionRow[curSec - 1] * GRID_SIZE * curZoom;
-			prevGridBg.rows = 4 * PlayState.SONG.notes[curSec - 1].sectionBeats * curZoom;
+			prevGridBg.rows = prevStepsPerBeat * PlayState.SONG.notes[curSec - 1].sectionBeats * curZoom;
 			prevGridBg.visible = showPreviousSection;
 			hei += prevGridBg.height;
 			eventLockOverlay.y = prevGridBg.y;
@@ -2006,14 +2249,14 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 
 		if (curSec < PlayState.SONG.notes.length - 1) {
 			nextGridBg.y = cachedSectionRow[curSec + 1] * GRID_SIZE * curZoom;
-			nextGridBg.rows = 4 * PlayState.SONG.notes[curSec + 1].sectionBeats * curZoom;
+			nextGridBg.rows = nextStepsPerBeat * PlayState.SONG.notes[curSec + 1].sectionBeats * curZoom;
 			nextGridBg.visible = showNextSection;
 			hei += nextGridBg.height;
 		} else
 			nextGridBg.visible = false;
 
 		gridBg.y = cachedSectionRow[curSec] * GRID_SIZE * curZoom;
-		gridBg.rows = 4 * PlayState.SONG.notes[curSec].sectionBeats * curZoom;
+		gridBg.rows = curStepsPerBeat * PlayState.SONG.notes[curSec].sectionBeats * curZoom;
 		hei += gridBg.height;
 
 		if (!prevGridBg.visible)
@@ -2031,7 +2274,14 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 			altAnimSectionCheckBox.checked = sec.altAnim;
 			changeBpmCheckBox.checked = sec.changeBPM;
 			changeBpmStepper.value = Conductor.bpm;
-			beatsPerSecStepper.value = sec.sectionBeats;
+			beatsPerSecStepper.value = Conductor.getSectionBeats(PlayState.SONG, curSec);
+			denominatorStepper.value = Conductor.getSectionDenominator(PlayState.SONG, curSec);
+
+			changeTimeSigCheckBox.checked = (sec.changeTimeSignature == true);
+			changeScrollSpeedCheckBox.checked = (sec.changeScrollSpeed == true);
+			scrollSpeedStepperSec.value = (sec.scrollSpeed != null) ? sec.scrollSpeed : PlayState.SONG.speed;
+			changeKeyCountCheckBox.checked = (sec.changeKeyCount == true);
+			keyCountStepperSec.value = (sec.keyCount != null) ? sec.keyCount : GRID_COLUMNS_PER_PLAYER;
 
 			strumTimeStepper.step = Conductor.stepCrochet;
 			susLengthStepper.step = cachedSectionCrochets[curSec] / 4 / 2;
@@ -2042,7 +2292,11 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 				susLengthStepper.min = 0;
 		}
 		prevGridBg.vortexLineEnabled = gridBg.vortexLineEnabled = nextGridBg.vortexLineEnabled = vortexEnabled;
-		prevGridBg.vortexLineSpace = gridBg.vortexLineSpace = nextGridBg.vortexLineSpace = GRID_SIZE * 4 * curZoom;
+		// Heavy beat lines land every "steps per beat" rows, so X/8 sections get a
+		// line every 2 rows, X/16 every row, X/4 every 4 rows (unchanged).
+		prevGridBg.vortexLineSpace = GRID_SIZE * prevStepsPerBeat * curZoom;
+		gridBg.vortexLineSpace = GRID_SIZE * curStepsPerBeat * curZoom;
+		nextGridBg.vortexLineSpace = GRID_SIZE * nextStepsPerBeat * curZoom;
 		updateWaveform();
 	}
 
@@ -2110,6 +2364,16 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 					}
 				}
 			}
+		}
+
+		// Keep visible notes' quant colors current (section timing may have changed).
+		if (quantNoteColors) {
+			for (note in curRenderedNotes)
+				if (note != null && !note.isEvent && isPlainNote(note))
+					note.applyQuantColor(getQuantColor(note.strumTime));
+			for (note in behindRenderedNotes)
+				if (note != null && !note.isEvent && isPlainNote(note))
+					note.applyQuantColor(getQuantColor(note.strumTime));
 		}
 	}
 
@@ -2204,6 +2468,43 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 	var hitsoundPlayerStepper:PsychUINumericStepper;
 	var hitsoundOpponentStepper:PsychUINumericStepper;
 	var metronomeStepper:PsychUINumericStepper;
+
+	// === Options tab (toolbar) state, persisted via chartEditorSave ===
+	var showChars:Bool = false;
+	var showBF:Bool = true;
+	var showDad:Bool = true;
+	var showGF:Bool = true;
+	var charsScale:Float = 0.35;
+	var charsAnchorBottom:Bool = true; // keep every character's feet on charsFloorY
+	var charsFloorY:Float = -1; // -1 = uninitialised; set to the screen bottom on first use
+	var dragFloorOffY:Float = 0;
+	var quantNoteColors:Bool = false;
+	var metronomePresetIndex:Int = 0;
+	var metronomeAccent:Bool = false;
+
+	// Metronome sound presets. Index 0 is the stock tick; the rest are short
+	// synthesized ticks shipped in assets/shared/sounds/metronome/. `accentPitch`
+	// is used (where FLX_PITCH is available) to make the section downbeat stand out.
+	static final METRONOME_PRESETS:Array<{name:String, sound:String, accentPitch:Float}> = [
+		{name: 'Tick', sound: 'Metronome_Tick', accentPitch: 1.5},
+		{name: 'Beep', sound: 'metronome/beep', accentPitch: 1.5},
+		{name: 'Click', sound: 'metronome/click', accentPitch: 1.5},
+		{name: 'Wood', sound: 'metronome/wood', accentPitch: 1.4},
+	];
+
+	// Quantized note colors (StepMania-style). Index = subdivisions per beat a note
+	// lands on (1 = 4th/on-beat, 2 = 8th, 3 = triplet, 4 = 16th, ...); off-grid = grey.
+	static final QUANT_DIVS:Array<Int> = [1, 2, 3, 4, 6, 8, 12, 16];
+	static final QUANT_COLORS:Map<Int, FlxColor> = [
+		1 => 0xFFFF3030, // 4th  - red
+		2 => 0xFF3050FF, // 8th  - blue
+		3 => 0xFFC040FF, // 12th - purple
+		4 => 0xFF30C030, // 16th - green
+		6 => 0xFFFF60C0, // 24th - pink
+		8 => 0xFFFFE030, // 32nd - yellow
+		12 => 0xFFFF9030, // 48th - orange
+		16 => 0xFF40D0D0, // 64th - cyan
+	];
 
 	var instVolumeStepper:PsychUINumericStepper;
 	var instMuteCheckBox:PsychUICheckBox;
@@ -2601,6 +2902,12 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 	var changeBpmCheckBox:PsychUICheckBox;
 	var changeBpmStepper:PsychUINumericStepper;
 	var beatsPerSecStepper:PsychUINumericStepper;
+	var denominatorStepper:PsychUINumericStepper;
+	var changeTimeSigCheckBox:PsychUICheckBox;
+	var changeScrollSpeedCheckBox:PsychUICheckBox;
+	var scrollSpeedStepperSec:PsychUINumericStepper;
+	var changeKeyCountCheckBox:PsychUICheckBox;
+	var keyCountStepperSec:PsychUINumericStepper;
 
 	function addSectionTab() {
 		var affectNotes:PsychUICheckBox = null;
@@ -2685,7 +2992,7 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 				sec.altAnim = altAnimSectionCheckBox.checked;
 		});
 
-		objY += 40;
+		objY += 35;
 		changeBpmCheckBox = new PsychUICheckBox(objX, objY, 'Change BPM', 80, function() {
 			var sec = getCurChartSection();
 			if (sec != null) {
@@ -2693,6 +3000,21 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 				sec.changeBPM = changeBpmCheckBox.checked;
 				if (!Reflect.hasField(sec, 'bpm'))
 					sec.bpm = changeBpmStepper.value;
+				adaptNotesToNewTimes(oldTimes);
+			}
+		});
+
+		// Per-section time signature override, gated like Change BPM. Off == inherit
+		// the song's base time signature (see Conductor.getSectionBeats).
+		changeTimeSigCheckBox = new PsychUICheckBox(objX + 150, objY, 'Change Time Sig.', 110, function() {
+			var sec = getCurChartSection();
+			if (sec != null) {
+				var oldTimes:Array<Float> = cachedSectionTimes.copy();
+				sec.changeTimeSignature = changeTimeSigCheckBox.checked;
+				if (changeTimeSigCheckBox.checked) {
+					sec.sectionBeats = beatsPerSecStepper.value;
+					sec.sectionDenominator = Std.int(denominatorStepper.value);
+				}
 				adaptNotesToNewTimes(oldTimes);
 			}
 		});
@@ -2710,18 +3032,90 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 			}
 		};
 
-		beatsPerSecStepper = new PsychUINumericStepper(objX + 150, objY, 1, 4, 1, 16, 2);
+		beatsPerSecStepper = new PsychUINumericStepper(objX + 150, objY, 1, 4, 1, 16, 2, 50);
 		beatsPerSecStepper.onValueChange = function() {
 			beatsPerSecStepper.value = Math.round(beatsPerSecStepper.value * 4) / 4;
 			var sec = getCurChartSection();
 			if (sec != null) {
 				var oldTimes:Array<Float> = cachedSectionTimes.copy();
 				sec.sectionBeats = beatsPerSecStepper.value;
+				sec.changeTimeSignature = true;
+				changeTimeSigCheckBox.checked = true;
 				adaptNotesToNewTimes(oldTimes);
 			}
 		};
 
-		objY += 40;
+		// Time-signature denominator. Only powers of two {1,2,4,8,16} are valid (so
+		// 16/denominator is an integer), so we snap to the next/previous power of two
+		// relative to the section's current value instead of stepping by 1.
+		denominatorStepper = new PsychUINumericStepper(objX + 210, objY, 1, 4, 1, 16, 0, 50);
+		denominatorStepper.onValueChange = function() {
+			var sec = getCurChartSection();
+			if (sec == null) {
+				denominatorStepper.value = 4;
+				return;
+			}
+			var cur:Int = Conductor.getSectionDenominator(PlayState.SONG, curSec);
+			var v:Int = Std.int(denominatorStepper.value);
+			var snapped:Int = (v > cur) ? Std.int(Math.min(16, cur * 2)) : (v < cur ? Std.int(Math.max(1, Std.int(cur / 2))) : cur);
+			denominatorStepper.value = snapped;
+
+			var oldTimes:Array<Float> = cachedSectionTimes.copy();
+			sec.sectionDenominator = snapped;
+			sec.changeTimeSignature = true;
+			changeTimeSigCheckBox.checked = true;
+			adaptNotesToNewTimes(oldTimes);
+		};
+
+		// Per-section scroll speed override (gated like Change BPM). Applied at the
+		// section boundary in gameplay (PlayState.sectionHit).
+		objY += 30;
+		changeScrollSpeedCheckBox = new PsychUICheckBox(objX, objY, 'Change Scroll Speed', 130, function() {
+			var sec = getCurChartSection();
+			if (sec != null) {
+				sec.changeScrollSpeed = changeScrollSpeedCheckBox.checked;
+				if (sec.scrollSpeed == null)
+					sec.scrollSpeed = scrollSpeedStepperSec.value;
+			}
+		});
+		scrollSpeedStepperSec = new PsychUINumericStepper(objX + 150, objY, 0.1, 1, 0.1, 10, 2);
+		scrollSpeedStepperSec.onValueChange = function() {
+			var sec = getCurChartSection();
+			if (sec != null) {
+				sec.scrollSpeed = scrollSpeedStepperSec.value;
+				sec.changeScrollSpeed = true;
+				changeScrollSpeedCheckBox.checked = true;
+			}
+		};
+
+		// Per-section key count override (multikey mid-song lane change). Gameplay
+		// rebuilds the strums + input when crossing into this section.
+		objY += 30;
+		changeKeyCountCheckBox = new PsychUICheckBox(objX, objY, 'Change Key Amount', 130, function() {
+			var sec = getCurChartSection();
+			if (sec != null) {
+				updateChartData();
+				var old:Array<Int> = snapshotEffectives();
+				sec.changeKeyCount = changeKeyCountCheckBox.checked;
+				if (sec.keyCount == null)
+					sec.keyCount = Std.int(keyCountStepperSec.value);
+				commitKeyCountChange(old);
+			}
+		});
+		keyCountStepperSec = new PsychUINumericStepper(objX + 150, objY, 1, GRID_COLUMNS_PER_PLAYER, Mania.MIN, Mania.MAX, 0);
+		keyCountStepperSec.onValueChange = function() {
+			var sec = getCurChartSection();
+			if (sec != null) {
+				updateChartData();
+				var old:Array<Int> = snapshotEffectives();
+				sec.keyCount = Std.int(keyCountStepperSec.value);
+				sec.changeKeyCount = true;
+				changeKeyCountCheckBox.checked = true;
+				commitKeyCountChange(old);
+			}
+		};
+
+		objY += 35;
 		var copyButton:PsychUIButton = new PsychUIButton(objX, objY, 'Copy Section', copyNotesOnSection.bind());
 		var pasteButton:PsychUIButton = new PsychUIButton(objX + 100, objY, 'Paste Section', function() {
 			pasteCopiedNotesToSection(affectNotes.checked, affectEvents.checked);
@@ -2828,10 +3222,18 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 		tab_group.add(gfSectionCheckBox);
 		tab_group.add(altAnimSectionCheckBox);
 
-		tab_group.add(new FlxText(beatsPerSecStepper.x, beatsPerSecStepper.y - 15, 100, 'Beats per Section:'));
+		// No "Time Signature:" label here -- the "Change Time Sig." checkbox above
+		// the steppers already names them. Just the num/den separator.
+		tab_group.add(new FlxText(denominatorStepper.x - 12, denominatorStepper.y + 3, 12, '/'));
 		tab_group.add(changeBpmCheckBox);
+		tab_group.add(changeTimeSigCheckBox);
 		tab_group.add(changeBpmStepper);
 		tab_group.add(beatsPerSecStepper);
+		tab_group.add(denominatorStepper);
+		tab_group.add(changeScrollSpeedCheckBox);
+		tab_group.add(scrollSpeedStepperSec);
+		tab_group.add(changeKeyCountCheckBox);
+		tab_group.add(keyCountStepperSec);
 
 		tab_group.add(copyButton);
 		tab_group.add(pasteButton);
@@ -2981,6 +3383,9 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 	var bpmStepper:PsychUINumericStepper;
 	var scrollSpeedStepper:PsychUINumericStepper;
 	var audioOffsetStepper:PsychUINumericStepper;
+	var timeSigNumStepper:PsychUINumericStepper;
+	var timeSigDenStepper:PsychUINumericStepper;
+	var keyCountStepper:PsychUINumericStepper;
 
 	var stageDropDown:PsychUIDropDownMenu;
 	var playerDropDown:PsychUIDropDownMenu;
@@ -3066,29 +3471,41 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 		//
 
 		objY += 40;
-		playerDropDown = new PsychUIDropDownMenu(objX, objY, [''], function(id:Int, character:String) {
+		// Song structure steppers (time signature + key count) share the row right
+		// under BPM/Scroll Speed; the character dropdowns sit below them so their
+		// open lists can't cover the steppers.
+		var baseSig:Array<Int> = Conductor.getBaseTimeSignature(PlayState.SONG);
+		timeSigNumStepper = new PsychUINumericStepper(objX, objY, 1, baseSig[0], 1, 16, 0, 50);
+		timeSigNumStepper.onValueChange = function() applyBaseTimeSignature();
+		timeSigDenStepper = new PsychUINumericStepper(objX + 60, objY, 1, baseSig[1], 1, 16, 0, 50);
+		timeSigDenStepper.onValueChange = function() applyBaseTimeSignature();
+
+		playerDropDown = new PsychUIDropDownMenu(objX, objY + 40, [''], function(id:Int, character:String) {
 			PlayState.SONG.player1 = character;
 			updateJsonData();
 			updateHeads(true);
 			loadMusic();
+			if (showChars) reloadEditorChars();
 			trace('selected $character');
 		});
-		stageDropDown = new PsychUIDropDownMenu(objX + 140, objY, [''], function(id:Int, stage:String) {
+		stageDropDown = new PsychUIDropDownMenu(objX + 140, objY + 40, [''], function(id:Int, stage:String) {
 			PlayState.SONG.stage = stage;
 			StageData.loadDirectory(PlayState.SONG);
 			trace('selected $stage');
 		});
 
-		opponentDropDown = new PsychUIDropDownMenu(objX, objY + 40, [''], function(id:Int, character:String) {
+		opponentDropDown = new PsychUIDropDownMenu(objX, objY + 80, [''], function(id:Int, character:String) {
 			PlayState.SONG.player2 = character;
 			updateJsonData();
 			updateHeads(true);
 			loadMusic();
+			if (showChars) reloadEditorChars();
 			trace('selected $character');
 		});
 
-		girlfriendDropDown = new PsychUIDropDownMenu(objX, objY + 80, [''], function(id:Int, character:String) {
+		girlfriendDropDown = new PsychUIDropDownMenu(objX, objY + 120, [''], function(id:Int, character:String) {
 			PlayState.SONG.gfVersion = character;
+			if (showChars) reloadEditorChars();
 			trace('selected $character');
 		});
 
@@ -3108,6 +3525,41 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 		tab_group.add(girlfriendDropDown);
 		tab_group.add(opponentDropDown);
 		tab_group.add(playerDropDown);
+
+		tab_group.add(new FlxText(timeSigNumStepper.x, timeSigNumStepper.y - 15, 120, 'Time Signature:'));
+		tab_group.add(new FlxText(timeSigDenStepper.x - 12, timeSigDenStepper.y + 3, 12, '/'));
+		tab_group.add(timeSigNumStepper);
+		tab_group.add(timeSigDenStepper);
+
+		// Multikey: column count per side (1-9). Live-rebuilds the grid + strums.
+		// Shares the Time Signature row (above the dropdowns) so dropdown lists
+		// don't cover it.
+		keyCountStepper = new PsychUINumericStepper(objX + 180, objY, 1,
+			(PlayState.SONG.keyCount != null) ? PlayState.SONG.keyCount : Mania.DEFAULT, Mania.MIN, Mania.MAX, 0, 50);
+		keyCountStepper.onValueChange = function() changeKeyCount(Std.int(keyCountStepper.value));
+		tab_group.add(new FlxText(keyCountStepper.x, keyCountStepper.y - 15, 120, 'Key Count:'));
+		tab_group.add(keyCountStepper);
+	}
+
+	// Sets the song's base time signature and applies it to every section (sections can
+	// still be individually overridden afterwards in the Section tab). The denominator
+	// snaps to a power of two, like the per-section stepper.
+	function applyBaseTimeSignature() {
+		var num:Float = Math.max(1, Math.round(timeSigNumStepper.value));
+		var curDen:Int = Conductor.getBaseTimeSignature(PlayState.SONG)[1];
+		var v:Int = Std.int(timeSigDenStepper.value);
+		var den:Int = (v > curDen) ? Std.int(Math.min(16, curDen * 2)) : (v < curDen ? Std.int(Math.max(1, Std.int(curDen / 2))) : curDen);
+
+		timeSigNumStepper.value = num;
+		timeSigDenStepper.value = den;
+
+		var oldTimes:Array<Float> = cachedSectionTimes.copy();
+		PlayState.SONG.timeSignature = [Std.int(num), den];
+		for (section in PlayState.SONG.notes) {
+			section.sectionBeats = num;
+			section.sectionDenominator = den;
+		}
+		adaptNotesToNewTimes(oldTimes);
 	}
 
 	function addFileTab() {
@@ -4250,7 +4702,524 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 		tab_group.add(btn);
 	}
 
+	function addOptionsTab() {
+		var tab = upperBox.getTab('Options');
+		var tab_group = tab.menu;
+		var btnX = tab.x - upperBox.x;
+		var btnY = 1;
+		var btnWid = Std.int(tab.width);
+
+		// Load persisted preferences.
+		if (chartEditorSave.data.showChars != null) showChars = chartEditorSave.data.showChars;
+		if (chartEditorSave.data.showBF != null) showBF = chartEditorSave.data.showBF;
+		if (chartEditorSave.data.showDad != null) showDad = chartEditorSave.data.showDad;
+		if (chartEditorSave.data.showGF != null) showGF = chartEditorSave.data.showGF;
+		if (chartEditorSave.data.charsScale != null) charsScale = chartEditorSave.data.charsScale;
+		if (chartEditorSave.data.charsAnchorBottom != null) charsAnchorBottom = chartEditorSave.data.charsAnchorBottom;
+		if (chartEditorSave.data.charsFloorY != null) charsFloorY = chartEditorSave.data.charsFloorY;
+		if (chartEditorSave.data.quantColors != null) quantNoteColors = chartEditorSave.data.quantColors;
+		if (chartEditorSave.data.metronomePreset != null)
+			metronomePresetIndex = Std.int(FlxMath.bound(chartEditorSave.data.metronomePreset, 0, METRONOME_PRESETS.length - 1));
+		if (chartEditorSave.data.metronomeAccent != null) metronomeAccent = chartEditorSave.data.metronomeAccent;
+
+		// --- Character preview: opens a small settings window ---
+		var charPrefsButton:PsychUIButton = new PsychUIButton(btnX, btnY, '  Character Preview...', function() {
+			openCharacterPreviewPrompt();
+		}, btnWid);
+		charPrefsButton.text.alignment = LEFT;
+		tab_group.add(charPrefsButton);
+
+		// --- Quant note colors ---
+		btnY += 20;
+		var quantButton:PsychUIButton = null;
+		quantButton = new PsychUIButton(btnX, btnY, '', function() {
+			quantNoteColors = !quantNoteColors;
+			chartEditorSave.data.quantColors = quantNoteColors;
+			chartEditorSave.flush();
+			quantButton.text.text = quantNoteColors ? '  Quant Colors: ON' : '  Quant Colors: OFF';
+			refreshNoteColors();
+		}, btnWid);
+		quantButton.text.text = quantNoteColors ? '  Quant Colors: ON' : '  Quant Colors: OFF';
+		quantButton.text.alignment = LEFT;
+		tab_group.add(quantButton);
+
+		// --- Metronome ---
+		btnY += 20;
+		var metroSoundButton:PsychUIButton = null;
+		metroSoundButton = new PsychUIButton(btnX, btnY, '', function() {
+			metronomePresetIndex = (metronomePresetIndex + 1) % METRONOME_PRESETS.length;
+			chartEditorSave.data.metronomePreset = metronomePresetIndex;
+			chartEditorSave.flush();
+			metroSoundButton.text.text = '  Metronome: ${METRONOME_PRESETS[metronomePresetIndex].name}';
+			if (metronomeStepper != null && metronomeStepper.value > 0)
+				FlxG.sound.play(Paths.sound(METRONOME_PRESETS[metronomePresetIndex].sound), metronomeStepper.value);
+		}, btnWid);
+		metroSoundButton.text.text = '  Metronome: ${METRONOME_PRESETS[metronomePresetIndex].name}';
+		metroSoundButton.text.alignment = LEFT;
+		tab_group.add(metroSoundButton);
+
+		btnY += 20;
+		var accentButton:PsychUIButton = null;
+		accentButton = new PsychUIButton(btnX, btnY, '', function() {
+			metronomeAccent = !metronomeAccent;
+			chartEditorSave.data.metronomeAccent = metronomeAccent;
+			chartEditorSave.flush();
+			accentButton.text.text = metronomeAccent ? '  Accent: ON' : '  Accent: OFF';
+		}, btnWid);
+		accentButton.text.text = metronomeAccent ? '  Accent: ON' : '  Accent: OFF';
+		accentButton.text.alignment = LEFT;
+		tab_group.add(accentButton);
+	}
+
+	// Small settings window for the bottom-left character preview.
+	function openCharacterPreviewPrompt() {
+		ClientPrefs.toggleVolumeKeys(false);
+		openSubState(new BasePrompt(300, 250, 'Character Preview', function(state:BasePrompt) {
+			upperBox.isMinimized = true;
+			upperBox.bg.visible = false;
+
+			var closeBtn:PsychUIButton = new PsychUIButton(state.bg.x + state.bg.width - 40, state.bg.y, 'X', state.close, 40);
+			closeBtn.cameras = state.cameras;
+			state.add(closeBtn);
+
+			var sx:Float = state.bg.x + 40;
+			var sy:Float = state.bg.y + 55;
+
+			function addCheck(label:String, dy:Float, getVal:Void->Bool, setVal:Bool->Void):Void {
+				var chk:PsychUICheckBox = new PsychUICheckBox(sx, sy + dy, label, 110);
+				chk.checked = getVal();
+				chk.onClick = function() {
+					setVal(chk.checked);
+					chartEditorSave.flush();
+					updateCharsVisibility();
+				};
+				chk.cameras = state.cameras;
+				state.add(chk);
+			}
+
+			addCheck('Show Characters', 0, () -> showChars, function(v) {
+				showChars = v;
+				chartEditorSave.data.showChars = v;
+			});
+			addCheck('Boyfriend', 32, () -> showBF, function(v) {
+				showBF = v;
+				chartEditorSave.data.showBF = v;
+			});
+			addCheck('Opponent', 60, () -> showDad, function(v) {
+				showDad = v;
+				chartEditorSave.data.showDad = v;
+			});
+			addCheck('Girlfriend', 88, () -> showGF, function(v) {
+				showGF = v;
+				chartEditorSave.data.showGF = v;
+			});
+
+			var scaleLabel:FlxText = new FlxText(sx, sy + 124, 60, 'Scale:');
+			scaleLabel.cameras = state.cameras;
+			state.add(scaleLabel);
+			var scaleStepper:PsychUINumericStepper = new PsychUINumericStepper(sx + 55, sy + 122, 0.05, charsScale, 0.1, 3, 2, 70);
+			scaleStepper.onValueChange = function() {
+				charsScale = scaleStepper.value;
+				chartEditorSave.data.charsScale = charsScale;
+				chartEditorSave.flush();
+				applyCharScale();
+			};
+			scaleStepper.cameras = state.cameras;
+			state.add(scaleStepper);
+
+			addCheck('Anchor to Floor', 155, () -> charsAnchorBottom, function(v) {
+				charsAnchorBottom = v;
+				chartEditorSave.data.charsAnchorBottom = v;
+			});
+		}));
+	}
+
+	// ===== Character preview (Options > Characters) =====
+	// Same name logic the character editor uses to guess a character's natural slot.
+	inline function predictCharacterIsNotPlayer(name:String):Bool {
+		return (name != 'bf' && !name.startsWith('bf-') && !name.endsWith('-player') && !name.endsWith('-playable') && !name.endsWith('-dead'))
+			|| name.endsWith('-opponent')
+			|| name.startsWith('gf-')
+			|| name.endsWith('-gf')
+			|| name == 'gf';
+	}
+
+	function makeEditorChar(name:String, wantPlayer:Bool):Character {
+		if (name == null || name.length < 1)
+			return null;
+		var c:Character = null;
+		try {
+			// Load the character in its NATURAL orientation so baseFlipX matches its
+			// authored offsets, then flip it into the requested slot exactly the way the
+			// character editor's "Player" toggle does (flip flipX, leave baseFlipX). That
+			// makes correctFlippedOffsets mirror the animation offsets, so an opponent
+			// like dad/pico used as the playable character lines up instead of drifting.
+			var naturalIsPlayer:Bool = !predictCharacterIsNotPlayer(name);
+			c = new Character(0, 0, name, naturalIsPlayer);
+			if (wantPlayer != naturalIsPlayer) {
+				c.isPlayer = wantPlayer;
+				c.flipX = !c.flipX;
+			}
+		} catch (e:Dynamic) {
+			trace('Chart editor: failed to load character "$name": $e');
+			return null;
+		}
+		// Preview only: drop the json stage/camera offsets -- the per-animation offsets
+		// are all that matter here.
+		c.positionArray = [0, 0];
+		c.cameraPosition = [0, 0];
+		c.scrollFactor.set();
+		c.cameras = [camChars];
+		c.antialiasing = ClientPrefs.data.antialiasing;
+		editorChars.push(c);
+		editorCharBaseScale.push(c.scale.x); // remember the char's own json scale
+		add(c);
+		return c;
+	}
+
+	function reloadEditorChars() {
+		for (c in editorChars) {
+			if (c == null)
+				continue;
+			remove(c, true);
+			c.destroy();
+		}
+		editorChars = [];
+		editorCharBaseScale = [];
+		charBF = charDad = charGF = null;
+		draggingCharIndex = -1;
+		if (charDragOutline != null)
+			charDragOutline.visible = false;
+		if (PlayState.SONG == null)
+			return;
+
+		charGF = makeEditorChar(PlayState.SONG.gfVersion, false);
+		charDad = makeEditorChar(PlayState.SONG.player2, false);
+		charBF = makeEditorChar(PlayState.SONG.player1, true);
+
+		applyCharScale();
+		for (c in editorChars)
+			c.dance(); // apply the (now flip-corrected) idle offset before measuring bounds
+		placeEditorChars();
+		updateCharsVisibility();
+	}
+
+	inline function charToggled(c:Character):Bool {
+		return (c == charBF && showBF) || (c == charDad && showDad) || (c == charGF && showGF);
+	}
+
+	inline function charSlot(c:Character):String {
+		return (c == charBF) ? 'BF' : (c == charDad) ? 'Dad' : 'GF';
+	}
+
+	// Scale by each char's own json scale * the user scale. updateHitbox() resets the
+	// sprite offset, so the current animation is replayed to restore the (scaled)
+	// animation offset, and the visible bottom-left is kept fixed so scaling never
+	// shoves a character off-screen.
+	function applyCharScale() {
+		for (i in 0...editorChars.length) {
+			var c:Character = editorChars[i];
+			if (c == null)
+				continue;
+			var b0 = c.getScreenBounds(null, camChars);
+			var keepX:Float = b0.x;
+			var keepBottom:Float = b0.y + b0.height;
+			b0.put();
+
+			var base:Float = (i < editorCharBaseScale.length) ? editorCharBaseScale[i] : 1;
+			c.scale.set(base * charsScale, base * charsScale);
+			c.updateHitbox();
+			var anim:String = c.getAnimationName();
+			if (anim != null)
+				c.playAnim(anim, true);
+
+			var b1 = c.getScreenBounds(null, camChars);
+			c.x += keepX - b1.x;
+			c.y += keepBottom - (b1.y + b1.height);
+			b1.put();
+		}
+	}
+
+	// Place characters along the bottom-left, spread by their on-screen width so the
+	// animation offsets are accounted for; saved per-slot positions override the default.
+	// Positions are then frozen -- playback/animation never repositions a character.
+	function placeEditorChars() {
+		var runX:Float = 20;
+		for (i in 0...editorChars.length) {
+			var c:Character = editorChars[i];
+			if (c == null)
+				continue;
+			// Default: put the visible bottom-left of the sprite at (runX, screen bottom).
+			c.setPosition(0, 0);
+			var b = c.getScreenBounds(null, camChars);
+			c.x = runX - b.x;
+			c.y = (FlxG.height - 10) - (b.y + b.height);
+			runX += b.width + 12;
+			b.put();
+
+			var saved:Dynamic = Reflect.field(chartEditorSave.data, 'charPos' + charSlot(c));
+			if (saved != null && saved.length > 1) {
+				c.x = saved[0];
+				c.y = saved[1];
+			}
+		}
+	}
+
+	function updateCharsVisibility() {
+		if (showChars && editorChars.length == 0 && PlayState.SONG != null) {
+			reloadEditorChars();
+			return;
+		}
+		for (c in editorChars) {
+			var vis:Bool = showChars && charToggled(c);
+			c.visible = vis;
+			c.active = vis;
+		}
+		if ((!showChars || draggingCharIndex < 0) && charDragOutline != null)
+			charDragOutline.visible = false;
+	}
+
+	// Outline that tracks the dragged character's actual on-screen bounds (so animation
+	// offsets don't leave it detached). The graphic is only regenerated when size changes.
+	function updateCharDragOutline(c:Character) {
+		if (charDragOutline == null) {
+			charDragOutline = new FlxSprite();
+			charDragOutline.scrollFactor.set();
+			charDragOutline.cameras = [camChars];
+			add(charDragOutline);
+		}
+		var b = c.getScreenBounds(null, camChars);
+		var w:Int = Std.int(Math.max(b.width, 1));
+		var h:Int = Std.int(Math.max(b.height, 1));
+		if (w != _outlineW || h != _outlineH) {
+			charDragOutline.makeGraphic(w, h, FlxColor.TRANSPARENT, true);
+			FlxSpriteUtil.drawRect(charDragOutline, 0, 0, w - 1, h - 1, FlxColor.TRANSPARENT, {thickness: 3, color: 0xFFFFFF00});
+			_outlineW = w;
+			_outlineH = h;
+		}
+		charDragOutline.setPosition(b.x, b.y);
+		charDragOutline.visible = true;
+		b.put();
+	}
+
+	// True if the mouse (already in camChars space) is over the character's visible box.
+	function mouseOverChar(c:Character, mp:FlxPoint):Bool {
+		var b = c.getScreenBounds(null, camChars);
+		var inside:Bool = (mp.x >= b.x && mp.x <= b.x + b.width && mp.y >= b.y && mp.y <= b.y + b.height);
+		b.put();
+		return inside;
+	}
+
+	// Move the character so its visible bottom sits on charsFloorY (keeps feet planted,
+	// so a flip/character-change/animation can't fling it off-screen vertically).
+	function anchorCharBottom(c:Character) {
+		var b = c.getScreenBounds(null, camChars);
+		c.y += charsFloorY - (b.y + b.height);
+		b.put();
+	}
+
+	// Keep the character's visible box inside the screen.
+	function clampCharToScreen(c:Character) {
+		var b = c.getScreenBounds(null, camChars);
+		var tx:Float = FlxMath.bound(b.x, 0, Math.max(0, FlxG.width - b.width));
+		var ty:Float = FlxMath.bound(b.y, 0, Math.max(0, FlxG.height - b.height));
+		c.x += tx - b.x;
+		c.y += ty - b.y;
+		b.put();
+	}
+
+	// Per-frame: idle return after a sing, independent mouse-dragging of each character,
+	// then the floor-anchor + screen clamp so nothing ever drifts off-screen.
+	function updateEditorChars(elapsed:Float) {
+		if (!showChars || editorChars.length == 0)
+			return;
+
+		if (charsFloorY < 0)
+			charsFloorY = FlxG.height - 10;
+
+		for (c in editorChars) {
+			if (c == null)
+				continue;
+			var anim:String = c.getAnimationName();
+			if (anim != null && anim.startsWith('sing') && c.holdTimer >= Conductor.stepCrochet * 0.0011 * c.singDuration) {
+				c.dance();
+				c.holdTimer = 0;
+			}
+		}
+
+		var mp:FlxPoint = FlxG.mouse.getScreenPosition(camChars);
+		if (draggingCharIndex < 0) {
+			var overUI:Bool = FlxG.mouse.overlaps(mainBox.bg, camUI)
+				|| FlxG.mouse.overlaps(infoBox.bg, camUI)
+				|| FlxG.mouse.overlaps(upperBox.bg, camUI);
+			if (FlxG.mouse.justPressed && !overUI) {
+				var i:Int = editorChars.length;
+				while (--i >= 0) { // topmost first (bf is drawn last)
+					var c:Character = editorChars[i];
+					// Hit-test the VISIBLE bounds (getScreenBounds includes the animation
+					// offset); the plain x/y/width/height box ignores offset and would be
+					// detached from what the user sees.
+					if (c != null && c.visible && mouseOverChar(c, mp)) {
+						draggingCharIndex = i;
+						dragCharOffX = c.x - mp.x;
+						dragCharOffY = c.y - mp.y;
+						dragFloorOffY = charsFloorY - mp.y;
+						ignoreClickForThisFrame = true; // don't also place a note
+						updateCharDragOutline(c);
+						break;
+					}
+				}
+			}
+		} else {
+			var c:Character = editorChars[draggingCharIndex];
+			if (c != null && FlxG.mouse.pressed) {
+				c.x = mp.x + dragCharOffX;
+				// When anchored, vertical drag moves the shared floor line; otherwise it
+				// moves this character's Y directly.
+				if (charsAnchorBottom)
+					charsFloorY = mp.y + dragFloorOffY;
+				else
+					c.y = mp.y + dragCharOffY;
+			} else {
+				if (c != null) {
+					Reflect.setField(chartEditorSave.data, 'charPos' + charSlot(c), [c.x, c.y]);
+					chartEditorSave.data.charsFloorY = charsFloorY;
+					chartEditorSave.flush();
+				}
+				draggingCharIndex = -1;
+				if (charDragOutline != null)
+					charDragOutline.visible = false;
+			}
+		}
+		mp.put();
+
+		// Anchor feet to the floor (if enabled) and keep everyone on-screen.
+		for (c in editorChars) {
+			if (c == null || !c.visible)
+				continue;
+			if (charsAnchorBottom)
+				anchorCharBottom(c);
+			clampCharToScreen(c);
+		}
+
+		if (draggingCharIndex >= 0 && editorChars[draggingCharIndex] != null)
+			updateCharDragOutline(editorChars[draggingCharIndex]);
+	}
+
+	// Mirrors PlayState note-hit anims minimally: routes a passing note to the
+	// right character and plays the matching sing animation (with alt suffix).
+	function editorCharSing(note:MetaNote) {
+		if (!showChars || editorChars.length == 0 || note == null || note.isEvent || note.songData == null || note.songData.length < 2)
+			return;
+
+		var noteType:String = (note.songData[3] != null && Std.isOfType(note.songData[3], String)) ? note.songData[3] : '';
+		if (noteType == 'No Animation')
+			return;
+
+		var dir:Int = Std.int(note.songData[1]) % ChartingState.GRID_COLUMNS_PER_PLAYER;
+		// Multikey: pick the sing anim from the per-keycount table (4K == SING_ANIMS).
+		var singAnims:Array<String> = Mania.singAnimations[ChartingState.GRID_COLUMNS_PER_PLAYER - 1];
+		if (dir < 0 || dir >= singAnims.length)
+			return;
+
+		var char:Character = note.mustPress ? charBF : charDad;
+		if (noteType == 'GF Sing')
+			char = charGF;
+		if (char == null)
+			return;
+
+		var suffix:String = (noteType == 'Alt Animation') ? '-alt' : '';
+		var sec:SwagSection = editorSectionAtTime(note.strumTime);
+		if (suffix.length < 1 && sec != null && sec.altAnim)
+			suffix = '-alt';
+
+		char.playAnim(singAnims[dir] + suffix, true);
+		char.holdTimer = 0;
+	}
+
+	// Routes a passing 'Play Animation' event to its character (mirror PlayState).
+	function editorEventAnim(event:EventMetaNote) {
+		if (!showChars || editorChars.length == 0 || event == null || event.events == null)
+			return;
+		for (sub in event.events) {
+			if (sub == null || sub.length < 1 || sub[0] != 'Play Animation')
+				continue;
+			var char:Character = charDad;
+			switch ((sub[2] != null ? sub[2] : '').toLowerCase().trim()) {
+				case 'bf' | 'boyfriend' | '1':
+					char = charBF;
+				case 'gf' | 'girlfriend' | '2':
+					char = charGF;
+				default:
+					char = charDad;
+			}
+			if (char != null && sub[1] != null)
+				char.playAnim(sub[1], true);
+		}
+	}
+
+	function editorSectionAtTime(time:Float):SwagSection {
+		if (PlayState.SONG == null || cachedSectionTimes == null)
+			return null;
+		var sec:Int = 0;
+		for (i in 1...cachedSectionTimes.length) {
+			if (cachedSectionTimes[i] > time)
+				break;
+			sec = i;
+		}
+		return (sec < PlayState.SONG.notes.length) ? PlayState.SONG.notes[sec] : null;
+	}
+
+	// ===== Quantized note colors (Options > Quant Note Colors) =====
+	function getQuantColor(strumTime:Float):FlxColor {
+		if (cachedSectionTimes == null || cachedSectionTimes.length == 0)
+			return 0xFF888888;
+		// Locate the note's section and its beat (quarter) length.
+		var sec:Int = 0;
+		for (i in 1...cachedSectionTimes.length) {
+			if (cachedSectionTimes[i] > strumTime)
+				break;
+			sec = i;
+		}
+		var secStart:Float = (sec < cachedSectionTimes.length) ? cachedSectionTimes[sec] : 0;
+		var crochet:Float = (sec < cachedSectionCrochets.length && cachedSectionCrochets[sec] > 0) ? cachedSectionCrochets[sec] : Conductor.crochet;
+
+		var beatFrac:Float = (strumTime - secStart) / crochet;
+		var frac:Float = beatFrac - Math.floor(beatFrac); // position within the beat [0,1)
+		// Snap-to-edge: a value microscopically under 1 belongs to the next beat (0).
+		if (frac > 0.98)
+			frac = 0;
+		for (q in QUANT_DIVS) {
+			var x:Float = frac * q;
+			if (Math.abs(x - Math.round(x)) < 0.04)
+				return QUANT_COLORS.get(q);
+		}
+		return 0xFF888888; // off-grid
+	}
+
+	// Notes with a specific note type keep their own colour and are never quant-coloured.
+	inline function isPlainNote(note:MetaNote):Bool {
+		return note.noteType == null || note.noteType.length < 1;
+	}
+
+	function refreshNoteColors() {
+		for (note in notes) {
+			if (note == null || note.isEvent || !isPlainNote(note))
+				continue;
+			if (quantNoteColors)
+				note.applyQuantColor(getQuantColor(note.strumTime));
+			else
+				note.restoreDirectionColor();
+		}
+	}
+
 	function updateChartData() {
+		// Multikey: the chart's base key count is its own value (set by the Song-tab
+		// stepper), NOT the editor's current-section grid width, which now varies as
+		// you navigate sections. Only fill it in for brand-new/blank charts.
+		if (PlayState.SONG.keyCount == null)
+			PlayState.SONG.keyCount = Mania.DEFAULT;
+
 		for (secNum => section in PlayState.SONG.notes)
 			PlayState.SONG.notes[secNum].sectionNotes = [];
 
@@ -4501,6 +5470,11 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 	override function destroy() {
 		Note.globalRgbShaders = [];
 		backend.NoteTypesConfig.clearNoteTypesData();
+
+		// Multikey: restore the classic 4K globals when leaving the editor.
+		Mania.current = Mania.DEFAULT;
+		Note.colArray = Mania.colArray[Mania.DEFAULT - 1];
+		Note.swagWidth = 160 * Mania.noteSizes[Mania.DEFAULT - 1];
 
 		for (num => text in MetaNote.noteTypeTexts)
 			text.destroy();
