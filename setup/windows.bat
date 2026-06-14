@@ -43,6 +43,8 @@ call :installGit hxluajit         https://github.com/MAJigsaw77/hxluajit
 call :installGit hxluajit-wrapper https://github.com/MAJigsaw77/hxluajit-wrapper
 rem Script interpreter (replaces hscript-iris); pinned to match hmm.json.
 call :installGit hscript-insanity https://github.com/MeguminBOT/hscript-insanity
+rem CPU/GPU/memory metrics for the FPS counter (HARDWARE_ALLOWED); native C++, not on haxelib.
+call :installGit hxhardware       https://github.com/Vortex2Oblivion/hxhardware
 
 echo.
 echo Re-asserting hxcpp = 'git' just in case and wipe any 4.3.2 version if it somehow snuck in.
