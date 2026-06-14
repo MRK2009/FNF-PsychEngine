@@ -85,6 +85,31 @@ class MetaNote extends Note {
 		setSustainLength(sustainLength, stepCrochet, _lastZoom);
 	}
 
+	// Quantized (StepMania-style) coloring. The RGB palette shader maps the arrow
+	// texture's red/green/blue channels to three colours (main / highlight / shadow,
+	// e.g. the default [0xFFC24B99, 0xFFFFFFFF, 0xFF3C1F56]). To recolour a note to a
+	// single hue the same way the note-color option does, set r = hue, g = white
+	// highlight, b = a darkened hue -- NOT a flat r=g=b (which oversaturates).
+	public function applyQuantColor(color:FlxColor) {
+		if (rgbShader == null)
+			return;
+		rgbShader.enabled = true;
+		rgbShader.r = color;
+		rgbShader.g = FlxColor.WHITE;
+		rgbShader.b = color.getDarkened(0.6);
+		if (sustainSprite != null)
+			sustainSprite.color = color;
+	}
+
+	public function restoreDirectionColor() {
+		if (rgbShader == null)
+			return;
+		defaultRGB();
+		rgbShader.enabled = (PlayState.SONG == null || !PlayState.SONG.disableNoteRGB);
+		if (sustainSprite != null)
+			sustainSprite.color = FlxColor.WHITE;
+	}
+
 	var _noteTypeText:FlxText;
 
 	public function findNoteTypeText(num:Int) {
