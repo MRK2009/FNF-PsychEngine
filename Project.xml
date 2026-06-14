@@ -39,7 +39,7 @@
 	<!-- CPU/GPU readouts for the FPS counter. Needs the hxhardware lib:
 	     haxelib git hxhardware https://github.com/Vortex2Oblivion/hxhardware
 	     Comment this out (and the haxelib below) if you don't want the native dependency. -->
-	<define name="HARDWARE_ALLOWED" if="desktop" unless="32bits"/>
+	<define name="HARDWARE_ALLOWED" if="desktop"/>
 
 	<!-- ____________________________ Window Settings ___________________________ -->
 
