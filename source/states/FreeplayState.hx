@@ -36,6 +36,7 @@ class FreeplayState extends MusicBeatState {
 	private var curPlaying:Bool = false;
 
 	private var iconArray:Array<HealthIcon> = [];
+	private var starArray:Array<FlxSprite> = [];
 
 	var bg:FlxSprite;
 	var intendedColor:Int;
@@ -51,6 +52,7 @@ class FreeplayState extends MusicBeatState {
 
 	var allSongs:Array<SongMetadata> = []; // unfiltered master list; `songs` is the filtered view
 	var grpIcons:FlxTypedGroup<HealthIcon>;
+	var grpStars:FlxTypedGroup<FlxSprite>; // star.png markers shown beside favorited songs
 
 	static final SORTS:Array<String> = ['WEEK', 'A-Z', 'SCORE', 'FAVES'];
 
@@ -128,6 +130,8 @@ class FreeplayState extends MusicBeatState {
 		add(grpSongs);
 		grpIcons = new FlxTypedGroup<HealthIcon>();
 		add(grpIcons);
+		grpStars = new FlxTypedGroup<FlxSprite>();
+		add(grpStars);
 
 		if (FlxG.save.data.freeplayFavorites != null)
 			favorites = FlxG.save.data.freeplayFavorites;
@@ -552,8 +556,6 @@ class FreeplayState extends MusicBeatState {
 				item.alpha = 1;
 				icon.alpha = 1;
 			}
-			// gold tint marks favorites in the list
-			icon.color = isFavorite(songs[num]) ? 0xFFFFD24A : FlxColor.WHITE;
 		}
 
 		Mods.currentModDirectory = songs[curSelected].folder;
@@ -664,7 +666,13 @@ class FreeplayState extends MusicBeatState {
 				grpIcons.remove(icon, true);
 				icon.destroy();
 			}
+		for (star in starArray)
+			if (star != null) {
+				grpStars.remove(star, true);
+				star.destroy();
+			}
 		iconArray = [];
+		starArray = [];
 		grpSongs.clear();
 		_lastVisibles = [];
 
@@ -692,6 +700,15 @@ class FreeplayState extends MusicBeatState {
 
 			iconArray.push(icon);
 			grpIcons.add(icon);
+
+			// Star marker overlapping the title's left edge on favorited songs
+			// (positioned in updateTexts).
+			var star:FlxSprite = new FlxSprite().loadGraphic(Paths.image('starMarker'));
+			star.setGraphicSize(LIST_STAR, LIST_STAR);
+			star.updateHitbox();
+			star.visible = star.active = false;
+			starArray.push(star);
+			grpStars.add(star);
 		}
 		WeekData.setDirectoryFromWeek();
 
@@ -764,8 +781,8 @@ class FreeplayState extends MusicBeatState {
 			applyFilters();
 			rebuildSongList();
 			restoreSelection(sel);
-		} else
-			changeSelection(0, false); // just refresh the gold tint
+		}
+		// star markers refresh every frame in updateTexts via isFavorite()
 	}
 
 	function beginSearch() {
@@ -823,6 +840,7 @@ class FreeplayState extends MusicBeatState {
 	static final LIST_STEP:Float = 90;
 	static final LIST_SCALE:Float = 0.75;
 	static final LIST_ICON:Int = 90;
+	static final LIST_STAR:Int = 46; // favorite-marker star, overlaps the title's left edge
 
 	var _drawDistance:Int = 7;
 	var _lastVisibles:Array<Int> = [];
@@ -832,6 +850,7 @@ class FreeplayState extends MusicBeatState {
 		for (i in _lastVisibles) {
 			grpSongs.members[i].visible = grpSongs.members[i].active = false;
 			iconArray[i].visible = iconArray[i].active = false;
+			starArray[i].visible = starArray[i].active = false;
 		}
 		_lastVisibles = [];
 
@@ -847,6 +866,13 @@ class FreeplayState extends MusicBeatState {
 			icon.visible = icon.active = true;
 			icon.x = item.x + item.width + 10;
 			icon.y = item.y + (item.height - icon.height) * 0.5;
+
+			// Star overlaps the title's top-left corner, only for favorited songs.
+			var star:FlxSprite = starArray[i];
+			star.visible = star.active = isFavorite(songs[i]);
+			star.x = item.x - star.width * 0.7;
+			star.y = item.y - star.height * 0.4;
+			star.alpha = item.alpha;
 			_lastVisibles.push(i);
 		}
 	}

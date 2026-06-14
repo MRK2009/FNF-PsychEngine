@@ -176,20 +176,29 @@ class StrumNote extends FlxSprite {
 
 	public function playerPosition() {
 		final kc:Int = Mania.current;
-		switch (kc - 1) {
-			case 3: // 4K -- unchanged classic spacing
-				x += Note.swagWidth * noteData;
-			case 0 | 1 | 2: // 1K-3K -- snug spacing
-				x += width * noteData;
-			default: // 5K+ -- spacing tightened by the Mania offset table
-				x += (width - Mania.strumOffsets[kc - 1]) * noteData;
+		if (kc == Mania.DEFAULT) {
+			// Classic 4K spacing, untouched.
+			x += Note.swagWidth * noteData;
+			x += 50;
+			x += ((FlxG.width / 2) * player);
+			return;
 		}
+
+		// Multikey: step each column by the note width plus a fixed gap so the
+		// lanes aren't cramped, then shift the whole row left/right so it stays
+		// centered on the exact point the 4K row centers on. Keeping the same
+		// center means normal- and middle-scroll placement match 4K and don't
+		// drift as the key count changes. Note.swagWidth already tracks the
+		// current key count's scale (160 * noteSizes[kc-1]).
+		final step:Float = Note.swagWidth + Mania.STRUM_GAP;
+		// Half-span of the 4K row, i.e. how far its center sits from column 0.
+		final center4K:Float = 160 * Mania.noteSizes[Mania.DEFAULT - 1] * (Mania.DEFAULT - 1) / 2;
+
+		x += step * noteData;
 		x += 50;
 		x += ((FlxG.width / 2) * player);
-		if (kc != Mania.DEFAULT) {
-			x -= Mania.noteOffsetsX[kc - 1];
-			y += Mania.noteOffsetsY[kc - 1];
-		}
+		x -= (step * (kc - 1) / 2 - center4K); // re-center the wider/narrower row
+		y += Mania.noteOffsetsY[kc - 1];
 	}
 
 	override function update(elapsed:Float) {

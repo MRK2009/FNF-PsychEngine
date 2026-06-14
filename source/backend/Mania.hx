@@ -67,11 +67,17 @@ class Mania {
 		["singLEFT", "singDOWN", "singUP", "singRIGHT", "singUP", "singLEFT", "singDOWN", "singUP", "singRIGHT"]
 	];
 
-	// Note/strum scale + positioning per keycount.
-	public static var noteSizes:Array<Float> = [0.9, 0.85, 0.8, 0.7, 0.66, 0.6, 0.55, 0.5, 0.46];
-	public static var noteOffsetsX:Array<Float> = [-100, -75, -50, 0, 35, 45, 52, 57, 65];
+	// Note/strum scale per keycount. The high counts are scaled down so the
+	// (un-cramped) per-column spacing below still fits within a player's half of
+	// the screen alongside the other strumline.
+	public static var noteSizes:Array<Float> = [0.9, 0.85, 0.8, 0.7, 0.66, 0.6, 0.5, 0.42, 0.36];
+
+	// Extra horizontal gap added between adjacent strums on top of the note
+	// width (StrumNote.playerPosition). Bigger = more breathing room per column.
+	public static inline var STRUM_GAP:Float = 2;
+
+	// Vertical nudge for the taller multikey layouts (square atlas sits lower).
 	public static var noteOffsetsY:Array<Float> = [0, 0, 0, 0, 10, 25, 25, 40, 40];
-	public static var strumOffsets:Array<Float> = [0, -30, -10, 0, 10, 20, 32, 40, 45];
 	public static var splashOffsets:Array<Array<Float>> = [
 		[-100, -100],
 		[-75, -90],

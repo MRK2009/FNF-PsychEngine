@@ -2071,6 +2071,7 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 		var gottaHitNote:Bool = (note[1] < secKeys);
 
 		var swagNote:MetaNote = new MetaNote(daStrumTime, daNoteData, note);
+		swagNote.chartKeyCount = secKeys;
 		swagNote.mustPress = gottaHitNote;
 		swagNote.setSustainLength(note[2], cachedSectionCrochets[secNum] / 4, curZoom);
 		swagNote.gfNote = (section.gfSection && gottaHitNote == section.mustHitSection);
@@ -2098,8 +2099,7 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 	function createEvent(event:Dynamic) {
 		var daStrumTime:Float = event[0];
 		var swagEvent:EventMetaNote = new EventMetaNote(daStrumTime, event);
-		swagEvent.x = gridBg.x;
-		swagEvent.eventText.x = swagEvent.x - swagEvent.eventText.width - 10;
+		positionEventX(swagEvent);
 		swagEvent.scrollFactor.x = 0;
 		swagEvent.active = false;
 
@@ -2320,6 +2320,9 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 				if (!firstNote)
 					sectionFirstNoteID = num;
 				curRenderedNotes.add(note);
+				// Realign X to the current grid: its width/x can differ from when the
+				// note was created if this section's key count differs (multikey).
+				positionNoteXByData(note);
 				note.alpha = (note.strumTime >= Conductor.songPosition) ? 1 : 0.6;
 				if (note.hasSustain)
 					note.updateSustainToZoom(cachedSectionCrochets[curSec] / 4, curZoom);
@@ -2332,6 +2335,7 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 					if (!firstEvent)
 						sectionFirstEventID = num;
 					curRenderedNotes.add(event);
+					positionEventX(event);
 					event.alpha = (event.strumTime >= Conductor.songPosition) ? 1 : 0.6;
 					event.eventText.visible = true;
 				}
@@ -2351,6 +2355,7 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 
 				for (note in notes.filter(otherSecFilter)) {
 					behindRenderedNotes.add(note);
+					positionNoteXByData(note);
 					note.alpha = 0.4;
 					if (note.hasSustain)
 						note.updateSustainToZoom(cachedSectionCrochets[curSec] / 4, curZoom);
@@ -2359,6 +2364,7 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 				if (SHOW_EVENT_COLUMN) {
 					for (event in events.filter(otherSecFilter)) {
 						behindRenderedNotes.add(event);
+						positionEventX(event);
 						event.alpha = 0.4;
 						event.eventText.visible = false;
 					}
@@ -2395,13 +2401,32 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 		if (data == null)
 			data = note.songData[1];
 
+		// Map the note's raw column (encoded against its own section's key count)
+		// onto the currently displayed grid. For the current section the two key
+		// counts match, so this is an identity; for prev/next sections with a
+		// different key count it keeps the note inside the visible lanes instead
+		// of spilling past the grid edge (multikey).
+		var keys:Int = (note.chartKeyCount > 0) ? note.chartKeyCount : GRID_COLUMNS_PER_PLAYER;
+		var side:Int = (data >= keys) ? 1 : 0;
+		var col:Int = data - side * keys;
+		if (col >= GRID_COLUMNS_PER_PLAYER)
+			col = GRID_COLUMNS_PER_PLAYER - 1; // clamp lanes that don't exist on this grid
+		var gridData:Int = side * GRID_COLUMNS_PER_PLAYER + col;
+
 		var noteX:Float = gridBg.x + (GRID_SIZE - note.width) / 2;
 		if (SHOW_EVENT_COLUMN)
 			noteX += GRID_SIZE;
 
-		noteX += GRID_SIZE * data;
+		noteX += GRID_SIZE * gridData;
 		note.x = noteX;
 		// trace(gridBg.x, noteX);
+	}
+
+	// Events live in the event column at the grid's left edge; realign them when
+	// the grid shifts (its x moves as the column count changes between sections).
+	function positionEventX(event:EventMetaNote) {
+		event.x = gridBg.x;
+		event.eventText.x = event.x - event.eventText.width - 10;
 	}
 
 	function positionNoteYOnTime(note:MetaNote, section:Int) {

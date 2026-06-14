@@ -12,6 +12,10 @@ class MetaNote extends Note {
 	public var sustainSprite:FlxSprite;
 	public var chartY:Float = 0;
 	public var chartNoteData:Int = 0;
+	// Key count of the section this note belongs to. Lets the editor remap the
+	// note onto the current grid width even when sections have different key
+	// counts (multikey), so notes never render outside their grid.
+	public var chartKeyCount:Int = ChartingState.GRID_COLUMNS_PER_PLAYER;
 
 	public function new(time:Float, data:Int, songData:Array<Dynamic>) {
 		super(time, data, null, false, true);
