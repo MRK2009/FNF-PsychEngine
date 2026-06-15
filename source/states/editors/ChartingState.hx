@@ -392,7 +392,7 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 		if (chartEditorSave.data.infoBoxPosition != null && chartEditorSave.data.infoBoxPosition.length > 1)
 			infoBox.setPosition(chartEditorSave.data.infoBoxPosition[0], chartEditorSave.data.infoBoxPosition[1]);
 
-		upperBox = new PsychUIBox(40, 40, 520, 300, ['File', 'Edit', 'View', 'Options']);
+		upperBox = new PsychUIBox(0, 0, 600, 320, ['File', 'Edit', 'View', 'Options']);
 		upperBox.scrollFactor.set();
 		upperBox.isMinimized = true;
 		upperBox.minimizeOnFocusLost = true;
