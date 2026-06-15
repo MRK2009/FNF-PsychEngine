@@ -142,6 +142,11 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 	var _outlineW:Int = -1;
 	var _outlineH:Int = -1;
 	static final SING_ANIMS:Array<String> = ['singLEFT', 'singDOWN', 'singUP', 'singRIGHT'];
+	// Active sustain holds per preview character: while the playhead is within a long note,
+	// the character keeps singing (playing its -hold/-loop anims) instead of returning to
+	// idle after singDuration, matching PlayState.
+	var editorCharHoldEnd:Map<Character, Float> = new Map();
+	var editorCharHoldAnim:Map<Character, String> = new Map();
 
 	var prevGridBg:ChartingGridSprite;
 	var gridBg:ChartingGridSprite;
@@ -4979,6 +4984,8 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 		}
 		editorChars = [];
 		editorCharBaseScale = [];
+		editorCharHoldEnd.clear();
+		editorCharHoldAnim.clear();
 		charBF = charDad = charGF = null;
 		draggingCharIndex = -1;
 		if (charDragOutline != null)
@@ -5134,6 +5141,25 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 			if (c == null)
 				continue;
 			var anim:String = c.getAnimationName();
+
+			// Sustain hold: while the playhead is inside a long note, keep the character
+			// singing so Character.update's "-loop" handling (and any "-hold" anim) plays
+			// for the whole sustain, just like PlayState.
+			if (editorCharHoldEnd.exists(c)) {
+				var holding:Bool = FlxG.sound.music != null && FlxG.sound.music.playing
+					&& Conductor.songPosition < editorCharHoldEnd.get(c)
+					&& anim != null && anim.startsWith('sing');
+				if (holding) {
+					c.holdTimer = 0; // stops both the editor + Character idle-returns from firing
+					var holdAnim:String = editorCharHoldAnim.get(c) + '-hold';
+					if (c.hasAnimation(holdAnim) && anim != holdAnim && anim != holdAnim + '-loop')
+						c.playAnim(holdAnim, true);
+					continue;
+				}
+				editorCharHoldEnd.remove(c);
+				editorCharHoldAnim.remove(c);
+			}
+
 			if (anim != null && anim.startsWith('sing') && c.holdTimer >= Conductor.stepCrochet * 0.0011 * c.singDuration) {
 				c.dance();
 				c.holdTimer = 0;
@@ -5228,6 +5254,16 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 
 		char.playAnim(singAnims[dir] + suffix, true);
 		char.holdTimer = 0;
+
+		// Long notes: remember the sustain so the character holds the sing/loop pose for its
+		// whole length (see updateEditorChars), instead of dropping back to idle early.
+		if (note.sustainLength > 0) {
+			editorCharHoldEnd.set(char, note.strumTime + note.sustainLength);
+			editorCharHoldAnim.set(char, singAnims[dir] + suffix);
+		} else {
+			editorCharHoldEnd.remove(char);
+			editorCharHoldAnim.remove(char);
+		}
 	}
 
 	// Routes a passing 'Play Animation' event to its character (mirror PlayState).
