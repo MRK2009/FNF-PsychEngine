@@ -251,6 +251,8 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 			backupLimit = chartEditorSave.data.backupLimit;
 		if (chartEditorSave.data.vortex != null)
 			vortexEnabled = chartEditorSave.data.vortex;
+		if (chartEditorSave.data.noteAdaptMode != null)
+			noteAdaptMode = chartEditorSave.data.noteAdaptMode;
 
 		if (chartEditorSave.data.customBgColor == null)
 			chartEditorSave.data.customBgColor = '303030';
@@ -2507,6 +2509,15 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 	var metronomePresetIndex:Int = 0;
 	var metronomeAccent:Bool = false;
 
+	// How existing notes are repositioned when a section's duration changes because
+	// of a time-signature (numerator/denominator) edit. Persisted via chartEditorSave.
+	// BPM edits always use RESCALE regardless of this setting.
+	static inline final ADAPT_KEEP:Int = 0; // keep the exact strumTime (notes don't move in time)
+	static inline final ADAPT_SNAP:Int = 1; // keep the time, then snap to the nearest step of the new grid
+	static inline final ADAPT_RESCALE:Int = 2; // proportionally rescale within the section (legacy behavior)
+	static final ADAPT_LABELS:Array<String> = ['Keep Time', 'Snap to Step', 'Rescale (Fit Section)'];
+	var noteAdaptMode:Int = ADAPT_KEEP;
+
 	// Metronome sound presets. Index 0 is the stock tick; the rest are short
 	// synthesized ticks shipped in assets/shared/sounds/metronome/. `accentPitch`
 	// is used (where FLX_PITCH is available) to make the section downbeat stand out.
@@ -3025,7 +3036,7 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 				sec.changeBPM = changeBpmCheckBox.checked;
 				if (!Reflect.hasField(sec, 'bpm'))
 					sec.bpm = changeBpmStepper.value;
-				adaptNotesToNewTimes(oldTimes);
+				adaptNotesToNewTimes(oldTimes, ADAPT_RESCALE);
 			}
 		});
 
@@ -3053,7 +3064,7 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 				sec.bpm = changeBpmStepper.value;
 				sec.changeBPM = true;
 				changeBpmCheckBox.checked = true;
-				adaptNotesToNewTimes(oldTimes);
+				adaptNotesToNewTimes(oldTimes, ADAPT_RESCALE);
 			}
 		};
 
@@ -3470,7 +3481,7 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 		bpmStepper.onValueChange = function() {
 			var oldTimes:Array<Float> = cachedSectionTimes.copy();
 			PlayState.SONG.bpm = bpmStepper.value;
-			adaptNotesToNewTimes(oldTimes);
+			adaptNotesToNewTimes(oldTimes, ADAPT_RESCALE);
 		};
 
 		scrollSpeedStepper = new PsychUINumericStepper(objX + 90, objY, 0.1, 1, 0.1, 10, 2);
@@ -4794,6 +4805,19 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 		accentButton.text.text = metronomeAccent ? '  Accent: ON' : '  Accent: OFF';
 		accentButton.text.alignment = LEFT;
 		tab_group.add(accentButton);
+
+		// --- Time-signature note adaptation (how notes follow a numerator/denominator edit) ---
+		btnY += 20;
+		var adaptButton:PsychUIButton = null;
+		adaptButton = new PsychUIButton(btnX, btnY, '', function() {
+			noteAdaptMode = (noteAdaptMode + 1) % ADAPT_LABELS.length;
+			chartEditorSave.data.noteAdaptMode = noteAdaptMode;
+			chartEditorSave.flush();
+			adaptButton.text.text = '  Time Sig. Notes: ${ADAPT_LABELS[noteAdaptMode]}';
+		}, btnWid);
+		adaptButton.text.text = '  Time Sig. Notes: ${ADAPT_LABELS[noteAdaptMode]}';
+		adaptButton.text.alignment = LEFT;
+		tab_group.add(adaptButton);
 	}
 
 	// Small settings window for the bottom-left character preview.
@@ -5186,13 +5210,19 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 	function editorSectionAtTime(time:Float):SwagSection {
 		if (PlayState.SONG == null || cachedSectionTimes == null)
 			return null;
+		var sec:Int = sectionIndexAtTime(time);
+		return (sec < PlayState.SONG.notes.length) ? PlayState.SONG.notes[sec] : null;
+	}
+
+	// Index of the section that contains `time` (largest section whose start <= time).
+	inline function sectionIndexAtTime(time:Float):Int {
 		var sec:Int = 0;
 		for (i in 1...cachedSectionTimes.length) {
 			if (cachedSectionTimes[i] > time)
 				break;
 			sec = i;
 		}
-		return (sec < PlayState.SONG.notes.length) ? PlayState.SONG.notes[sec] : null;
+		return sec;
 	}
 
 	// ===== Quantized note colors (Options > Quant Note Colors) =====
@@ -5335,63 +5365,109 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 		softReloadNotes();
 	}
 
-	function adaptNotesToNewTimes(oldTimes:Array<Float>) {
+	// `mode` controls how existing notes follow a section-length change (see ADAPT_*).
+	// Defaults to the user's configured noteAdaptMode; BPM-change callers force RESCALE.
+	function adaptNotesToNewTimes(oldTimes:Array<Float>, ?mode:Int = -1) {
+		if (mode < 0)
+			mode = noteAdaptMode;
 		undoActions = [];
 		setSongPlaying(false);
 		var gridLerp:Float = FlxMath.bound((scrollY + FlxG.height / 2 - gridBg.y) / gridBg.height, 0.000001, 0.999999);
 		notes.sort(PlayState.sortByTime);
 		_cacheSections();
 
-		var noteSec:Int = 0;
-		var oldNextSectionTime:Float = oldTimes[noteSec + 1];
-		var oldCurSectionTime:Float = oldTimes[noteSec];
-		var nextSectionTime:Float = cachedSectionTimes[noteSec + 1];
-		var curSectionTime:Float = cachedSectionTimes[noteSec];
+		if (mode == ADAPT_RESCALE) {
+			var noteSec:Int = 0;
+			var oldNextSectionTime:Float = oldTimes[noteSec + 1];
+			var oldCurSectionTime:Float = oldTimes[noteSec];
+			var nextSectionTime:Float = cachedSectionTimes[noteSec + 1];
+			var curSectionTime:Float = cachedSectionTimes[noteSec];
 
-		for (num => note in notes) {
-			if (note == null || note.strumTime <= 0)
-				continue;
+			for (num => note in notes) {
+				if (note == null || note.strumTime <= 0)
+					continue;
 
-			while (noteSec + 2 < oldTimes.length && oldTimes[noteSec + 1] <= note.strumTime) {
-				noteSec++;
-				oldNextSectionTime = oldTimes[noteSec + 1];
-				oldCurSectionTime = oldTimes[noteSec];
-				nextSectionTime = cachedSectionTimes[noteSec + 1];
-				curSectionTime = cachedSectionTimes[noteSec];
+				while (noteSec + 2 < oldTimes.length && oldTimes[noteSec + 1] <= note.strumTime) {
+					noteSec++;
+					oldNextSectionTime = oldTimes[noteSec + 1];
+					oldCurSectionTime = oldTimes[noteSec];
+					nextSectionTime = cachedSectionTimes[noteSec + 1];
+					curSectionTime = cachedSectionTimes[noteSec];
 
-				if (noteSec + 1 >= cachedSectionTimes.length) {
-					trace('failsafe, cancel early and delete notes after this');
-					var changedSelected:Bool = false;
-					for (i in num...notes.length) {
-						var n = notes[num];
-						if (n != null) {
-							if (selectedNotes.contains(n)) {
-								selectedNotes.remove(n);
-								changedSelected = true;
+					if (noteSec + 1 >= cachedSectionTimes.length) {
+						trace('failsafe, cancel early and delete notes after this');
+						var changedSelected:Bool = false;
+						for (i in num...notes.length) {
+							var n = notes[num];
+							if (n != null) {
+								if (selectedNotes.contains(n)) {
+									selectedNotes.remove(n);
+									changedSelected = true;
+								}
+								notes.remove(n);
+								note.destroy();
 							}
-							notes.remove(n);
-							note.destroy();
 						}
+						if (changedSelected)
+							onSelectNote();
+						loadSection();
+						return;
 					}
-					if (changedSelected)
-						onSelectNote();
-					loadSection();
-					return;
+					// trace('changed section: $noteSec, $oldNextSectionTime, $oldCurSectionTime, $nextSectionTime, $curSectionTime');
 				}
-				// trace('changed section: $noteSec, $oldNextSectionTime, $oldCurSectionTime, $nextSectionTime, $curSectionTime');
+
+				var shouldBound:Bool = (note.strumTime >= oldCurSectionTime && note.strumTime < oldNextSectionTime);
+				var strumTime:Float = note.strumTime;
+
+				var ratio:Float = (nextSectionTime - curSectionTime) / (oldNextSectionTime - oldCurSectionTime);
+				var adaptedStrumTime:Float = ((note.strumTime - oldCurSectionTime) * ratio) + curSectionTime;
+				note.setStrumTime(adaptedStrumTime);
+				if (shouldBound)
+					note.setStrumTime(FlxMath.bound(note.strumTime, curSectionTime, nextSectionTime));
+
+				positionNoteYOnTime(note, noteSec);
+				note.updateSustainToStepCrochet(cachedSectionCrochets[noteSec] / 4);
 			}
+		} else {
+			// ADAPT_KEEP / ADAPT_SNAP: the note's absolute strumTime is preserved (optionally
+			// snapped to the nearest step of the new grid), then it's re-placed into whichever
+			// section now contains that time. Notes pushed past the end of the song are dropped.
+			var lastTime:Float = cachedSectionTimes[cachedSectionTimes.length - 1];
+			var changedSelected:Bool = false;
+			var num:Int = 0;
+			while (num < notes.length) {
+				var note = notes[num];
+				if (note == null || note.strumTime <= 0) {
+					num++;
+					continue;
+				}
 
-			var shouldBound:Bool = (note.strumTime >= oldCurSectionTime && note.strumTime < oldNextSectionTime);
-			var strumTime:Float = note.strumTime;
+				var t:Float = note.strumTime;
+				if (mode == ADAPT_SNAP) {
+					var sec:Int = sectionIndexAtTime(t);
+					var stepCrochet:Float = cachedSectionCrochets[sec] / 4;
+					if (stepCrochet > 0)
+						t = cachedSectionTimes[sec] + Math.round((t - cachedSectionTimes[sec]) / stepCrochet) * stepCrochet;
+				}
 
-			var ratio:Float = (nextSectionTime - curSectionTime) / (oldNextSectionTime - oldCurSectionTime);
-			var adaptedStrumTime:Float = ((note.strumTime - oldCurSectionTime) * ratio) + curSectionTime;
-			note.setStrumTime(adaptedStrumTime);
-			if (shouldBound)
-				note.setStrumTime(FlxMath.bound(note.strumTime, curSectionTime, nextSectionTime));
+				if (t >= lastTime) {
+					if (selectedNotes.contains(note)) {
+						selectedNotes.remove(note);
+						changedSelected = true;
+					}
+					notes.remove(note);
+					note.destroy();
+					continue; // list shrank; don't advance num
+				}
 
-			positionNoteYOnTime(note, noteSec);
-			note.updateSustainToStepCrochet(cachedSectionCrochets[noteSec] / 4);
+				note.setStrumTime(t);
+				var newSec:Int = sectionIndexAtTime(t);
+				positionNoteYOnTime(note, newSec);
+				note.updateSustainToStepCrochet(cachedSectionCrochets[newSec] / 4);
+				num++;
+			}
+			if (changedSelected)
+				onSelectNote();
 		}
 
 		for (event in events) {
