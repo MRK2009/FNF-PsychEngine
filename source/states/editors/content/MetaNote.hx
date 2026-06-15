@@ -137,7 +137,8 @@ class MetaNote extends Note {
 	override function draw() {
 		if (sustainSprite != null && sustainSprite.exists && sustainSprite.visible && sustainLength > 0) {
 			sustainSprite.x = this.x + this.width / 2 - sustainSprite.width / 2;
-			sustainSprite.y = this.y + this.height / 2;
+			// Downscroll: the sustain tail extends upward (toward later time) from the head.
+			sustainSprite.y = ChartingState.downScroll ? (this.y + this.height / 2 - sustainSprite.height) : (this.y + this.height / 2);
 			sustainSprite.alpha = this.alpha;
 			sustainSprite.draw();
 		}

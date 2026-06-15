@@ -82,18 +82,32 @@ class ChartingGridSprite extends FlxSprite {
 
 		if (vortexLineEnabled) {
 			vortexLine.x = this.x;
-			vortexLine.y = this.y - 1;
-			while (true) {
-				vortexLine.y += vortexLineSpace;
-				if (vortexLine.y >= this.y + this.height)
-					break;
+			// Beat lines are measured from the section START edge so they stay aligned with the
+			// notes even on fractional-beat sections. In downscroll that edge is the bottom.
+			if (ChartingState.downScroll) {
+				vortexLine.y = this.y + this.height + 1;
+				while (true) {
+					vortexLine.y -= vortexLineSpace;
+					if (vortexLine.y < this.y)
+						break;
 
-				vortexLine.draw();
+					vortexLine.draw();
+				}
+			} else {
+				vortexLine.y = this.y - 1;
+				while (true) {
+					vortexLine.y += vortexLineSpace;
+					if (vortexLine.y >= this.y + this.height)
+						break;
+
+					vortexLine.draw();
+				}
 			}
 		}
 	}
 
 	function _drawStripes() {
+		stripe.y = this.y; // y can be set after rows (e.g. downscroll flip), so refresh it here
 		for (i => column in stripes) {
 			if (column == 0)
 				stripe.x = this.x;

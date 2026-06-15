@@ -78,6 +78,10 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 	];
 
 	public static var keysArray:Array<FlxKey> = [ONE, TWO, THREE, FOUR, FIVE, SIX, SEVEN, EIGHT]; // Used for Vortex Editor
+	// Downscroll: the whole timeline is mirrored vertically (later notes appear above the
+	// centered playhead, the view scrolls upward). Static so MetaNote can flip its sustain.
+	// Defaults to the gameplay pref, overridable via the View menu (chartEditorSave).
+	public static var downScroll:Bool = false;
 	public static var SHOW_EVENT_COLUMN = true;
 	public static var GRID_COLUMNS_PER_PLAYER = 4;
 	public static var GRID_PLAYERS = 2;
@@ -174,6 +178,7 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 	var isMovingNotes:Bool = false;
 	var movingNotesLastData:Int = 0;
 	var movingNotesLastY:Float = 0;
+	var dummyChartY:Float = 0; // natural (downward-time) Y the dummy arrow snaps to; flipped only for rendering
 
 	var vocals:FlxSound = new FlxSound();
 	var opponentVocals:FlxSound = new FlxSound();
@@ -258,6 +263,10 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 			vortexEnabled = chartEditorSave.data.vortex;
 		if (chartEditorSave.data.noteAdaptMode != null)
 			noteAdaptMode = chartEditorSave.data.noteAdaptMode;
+		if (chartEditorSave.data.bpmAdaptMode != null)
+			bpmAdaptMode = chartEditorSave.data.bpmAdaptMode;
+		// Downscroll defaults to the gameplay preference, overridable per-editor.
+		downScroll = (chartEditorSave.data.downScroll != null) ? chartEditorSave.data.downScroll : ClientPrefs.data.downScroll;
 
 		if (chartEditorSave.data.customBgColor == null)
 			chartEditorSave.data.customBgColor = '303030';
@@ -281,7 +290,7 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 		dummyArrow.scrollFactor.x = 0;
 		add(dummyArrow);
 
-		vortexIndicator = new FlxSprite(gridBg.x - GRID_SIZE, FlxG.height / 2).loadGraphic(Paths.image('editors/vortex_indicator'));
+		vortexIndicator = new FlxSprite(gridBg.x - GRID_SIZE, strumLineY()).loadGraphic(Paths.image('editors/vortex_indicator'));
 		vortexIndicator.setGraphicSize(GRID_SIZE);
 		vortexIndicator.updateHitbox();
 		vortexIndicator.scrollFactor.set();
@@ -305,8 +314,8 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 		timeLine = new FlxSprite(gridBg.x, 0).makeGraphic(1, 1, FlxColor.WHITE);
 		timeLine.setGraphicSize(Std.int(gridBg.width), 4);
 		timeLine.updateHitbox();
-		timeLine.screenCenter(Y);
 		timeLine.scrollFactor.set();
+		positionTimeLine();
 		add(timeLine);
 
 		var startX:Float = gridBg.x;
@@ -898,18 +907,21 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 					if (FlxG.sound.music.playing)
 						setSongPlaying(false);
 
+					// Downscroll mirrors the timeline, so flip the wheel direction (but not the
+					// explicit W/S keys) to keep "scroll up = go up the screen".
+					var wheelDir:Float = downScroll ? -FlxG.mouse.wheel : FlxG.mouse.wheel;
 					if (mouseSnapCheckBox.checked && FlxG.mouse.wheel != 0) {
 						var snap:Float = Conductor.stepCrochet / (curQuant / 16) / curZoom;
-						var timeAdd:Float = (FlxG.keys.pressed.SHIFT ? 4 : 1) / (holdingAlt ? 4 : 1) * -FlxG.mouse.wheel * snap;
+						var timeAdd:Float = (FlxG.keys.pressed.SHIFT ? 4 : 1) / (holdingAlt ? 4 : 1) * -wheelDir * snap;
 						var time:Float = Math.round((FlxG.sound.music.time + timeAdd) / snap) * snap;
 						if (time > 0)
 							time += 0.000001; // goes at the start of a section more properly
 						FlxG.sound.music.time = time;
 					} else {
 						var speedMult:Float = (FlxG.keys.pressed.SHIFT ? 4 : 1) * (FlxG.mouse.wheel != 0 ? 4 : 1) / (holdingAlt ? 4 : 1);
-						if (FlxG.keys.pressed.W || FlxG.mouse.wheel > 0)
+						if (FlxG.keys.pressed.W || wheelDir > 0)
 							FlxG.sound.music.time -= Conductor.crochet * speedMult * 1.5 * elapsed / curZoom;
-						else if (FlxG.keys.pressed.S || FlxG.mouse.wheel < 0)
+						else if (FlxG.keys.pressed.S || wheelDir < 0)
 							FlxG.sound.music.time += Conductor.crochet * speedMult * 1.5 * elapsed / curZoom;
 					}
 
@@ -1126,8 +1138,11 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 					if (!selectedNotes.contains(note) || holdingAlt /*&& FlxG.overlap(selectionBox, note)*/) // overlap doesnt work here
 					{
 						var noteBounds = note.getScreenBounds(null, camUI);
-						noteBounds.top -= scrollY;
-						noteBounds.bottom -= scrollY;
+						// Convert the note's (possibly flipped) world Y into camUI screen space.
+						// Matches the camera scroll, including the time-head offset.
+						var yShift:Float = (downScroll ? (scrollY + FlxG.height) : -scrollY) + timeHeadOffset();
+						noteBounds.top += yShift;
+						noteBounds.bottom += yShift;
 
 						if (selectionBounds.overlaps(noteBounds)) {
 							if (holdingAlt && selectedNotes.contains(note)) {
@@ -1167,7 +1182,7 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 
 		if (FlxG.mouse.x >= minX && FlxG.mouse.x < gridBg.x + gridBg.width) {
 			var diffX:Float = FlxG.mouse.x - gridBg.x;
-			var diffY:Float = FlxG.mouse.y - gridBg.y;
+			var diffY:Float = chartMouseY() - curGridTopY;
 			if (!FlxG.keys.pressed.SHIFT)
 				diffY -= diffY % (GRID_SIZE / (curQuant / 16));
 
@@ -1187,14 +1202,15 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 			if (SHOW_EVENT_COLUMN)
 				noteData--;
 
-			if (FlxG.keys.pressed.SHIFT || FlxG.mouse.y >= gridBg.y || !prevGridBg.visible)
-				dummyArrow.y = gridBg.y + diffY;
+			if (FlxG.keys.pressed.SHIFT || chartMouseY() >= curGridTopY || !prevGridBg.visible)
+				dummyChartY = curGridTopY + diffY;
 			else {
 				var t:Float = (diffY - (GRID_SIZE / (curQuant / 16)));
-				if (FlxG.mouse.y >= gridBg.y)
+				if (chartMouseY() >= curGridTopY)
 					t *= curZoom;
-				dummyArrow.y = gridBg.y + t;
+				dummyChartY = curGridTopY + t;
 			}
+			dummyArrow.y = flipWorldY(dummyChartY, dummyArrow.height);
 
 			if (isMovingNotes) {
 				// Move note data
@@ -1236,8 +1252,8 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 				movingNotesLastData = nData;
 
 				// Move note strum time
-				if (dummyArrow.y != movingNotesLastY) {
-					var diff:Float = dummyArrow.y - movingNotesLastY;
+				if (dummyChartY != movingNotesLastY) {
+					var diff:Float = dummyChartY - movingNotesLastY;
 					var curSecRow:Int = 0;
 					for (note in movingNotes) // Try to figure out new strum time for the notes, DEFINITELY INACCURATE WITH BPM CHANGING, ALTHOUGH UNTESTED
 					{
@@ -1255,24 +1271,25 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 						if (note.isEvent)
 							cast(note, EventMetaNote).updateEventText();
 					}
-					movingNotesLastY = dummyArrow.y;
+					movingNotesLastY = dummyChartY;
 				}
 			} else if (FlxG.mouse.justPressed && !ignoreClickForThisFrame) {
 				if (FlxG.keys.pressed.CONTROL && FlxG.mouse.justPressed) {
 					if (selectedNotes.length > 0)
-						moveSelectedNotes(noteData, dummyArrow.y);
+						moveSelectedNotes(noteData, dummyChartY);
 					else
 						showOutput('You must select notes to move them!', true);
 				} else if (FlxG.mouse.x >= gridBg.x && FlxG.mouse.x < gridBg.x + gridBg.width) {
+					var mouseChartY:Float = chartMouseY();
 					var closeNotes:Array<MetaNote> = curRenderedNotes.members.filter(function(note:MetaNote) {
-						var chartY:Float = FlxG.mouse.y - note.chartY;
+						var chartY:Float = mouseChartY - note.chartY;
 						return ((note.isEvent && noteData < 0)
 							|| (!note.isEvent && note.songData[1] == noteData))
 							&& chartY >= 0
 							&& chartY < GRID_SIZE;
 					});
 					closeNotes.sort(function(a:MetaNote,
-							b:MetaNote) return Math.abs(a.strumTime - FlxG.mouse.y) < Math.abs(b.strumTime - FlxG.mouse.y) ? 1 : -1);
+							b:MetaNote) return Math.abs(a.strumTime - mouseChartY) < Math.abs(b.strumTime - mouseChartY) ? 1 : -1);
 
 					var closest = closeNotes[0];
 					if (closest != null && (!closest.isEvent || !lockedEvents)) {
@@ -1304,7 +1321,7 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 						if (selectedNotes.length == 1)
 							onSelectNote();
 						forceDataUpdate = true;
-					} else if (!holdingAlt && FlxG.mouse.y >= gridBg.y && FlxG.mouse.y < gridBg.y + gridBg.height) // Add note
+					} else if (!holdingAlt && chartMouseY() >= curGridTopY && chartMouseY() < curGridTopY + gridBg.height) // Add note
 					{
 						var strumTime:Float = (diffY / GRID_SIZE * Conductor.stepCrochet / curZoom) + cachedSectionTimes[curSec];
 						if (noteData >= 0) {
@@ -1503,7 +1520,7 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 
 		outputTxt.alpha = outputAlpha;
 		outputTxt.visible = (outputAlpha > 0);
-		FlxG.camera.scroll.y = scrollY;
+		FlxG.camera.scroll.y = (downScroll ? (-scrollY - FlxG.height) : scrollY) - timeHeadOffset();
 		lastFocus = PsychUIInputText.focusOn;
 	}
 
@@ -1747,7 +1764,7 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 		strumLineNotes.clear();
 
 		var startX:Float = gridBg.x;
-		var startY:Float = FlxG.height / 2;
+		var startY:Float = strumLineY();
 		if (SHOW_EVENT_COLUMN)
 			startX += GRID_SIZE;
 
@@ -2252,30 +2269,33 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 
 		var hei:Float = 0;
 		if (curSec > 0) {
-			prevGridBg.y = cachedSectionRow[curSec - 1] * GRID_SIZE * curZoom;
+			prevGridTopY = cachedSectionRow[curSec - 1] * GRID_SIZE * curZoom;
 			prevGridBg.rows = prevStepsPerBeat * PlayState.SONG.notes[curSec - 1].sectionBeats * curZoom;
+			prevGridBg.y = flipWorldY(prevGridTopY, prevGridBg.height);
 			prevGridBg.visible = showPreviousSection;
 			hei += prevGridBg.height;
-			eventLockOverlay.y = prevGridBg.y;
 		} else
 			prevGridBg.visible = false;
 
 		if (curSec < PlayState.SONG.notes.length - 1) {
-			nextGridBg.y = cachedSectionRow[curSec + 1] * GRID_SIZE * curZoom;
+			nextGridTopY = cachedSectionRow[curSec + 1] * GRID_SIZE * curZoom;
 			nextGridBg.rows = nextStepsPerBeat * PlayState.SONG.notes[curSec + 1].sectionBeats * curZoom;
+			nextGridBg.y = flipWorldY(nextGridTopY, nextGridBg.height);
 			nextGridBg.visible = showNextSection;
 			hei += nextGridBg.height;
 		} else
 			nextGridBg.visible = false;
 
-		gridBg.y = cachedSectionRow[curSec] * GRID_SIZE * curZoom;
+		curGridTopY = cachedSectionRow[curSec] * GRID_SIZE * curZoom;
 		gridBg.rows = curStepsPerBeat * PlayState.SONG.notes[curSec].sectionBeats * curZoom;
+		gridBg.y = flipWorldY(curGridTopY, gridBg.height);
 		hei += gridBg.height;
 
-		if (!prevGridBg.visible)
-			eventLockOverlay.y = gridBg.y;
+		// The lock overlay spans all visible sections; anchor it to the topmost natural top.
+		var overlayTop:Float = prevGridBg.visible ? prevGridTopY : curGridTopY;
 		eventLockOverlay.scale.y = hei;
 		eventLockOverlay.updateHitbox();
+		eventLockOverlay.y = flipWorldY(overlayTop, eventLockOverlay.height);
 
 		softReloadNotes();
 		updateHeads();
@@ -2442,13 +2462,63 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 		event.eventText.x = event.x - event.eventText.width - 10;
 	}
 
+	// Downscroll mirrors every play-area sprite around world Y=0 (accounting for the
+	// sprite's height); the camera scroll is mirrored to match (see the scroll assignment
+	// in update()). `chartY`/grid tops stay in the natural (downward-time) space so all the
+	// time<->pixel math is reused unchanged -- only rendering and mouse input are flipped.
+	inline function flipWorldY(naturalTop:Float, height:Float):Float
+		return downScroll ? (-naturalTop - height) : naturalTop;
+
+	// Mouse Y in natural (downward-time) world space, so existing formulas work as-is.
+	inline function chartMouseY():Float
+		return downScroll ? -FlxG.mouse.y : FlxG.mouse.y;
+
+	// Screen offset of the time head (playhead line) from the vertical center. Driving the
+	// camera by the same amount keeps notes aligned to the line. Downscroll nudges it down a
+	// step so the "hit line" sits lower (closer to a downscroll gameplay layout).
+	inline function timeHeadOffset():Float
+		return downScroll ? GRID_SIZE : 0;
+
+	// Screen Y of the time head / playhead line.
+	inline function timeHeadY():Float
+		return FlxG.height / 2 + timeHeadOffset();
+
+	// Top of the receptor/vortex row. It hugs the time head on the side the current note
+	// renders: just below it in upscroll, just above it in downscroll.
+	inline function strumLineY():Float
+		return downScroll ? (timeHeadY() - GRID_SIZE) : timeHeadY();
+
+	// Center the time-head bar on timeHeadY (it's a fixed-screen sprite).
+	function positionTimeLine() {
+		if (timeLine == null)
+			return;
+		timeLine.screenCenter(Y);
+		timeLine.y += timeHeadOffset();
+	}
+
+	// Natural (unflipped) top of each visible section grid, for mouse/placement math.
+	var curGridTopY:Float = 0;
+	var prevGridTopY:Float = 0;
+	var nextGridTopY:Float = 0;
+
+	// Recompute every note/event Y for the current orientation. Needed when toggling
+	// downscroll, since note Y is absolute world-space and only set at creation/move time.
+	function repositionAllNotesY() {
+		for (note in notes)
+			if (note != null)
+				positionNoteYOnTime(note, sectionIndexAtTime(note.strumTime));
+		for (event in events)
+			if (event != null)
+				positionNoteYOnTime(event, sectionIndexAtTime(event.strumTime));
+	}
+
 	function positionNoteYOnTime(note:MetaNote, section:Int) {
 		var time:Float = note.strumTime - cachedSectionTimes[section];
 		var noteY:Float = (time / cachedSectionCrochets[section]) * GRID_SIZE * 4 * curZoom;
 		noteY += cachedSectionRow[section] * GRID_SIZE * curZoom;
 		noteY = Math.max(noteY, -150);
-		note.y = noteY + (GRID_SIZE / 2 - note.height / 2);
 		note.chartY = noteY;
+		note.y = flipWorldY(noteY + (GRID_SIZE / 2 - note.height / 2), note.height);
 		// trace(gridBg.y, noteY);
 	}
 
@@ -2520,15 +2590,15 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 	var metronomePresetIndex:Int = 0;
 	var metronomeAccent:Bool = false;
 
-	// How existing notes are repositioned when a section's duration changes because
-	// of a time-signature (numerator/denominator) edit. Persisted via chartEditorSave.
-	// BPM edits always use RESCALE regardless of this setting.
+	// How existing notes are repositioned when a section's duration changes. Persisted via
+	// chartEditorSave. Time-signature and BPM edits each have their own configurable mode.
 	static inline final ADAPT_KEEP:Int = 0; // keep the exact strumTime (notes don't move in time)
 	static inline final ADAPT_SNAP:Int = 1; // keep the time, then snap to the nearest step of the new grid
 	static inline final ADAPT_RESCALE:Int = 2; // proportionally rescale within the section (legacy behavior)
 	static final ADAPT_LABELS:Array<String> = ['Keep Time', 'Snap to Step', 'Rescale (Fit Section)'];
 	static final ADAPT_SHORT:Array<String> = ['Keep', 'Snap', 'Rescale']; // compact form for the toolbar button
-	var noteAdaptMode:Int = ADAPT_KEEP;
+	var noteAdaptMode:Int = ADAPT_KEEP; // for time-signature (numerator/denominator) edits
+	var bpmAdaptMode:Int = ADAPT_RESCALE; // for BPM edits (defaults to the legacy rescale behavior)
 
 	// Metronome sound presets. Index 0 is the stock tick; the rest are short
 	// synthesized ticks shipped in assets/shared/sounds/metronome/. `accentPitch`
@@ -3048,7 +3118,7 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 				sec.changeBPM = changeBpmCheckBox.checked;
 				if (!Reflect.hasField(sec, 'bpm'))
 					sec.bpm = changeBpmStepper.value;
-				adaptNotesToNewTimes(oldTimes, ADAPT_RESCALE);
+				adaptNotesToNewTimes(oldTimes, bpmAdaptMode);
 			}
 		});
 
@@ -3076,7 +3146,7 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 				sec.bpm = changeBpmStepper.value;
 				sec.changeBPM = true;
 				changeBpmCheckBox.checked = true;
-				adaptNotesToNewTimes(oldTimes, ADAPT_RESCALE);
+				adaptNotesToNewTimes(oldTimes, bpmAdaptMode);
 			}
 		};
 
@@ -3499,7 +3569,7 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 		bpmStepper.onValueChange = function() {
 			var oldTimes:Array<Float> = cachedSectionTimes.copy();
 			PlayState.SONG.bpm = bpmStepper.value;
-			adaptNotesToNewTimes(oldTimes, ADAPT_RESCALE);
+			adaptNotesToNewTimes(oldTimes, bpmAdaptMode);
 		};
 
 		scrollSpeedStepper = new PsychUINumericStepper(objX + 90, objY, 0.1, 1, 0.1, 10, 2);
@@ -4427,6 +4497,7 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 	var vortexEditorButton:PsychUIButton;
 	var stageEventsButton:PsychUIButton;
 	var fpsCounterButton:PsychUIButton;
+	var downScrollButton:PsychUIButton;
 
 	function addViewTab() {
 		var tab = upperBox.getTab('View');
@@ -4494,6 +4565,26 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 		fpsCounterButton.text.text = (Main.fpsVar != null && Main.fpsVar.visible) ? '  FPS Counter: ON' : '  FPS Counter: OFF';
 		fpsCounterButton.text.alignment = LEFT;
 		tab_group.add(fpsCounterButton);
+
+		btnY++;
+		btnY += 20;
+		// Flip the whole timeline (downscroll). Reloads the section so grids/notes reposition.
+		downScrollButton = new PsychUIButton(btnX, btnY, '', function() {
+			downScroll = !downScroll;
+			chartEditorSave.data.downScroll = downScroll;
+			chartEditorSave.flush();
+			downScrollButton.text.text = downScroll ? '  Downscroll: ON' : '  Downscroll: OFF';
+			repositionAllNotesY(); // note Y is absolute world-space; recompute it for the new orientation
+			createStrumLineNotes(); // receptor row mirrors to the other side of the center line
+			vortexIndicator.y = strumLineY();
+			positionTimeLine(); // time head shifts with the scroll direction
+			loadSection();
+			updateScrollY();
+			updateWaveform();
+		}, btnWid);
+		downScrollButton.text.text = downScroll ? '  Downscroll: ON' : '  Downscroll: OFF';
+		downScrollButton.text.alignment = LEFT;
+		tab_group.add(downScrollButton);
 
 		btnY++;
 		btnY += 20;
@@ -4867,6 +4958,19 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 		adaptButton.text.text = '  Time Sig: ${ADAPT_SHORT[noteAdaptMode]}';
 		adaptButton.text.alignment = LEFT;
 		tab_group.add(adaptButton);
+
+		// --- BPM note adaptation (how notes follow a BPM edit) ---
+		btnY += 20;
+		var bpmAdaptButton:PsychUIButton = null;
+		bpmAdaptButton = new PsychUIButton(btnX, btnY, '', function() {
+			bpmAdaptMode = (bpmAdaptMode + 1) % ADAPT_LABELS.length;
+			chartEditorSave.data.bpmAdaptMode = bpmAdaptMode;
+			chartEditorSave.flush();
+			bpmAdaptButton.text.text = '  BPM: ${ADAPT_SHORT[bpmAdaptMode]}';
+		}, btnWid);
+		bpmAdaptButton.text.text = '  BPM: ${ADAPT_SHORT[bpmAdaptMode]}';
+		bpmAdaptButton.text.alignment = LEFT;
+		tab_group.add(bpmAdaptButton);
 	}
 
 	// Small settings window for the bottom-left character preview.
@@ -5446,13 +5550,13 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 	}
 
 	// `mode` controls how existing notes follow a section-length change (see ADAPT_*).
-	// Defaults to the user's configured noteAdaptMode; BPM-change callers force RESCALE.
+	// Defaults to the time-signature noteAdaptMode; BPM-change callers pass bpmAdaptMode.
 	function adaptNotesToNewTimes(oldTimes:Array<Float>, ?mode:Int = -1) {
 		if (mode < 0)
 			mode = noteAdaptMode;
 		undoActions = [];
 		setSongPlaying(false);
-		var gridLerp:Float = FlxMath.bound((scrollY + FlxG.height / 2 - gridBg.y) / gridBg.height, 0.000001, 0.999999);
+		var gridLerp:Float = FlxMath.bound((scrollY + FlxG.height / 2 - curGridTopY) / gridBg.height, 0.000001, 0.999999);
 		notes.sort(PlayState.sortByTime);
 		_cacheSections();
 
@@ -5907,7 +6011,8 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 		}
 
 		waveformSprite.visible = true;
-		waveformSprite.y = gridBg.y;
+		waveformSprite.flipY = downScroll; // mirror the bitmap so its time axis matches the flipped notes
+		waveformSprite.y = flipWorldY(curGridTopY, gridBg.height);
 		var width:Int = Std.int(GRID_SIZE * GRID_COLUMNS_PER_PLAYER * GRID_PLAYERS);
 		var height:Int = Std.int(gridBg.height);
 		if (Std.int(waveformSprite.height) != height && waveformSprite.pixels != null) {
