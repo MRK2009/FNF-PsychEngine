@@ -2522,6 +2522,7 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 	static inline final ADAPT_SNAP:Int = 1; // keep the time, then snap to the nearest step of the new grid
 	static inline final ADAPT_RESCALE:Int = 2; // proportionally rescale within the section (legacy behavior)
 	static final ADAPT_LABELS:Array<String> = ['Keep Time', 'Snap to Step', 'Rescale (Fit Section)'];
+	static final ADAPT_SHORT:Array<String> = ['Keep', 'Snap', 'Rescale']; // compact form for the toolbar button
 	var noteAdaptMode:Int = ADAPT_KEEP;
 
 	// Metronome sound presets. Index 0 is the stock tick; the rest are short
@@ -4856,9 +4857,9 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 			noteAdaptMode = (noteAdaptMode + 1) % ADAPT_LABELS.length;
 			chartEditorSave.data.noteAdaptMode = noteAdaptMode;
 			chartEditorSave.flush();
-			adaptButton.text.text = '  Time Sig. Notes: ${ADAPT_LABELS[noteAdaptMode]}';
+			adaptButton.text.text = '  Time Sig: ${ADAPT_SHORT[noteAdaptMode]}';
 		}, btnWid);
-		adaptButton.text.text = '  Time Sig. Notes: ${ADAPT_LABELS[noteAdaptMode]}';
+		adaptButton.text.text = '  Time Sig: ${ADAPT_SHORT[noteAdaptMode]}';
 		adaptButton.text.alignment = LEFT;
 		tab_group.add(adaptButton);
 	}
