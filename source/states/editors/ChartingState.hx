@@ -2224,6 +2224,12 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 	var showPreviousSection:Bool = true;
 	var showNextSection:Bool = true;
 	var showNoteTypeLabels:Bool = true;
+	// When false (default), the vanilla week/stage-locked events below are filtered out of
+	// the Events dropdown to reduce clutter. They're useless in ~99% of charts.
+	var showStageEvents:Bool = false;
+	static final STAGE_LOCKED_EVENTS:Array<String> = [
+		'Dadbattle Spotlight', 'Philly Glow', 'Kill Henchmen', 'BG Freaks Expression', 'Trigger BG Ghouls'
+	];
 	var forceDataUpdate:Bool = true;
 
 	function loadSection(?sec:Null<Int> = null) {
@@ -3298,6 +3304,12 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 			for (id => event in defaultEvents)
 				if (!eventsList.contains(event))
 					eventsList.insert(id, event);
+
+			// Hide the vanilla stage/song-locked events unless the user opted in (View menu).
+			// Filtering the data list keeps it parallel with the display list and the
+			// index-based lookups used when adding/selecting events.
+			if (!showStageEvents)
+				eventsList = eventsList.filter(function(e) return !STAGE_LOCKED_EVENTS.contains(e[0]));
 
 			var displayEventsList:Array<String> = [];
 			for (id => data in eventsList) {
@@ -4407,6 +4419,8 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 	var showNextGridButton:PsychUIButton;
 	var noteTypeLabelsButton:PsychUIButton;
 	var vortexEditorButton:PsychUIButton;
+	var stageEventsButton:PsychUIButton;
+	var fpsCounterButton:PsychUIButton;
 
 	function addViewTab() {
 		var tab = upperBox.getTab('View');
@@ -4415,6 +4429,8 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 		var btnY = 1;
 		var btnWid = Std.int(tab.width);
 
+		if (chartEditorSave.data.showStageEvents != null)
+			showStageEvents = chartEditorSave.data.showStageEvents;
 		if (chartEditorSave.data.waveformEnabled != null)
 			waveformEnabled = chartEditorSave.data.waveformEnabled;
 		if (chartEditorSave.data.waveformTarget != null)
@@ -4445,6 +4461,33 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 		}, btnWid);
 		noteTypeLabelsButton.text.alignment = LEFT;
 		tab_group.add(noteTypeLabelsButton);
+
+		btnY++;
+		btnY += 20;
+		// Show/hide the vanilla stage/song-locked events in the Events dropdown.
+		stageEventsButton = new PsychUIButton(btnX, btnY, '', function() {
+			showStageEvents = !showStageEvents;
+			chartEditorSave.data.showStageEvents = showStageEvents;
+			chartEditorSave.flush();
+			stageEventsButton.text.text = showStageEvents ? '  Stage Events: Shown' : '  Stage Events: Hidden';
+			reloadNotesDropdowns();
+		}, btnWid);
+		stageEventsButton.text.text = showStageEvents ? '  Stage Events: Shown' : '  Stage Events: Hidden';
+		stageEventsButton.text.alignment = LEFT;
+		tab_group.add(stageEventsButton);
+
+		btnY++;
+		btnY += 20;
+		// Toggle the global FPS counter without leaving the editor.
+		fpsCounterButton = new PsychUIButton(btnX, btnY, '', function() {
+			if (Main.fpsVar != null) {
+				Main.fpsVar.visible = !Main.fpsVar.visible;
+				fpsCounterButton.text.text = Main.fpsVar.visible ? '  FPS Counter: ON' : '  FPS Counter: OFF';
+			}
+		}, btnWid);
+		fpsCounterButton.text.text = (Main.fpsVar != null && Main.fpsVar.visible) ? '  FPS Counter: ON' : '  FPS Counter: OFF';
+		fpsCounterButton.text.alignment = LEFT;
+		tab_group.add(fpsCounterButton);
 
 		btnY++;
 		btnY += 20;
