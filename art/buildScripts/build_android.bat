@@ -1,16 +1,23 @@
 @echo off
+color 0a
 rem Build the Android APK on Windows.
 rem
-rem Portable: no hardcoded SDK/NDK/JDK paths. Relies on your lime Android config
-rem (run "haxelib run lime setup android" once, or set ANDROID_SDK / ANDROID_NDK_ROOT /
-rem JAVA_HOME in %USERPROFILE%\.lime\config.xml) and on JAVA_HOME in your environment.
+rem Lives in art\buildScripts\; cd's up to the repo root (where Project.xml is) so it
+rem works no matter where it's launched from. Portable: no hardcoded SDK/NDK/JDK paths --
+rem relies on your lime Android config ("haxelib run lime setup android", or ANDROID_SDK /
+rem ANDROID_NDK_ROOT / JAVA_HOME in %USERPROFILE%\.lime\config.xml) and JAVA_HOME.
 rem
 rem lime's own Gradle-wrapper invocation is broken on Windows, so this lets lime do the
 rem Haxe -> C++ -> arm64 link, then finishes by calling gradlew.bat directly.
 rem
-rem Usage: build-android.bat [debug^|release]   (default: debug)
+rem Usage: build_android.bat [debug^|release]   (default: debug)
 setlocal enabledelayedexpansion
-cd /d "%~dp0"
+cd /d "%~dp0..\.."
+
+if not exist "Project.xml" (
+	echo Could not find Project.xml at "%cd%". Keep this script in art\buildScripts\.
+	exit /b 1
+)
 
 set "MODE=%~1"
 if "%MODE%"=="" set "MODE=debug"
@@ -26,7 +33,7 @@ if /i "%MODE%"=="debug" (
 	set "OUT=release"
 	set "EXPORT=export\release\android\bin"
 ) else (
-	echo Usage: build-android.bat [debug^|release]
+	echo Usage: build_android.bat [debug^|release]
 	exit /b 1
 )
 
