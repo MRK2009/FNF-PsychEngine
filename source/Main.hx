@@ -225,7 +225,15 @@ class Main extends Sprite {
 		Sys.println(errMsg);
 		Sys.println("Crash dump saved in " + Path.normalize(path));
 
+		#if mobile
+		// Desktop-style modal alert isn't reliable on mobile; the saved log file (and
+		// logcat via the println above) is what matters there.
+		#if android
+		try extension.androidtools.widget.Toast.makeText('Crashed -- log saved to crash/', extension.androidtools.widget.Toast.LENGTH_LONG) catch (_:Dynamic) {}
+		#end
+		#else
 		Application.current.window.alert(errMsg, "Error!");
+		#end
 		#if DISCORD_ALLOWED
 		DiscordClient.shutdown();
 		#end
