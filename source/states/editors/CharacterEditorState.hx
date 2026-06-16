@@ -1066,7 +1066,7 @@ class CharacterEditorState extends MusicBeatState implements PsychUIEventHandler
 		if (FlxG.keys.justPressed.F1 || (helpBg.visible && FlxG.keys.justPressed.ESCAPE)) {
 			helpBg.visible = !helpBg.visible;
 			helpTexts.visible = helpBg.visible;
-		} else if (FlxG.keys.justPressed.ESCAPE || touchPadJustPressed('B')) {
+		} else if (FlxG.keys.justPressed.ESCAPE || controls.BACK) {
 			if (!_goToPlayState) {
 				if (!unsavedProgress) {
 					MusicBeatState.switchState(new states.editors.MasterEditorMenu());

@@ -1286,7 +1286,7 @@ class StageEditorState extends MusicBeatState implements PsychUIEventHandler.Psy
 		if (PsychUIInputText.focusOn != null)
 			return;
 
-		if (FlxG.keys.justPressed.ESCAPE || touchPadJustPressed('B')) {
+		if (FlxG.keys.justPressed.ESCAPE || controls.BACK) {
 			if (!unsavedProgress) {
 				MusicBeatState.switchState(new states.editors.MasterEditorMenu());
 				FlxG.sound.playMusic(Paths.music('freakyMenu'));

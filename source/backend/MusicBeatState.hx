@@ -180,7 +180,53 @@ class MusicBeatState extends FlxState {
 		#if mobile return touchPad != null && touchPad.buttonPressed(tag); #else return false; #end
 	}
 
+	// Index of the visible group item under a just-started click/tap, else -1.
+	// (Touch drives FlxG.mouse on Android, so one path serves click and tap.)
+	public function getTappedMenuItem<T:flixel.FlxBasic>(group:flixel.group.FlxTypedGroup<T>, ?cam:flixel.FlxCamera):Int {
+		#if FLX_MOUSE
+		if (group == null || !FlxG.mouse.justPressed)
+			return -1;
+		for (i in 0...group.length) {
+			final m = group.members[i];
+			if (m != null && m.exists && m.visible && FlxG.mouse.overlaps(m, cam))
+				return i;
+		}
+		#end
+		return -1;
+	}
+
+	// Extra on-screen action buttons (left column), for state-specific functions that
+	// have no place on the d-pad (sort/group/favorite, etc). Returns false off-mobile.
+	public function actionButtonJustPressed(tag:String):Bool {
+		#if mobile return actionButtons != null && actionButtons.exists(tag) && actionButtons.get(tag).justPressed; #else return false; #end
+	}
+
 	#if mobile
+	public var actionButtons:Map<String, mobile.objects.TouchButton>;
+
+	// defs: each entry is [tag, label]. Stacked top-down on the left edge.
+	public function addActionButtons(defs:Array<Array<String>>):Void {
+		initMobileControlsCamera();
+		if (actionButtons == null) actionButtons = new Map();
+		final size:Int = 84;
+		final pad:Int = 12;
+		var ty:Float = pad;
+		for (def in defs) {
+			var btn = new mobile.objects.TouchButton(pad, ty, def[0]);
+			btn.makeGraphic(size, size, 0xFF3B3B6B);
+			btn.idleAlpha = ClientPrefs.data.controlsAlpha;
+			btn.cameras = [mobileControlsCamera];
+			add(btn);
+			var lbl = new flixel.text.FlxText(pad, ty + size / 2 - 14, size, def[1], 24);
+			lbl.setFormat(null, 24, flixel.util.FlxColor.WHITE, CENTER);
+			lbl.scrollFactor.set();
+			lbl.cameras = [mobileControlsCamera];
+			add(lbl);
+			actionButtons.set(def[0], btn);
+			ty += size + pad;
+		}
+	}
+
 	// Cheap: only reorders on the frame(s) where it isn't already on top.
 	function keepControlsCameraOnTop():Void {
 		if (mobileControlsCamera == null)

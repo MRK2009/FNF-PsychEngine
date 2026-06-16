@@ -98,6 +98,11 @@ class Main extends Sprite {
 		#if ACHIEVEMENTS_ALLOWED Achievements.load(); #end
 		addChild(new FlxGame(game.width, game.height, game.initialState, game.framerate, game.framerate, game.skipSplash, game.startFullscreen));
 
+		#if android
+		// Without this the OS handles Back (minimise/close) before we can read it.
+		FlxG.signals.postGameStart.addOnce(() -> FlxG.android.preventDefaultKeys = [flixel.input.android.FlxAndroidKey.BACK]);
+		#end
+
 		#if !mobile
 		fpsVar = new FPSCounter(10, 3, 0xFFFFFF);
 		addChild(fpsVar);

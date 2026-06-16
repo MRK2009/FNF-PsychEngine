@@ -132,7 +132,8 @@ class CreditsState extends MusicBeatState {
 		super.create();
 
 		#if mobile
-		addTouchPad('UP_DOWN', 'A_B');
+		// Entries are tappable (see update()); pad is just a Back button.
+		addTouchPad('NONE', 'B');
 		#end
 	}
 
@@ -173,7 +174,18 @@ class CreditsState extends MusicBeatState {
 				}
 			}
 
-			if (controls.ACCEPT && creditsStuff[curSelected][3] != null && creditsStuff[curSelected][3].length > 4) {
+			#if mobile
+				var tapped:Int = getTappedMenuItem(grpOptions);
+				if (tapped >= 0 && !unselectableCheck(tapped)) {
+					if (tapped == curSelected) {
+						if (creditsStuff[curSelected][3] != null && creditsStuff[curSelected][3].length > 4)
+							CoolUtil.browserLoad(creditsStuff[curSelected][3]);
+					} else
+						changeSelection(tapped - curSelected);
+				}
+				#end
+
+				if (controls.ACCEPT && creditsStuff[curSelected][3] != null && creditsStuff[curSelected][3].length > 4) {
 				CoolUtil.browserLoad(creditsStuff[curSelected][3]);
 			}
 			if (controls.BACK) {

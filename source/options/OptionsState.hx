@@ -89,7 +89,8 @@ class OptionsState extends MusicBeatState {
 		super.create();
 
 		#if mobile
-		addTouchPad('UP_DOWN', 'A_B');
+		// Items are tappable (see update()); pad is just a Back button.
+		addTouchPad('NONE', 'B');
 		#end
 	}
 
@@ -108,6 +109,16 @@ class OptionsState extends MusicBeatState {
 			changeSelection(-1);
 		if (controls.UI_DOWN_P)
 			changeSelection(1);
+
+		#if mobile
+		var tapped:Int = getTappedMenuItem(grpOptions);
+		if (tapped >= 0) {
+			curSelected = tapped;
+			changeSelection();
+			openSelectedSubstate(options[curSelected]);
+			return;
+		}
+		#end
 
 		if (controls.BACK) {
 			FlxG.sound.play(Paths.sound('cancelMenu'));

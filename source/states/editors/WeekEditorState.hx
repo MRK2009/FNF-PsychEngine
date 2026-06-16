@@ -395,7 +395,7 @@ class WeekEditorState extends MusicBeatState implements PsychUIEventHandler.Psyc
 
 		if (PsychUIInputText.focusOn == null) {
 			ClientPrefs.toggleVolumeKeys(true);
-			if (FlxG.keys.justPressed.ESCAPE || touchPadJustPressed('B')) {
+			if (FlxG.keys.justPressed.ESCAPE || controls.BACK) {
 				if (!unsavedProgress) {
 					MusicBeatState.switchState(new MasterEditorMenu());
 					FlxG.sound.playMusic(Paths.music('freakyMenu'));
@@ -738,7 +738,7 @@ class WeekEditorFreeplayState extends MusicBeatState implements PsychUIEventHand
 			ClientPrefs.toggleVolumeKeys(false);
 		else {
 			ClientPrefs.toggleVolumeKeys(true);
-			if (FlxG.keys.justPressed.ESCAPE || touchPadJustPressed('B')) {
+			if (FlxG.keys.justPressed.ESCAPE || controls.BACK) {
 				if (!WeekEditorState.unsavedProgress) {
 					MusicBeatState.switchState(new MasterEditorMenu());
 					FlxG.sound.playMusic(Paths.music('freakyMenu'));

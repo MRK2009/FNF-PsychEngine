@@ -255,6 +255,7 @@ class ModsMenuState extends MusicBeatState {
 
 		#if mobile
 		addTouchPad('FULL', 'A_B');
+		addActionButtons([['TOGGLE', 'ON'], ['SETTINGS', 'SET'], ['FILTER', 'FLTR'], ['SEARCH', 'SRCH']]);
 		#end
 	}
 
@@ -298,6 +299,13 @@ class ModsMenuState extends MusicBeatState {
 		// Search text entry takes priority over shortcuts.
 		if (searching) {
 			handleSearchInput();
+			#if android
+			if (controls.BACK) {
+				endSearch();
+				super.update(elapsed);
+				return;
+			}
+			#end
 			if (view.length > 0) {
 				if (controls.UI_DOWN_P)
 					changeSel(1);
@@ -376,22 +384,22 @@ class ModsMenuState extends MusicBeatState {
 			// Actions. Space/Y (toggle) is checked BEFORE Accept (launch): ACCEPT
 			// is bound to both Enter AND Space, so otherwise Space would launch and
 			// never toggle.
-			if (FlxG.keys.justPressed.SPACE || FlxG.gamepads.anyJustPressed(Y)) {
+			if (FlxG.keys.justPressed.SPACE || FlxG.gamepads.anyJustPressed(Y) || actionButtonJustPressed('TOGGLE')) {
 				if (FlxG.keys.pressed.SHIFT)
 					toggleAll();
 				else
 					toggleSelected();
 			} else if (controls.ACCEPT)
 				launchSelected();
-			else if (FlxG.keys.justPressed.TAB || FlxG.gamepads.anyJustPressed(X))
+			else if (FlxG.keys.justPressed.TAB || FlxG.gamepads.anyJustPressed(X) || actionButtonJustPressed('SETTINGS'))
 				openSelectedSettings();
 			else if (FlxG.keys.justPressed.Y)
 				openSelectedSecurity();
 			else if (FlxG.keys.justPressed.P)
 				openSelectedPackSettings();
-			else if (FlxG.keys.justPressed.F)
+			else if (FlxG.keys.justPressed.F || actionButtonJustPressed('FILTER'))
 				cycleFilter();
-			else if (FlxG.keys.justPressed.SLASH)
+			else if (FlxG.keys.justPressed.SLASH || actionButtonJustPressed('SEARCH'))
 				beginSearch();
 		} else if (modsList.all.length < 1) {
 			noModsSine += 180 * elapsed;
@@ -775,12 +783,32 @@ class ModsMenuState extends MusicBeatState {
 		searching = true;
 		searchTxt.text = 'SEARCH: ' + query + '_';
 		FlxG.sound.play(Paths.sound('scrollMenu'), 0.6);
+		#if android
+		mobile.backend.SoftKeyboard.open(searchType, searchBackspace, endSearch);
+		#end
 	}
 
 	function endSearch() {
 		searching = false;
 		searchTxt.text = query.length > 0 ? 'SEARCH: ' + query : 'SEARCH';
+		#if android mobile.backend.SoftKeyboard.close(); #end
 	}
+
+	#if android
+	function searchType(input:String) {
+		query += input.toLowerCase();
+		searchTxt.text = 'SEARCH: ' + query + '_';
+		applyView();
+	}
+
+	function searchBackspace() {
+		if (query.length > 0) {
+			query = query.substr(0, query.length - 1);
+			searchTxt.text = 'SEARCH: ' + query + '_';
+			applyView();
+		}
+	}
+	#end
 
 	function handleSearchInput() {
 		var k:Int = FlxG.keys.firstJustPressed();

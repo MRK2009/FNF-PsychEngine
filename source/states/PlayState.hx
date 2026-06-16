@@ -636,10 +636,7 @@ class PlayState extends MusicBeatState {
 		FlxG.stage.addEventListener(KeyboardEvent.KEY_UP, onKeyRelease);
 
 		#if mobile
-		// Gameplay lanes (one per column) + a pause button. The lanes feed the same
-		// keyPressed/keyReleased path as the keyboard; the pad's B maps to 'pause'.
-		addHitbox(totalColumns);
-		addTouchPad('NONE', 'B');
+		addHitbox(totalColumns); // Back button pauses (see update()); no on-screen pause button.
 		#end
 
 		// PRECACHING THINGS THAT GET USED FREQUENTLY TO AVOID LAGSPIKES
@@ -1784,7 +1781,7 @@ class PlayState extends MusicBeatState {
 			botplayTxt.alpha = 1 - Math.sin((Math.PI * botplaySine) / 180);
 		}
 
-		if (controls.PAUSE && startedCountdown && canPause) {
+		if ((controls.PAUSE #if android || FlxG.android.justPressed.BACK #end) && startedCountdown && canPause) {
 			var ret:Dynamic = callOnScripts('onPause', null, true);
 			if (ret != LuaUtils.Function_Stop) {
 				openPauseMenu();

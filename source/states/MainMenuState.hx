@@ -135,7 +135,7 @@ class MainMenuState extends MusicBeatState {
 		FlxG.camera.follow(camFollow, null, 0.15);
 
 		#if mobile
-		addTouchPad('UP_DOWN', 'A_B');
+		addActionButtons([['EDITORS', 'EDIT']]);
 		#end
 	}
 
@@ -330,6 +330,12 @@ class MainMenuState extends MusicBeatState {
 			if (controls.justPressed('debug_1')) {
 				selectedSomethin = true;
 				FlxG.mouse.visible = false;
+				MusicBeatState.switchState(new MasterEditorMenu());
+			}
+			#end
+			#if mobile
+			if (actionButtonJustPressed('EDITORS')) {
+				selectedSomethin = true;
 				MusicBeatState.switchState(new MasterEditorMenu());
 			}
 			#end

@@ -210,7 +210,7 @@ class MenuCharacterEditorState extends MusicBeatState implements PsychUIEventHan
 	override function update(elapsed:Float) {
 		if (PsychUIInputText.focusOn == null) {
 			ClientPrefs.toggleVolumeKeys(true);
-			if (FlxG.keys.justPressed.ESCAPE || touchPadJustPressed('B')) {
+			if (FlxG.keys.justPressed.ESCAPE || controls.BACK) {
 				if (!unsavedProgress) {
 					MusicBeatState.switchState(new states.editors.MasterEditorMenu());
 					FlxG.sound.playMusic(Paths.music('freakyMenu'));
