@@ -69,7 +69,7 @@
 	<!-- __________________________ Game Assets & Etc. __________________________ -->
 	
 	<!-- Turn on Crash Handler -->
-	<define name="CRASH_HANDLER" if="desktop release" />
+	<define name="CRASH_HANDLER" if="desktop || mobile" />
 
 	<!-- Assets -->
 	<assets path="assets/fonts" />
@@ -130,6 +130,8 @@
 		<config:android permission="android.permission.VIBRATE" />
 		<config:android target-sdk-version="34" />
 		<config:android minimum-sdk-version="21" />
+		<include path="signing.local.xml" unless="debug" /> <!-- REMOVE THIS if you don't use signing keys-->
+
 		<architecture exclude="armv7" />
 		<architecture exclude="armv7s" />
 		<architecture exclude="x86" />

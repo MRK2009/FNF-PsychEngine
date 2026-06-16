@@ -11,7 +11,7 @@
 # arm64 link, then finishes packaging by calling the Gradle wrapper directly. On Linux/
 # macOS lime completes everything itself and the wrapper step is skipped.
 #
-# Usage: ./build_android.sh [debug|release]   (default: debug)
+# Usage: ./build_android.sh [debug|release]   (default: release)
 set -e
 cd "$(dirname "$0")/../.."
 
@@ -20,7 +20,7 @@ if [ ! -f Project.xml ]; then
 	exit 1
 fi
 
-MODE="${1:-debug}"
+MODE="${1:-release}"
 case "$MODE" in
 	debug)   LIME_FLAGS="-debug"; GRADLE_TASK="assembleDebug";   OUT="debug";   EXPORT="export/debug/android/bin" ;;
 	release) LIME_FLAGS="";       GRADLE_TASK="assembleRelease"; OUT="release"; EXPORT="export/release/android/bin" ;;
@@ -28,6 +28,11 @@ case "$MODE" in
 esac
 
 APK_DIR="$EXPORT/app/build/outputs/apk/$OUT"
+
+# Remove any stale APK first, so a previous build's output can't be mistaken for
+# this run's (lime's gradlew step fails on Windows, so the APK-exists check below
+# must only pass when packaging actually happened this run).
+rm -f "$APK_DIR"/*.apk 2>/dev/null || true
 
 echo ">> haxelib run lime build android $LIME_FLAGS"
 # Don't abort if lime's own gradlew invocation fails (Windows); we finish below.

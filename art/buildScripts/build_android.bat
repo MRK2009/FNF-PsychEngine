@@ -10,7 +10,7 @@ rem
 rem lime's own Gradle-wrapper invocation is broken on Windows, so this lets lime do the
 rem Haxe -> C++ -> arm64 link, then finishes by calling gradlew.bat directly.
 rem
-rem Usage: build_android.bat [debug^|release]   (default: debug)
+rem Usage: build_android.bat [debug^|release]   (default: release)
 setlocal enabledelayedexpansion
 cd /d "%~dp0..\.."
 
@@ -20,7 +20,7 @@ if not exist "Project.xml" (
 )
 
 set "MODE=%~1"
-if "%MODE%"=="" set "MODE=debug"
+if "%MODE%"=="" set "MODE=release"
 
 if /i "%MODE%"=="debug" (
 	set "LIME_FLAGS=-debug"
@@ -38,6 +38,11 @@ if /i "%MODE%"=="debug" (
 )
 
 set "APK_DIR=%EXPORT%\app\build\outputs\apk\%OUT%"
+
+rem Remove any stale APK first, so a previous build's output can't be mistaken for
+rem this run's (lime's gradlew step fails on Windows, so the APK-exists check below
+rem must only pass when packaging actually happened this run).
+if exist "%APK_DIR%\*.apk" del /q "%APK_DIR%\*.apk"
 
 echo ^>^> haxelib run lime build android %LIME_FLAGS%
 call haxelib run lime build android %LIME_FLAGS%
