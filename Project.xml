@@ -219,6 +219,10 @@
 	<haxeflag name="--macro" value="allowPackage('flash')" />
 	<haxeflag name="--macro" value="include('my.pack')" />
 
+	<!-- Android: rewrite File.getContent/getBytes + FileSystem.exists across the game's
+	     packages to fall back to APK-bundled assets. No-op on every other target. -->
+	<haxeflag name="--macro" value="macros.FileAccessMacro.use()" if="android" />
+
 	<!-- _________________________________ Custom _______________________________ -->
 
 	<assets path='art/icons/iconOG.png' rename='icon.png' if="linux || mac" />
