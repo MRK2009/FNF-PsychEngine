@@ -164,6 +164,33 @@ class MusicBeatState extends FlxState {
 		final a:Float = ClientPrefs.data.controlsAlpha;
 		for (btn in pad.buttons) btn.idleAlpha = a;
 	}
+
+	// Keep the on-screen controls above any HUD cameras a state adds after
+	// addTouchPad/addHitbox, so callers can add the pad anywhere in create().
+	// (see below for the reorder; the input helpers are declared outside #if mobile.)
+	#end
+
+	// Touch-pad query helpers usable WITHOUT #if guards at call sites (handy for
+	// states that read FlxG.keys directly). Always present; return false off-mobile.
+	public function touchPadJustPressed(tag:String):Bool {
+		#if mobile return touchPad != null && touchPad.buttonJustPressed(tag); #else return false; #end
+	}
+
+	public function touchPadPressed(tag:String):Bool {
+		#if mobile return touchPad != null && touchPad.buttonPressed(tag); #else return false; #end
+	}
+
+	#if mobile
+	// Cheap: only reorders on the frame(s) where it isn't already on top.
+	function keepControlsCameraOnTop():Void {
+		if (mobileControlsCamera == null)
+			return;
+		final list = FlxG.cameras.list;
+		if (list.length == 0 || list[list.length - 1] == mobileControlsCamera)
+			return;
+		FlxG.cameras.remove(mobileControlsCamera, false);
+		FlxG.cameras.add(mobileControlsCamera, false);
+	}
 	#end
 
 	public static var timePassedOnState:Float = 0;
@@ -174,6 +201,7 @@ class MusicBeatState extends FlxState {
 		// The topmost updating state owns menu touch input; states without a pad
 		// clear it so stale presses can't leak in (see TouchPad.current).
 		TouchPad.current = touchPad;
+		keepControlsCameraOnTop();
 		#end
 
 		// everyStep();

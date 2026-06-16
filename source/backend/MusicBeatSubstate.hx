@@ -5,6 +5,7 @@ import flixel.FlxSubState;
 import flixel.FlxCamera;
 import flixel.FlxG;
 import mobile.input.TouchPad;
+import mobile.input.Hitbox;
 #end
 
 class MusicBeatSubstate extends FlxSubState {
@@ -14,6 +15,7 @@ class MusicBeatSubstate extends FlxSubState {
 
 	#if mobile
 	public var touchPad:TouchPad;
+	public var hitbox:Hitbox;
 	public var mobileControlsCamera:FlxCamera;
 	#end
 
@@ -46,8 +48,30 @@ class MusicBeatSubstate extends FlxSubState {
 		}
 	}
 
+	public function addHitbox(keyCount:Int):Void {
+		removeHitbox();
+		if (mobileControlsCamera == null) {
+			mobileControlsCamera = new FlxCamera();
+			mobileControlsCamera.bgColor.alpha = 0;
+			FlxG.cameras.add(mobileControlsCamera, false);
+		}
+		hitbox = new Hitbox(keyCount);
+		hitbox.cameras = [mobileControlsCamera];
+		for (btn in hitbox.buttons) btn.cameras = [mobileControlsCamera];
+		add(hitbox);
+	}
+
+	public function removeHitbox():Void {
+		if (hitbox != null) {
+			remove(hitbox, true);
+			hitbox.destroy();
+			hitbox = null;
+		}
+	}
+
 	override public function destroy():Void {
 		removeTouchPad();
+		removeHitbox();
 		if (mobileControlsCamera != null) {
 			FlxG.cameras.remove(mobileControlsCamera, true);
 			mobileControlsCamera = null;
@@ -55,6 +79,14 @@ class MusicBeatSubstate extends FlxSubState {
 		super.destroy();
 	}
 	#end
+
+	public function touchPadJustPressed(tag:String):Bool {
+		#if mobile return touchPad != null && touchPad.buttonJustPressed(tag); #else return false; #end
+	}
+
+	public function touchPadPressed(tag:String):Bool {
+		#if mobile return touchPad != null && touchPad.buttonPressed(tag); #else return false; #end
+	}
 
 	private var curSection:Int = 0;
 	private var stepsToDo:Int = 0;
@@ -82,6 +114,13 @@ class MusicBeatSubstate extends FlxSubState {
 		#if mobile
 		if (touchPad != null)
 			TouchPad.current = touchPad;
+		if (mobileControlsCamera != null) {
+			final list = FlxG.cameras.list;
+			if (list.length > 0 && list[list.length - 1] != mobileControlsCamera) {
+				FlxG.cameras.remove(mobileControlsCamera, false);
+				FlxG.cameras.add(mobileControlsCamera, false);
+			}
+		}
 		#end
 
 		// everyStep();
