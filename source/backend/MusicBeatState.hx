@@ -3,8 +3,22 @@ package backend;
 import flixel.FlxState;
 import flixel.group.FlxGroup.FlxTypedGroup;
 import backend.PsychCamera;
+#if mobile
+import flixel.FlxCamera;
+import mobile.input.TouchPad;
+import mobile.input.Hitbox;
+#end
 
 class MusicBeatState extends FlxState {
+	#if mobile
+	// On-screen controls for this state. `touchPad` drives menu navigation (read by
+	// backend.Controls); `hitbox` drives gameplay lanes (polled by PlayState). Both
+	// render on a dedicated overlay camera so they ignore game-camera zoom/scroll.
+	public var touchPad:TouchPad;
+	public var hitbox:Hitbox;
+	public var mobileControlsCamera:FlxCamera;
+	#end
+
 	private var curSection:Int = 0;
 	private var stepsToDo:Int = 0;
 
@@ -96,10 +110,72 @@ class MusicBeatState extends FlxState {
 		return camera;
 	}
 
+	#if mobile
+	function initMobileControlsCamera():Void {
+		if (mobileControlsCamera != null)
+			return;
+		mobileControlsCamera = new FlxCamera();
+		mobileControlsCamera.bgColor.alpha = 0;
+		FlxG.cameras.add(mobileControlsCamera, false);
+	}
+
+	/**
+	 * Adds the menu virtual gamepad. `dpadMode` ∈ FULL/UP_DOWN/LEFT_RIGHT/UP_LEFT_RIGHT/NONE,
+	 * `actionMode` ∈ A_B/A/NONE. Alpha follows ClientPrefs.data.controlsAlpha.
+	 */
+	public function addTouchPad(dpadMode:String = 'FULL', actionMode:String = 'A_B'):Void {
+		removeTouchPad();
+		initMobileControlsCamera();
+		touchPad = new TouchPad(dpadMode, actionMode);
+		touchPad.cameras = [mobileControlsCamera];
+		for (btn in touchPad.buttons) btn.cameras = [mobileControlsCamera];
+		applyControlsAlpha(touchPad);
+		add(touchPad);
+		TouchPad.current = touchPad;
+	}
+
+	public function removeTouchPad():Void {
+		if (touchPad != null) {
+			remove(touchPad, true);
+			touchPad.destroy();
+			touchPad = null;
+		}
+	}
+
+	/** Adds the gameplay lane overlay for `keyCount` columns. */
+	public function addHitbox(keyCount:Int):Void {
+		removeHitbox();
+		initMobileControlsCamera();
+		hitbox = new Hitbox(keyCount);
+		hitbox.cameras = [mobileControlsCamera];
+		for (btn in hitbox.buttons) btn.cameras = [mobileControlsCamera];
+		add(hitbox);
+	}
+
+	public function removeHitbox():Void {
+		if (hitbox != null) {
+			remove(hitbox, true);
+			hitbox.destroy();
+			hitbox = null;
+		}
+	}
+
+	function applyControlsAlpha(pad:TouchPad):Void {
+		final a:Float = ClientPrefs.data.controlsAlpha;
+		for (btn in pad.buttons) btn.idleAlpha = a;
+	}
+	#end
+
 	public static var timePassedOnState:Float = 0;
 	private static var _lastSavedFullscreen:Bool = false;
 
 	override function update(elapsed:Float) {
+		#if mobile
+		// The topmost updating state owns menu touch input; states without a pad
+		// clear it so stale presses can't leak in (see TouchPad.current).
+		TouchPad.current = touchPad;
+		#end
+
 		// everyStep();
 		var oldStep:Int = curStep;
 		timePassedOnState += elapsed;

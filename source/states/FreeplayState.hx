@@ -206,6 +206,10 @@ class FreeplayState extends MusicBeatState {
 		changeSelection();
 		updateTexts();
 		super.create();
+
+		#if mobile
+		addTouchPad('FULL', 'A_B');
+		#end
 	}
 
 	override function closeSubState() {

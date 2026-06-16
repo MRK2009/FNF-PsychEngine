@@ -635,6 +635,13 @@ class PlayState extends MusicBeatState {
 		FlxG.stage.addEventListener(KeyboardEvent.KEY_DOWN, onKeyPress);
 		FlxG.stage.addEventListener(KeyboardEvent.KEY_UP, onKeyRelease);
 
+		#if mobile
+		// Gameplay lanes (one per column) + a pause button. The lanes feed the same
+		// keyPressed/keyReleased path as the keyboard; the pad's B maps to 'pause'.
+		addHitbox(totalColumns);
+		addTouchPad('NONE', 'B');
+		#end
+
 		// PRECACHING THINGS THAT GET USED FREQUENTLY TO AVOID LAGSPIKES
 		if (ClientPrefs.data.hitsoundVolume > 0)
 			Paths.sound('hitsound');
@@ -3061,6 +3068,20 @@ class PlayState extends MusicBeatState {
 			if (r) anyReleased = true;
 		}
 
+		#if mobile
+		// On-screen lanes: no keyboard events fire, so dispatch hits/releases here and
+		// feed holdArray so the sustain logic below works exactly like the keyboard.
+		if (hitbox != null) {
+			final hlen:Int = (klen < hitbox.buttons.length) ? klen : hitbox.buttons.length;
+			for (i in 0...hlen) {
+				final btn = hitbox.buttons[i];
+				if (btn.pressed) { holdArray[i] = true; anyHeld = true; }
+				if (btn.justPressed && strumsBlocked[i] != true) keyPressed(i);
+				if (btn.justReleased) keyReleased(i);
+			}
+		}
+		#end
+
 		// TO DO: Find a better way to handle controller inputs, this should work for now
 		if (ctrl.controllerMode && anyPressed)
 			for (i in 0...klen)
@@ -3145,6 +3166,11 @@ class PlayState extends MusicBeatState {
 	}
 
 	function noteMissCommon(direction:Int, note:Note = null) {
+		#if android
+		if (ClientPrefs.data.vibration)
+			extension.haptics.Haptic.vibrateOneShot(0.04, 1, 0.5);
+		#end
+
 		// score and data
 		var subtract:Float = pressMissDamage;
 		if (note != null)

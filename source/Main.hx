@@ -1,7 +1,10 @@
 package;
 
+#if mobile
+import mobile.backend.StorageUtil;
+#end
 #if android
-import android.content.Context;
+import extension.haptics.Haptic;
 #end
 import debug.FPSCounter;
 import flixel.graphics.FlxGraphic;
@@ -60,11 +63,16 @@ class Main extends Sprite {
 		backend.Native.fixScaling();
 		#end
 
-		// Credits to MAJigsaw77 (he's the og author for this code)
+		// Mobile storage: point the engine at a public, file-manager-browsable folder
+		// (/storage/emulated/0/PsychEngine) so users can add mods/read saves freely.
+		// Credits to MAJigsaw77 (he's the og author for the original android code)
+		#if mobile
 		#if android
-		Sys.setCwd(Path.addTrailingSlash(Context.getExternalFilesDir()));
-		#elseif ios
-		Sys.setCwd(lime.system.System.applicationStorageDirectory);
+		StorageUtil.requestPermissions();
+		Haptic.initialize();
+		#end
+		StorageUtil.prepareDirectories();
+		Sys.setCwd(StorageUtil.getStorageDirectory());
 		#end
 		#if VIDEOS_ALLOWED
 		hxvlc.util.Handle.init(#if (hxvlc >= "1.8.0") ['--no-lua'] #end);
