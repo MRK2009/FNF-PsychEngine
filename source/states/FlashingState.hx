@@ -40,6 +40,11 @@ class FlashingState extends MusicBeatState {
 		FlxTween.tween(texts, {alpha: 1.0}, 0.5, {
 			onComplete: (_) -> updateItems()
 		});
+
+		#if mobile
+		// LEFT/RIGHT toggles Yes/No, A accepts, B backs out.
+		addTouchPad('LEFT_RIGHT', 'A_B');
+		#end
 	}
 
 	override function update(elapsed:Float) {

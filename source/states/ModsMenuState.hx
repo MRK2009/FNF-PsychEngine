@@ -252,6 +252,10 @@ class ModsMenuState extends MusicBeatState {
 		updateDetail();
 		_lastControllerMode = controls.controllerMode;
 		super.create();
+
+		#if mobile
+		addTouchPad('FULL', 'A_B');
+		#end
 	}
 
 	inline function filterWidthOf(s:String):Float {

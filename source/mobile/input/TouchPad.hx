@@ -86,6 +86,10 @@ class TouchPad extends FlxSpriteGroup
 				makeButton('A', aX, baseY, FlxColor.LIME, 'A');
 			case 'B': // single button, used as pause in gameplay -- top-right, clear of the lanes
 				makeButton('B', aX, pad, FlxColor.ORANGE, 'II');
+			case 'A_B_C': // adds a third button for the 'reset' control
+				makeButton('A', aX, baseY, FlxColor.LIME, 'A');
+				makeButton('B', aX - (btnSize + pad), baseY, FlxColor.ORANGE, 'B');
+				makeButton('C', aX - 2 * (btnSize + pad), baseY, FlxColor.CYAN, 'C');
 			default: // A_B
 				makeButton('A', aX, baseY, FlxColor.LIME, 'A');
 				makeButton('B', aX - btnSize - pad, baseY, FlxColor.ORANGE, 'B');
