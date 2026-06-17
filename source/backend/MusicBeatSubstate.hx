@@ -17,6 +17,10 @@ class MusicBeatSubstate extends FlxSubState {
 	public var touchPad:TouchPad;
 	public var hitbox:Hitbox;
 	public var mobileControlsCamera:FlxCamera;
+
+	// Scripted substates get a default pad once (after their create runs) if they
+	// never added their own, so plain controls.ACCEPT/BACK/UI_* work on touch.
+	var defaultTouchPadTried:Bool = false;
 	#end
 
 	public function new() {
@@ -111,6 +115,14 @@ class MusicBeatSubstate extends FlxSubState {
 		return Controls.instance;
 
 	override function update(elapsed:Float) {
+		#if (mobile && HSCRIPT_ALLOWED)
+		if (!defaultTouchPadTried && touchPad == null && hitbox == null && (this is insanity.IScripted)) {
+			defaultTouchPadTried = true;
+			if (!Mods.isNativeMobile())
+				addTouchPad('FULL', 'A_B');
+		}
+		#end
+
 		#if mobile
 		if (touchPad != null)
 			TouchPad.current = touchPad;

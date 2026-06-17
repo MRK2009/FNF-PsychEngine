@@ -17,6 +17,11 @@ class MusicBeatState extends FlxState {
 	public var touchPad:TouchPad;
 	public var hitbox:Hitbox;
 	public var mobileControlsCamera:FlxCamera;
+
+	// Scripted states use plain controls.ACCEPT/BACK/UI_* with no android-specific
+	// calls, so give them a default pad once (after their create runs) if they never
+	// added their own pad or hitbox. Set true once attempted, so we don't re-add.
+	var defaultTouchPadTried:Bool = false;
 	#end
 
 	private var curSection:Int = 0;
@@ -243,6 +248,14 @@ class MusicBeatState extends FlxState {
 	private static var _lastSavedFullscreen:Bool = false;
 
 	override function update(elapsed:Float) {
+		#if (mobile && HSCRIPT_ALLOWED)
+		if (!defaultTouchPadTried && touchPad == null && hitbox == null && (this is insanity.IScripted)) {
+			defaultTouchPadTried = true;
+			if (!Mods.isNativeMobile())
+				addTouchPad('FULL', 'A_B');
+		}
+		#end
+
 		#if mobile
 		// The topmost updating state owns menu touch input; states without a pad
 		// clear it so stale presses can't leak in (see TouchPad.current).
