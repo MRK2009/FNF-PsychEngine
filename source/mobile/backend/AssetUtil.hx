@@ -53,9 +53,26 @@ class AssetUtil
 	{
 		#if sys
 		if (sys.FileSystem.exists(path))
-			return openfl.media.Sound.fromFile(path);
+		{
+			// Sound.fromFile (AudioBuffer.fromFile) returns null for external-storage
+			// files on Android; decoding the bytes works.
+			final buffer = lime.media.AudioBuffer.fromBytes(sys.io.File.getBytes(path));
+			return buffer != null ? openfl.media.Sound.fromAudioBuffer(buffer) : null;
+		}
 		#end
 		return Assets.exists(path) ? Assets.getSound(path) : null;
+	}
+
+	/** Real file first (mods + desktop on-disk), then the APK asset. Null if missing. */
+	public static function getBitmap(path:String):openfl.display.BitmapData
+	{
+		#if sys
+		if (sys.FileSystem.exists(path))
+			// BitmapData.fromFile (Image.fromFile) returns null for external-storage
+			// files on Android; decoding the bytes works.
+			return openfl.display.BitmapData.fromBytes(sys.io.File.getBytes(path));
+		#end
+		return Assets.exists(path) ? Assets.getBitmapData(path) : null;
 	}
 
 	/** Like FileSystem.exists, but also true for APK-bundled assets. */

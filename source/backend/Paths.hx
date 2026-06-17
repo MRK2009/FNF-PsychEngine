@@ -253,10 +253,17 @@ class Paths {
 	public static function cacheBitmap(key:String, ?parentFolder:String = null, ?bitmap:BitmapData, ?allowGPU:Bool = true):FlxGraphic {
 		if (bitmap == null) {
 			var file:String = getPath(key, IMAGE, parentFolder, true);
-			#if MODS_ALLOWED if (FileSystem.exists(file))
+			#if mobile
+			bitmap = mobile.backend.AssetUtil.getBitmap(file);
+			#elseif MODS_ALLOWED
+			if (FileSystem.exists(file))
 				bitmap = BitmapData.fromFile(file);
-			else #end if (OpenFlAssets.exists(file, IMAGE))
+			else if (OpenFlAssets.exists(file, IMAGE))
 				bitmap = OpenFlAssets.getBitmapData(file);
+			#else
+			if (OpenFlAssets.exists(file, IMAGE))
+				bitmap = OpenFlAssets.getBitmapData(file);
+			#end
 
 			if (bitmap == null) {
 				// trace('Bitmap not found: $file | key: $key');
