@@ -36,7 +36,12 @@ class VisualsSettingsSubState extends BaseOptionsMenu {
 
 		// options
 		var noteSkins:Array<String> = Mods.mergeAllTextsNamed('images/noteSkins/list.txt');
-		if (noteSkins.length > 0) {
+		for (folder in backend.NoteSkinConfig.list()) {
+			var name:String = folder.substr(folder.lastIndexOf('/') + 1);
+			if (!noteSkins.contains(name))
+				noteSkins.push(name);
+		}
+		{
 			if (!noteSkins.contains(ClientPrefs.data.noteSkin))
 				ClientPrefs.data.noteSkin = ClientPrefs.defaultData.noteSkin; // Reset to default if saved noteskin couldnt be found
 

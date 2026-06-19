@@ -2,6 +2,8 @@ package objects;
 
 import backend.animation.PsychAnimationController;
 import backend.NoteTypesConfig;
+import backend.NoteSkinConfig;
+import backend.NoteSkinConfig.NoteSkinData;
 import shaders.RGBPalette;
 import shaders.RGBPalette.RGBShaderReference;
 import objects.StrumNote;
@@ -100,6 +102,9 @@ class Note extends FlxSprite {
 	public var lowPriority:Bool = false;
 
 	public static var SUSTAIN_SIZE:Int = 44;
+
+	public static var SUSTAIN_OVERLAP:Float = 1.05;
+
 	public static var swagWidth:Float = 160 * 0.7;
 	public static var colArray:Array<String> = ['purple', 'blue', 'green', 'red'];
 	public static var defaultNoteSkin(default, never):String = 'noteSkins/NOTE_assets';
@@ -118,6 +123,7 @@ class Note extends FlxSprite {
 
 	public var offsetX:Float = 0;
 	public var offsetY:Float = 0;
+	public var centerOnStrum:Bool = false;
 	public var offsetAngle:Float = 0;
 	public var multAlpha:Float = 1;
 	public var multSpeed(default, set):Float = 1;
@@ -311,6 +317,14 @@ class Note extends FlxSprite {
 		if (isSustainNote && prevNote != null) {
 			alpha = 0.6;
 			multAlpha = 0.6;
+			var aSkin:String = NoteSkinConfig.activeSkin();
+			if (aSkin != null) {
+				var aCfg:NoteSkinData = NoteSkinConfig.forCurrentKeys(aSkin);
+				if (aCfg != null && aCfg.holdAlpha != null) {
+					alpha = aCfg.holdAlpha;
+					multAlpha = aCfg.holdAlpha;
+				}
+			}
 			hitsoundDisabled = true;
 			if (ClientPrefs.data.downScroll)
 				flipY = true;
@@ -330,16 +344,17 @@ class Note extends FlxSprite {
 			if (prevNote.isSustainNote) {
 				prevNote.animation.play(colArray[prevNote.noteData % colArray.length] + 'hold');
 
-				prevNote.scale.y *= Conductor.stepCrochet / 100 * 1.05;
-				if (createdFrom != null && createdFrom.songSpeed != null)
-					prevNote.scale.y *= createdFrom.songSpeed;
-
-				if (PlayState.isPixelStage) {
+				var localStep:Float = Conductor.getBPMFromSeconds(prevNote.strumTime + 2).stepCrochet;
+				var speed:Float = (createdFrom != null && createdFrom.songSpeed != null) ? createdFrom.songSpeed : 1;
+				var rate:Float = (createdFrom != null && createdFrom.playbackRate != null) ? createdFrom.playbackRate : 1;
+				if (PlayState.isPixelStage && NoteSkinConfig.activeSkin() == null) {
+					prevNote.scale.y *= (localStep / 100 * 1.05) * speed;
 					prevNote.scale.y *= 1.19;
-					prevNote.scale.y *= (6 / height); // Auto adjust note size
+					prevNote.scale.y *= (6 / height);
+				} else {
+					prevNote.scale.y = (localStep * 0.45 * speed / rate) * SUSTAIN_OVERLAP / prevNote.frameHeight;
 				}
 				prevNote.updateHitbox();
-				// prevNote.setGraphicSize();
 			}
 
 			if (PlayState.isPixelStage) {
@@ -404,6 +419,12 @@ class Note extends FlxSprite {
 			animName = animation.curAnim.name;
 		}
 
+		if (texture == null || texture.length < 1) {
+			var folderSkin:String = NoteSkinConfig.activeSkin();
+			if (folderSkin != null && reloadFolderNote(folderSkin, animName))
+				return;
+		}
+
 		var skinPixel:String = skin;
 		var lastScaleY:Float = scale.y;
 		var skinPostfix:String = getNoteSkinPostfix();
@@ -464,6 +485,101 @@ class Note extends FlxSprite {
 
 		if (animName != null)
 			animation.play(animName, true);
+	}
+
+	function reloadFolderNote(skinName:String, animName:String):Bool {
+		var cfg:NoteSkinData = NoteSkinConfig.forCurrentKeys(skinName);
+		if (cfg == null)
+			return false;
+
+		if (NoteSkinConfig.editorOverride == null)
+			NoteSkinConfig.pixelMode = (cfg.pixel == true) || (cfg.pixelVariant == true && PlayState.isPixelStage);
+
+		var base:String = NoteSkinConfig.folder(skinName);
+		var col:Int = noteData;
+		var name:String = colArray[col % colArray.length];
+		var kc:Int = Mania.clamp(Mania.current);
+		var scaleBase:Float = (cfg.scale == null ? 0.7 : cfg.scale) * Mania.noteSizes[kc - 1] / Mania.noteSizes[Mania.DEFAULT - 1];
+		var prevScaleY:Float = scale.y;
+
+		var note = NoteSkinConfig.resolveColumn(cfg, cfg.notes, col);
+		if (note == null)
+			return false;
+
+		var colorable:Bool = cfg.colorable == true;
+		var factor:Float;
+		if (isSustainNote) {
+			var holdKey:String = NoteSkinConfig.columnKey(cfg.holds, col);
+			var endKey:String = NoteSkinConfig.columnKey(cfg.ends, col);
+			if (holdKey == null || endKey == null)
+				return false;
+			var holdFrames:Array<String> = NoteSkinConfig.frameKeys(NoteSkinConfig.variant(base + holdKey));
+			var endFrames:Array<String> = NoteSkinConfig.frameKeys(NoteSkinConfig.variant(base + endKey));
+			if (holdFrames == null || endFrames == null)
+				return false;
+			factor = NoteSkinConfig.applyAnims(this, [
+				{
+					name: name + 'hold',
+					keys: holdFrames,
+					fps: 24,
+					loop: true
+				},
+				{
+					name: name + 'holdend',
+					keys: endFrames,
+					fps: 24,
+					loop: true
+				}
+			]);
+		} else {
+			var noteFrames:Array<String> = NoteSkinConfig.frameKeys(NoteSkinConfig.variant(base + note.key));
+			if (noteFrames == null)
+				return false;
+			factor = NoteSkinConfig.applyAnims(this, [
+				{
+					name: name + 'Scroll',
+					keys: noteFrames,
+					fps: 24,
+					loop: false,
+					angle: note.angle,
+					square: true
+				}
+			]);
+		}
+
+		if (!colorable)
+			rgbShader.enabled = false;
+		antialiasing = (cfg.pixel == true || NoteSkinConfig.pixelMode) ? false : (cfg.antialiasing == null ? ClientPrefs.data.antialiasing : cfg.antialiasing);
+		// Hold/end can render crisp (no AA) independently of the arrows, so
+		// pixel-perfect tiling art stays sharp and seamless while arrows stay smooth.
+		if (isSustainNote && cfg.holdAntialiasing != null)
+			antialiasing = cfg.holdAntialiasing;
+		if (cfg.splash != null) {
+			noteSplashData.texture = base + cfg.splash;
+			noteSplashData.useRGBShader = colorable;
+		}
+
+		if (isSustainNote) {
+			scale.x = scaleBase * factor;
+			// Preserve a body's computed height across mid-song skin swaps; tails reset to base.
+			scale.y = (animName != null && animName.endsWith('hold')) ? prevScaleY : scaleBase * factor;
+		} else {
+			scale.set(scaleBase * factor, scaleBase * factor);
+			centerOffsets();
+			centerOrigin();
+		}
+		updateHitbox();
+
+		centerOnStrum = true;
+		var off:Array<Float> = NoteSkinConfig.offsetFor(isSustainNote ? cfg.holdOffsets : cfg.noteOffsets, col);
+		offsetX = off[0];
+		offsetY = off[1];
+
+		if (animName != null && animation.getByName(animName) != null)
+			animation.play(animName, true);
+		else if (!isSustainNote)
+			animation.play(name + 'Scroll', true);
+		return true;
 	}
 
 	public static function getNoteSkinPostfix() {
@@ -557,8 +673,11 @@ class Note extends FlxSprite {
 		if (copyAlpha)
 			alpha = strumAlpha * multAlpha;
 
-		if (copyX)
+		if (copyX) {
 			x = strumX + offsetX + Math.cos(angleDir) * distance;
+			if (centerOnStrum)
+				x += (swagWidth - width) / 2;
+		}
 
 		if (copyY) {
 			y = strumY + offsetY + correctionOffset + Math.sin(angleDir) * distance;

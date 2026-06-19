@@ -1,6 +1,8 @@
 package objects;
 
 import backend.animation.PsychAnimationController;
+import backend.NoteSkinConfig;
+import backend.NoteSkinConfig.NoteSkinData;
 import shaders.RGBPalette;
 import shaders.RGBPalette.RGBShaderReference;
 
@@ -13,6 +15,11 @@ class StrumNote extends FlxSprite {
 	public var direction:Float = 90;
 	public var downScroll:Bool = false;
 	public var sustainReduce:Bool = true;
+
+	public var skinOffsetX:Float = 0;
+	public var skinOffsetY:Float = 0;
+
+	public var folderLaneCenter:Bool = false;
 
 	private var player:Int;
 
@@ -83,6 +90,12 @@ class StrumNote extends FlxSprite {
 		var lastAnim:String = null;
 		if (animation.curAnim != null)
 			lastAnim = animation.curAnim.name;
+
+		folderLaneCenter = false;
+
+		var folderSkin:String = NoteSkinConfig.activeSkin();
+		if (folderSkin != null && reloadFolderStrum(folderSkin, lastAnim))
+			return;
 
 		if (PlayState.isPixelStage) {
 			// Cache the pixel atlas reference -- the previous code called
@@ -174,6 +187,85 @@ class StrumNote extends FlxSprite {
 		}
 	}
 
+	function reloadFolderStrum(skinName:String, lastAnim:String):Bool {
+		var cfg:NoteSkinData = NoteSkinConfig.forCurrentKeys(skinName);
+		if (cfg == null)
+			return false;
+
+		if (NoteSkinConfig.editorOverride == null)
+			NoteSkinConfig.pixelMode = (cfg.pixel == true) || (cfg.pixelVariant == true && PlayState.isPixelStage);
+
+		var base:String = NoteSkinConfig.folder(skinName);
+		var c:Int = Std.int(Math.abs(noteData));
+
+		var st = NoteSkinConfig.resolveColumn(cfg, cfg.strums, c);
+		if (st == null)
+			return false;
+		var staticF:Array<String> = NoteSkinConfig.frameKeys(NoteSkinConfig.variant(base + st.key));
+		if (staticF == null)
+			return false;
+		var staticA:Float = st.angle;
+
+		var pr = NoteSkinConfig.resolveColumn(cfg, cfg.pressed, c);
+		var pressedF:Array<String> = pr == null ? null : NoteSkinConfig.frameKeys(NoteSkinConfig.variant(base + pr.key));
+		var pressedA:Float = pr == null ? staticA : pr.angle;
+		if (pressedF == null) {
+			pressedF = staticF;
+			pressedA = staticA;
+		}
+
+		var cf = NoteSkinConfig.resolveColumn(cfg, cfg.confirm, c);
+		var confirmF:Array<String> = cf == null ? null : NoteSkinConfig.frameKeys(NoteSkinConfig.variant(base + cf.key));
+		var confirmA:Float = cf == null ? pressedA : cf.angle;
+		if (confirmF == null) {
+			confirmF = pressedF;
+			confirmA = pressedA;
+		}
+
+		var confirmFps:Int = cfg.confirmFPS == null ? 24 : cfg.confirmFPS;
+		var factor:Float = NoteSkinConfig.applyAnims(this, [
+			{
+				name: 'static',
+				keys: staticF,
+				fps: 24,
+				loop: false,
+				angle: staticA,
+				square: true
+			},
+			{
+				name: 'pressed',
+				keys: pressedF,
+				fps: 24,
+				loop: false,
+				angle: pressedA,
+				square: true
+			},
+			{
+				name: 'confirm',
+				keys: confirmF,
+				fps: confirmFps,
+				loop: false,
+				angle: confirmA,
+				square: true
+			}
+		]);
+
+		useRGBShader = cfg.colorable == true;
+		antialiasing = (cfg.pixel == true || NoteSkinConfig.pixelMode) ? false : (cfg.antialiasing == null ? ClientPrefs.data.antialiasing : cfg.antialiasing);
+		var soff:Array<Float> = NoteSkinConfig.offsetFor(cfg.strumOffsets, c);
+		skinOffsetX = soff[0];
+		skinOffsetY = soff[1];
+		folderLaneCenter = true;
+		var kc:Int = Mania.clamp(Mania.current);
+		var scaleBase:Float = (cfg.scale == null ? 0.7 : cfg.scale) * Mania.noteSizes[kc - 1] / Mania.noteSizes[Mania.DEFAULT - 1];
+		scale.set(scaleBase * factor, scaleBase * factor);
+		updateHitbox();
+
+		if (lastAnim != null)
+			playAnim(lastAnim, true);
+		return true;
+	}
+
 	public function playerPosition() {
 		final kc:Int = Mania.current;
 		if (kc == Mania.DEFAULT) {
@@ -181,6 +273,8 @@ class StrumNote extends FlxSprite {
 			x += Note.swagWidth * noteData;
 			x += 50;
 			x += ((FlxG.width / 2) * player);
+			x += skinOffsetX;
+			y += skinOffsetY;
 			return;
 		}
 
@@ -199,6 +293,8 @@ class StrumNote extends FlxSprite {
 		x += ((FlxG.width / 2) * player);
 		x -= (step * (kc - 1) / 2 - center4K); // re-center the wider/narrower row
 		y += Mania.noteOffsetsY[kc - 1];
+		x += skinOffsetX;
+		y += skinOffsetY;
 	}
 
 	override function update(elapsed:Float) {
@@ -217,6 +313,8 @@ class StrumNote extends FlxSprite {
 		if (animation.curAnim != null) {
 			centerOffsets();
 			centerOrigin();
+			if (folderLaneCenter)
+				offset.x = (frameWidth - Note.swagWidth) / 2;
 		}
 		if (useRGBShader)
 			rgbShader.enabled = (animation.curAnim != null && animation.curAnim.name != 'static');

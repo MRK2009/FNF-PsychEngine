@@ -1,6 +1,8 @@
 package states;
 
 import backend.Highscore;
+import backend.NoteSkinConfig;
+import backend.NoteSkinConfig.SkinImage;
 import backend.StageData;
 import backend.WeekData;
 import backend.Song;
@@ -315,6 +317,8 @@ class PlayState extends MusicBeatState {
 		// re-precaches its own custom hitsounds (and we don't hold
 		// references to last song's that might have been freed).
 		Note.precachedHitsounds = new Map();
+
+		NoteSkinConfig.reset();
 
 		if (FlxG.sound.music != null)
 			FlxG.sound.music.stop();
@@ -2737,6 +2741,29 @@ class PlayState extends MusicBeatState {
 		_popupPool.push(spr);
 	}
 
+	function folderUIImage(name:String):Null<SkinImage> {
+		var skin:String = NoteSkinConfig.activeSkin();
+		if (skin == null)
+			return null;
+		var cfg = NoteSkinConfig.get(skin);
+		if (cfg == null)
+			return null;
+
+		var base:String = NoteSkinConfig.folder(skin);
+		var key:String = null;
+		if (name == 'combo')
+			key = cfg.combo;
+		else if (name.startsWith('num')) {
+			if (cfg.comboNums != null)
+				key = cfg.comboNums + name.substr(3);
+		} else if (cfg.ratings != null && Reflect.hasField(cfg.ratings, name))
+			key = Reflect.field(cfg.ratings, name);
+
+		if (key == null)
+			return null;
+		return NoteSkinConfig.resolveImage(base + key);
+	}
+
 	private function popUpScore(note:Note = null):Void {
 		var noteDiff:Float = Math.abs(note.strumTime - Conductor.songPosition + ClientPrefs.data.ratingOffset);
 		vocals.volume = 1;
@@ -2785,7 +2812,13 @@ class PlayState extends MusicBeatState {
 			antialias = !isPixelStage;
 		}
 
-		rating.loadGraphic(Paths.image(uiFolder + daRating.image + uiPostfix));
+		var ratingFactor:Float = 1;
+		var ratingImg = folderUIImage(daRating.image);
+		if (ratingImg != null) {
+			rating.loadGraphic(ratingImg.graphic);
+			ratingFactor = ratingImg.factor;
+		} else
+			rating.loadGraphic(Paths.image(uiFolder + daRating.image + uiPostfix));
 		rating.screenCenter();
 		rating.x = placement - 40;
 		rating.y -= 60;
@@ -2798,7 +2831,13 @@ class PlayState extends MusicBeatState {
 		rating.antialiasing = antialias;
 
 		var comboSpr:FlxSprite = acquirePopupSprite();
-		comboSpr.loadGraphic(Paths.image(uiFolder + 'combo' + uiPostfix));
+		var comboFactor:Float = 1;
+		var comboImg = folderUIImage('combo');
+		if (comboImg != null) {
+			comboSpr.loadGraphic(comboImg.graphic);
+			comboFactor = comboImg.factor;
+		} else
+			comboSpr.loadGraphic(Paths.image(uiFolder + 'combo' + uiPostfix));
 		comboSpr.screenCenter();
 		comboSpr.x = placement;
 		comboSpr.acceleration.y = FlxG.random.int(200, 300) * playbackRate * playbackRate;
@@ -2812,8 +2851,8 @@ class PlayState extends MusicBeatState {
 		comboGroup.add(rating);
 
 		if (!PlayState.isPixelStage) {
-			rating.setGraphicSize(Std.int(rating.width * 0.7));
-			comboSpr.setGraphicSize(Std.int(comboSpr.width * 0.7));
+			rating.setGraphicSize(Std.int(rating.width * 0.7 * ratingFactor));
+			comboSpr.setGraphicSize(Std.int(comboSpr.width * 0.7 * comboFactor));
 		} else {
 			rating.setGraphicSize(Std.int(rating.width * daPixelZoom * 0.85));
 			comboSpr.setGraphicSize(Std.int(comboSpr.width * daPixelZoom * 0.85));
@@ -2830,13 +2869,19 @@ class PlayState extends MusicBeatState {
 		var separatedScore:String = Std.string(combo).lpad('0', 3);
 		for (i in 0...separatedScore.length) {
 			var numScore:FlxSprite = acquirePopupSprite();
-			numScore.loadGraphic(Paths.image(uiFolder + 'num' + Std.parseInt(separatedScore.charAt(i)) + uiPostfix));
+			var numFactor:Float = 1;
+			var numImg = folderUIImage('num' + Std.parseInt(separatedScore.charAt(i)));
+			if (numImg != null) {
+				numScore.loadGraphic(numImg.graphic);
+				numFactor = numImg.factor;
+			} else
+				numScore.loadGraphic(Paths.image(uiFolder + 'num' + Std.parseInt(separatedScore.charAt(i)) + uiPostfix));
 			numScore.screenCenter();
 			numScore.x = placement + (43 * daLoop) - 90 + ClientPrefs.data.comboOffset[2];
 			numScore.y += 80 - ClientPrefs.data.comboOffset[3];
 
 			if (!PlayState.isPixelStage)
-				numScore.setGraphicSize(Std.int(numScore.width * 0.5));
+				numScore.setGraphicSize(Std.int(numScore.width * 0.5 * numFactor));
 			else
 				numScore.setGraphicSize(Std.int(numScore.width * daPixelZoom));
 			numScore.updateHitbox();
