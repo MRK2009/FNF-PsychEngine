@@ -21,6 +21,11 @@ class StrumNote extends FlxSprite {
 
 	public var folderLaneCenter:Bool = false;
 
+	public var folderColorPerAnim:Bool = false;
+	public var staticColorable:Bool = false;
+	public var pressedColorable:Bool = true;
+	public var confirmColorable:Bool = true;
+
 	private var player:Int;
 
 	public var texture(default, set):String = null;
@@ -92,6 +97,7 @@ class StrumNote extends FlxSprite {
 			lastAnim = animation.curAnim.name;
 
 		folderLaneCenter = false;
+		folderColorPerAnim = false;
 
 		var folderSkin:String = NoteSkinConfig.activeSkin();
 		if (folderSkin != null && reloadFolderStrum(folderSkin, lastAnim))
@@ -243,14 +249,17 @@ class StrumNote extends FlxSprite {
 			{
 				name: 'confirm',
 				keys: confirmF,
-				fps: confirmFps,
+				fps: confirmF.length > 1 ? confirmFps : 24,
 				loop: false,
 				angle: confirmA,
 				square: true
 			}
 		]);
 
-		useRGBShader = cfg.colorable == true;
+		folderColorPerAnim = true;
+		staticColorable = NoteSkinConfig.colorableFor(cfg, 'strums');
+		pressedColorable = NoteSkinConfig.colorableFor(cfg, 'pressed');
+		confirmColorable = NoteSkinConfig.colorableFor(cfg, 'confirm');
 		antialiasing = (cfg.pixel == true || NoteSkinConfig.pixelMode) ? false : (cfg.antialiasing == null ? ClientPrefs.data.antialiasing : cfg.antialiasing);
 		var soff:Array<Float> = NoteSkinConfig.offsetFor(cfg.strumOffsets, c);
 		skinOffsetX = soff[0];
@@ -316,7 +325,18 @@ class StrumNote extends FlxSprite {
 			if (folderLaneCenter)
 				offset.x = (frameWidth - Note.swagWidth) / 2;
 		}
-		if (useRGBShader)
+		if (folderColorPerAnim) {
+			var on:Bool = false;
+			if (useRGBShader && animation.curAnim != null) {
+				on = switch (animation.curAnim.name) {
+					case 'static': staticColorable;
+					case 'pressed': pressedColorable;
+					case 'confirm': confirmColorable;
+					default: false;
+				}
+			}
+			rgbShader.enabled = on;
+		} else if (useRGBShader)
 			rgbShader.enabled = (animation.curAnim != null && animation.curAnim.name != 'static');
 	}
 }

@@ -317,14 +317,16 @@ class Note extends FlxSprite {
 		if (isSustainNote && prevNote != null) {
 			alpha = 0.6;
 			multAlpha = 0.6;
+			var aCfg:NoteSkinData = null;
 			var aSkin:String = NoteSkinConfig.activeSkin();
 			if (aSkin != null) {
-				var aCfg:NoteSkinData = NoteSkinConfig.forCurrentKeys(aSkin);
+				aCfg = NoteSkinConfig.forCurrentKeys(aSkin);
 				if (aCfg != null && aCfg.holdAlpha != null) {
 					alpha = aCfg.holdAlpha;
 					multAlpha = aCfg.holdAlpha;
 				}
 			}
+			var rgbOff:Bool = (PlayState.SONG != null && PlayState.SONG.disableNoteRGB);
 			hitsoundDisabled = true;
 			if (ClientPrefs.data.downScroll)
 				flipY = true;
@@ -333,6 +335,8 @@ class Note extends FlxSprite {
 			copyAngle = false;
 
 			animation.play(colArray[noteData % colArray.length] + 'holdend');
+			if (aCfg != null && rgbShader != null)
+				rgbShader.enabled = !rgbOff && NoteSkinConfig.colorableFor(aCfg, 'ends');
 
 			updateHitbox();
 
@@ -343,6 +347,8 @@ class Note extends FlxSprite {
 
 			if (prevNote.isSustainNote) {
 				prevNote.animation.play(colArray[prevNote.noteData % colArray.length] + 'hold');
+				if (aCfg != null && prevNote.rgbShader != null)
+					prevNote.rgbShader.enabled = !rgbOff && NoteSkinConfig.colorableFor(aCfg, 'holds');
 
 				var localStep:Float = Conductor.getBPMFromSeconds(prevNote.strumTime + 2).stepCrochet;
 				var speed:Float = (createdFrom != null && createdFrom.songSpeed != null) ? createdFrom.songSpeed : 1;
@@ -506,7 +512,6 @@ class Note extends FlxSprite {
 		if (note == null)
 			return false;
 
-		var colorable:Bool = cfg.colorable == true;
 		var factor:Float;
 		if (isSustainNote) {
 			var holdKey:String = NoteSkinConfig.columnKey(cfg.holds, col);
@@ -547,17 +552,24 @@ class Note extends FlxSprite {
 			]);
 		}
 
-		if (!colorable)
-			rgbShader.enabled = false;
+		if (isSustainNote) {
+			if (animName != null) {
+				var rgbOff:Bool = (PlayState.SONG != null && PlayState.SONG.disableNoteRGB);
+				var role:String = animName.endsWith('holdend') ? 'ends' : 'holds';
+				rgbShader.enabled = !rgbOff && NoteSkinConfig.colorableFor(cfg, role);
+			}
+		} else {
+			var colorable:Bool = NoteSkinConfig.colorableFor(cfg, 'notes');
+			if (!colorable)
+				rgbShader.enabled = false;
+			if (cfg.splash != null)
+				noteSplashData.useRGBShader = colorable;
+		}
 		antialiasing = (cfg.pixel == true || NoteSkinConfig.pixelMode) ? false : (cfg.antialiasing == null ? ClientPrefs.data.antialiasing : cfg.antialiasing);
-		// Hold/end can render crisp (no AA) independently of the arrows, so
-		// pixel-perfect tiling art stays sharp and seamless while arrows stay smooth.
 		if (isSustainNote && cfg.holdAntialiasing != null)
 			antialiasing = cfg.holdAntialiasing;
-		if (cfg.splash != null) {
+		if (cfg.splash != null)
 			noteSplashData.texture = base + cfg.splash;
-			noteSplashData.useRGBShader = colorable;
-		}
 
 		if (isSustainNote) {
 			scale.x = scaleBase * factor;

@@ -26,7 +26,7 @@ typedef NoteSkinData = {
 	@:optional var holdAlpha:Float;
 	@:optional var scale:Float;
 	@:optional var confirmFPS:Int;
-	@:optional var colorable:Bool;
+	@:optional var colorable:Dynamic;
 	@:optional var pixel:Bool;
 	@:optional var pixelVariant:Bool;
 	@:optional var rotate:Bool;
@@ -62,12 +62,16 @@ class NoteSkinConfig {
 	static var folderCache:Map<String, Bool> = new Map();
 	static var animCache:Map<String, BuiltAnims> = new Map();
 	static var mergedCache:Map<String, NoteSkinData> = new Map();
+	static var frameExistsCache:Map<String, Bool> = new Map();
+	static var frameKeysCache:Map<String, Array<String>> = new Map();
 
 	public static function reset() {
 		configCache.clear();
 		folderCache.clear();
 		animCache.clear();
 		mergedCache.clear();
+		frameExistsCache.clear();
+		frameKeysCache.clear();
 	}
 
 	public static function isFolderSkin(name:String):Bool {
@@ -113,6 +117,8 @@ class NoteSkinConfig {
 	public static function clearAnimCache() {
 		animCache.clear();
 		mergedCache.clear();
+		frameExistsCache.clear();
+		frameKeysCache.clear();
 	}
 
 	public static function forCurrentKeys(name:String):NoteSkinData {
@@ -204,6 +210,18 @@ class NoteSkinConfig {
 		return [a.length > 0 ? num(a[0]) : 0, a.length > 1 ? num(a[1]) : 0];
 	}
 
+	public static function colorableFor(cfg:NoteSkinData, element:String):Bool {
+		var c:Dynamic = cfg.colorable;
+		if (c == null)
+			return false;
+		if (Std.isOfType(c, Bool))
+			return element == 'strums' ? false : (c == true);
+		var v:Dynamic = Reflect.field(c, element);
+		if (v == null)
+			return element != 'strums';
+		return v == true;
+	}
+
 	public static function direction(col:Int):String {
 		var table:Array<String> = Mania.noteAnimations[Mania.clamp(Mania.current) - 1];
 		if (table != null && col >= 0 && col < table.length)
@@ -292,12 +310,26 @@ class NoteSkinConfig {
 		return g == null ? null : {graphic: g, factor: 1.0};
 	}
 
-	static inline function frameExists(key:String):Bool
-		return Paths.fileExists('images/$key.png', IMAGE) || Paths.fileExists('images/$key@2x.png', IMAGE);
+	static function frameExists(key:String):Bool {
+		if (frameExistsCache.exists(key))
+			return frameExistsCache.get(key);
+		var exists:Bool = Paths.fileExists('images/$key.png', IMAGE) || Paths.fileExists('images/$key@2x.png', IMAGE);
+		frameExistsCache.set(key, exists);
+		return exists;
+	}
 
 	public static function frameKeys(key:String):Array<String> {
 		if (key == null || key.length < 1)
 			return null;
+		if (frameKeysCache.exists(key))
+			return frameKeysCache.get(key);
+
+		var result:Array<String> = resolveFrameKeys(key);
+		frameKeysCache.set(key, result);
+		return result;
+	}
+
+	static function resolveFrameKeys(key:String):Array<String> {
 		if (frameExists(key))
 			return [key];
 
