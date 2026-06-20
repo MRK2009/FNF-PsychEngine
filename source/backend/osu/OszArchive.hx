@@ -19,6 +19,14 @@ typedef OsuSource = {
  * folder) into a working directory of files plus the list of `.osu` charts.
  */
 class OszArchive {
+	/**
+	 * Resolves an input path into a usable `OsuSource`.
+	 *
+	 * @param inputPath A folder, a loose `.osu` file, or an `.osz` archive.
+	 * @param workRoot Directory under which an `.osz` is extracted (ignored otherwise).
+	 * @return The source dir and its `.osu` files, or `null` if the path is missing or
+	 *         not a supported kind. `temporary` is true only for extracted archives.
+	 */
 	public static function prepare(inputPath:String, workRoot:String):OsuSource {
 		#if sys
 		if (inputPath == null || !FileSystem.exists(inputPath))

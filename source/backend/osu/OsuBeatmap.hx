@@ -15,8 +15,11 @@ typedef OsuHitObject = {
 }
 
 class OsuBeatmap {
+	/** Value of `mode` for an osu!mania beatmap (other modes are unsupported here). */
+	public static inline var MODE_MANIA:Int = 3;
+
 	public var audioFilename:String = null;
-	public var mode:Int = 0; // 3 == osu!mania
+	public var mode:Int = 0;
 
 	public var title:String = 'Unknown';
 	public var artist:String = '';
@@ -37,6 +40,7 @@ class OsuBeatmap {
 
 	public function new() {}
 
+	/** Number of mania columns, derived from `circleSize` (osu! stores key count there). */
 	public var keyCount(get, never):Int;
 
 	function get_keyCount():Int {
@@ -47,8 +51,9 @@ class OsuBeatmap {
 	}
 
 	public function isMania():Bool
-		return mode == 3;
+		return mode == MODE_MANIA;
 
+	/** Time (ms) of the latest note edge in the map, counting hold-note release times. */
 	public function lastObjectTime():Float {
 		var last:Float = 0;
 		for (obj in hitObjects) {

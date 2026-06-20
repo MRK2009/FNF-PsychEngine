@@ -7,6 +7,16 @@ using StringTools;
  * Reference: https://osu.ppy.sh/wiki/en/Client/File_formats/osu_%28file_format%29
  */
 class OsuParser {
+	/** Hit-object type bit (value 128) that marks a mania hold/long note. */
+	static inline var HOLD_NOTE_FLAG:Int = 128;
+
+	/**
+	 * Parses raw `.osu` file text into an `OsuBeatmap`.
+	 *
+	 * @param text The full contents of an `.osu` file, or `null`.
+	 * @return The parsed beatmap with timing points and hit objects sorted by time.
+	 *         An empty beatmap is returned when `text` is `null`.
+	 */
 	public static function parse(text:String):OsuBeatmap {
 		var map:OsuBeatmap = new OsuBeatmap();
 		if (text == null)
@@ -28,9 +38,9 @@ class OsuParser {
 
 			switch (section) {
 				case 'General':
-					parseKeyValue(map, line, true);
+					parseGeneral(map, line);
 				case 'Metadata':
-					parseKeyValue(map, line, false);
+					parseMetadata(map, line);
 				case 'Difficulty':
 					parseDifficulty(map, line);
 				case 'Events':
@@ -56,26 +66,27 @@ class OsuParser {
 		return [line.substring(0, colon).trim(), line.substring(colon + 1).trim()];
 	}
 
-	static function parseKeyValue(map:OsuBeatmap, line:String, general:Bool) {
+	static function parseGeneral(map:OsuBeatmap, line:String) {
 		var pair = splitKeyValue(line);
 		if (pair == null)
 			return;
-		var key:String = pair[0];
-		var value:String = pair[1];
-		if (general) {
-			switch (key) {
-				case 'AudioFilename': map.audioFilename = value;
-				case 'Mode': map.mode = parseIntSafe(value, 0);
-			}
-		} else {
-			switch (key) {
-				case 'Title': if (map.title == 'Unknown' || map.title.length < 1) map.title = value;
-				case 'TitleUnicode': // prefer the ASCII Title; ignore
-				case 'Artist': map.artist = value;
-				case 'Creator': map.creator = value;
-				case 'Version': map.version = value;
-				case 'BeatmapSetID': map.beatmapSetId = parseIntSafe(value, -1);
-			}
+		switch (pair[0]) {
+			case 'AudioFilename': map.audioFilename = pair[1];
+			case 'Mode': map.mode = parseIntSafe(pair[1], 0);
+		}
+	}
+
+	static function parseMetadata(map:OsuBeatmap, line:String) {
+		var pair = splitKeyValue(line);
+		if (pair == null)
+			return;
+		switch (pair[0]) {
+			case 'Title': if (map.title == 'Unknown' || map.title.length < 1) map.title = pair[1];
+			case 'TitleUnicode': // prefer the ASCII Title; ignore
+			case 'Artist': map.artist = pair[1];
+			case 'Creator': map.creator = pair[1];
+			case 'Version': map.version = pair[1];
+			case 'BeatmapSetID': map.beatmapSetId = parseIntSafe(pair[1], -1);
 		}
 	}
 
@@ -148,7 +159,7 @@ class OsuParser {
 		var type:Int = parseIntSafe(parts[3], 0);
 
 		var endTime:Int = -1;
-		if ((type & 128) != 0 && parts.length >= 6) {
+		if ((type & HOLD_NOTE_FLAG) != 0 && parts.length >= 6) {
 			// mania hold note: params field is "endTime:hitSample..."
 			var endField:String = parts[5];
 			var colon:Int = endField.indexOf(':');
