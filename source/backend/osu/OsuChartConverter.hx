@@ -11,8 +11,23 @@ import backend.osu.OsuBeatmap.OsuTimingPoint;
  * audio start, matching FNF `strumTime`). Sections are laid on a measure grid so
  * the engine's BPM map / beat visuals line up; uninherited timing points become
  * per-section BPM + time-signature changes (snapped to the nearest measure).
+ *
+ * When quantization is requested the timeline is first shifted so osu's beat grid
+ * lines up with the engine's section grid (a `song.offset` keeps the audio in sync),
+ * then each note is snapped to the nearest clean subdivision so charts stay editable.
  */
 class OsuChartConverter {
+	// Subdivisions per beat that are considered "on grid" (never grey). Mirrors the
+	// chart editor's QUANT_DIVS, ascending so the snap can prefer the coarsest match.
+	static final QUANT_DIVS:Array<Int> = [1, 2, 3, 4, 6, 8, 12, 16];
+
+	// A finer subdivision only wins a snap if it is closer by more than this many beats,
+	// so notes prefer the coarsest (least grey) grid line on near-ties.
+	static inline var QUANT_PREFER_COARSE:Float = 0.0001;
+
+	/** Event name carrying the normalized SV multiplier; handled by the bundled SV script. */
+	public static inline var SV_EVENT:String = 'Osu SV';
+
 	/** Characters and stage to set in the chart **/
 	public static inline var BLANK_ART:String = 'osuBlank';
 
@@ -26,8 +41,18 @@ class OsuChartConverter {
 	/** Beat length (ms) used when a map has no usable timing points; equals 120 BPM. */
 	static inline var FALLBACK_BEAT_LENGTH:Float = 500;
 
+	// Sane BPM window for the measure grid. osu maps use red lines with absurd BPM (e.g. 1 or
+	// 72727) as scroll-stop gimmicks; those would make sections hundreds of seconds (or fractions
+	// of a ms) long, so they're excluded from the grid (their scroll effect still rides on the SV).
+	static inline var MIN_GRID_BPM:Float = 20;
+
+	static inline var MAX_GRID_BPM:Float = 1000;
+
 	/** Upper bound on the measure-grid loop so a malformed map can never spin forever. */
 	static inline var MAX_SECTIONS:Int = 100000;
+
+	/** A section must carry at least one beat; the engine cannot represent a sub-beat section. */
+	static inline var MIN_SECTION_BEATS:Int = 1;
 
 	/**
 	 * Converts an osu!mania beatmap into a playable `SwagSong`.
@@ -35,12 +60,17 @@ class OsuChartConverter {
 	 * @param map The parsed osu!mania beatmap. Must be a mania map with 1-9 keys.
 	 * @param displayName Song title to store on the resulting `SwagSong`.
 	 * @param stageName Stage to assign to the converted song.
-	 * @param mimicSV When true, inherited timing points are emitted as "Change Scroll Speed"
-	 *        events so the chart mimics osu! slider-velocity changes.
+	 * @param mimicSV When true, slider-velocity changes are emitted as "Change Scroll Speed"
+	 *        events, normalized so the map's most-common SV plays at the chart's base speed.
+	 * @param quantize When true, the timeline is aligned to the section grid and every note
+	 *        is snapped to the nearest clean beat subdivision (chosen per note).
+	 * @param audioPadMs Leading silence (ms) prepended to the shared audio. The grid is laid
+	 *        that much later so notes never fall before 0 after the alignment shift; song.offset
+	 *        still compensates only the shift, since the silence keeps the audio in sync.
 	 * @return The converted song, or `null` if `map` is missing, not mania, or has an
 	 *         unsupported key count.
 	 */
-	public static function convert(map:OsuBeatmap, displayName:String, stageName:String, mimicSV:Bool):SwagSong {
+	public static function convert(map:OsuBeatmap, displayName:String, stageName:String, mimicSV:Bool, quantize:Bool = false):SwagSong {
 		if (map == null || !map.isMania())
 			return null;
 
@@ -50,13 +80,20 @@ class OsuChartConverter {
 
 		var bpmPoints:Array<OsuTimingPoint> = uninheritedTimingPoints(map);
 
-		var lastTime:Float = map.lastObjectTime();
+		// Shift the whole timeline so osu's first downbeat lands on a section boundary;
+		// this makes the engine's 0-anchored beat grid coincide with osu's beat grid, so
+		// quantized notes stay in sync with the audio. song.offset undoes the shift.
+		var shift:Float = quantize ? alignmentShift(bpmPoints, earliestObjectTime(map)) : 0;
+		var gridPoints:Array<OsuTimingPoint> = (shift != 0) ? shiftPoints(bpmPoints, shift) : bpmPoints;
+
+		var lastTime:Float = map.lastObjectTime() - shift;
 		var sections:Array<SwagSection> = [];
 		var sectionStarts:Array<Float> = [];
+		var sectionCrochets:Array<Float> = [];
 
-		buildMeasureGrid(bpmPoints, lastTime, sections, sectionStarts);
+		buildMeasureGrid(gridPoints, lastTime, sections, sectionStarts, sectionCrochets);
 
-		bucketNotes(map, keyCount, sections, sectionStarts);
+		bucketNotes(map, keyCount, shift, quantize, sections, sectionStarts, sectionCrochets);
 
 		var firstBpm:Float = 60000 / bpmPoints[0].beatLength;
 		var firstMeter:Int = meterOf(bpmPoints[0]);
@@ -64,11 +101,11 @@ class OsuChartConverter {
 		return {
 			song: displayName,
 			notes: sections,
-			events: mimicSV ? scrollSpeedEvents(map) : [],
+			events: mimicSV ? scrollSpeedEvents(map, shift) : [],
 			bpm: firstBpm,
 			needsVoices: false,
 			speed: scrollSpeedFromDensity(map),
-			offset: 0,
+			offset: -shift,
 			player1: BLANK_BF,
 			player2: BLANK_DAD,
 			gfVersion: BLANK_GF,
@@ -80,18 +117,70 @@ class OsuChartConverter {
 	}
 
 	/**
-	 * Collects the BPM-defining (uninherited) timing points, sorted by time.
+	 * Computes how far to slide the timeline so the first downbeat sits on a section boundary.
+	 *
+	 * Always aligns to the EARLIER boundary (shift >= 0, so `song.offset = -shift <= 0`): a
+	 * positive offset can't be shown at the top of the chart editor -- its audio time would go
+	 * negative, so the editor clamps it and hides the start of the grid. A non-positive offset
+	 * keeps the whole grid reachable (it only skips the empty audio lead-in). The one exception
+	 * is when aligning earlier would push the earliest note before 0, in which case it falls back
+	 * to the later boundary (positive offset) since a negative strumTime is worse.
+	 *
+	 * @param bpmPoints Uninherited timing points, sorted by time.
+	 * @param earliestTime Time (ms) of the earliest hit object, the floor the shift must not cross.
+	 * @return The signed shift in ms (positive moves notes earlier); 0 when the first
+	 *         measure has no valid duration.
+	 */
+	static function alignmentShift(bpmPoints:Array<OsuTimingPoint>, earliestTime:Float):Float {
+		var first:OsuTimingPoint = bpmPoints[0];
+		var measureDuration:Float = meterOf(first) * first.beatLength;
+		if (measureDuration <= 0)
+			return 0;
+
+		var phase:Float = first.time - Math.floor(first.time / measureDuration) * measureDuration; // in [0, measureDuration)
+		var shift:Float = phase; // earlier boundary -> offset <= 0 (editor-safe)
+		if (shift > earliestTime) // would push the earliest note negative -> align later instead
+			shift = phase - measureDuration;
+		return shift;
+	}
+
+	/** Time (ms) of the earliest hit object, or 0 when the map has none. */
+	static function earliestObjectTime(map:OsuBeatmap):Float {
+		return (map.hitObjects.length > 0) ? map.hitObjects[0].time : 0;
+	}
+
+	/** Returns copies of `points` with every `time` moved earlier by `shift`. */
+	static function shiftPoints(points:Array<OsuTimingPoint>, shift:Float):Array<OsuTimingPoint> {
+		return [
+			for (point in points)
+				{time: point.time - shift, beatLength: point.beatLength, meter: point.meter, uninherited: point.uninherited}
+		];
+	}
+
+	/**
+	 * Collects the BPM-defining (uninherited) timing points for the measure grid.
+	 *
+	 * Points with an out-of-range BPM (scroll-stop gimmicks) are dropped, and a run of
+	 * consecutive points with the same BPM + meter is collapsed to its first point so the
+	 * grid only re-anchors on a real change (osu maps often restate the BPM on every red line).
 	 *
 	 * @param map The beatmap to read timing points from.
-	 * @return The map's uninherited timing points, or a single 120 BPM fallback point
-	 *         when the map defines none.
+	 * @return The grid's BPM points, or a single 120 BPM fallback point when the map has none.
 	 */
 	static function uninheritedTimingPoints(map:OsuBeatmap):Array<OsuTimingPoint> {
-		var points:Array<OsuTimingPoint> = [
+		var sane:Array<OsuTimingPoint> = [
 			for (point in map.timingPoints)
-				if (point.uninherited && point.beatLength > 0) point
+				if (point.uninherited && point.beatLength > 0 && isGridBpm(60000 / point.beatLength)) point
 		];
-		points.sort((first, second) -> Std.int(first.time - second.time));
+		sane.sort((first, second) -> Std.int(first.time - second.time));
+
+		var points:Array<OsuTimingPoint> = [];
+		for (point in sane) {
+			var prev:OsuTimingPoint = (points.length > 0) ? points[points.length - 1] : null;
+			if (prev != null && Math.abs(prev.beatLength - point.beatLength) < 0.001 && meterOf(prev) == meterOf(point))
+				continue; // same BPM/meter as the previous kept point -> keep the grid continuous
+			points.push(point);
+		}
 
 		if (points.length < 1)
 			points = [
@@ -105,31 +194,35 @@ class OsuChartConverter {
 		return points;
 	}
 
+	/** Whether a BPM is plausible enough to drive the measure grid (filters gimmick red lines). */
+	static inline function isGridBpm(bpm:Float):Bool
+		return bpm >= MIN_GRID_BPM && bpm <= MAX_GRID_BPM;
+
 	/**
 	 * Lays out the section/measure grid that spans the whole song, emitting BPM and
-	 * time-signature changes whenever the active timing point switches.
+	 * time-signature changes at each timing point.
 	 *
-	 * @param bpmPoints Uninherited timing points, sorted by time.
+	 * Every BPM point re-anchors the bar line to its own start time (the first point governs
+	 * from the song start), so the section grid tracks osu's beats and quantizing realigns at
+	 * every BPM change. A bar cut short by the next point becomes a partial section; section
+	 * beat counts are always whole numbers (the engine grid is integer-based), so an off-grid
+	 * remainder is rounded to the nearest beat (>= 1).
+	 *
+	 * @param bpmPoints Grid BPM points (grid-space), sorted by time.
 	 * @param lastTime Time (ms) of the last hit object, i.e. how far the grid must reach.
 	 * @param sections Output: receives one `SwagSection` per measure.
 	 * @param sectionStarts Output: receives the start time (ms) of each pushed section.
+	 * @param sectionCrochets Output: receives each section's beat length (ms), for quantizing.
 	 */
-	static function buildMeasureGrid(bpmPoints:Array<OsuTimingPoint>, lastTime:Float, sections:Array<SwagSection>, sectionStarts:Array<Float>):Void {
+	static function buildMeasureGrid(bpmPoints:Array<OsuTimingPoint>, lastTime:Float, sections:Array<SwagSection>, sectionStarts:Array<Float>,
+			sectionCrochets:Array<Float>):Void {
 		var prevBpm:Float = Math.NEGATIVE_INFINITY;
-		var prevMeter:Int = -1;
-		var cursor:Float = 0;
+		var prevBeats:Int = -1;
 
-		while (cursor <= lastTime + 1 && sections.length < MAX_SECTIONS) {
-			var point:OsuTimingPoint = activeTimingPoint(bpmPoints, cursor);
-			var bpm:Float = 60000 / point.beatLength;
-			var meter:Int = meterOf(point);
-			var measureDuration:Float = meter * point.beatLength;
-			if (measureDuration <= 0)
-				break;
-
+		var pushSection = function(beats:Int, start:Float, crochet:Float, bpm:Float):Void {
 			var section:SwagSection = {
 				sectionNotes: [],
-				sectionBeats: meter,
+				sectionBeats: beats,
 				mustHitSection: true
 			};
 			if (bpm != prevBpm) {
@@ -137,15 +230,52 @@ class OsuChartConverter {
 				section.changeBPM = true;
 				prevBpm = bpm;
 			}
-			if (meter != prevMeter) {
+			if (beats != prevBeats) { // gates whether the engine applies sectionBeats
 				section.changeTimeSignature = true;
 				section.sectionDenominator = 4; // osu is quarter-note based; no denominator stored
-				prevMeter = meter;
+				prevBeats = beats;
 			}
-
 			sections.push(section);
-			sectionStarts.push(cursor);
-			cursor += measureDuration;
+			sectionStarts.push(start);
+			sectionCrochets.push(crochet);
+		};
+
+		for (i in 0...bpmPoints.length) {
+			var point:OsuTimingPoint = bpmPoints[i];
+			var beatLength:Float = point.beatLength;
+			var meter:Int = Std.int(Math.max(MIN_SECTION_BEATS, meterOf(point)));
+			var measureDuration:Float = meter * beatLength;
+			if (measureDuration <= 0)
+				continue;
+
+			var bpm:Float = 60000 / beatLength;
+			// The first point reaches back to time 0; later points re-anchor here so each
+			// timing region starts a fresh bar that quantizing can snap against.
+			var segStart:Float = (i == 0) ? 0 : point.time;
+			var segEnd:Float = (i + 1 < bpmPoints.length) ? bpmPoints[i + 1].time : lastTime + 1;
+			var segLength:Float = segEnd - segStart;
+			if (segLength <= 0)
+				continue;
+
+			var fullBars:Int = Math.floor(segLength / measureDuration);
+			// Section beats are whole numbers: round the leftover to the nearest beat.
+			var partialBeats:Int = Math.round((segLength - fullBars * measureDuration) / beatLength); // 0..meter
+			if (partialBeats >= meter) { // rounded up to a full bar
+				fullBars++;
+				partialBeats = 0;
+			}
+			if (fullBars < 1 && partialBeats < 1)
+				partialBeats = 1; // sub-beat segment: still give it one bar so its BPM/notes have a home
+
+			var cursor:Float = segStart;
+			for (bar in 0...fullBars) {
+				if (sections.length >= MAX_SECTIONS)
+					return;
+				pushSection(meter, cursor, beatLength, bpm);
+				cursor += measureDuration;
+			}
+			if (partialBeats >= 1 && sections.length < MAX_SECTIONS)
+				pushSection(partialBeats, cursor, beatLength, bpm);
 		}
 
 		if (sections.length < 1) { // empty map: still produce a single playable section
@@ -158,46 +288,180 @@ class OsuChartConverter {
 				changeBPM: true
 			});
 			sectionStarts.push(0);
+			sectionCrochets.push(first.beatLength);
 		}
 	}
 
 	/**
-	 * Places every hit object into its section as a `[time, column, sustain, type]` note.
+	 * Places every hit object into its section as a `[time, column, sustain, type]` note,
+	 * applying the timeline shift and (optionally) snapping note edges to the beat grid.
 	 *
 	 * @param map The beatmap whose hit objects are placed.
 	 * @param keyCount Number of columns/keys the chart uses.
+	 * @param shift Timeline shift (ms) already applied to the section grid.
+	 * @param quantize When true, snap each note's start and end to the nearest clean subdivision.
 	 * @param sections Sections to append notes to.
-	 * @param sectionStarts Ascending start times used to find each note's section.
+	 * @param sectionStarts Ascending section start times (shifted), used to find each note's section.
+	 * @param sectionCrochets Per-section beat length (ms), used when quantizing.
 	 */
-	static function bucketNotes(map:OsuBeatmap, keyCount:Int, sections:Array<SwagSection>, sectionStarts:Array<Float>):Void {
+	static function bucketNotes(map:OsuBeatmap, keyCount:Int, shift:Float, quantize:Bool, sections:Array<SwagSection>,
+			sectionStarts:Array<Float>, sectionCrochets:Array<Float>):Void {
 		for (obj in map.hitObjects) {
 			var column:Int = Math.floor(obj.posX * keyCount / OSU_PLAYFIELD_WIDTH);
 			column = Std.int(Math.max(0, Math.min(keyCount - 1, column)));
 
-			var sustain:Float = (obj.endTime > obj.time) ? (obj.endTime - obj.time) : 0;
-			var index:Int = sectionIndexFor(sectionStarts, obj.time);
-			sections[index].sectionNotes.push([obj.time, column, sustain, ""]);
+			var time:Float = obj.time - shift;
+			var endTime:Float = (obj.endTime > obj.time) ? (obj.endTime - shift) : time;
+			if (quantize) {
+				time = quantizeTime(time, sectionStarts, sectionCrochets);
+				endTime = quantizeTime(endTime, sectionStarts, sectionCrochets);
+			}
+
+			var sustain:Float = (endTime > time) ? (endTime - time) : 0;
+			var index:Int = sectionIndexFor(sectionStarts, time);
+			sections[index].sectionNotes.push([time, column, sustain, ""]);
 		}
 	}
 
 	/**
-	 * Turns inherited timing points into "Change Scroll Speed" events that reproduce
-	 * osu! slider-velocity changes.
+	 * Snaps a time to the nearest clean beat subdivision relative to its section.
 	 *
-	 * @param map The beatmap whose inherited timing points are converted.
-	 * @return The list of scroll-speed change events, one per inherited timing point.
+	 * The right division is chosen per note: the fractional beat position is rounded
+	 * against every QUANT_DIVS division and the closest result wins, preferring coarser
+	 * divisions on near-ties so notes avoid grey (off-grid) steps -- the inverse of the
+	 * editor's quant-colour test.
+	 *
+	 * @param time The time (ms) to snap, in shifted/section-grid space.
+	 * @param starts Ascending section start times.
+	 * @param crochets Per-section beat length (ms).
+	 * @return The snapped time (ms).
 	 */
-	static function scrollSpeedEvents(map:OsuBeatmap):Array<Dynamic> {
+	static function quantizeTime(time:Float, starts:Array<Float>, crochets:Array<Float>):Float {
+		var index:Int = sectionIndexFor(starts, time);
+		var crochet:Float = crochets[index];
+		if (crochet <= 0)
+			return time;
+
+		var beats:Float = (time - starts[index]) / crochet; // beats from the section start
+		var bestBeats:Float = beats;
+		var bestDistance:Float = Math.POSITIVE_INFINITY;
+		for (division in QUANT_DIVS) {
+			var snapped:Float = Math.round(beats * division) / division;
+			var distance:Float = Math.abs(snapped - beats);
+			if (distance < bestDistance - QUANT_PREFER_COARSE) {
+				bestDistance = distance;
+				bestBeats = snapped;
+			}
+		}
+		return starts[index] + bestBeats * crochet;
+	}
+
+	/**
+	 * Turns osu! slider-velocity changes into "Osu SV" events for the bundled SV script.
+	 *
+	 * osu's effective SV is the relative multiplier from green (inherited) lines, reset to
+	 * 1.0 by every red (uninherited) line. The SV the map spends the most time at is
+	 * normalized to 1x; one event is emitted whenever the normalized value changes. The
+	 * script (custom_events/Osu SV.hx) integrates these into a scroll-position curve, which
+	 * reproduces osu's "spacing changes forward only" behaviour -- unlike "Change Scroll
+	 * Speed", which is a single linear multiplier that teleports notes already on screen.
+	 *
+	 * @param map The beatmap whose timing points define the SV timeline.
+	 * @param gridShift Timeline shift (ms) to apply so events line up with the shifted notes.
+	 * @return The list of "Osu SV" events, ordered by time.
+	 */
+	static function scrollSpeedEvents(map:OsuBeatmap, gridShift:Float):Array<Dynamic> {
+		var segments:Array<{time:Float, sv:Float}> = svSegments(map);
+		if (segments.length < 1)
+			return [];
+
+		var base:Float = mostCommonSV(segments, map.lastObjectTime());
+		if (base <= 0)
+			base = 1;
+
 		var events:Array<Dynamic> = [];
-		for (point in map.timingPoints) {
-			if (point.uninherited || point.beatLength >= 0)
+		var prevValue:Float = 1; // scroll plays at 1x (most-common SV) until the first event
+		for (segment in segments) {
+			var value:Float = segment.sv / base;
+			if (Math.abs(value - prevValue) < 0.0001)
 				continue;
-			var velocity:Float = -100 / point.beatLength; // osu relative slider-velocity multiplier
+			prevValue = value;
 			// An event at exactly time 0 never fires, so nudge it just past the start.
-			var eventTime:Float = point.time <= 0 ? 0.001 : point.time;
-			events.push([eventTime, [["Change Scroll Speed", roundStr(velocity, 3), "0"]]]);
+			var eventTime:Float = segment.time - gridShift;
+			if (eventTime <= 0)
+				eventTime = 0.001;
+			events.push([eventTime, [[SV_EVENT, roundStr(value, 3), ""]]]);
 		}
 		return events;
+	}
+
+	/**
+	 * Walks the timing points into a timeline of effective SV multipliers: green lines set
+	 * the multiplier (`-100 / beatLength`), red lines reset it to 1.0. The result starts at
+	 * time 0 (default SV 1.0) and holds only the points where the SV actually changes.
+	 *
+	 * @param map The beatmap whose timing points are scanned.
+	 * @return Ascending `{time, sv}` breakpoints with consecutive duplicates collapsed.
+	 */
+	static function svSegments(map:OsuBeatmap):Array<{time:Float, sv:Float}> {
+		var raw:Array<{time:Float, sv:Float}> = [{time: 0, sv: 1.0}];
+		for (point in map.timingPoints) {
+			var sv:Float;
+			if (point.uninherited)
+				sv = 1.0;
+			else if (point.beatLength < 0)
+				sv = -100 / point.beatLength;
+			else
+				continue; // malformed inherited line (non-negative beatLength)
+			raw.push({time: Math.max(0, point.time), sv: sv});
+		}
+
+		// map.timingPoints is already time-sorted, so raw stays ascending; merge equal
+		// times (later line wins) and drop runs that don't change the SV.
+		var segments:Array<{time:Float, sv:Float}> = [];
+		for (entry in raw) {
+			var last = (segments.length > 0) ? segments[segments.length - 1] : null;
+			if (last != null && Math.abs(last.time - entry.time) < 0.001) {
+				last.sv = entry.sv;
+				continue;
+			}
+			if (last != null && Math.abs(last.sv - entry.sv) < 0.000001)
+				continue;
+			segments.push({time: entry.time, sv: entry.sv});
+		}
+		return segments;
+	}
+
+	/**
+	 * Finds the SV the map spends the most total time at; that value becomes FNF 1x.
+	 *
+	 * @param segments Ascending SV breakpoints from `svSegments`.
+	 * @param endTime Time (ms) of the last hit object, closing the final segment.
+	 * @return The longest-held SV multiplier, or 1.0 when nothing has positive duration.
+	 */
+	static function mostCommonSV(segments:Array<{time:Float, sv:Float}>, endTime:Float):Float {
+		var durations:Map<String, Float> = new Map();
+		var svByKey:Map<String, Float> = new Map();
+		var best:Float = 1;
+		var bestDuration:Float = -1;
+
+		for (i in 0...segments.length) {
+			var start:Float = segments[i].time;
+			var end:Float = (i + 1 < segments.length) ? segments[i + 1].time : endTime;
+			var duration:Float = end - start;
+			if (duration <= 0)
+				continue;
+
+			var key:String = roundStr(segments[i].sv, 4);
+			var total:Float = (durations.exists(key) ? durations.get(key) : 0) + duration;
+			durations.set(key, total);
+			svByKey.set(key, segments[i].sv);
+			if (total > bestDuration) {
+				bestDuration = total;
+				best = svByKey.get(key);
+			}
+		}
+		return best;
 	}
 
 	/**
@@ -231,25 +495,6 @@ class OsuChartConverter {
 		var speed:Float = 1 + (nps - lowNps) / (highNps - lowNps) * 3;
 		speed = Math.max(1, Math.min(4, speed));
 		return Math.round(speed * 100) / 100;
-	}
-
-	/**
-	 * Finds the timing point in effect at a given time.
-	 *
-	 * @param bpmPoints Uninherited timing points, sorted ascending by time.
-	 * @param time The time (ms) to look up.
-	 * @return The last timing point that starts at or before `time` (the first point
-	 *         when `time` precedes them all).
-	 */
-	static function activeTimingPoint(bpmPoints:Array<OsuTimingPoint>, time:Float):OsuTimingPoint {
-		var chosen:OsuTimingPoint = bpmPoints[0];
-		for (point in bpmPoints) {
-			if (point.time <= time + 1)
-				chosen = point;
-			else
-				break;
-		}
-		return chosen;
 	}
 
 	/**

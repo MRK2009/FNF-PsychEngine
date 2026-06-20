@@ -128,6 +128,14 @@ class Note extends FlxSprite {
 	public var multAlpha:Float = 1;
 	public var multSpeed(default, set):Float = 1;
 
+	// Stretched sustain-body scale at the song's base speed, captured at creation so scripts
+	// (e.g. the osu! SV script) can rescale the hold length without compounding. 0 = not a body.
+	public var sustainBaseScaleY:Float = 0;
+
+	// Free per-note cache for scripts (the osu! SV script stores its precomputed scroll
+	// position here at spawn, so its per-frame work stays O(1) with no lookup).
+	public var svScrollPos:Float = 0;
+
 	public var copyX:Bool = true;
 	public var copyY:Bool = true;
 	public var copyAngle:Bool = true;
@@ -360,6 +368,7 @@ class Note extends FlxSprite {
 				} else {
 					prevNote.scale.y = (localStep * 0.45 * speed / rate) * SUSTAIN_OVERLAP / prevNote.frameHeight;
 				}
+				prevNote.sustainBaseScaleY = prevNote.scale.y; // base for SV hold rescaling
 				prevNote.updateHitbox();
 			}
 

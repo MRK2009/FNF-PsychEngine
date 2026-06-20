@@ -8,7 +8,9 @@ typedef OsuConvertOptions = {
 	var videoCodec:String; // "vp9" | "av1"
 	var videoExtraArgs:String; // raw extra ffmpeg args appended to the video encode
 	var convertStoryboard:Bool; // v1: stub (logged, not emitted)
-	var mimicSV:Bool; // emit Change Scroll Speed events from inherited timing points
+	var mimicSV:Bool; // emit "Osu SV" events + bundle a script that reproduces osu! SV scrolling
+	var svScript:String; // which bundled SV script to write: "lua" | "hscript"
+	var quantize:Bool; // snap each note to its nearest clean beat subdivision (fixes loose timing)
 }
 
 class OsuConvertDefaults {
@@ -23,10 +25,18 @@ class OsuConvertDefaults {
 			videoCodec: 'vp9',
 			videoExtraArgs: '',
 			convertStoryboard: false,
-			mimicSV: false
+			mimicSV: false,
+			svScript: 'lua',
+			quantize: false
 		};
 	}
 
 	public static final AUDIO_BITRATES:Array<String> = ['96k', '128k', '192k', '256k', '320k'];
 	public static final VIDEO_CODECS:Array<String> = ['vp9', 'av1'];
+
+	// Dropdown labels for the SV script language; map back to OsuConvertOptions.svScript.
+	public static final SV_SCRIPTS:Array<String> = ['Lua', 'HScript'];
+
+	public static inline function svScriptValue(label:String):String
+		return (label == 'HScript') ? 'hscript' : 'lua';
 }

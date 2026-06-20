@@ -44,6 +44,37 @@ class OszArchive {
 		return null;
 	}
 
+	/**
+	 * Expands one selected input into the list of beatmaps to convert (batch support).
+	 *
+	 * A folder that directly contains `.osz` archives is treated as a batch -- each archive is
+	 * its own beatmap. Anything else (a single `.osz`/`.osu`, or a folder of loose `.osu` files)
+	 * stays a single input. Each returned path is fed through `prepare` individually.
+	 *
+	 * @param inputPath The dropped/selected path.
+	 * @return The input paths to convert (sorted), or an empty array when the path is missing.
+	 */
+	public static function expandInputs(inputPath:String):Array<String> {
+		#if sys
+		if (inputPath == null || !FileSystem.exists(inputPath))
+			return [];
+
+		if (FileSystem.isDirectory(inputPath)) {
+			var archives:Array<String> = [
+				for (entryName in FileSystem.readDirectory(inputPath))
+					if (entryName.toLowerCase().endsWith('.osz')) Path.join([inputPath, entryName])
+			];
+			if (archives.length > 0) {
+				archives.sort((first, second) -> (first < second) ? -1 : (first > second ? 1 : 0));
+				return archives; // a folder of archives -> convert each
+			}
+		}
+		return [inputPath]; // single .osz/.osu, or a folder of loose .osu files
+		#else
+		return [];
+		#end
+	}
+
 	public static function extract(oszPath:String, workRoot:String):OsuSource {
 		#if sys
 		var name:String = Path.withoutExtension(Path.withoutDirectory(oszPath));

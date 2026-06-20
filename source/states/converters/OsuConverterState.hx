@@ -34,10 +34,13 @@ class OsuConverterState extends MusicBeatState {
 	var videoCheck:PsychUICheckBox;
 	var sbCheck:PsychUICheckBox;
 	var svCheck:PsychUICheckBox;
+	var svScriptDrop:PsychUIDropDownMenu;
+	var quantizeCheck:PsychUICheckBox;
 
 	var logText:FlxText;
 	var logLines:Array<String> = [];
 	var selectedPath:String = null;
+	var queuedPaths:Array<String> = []; // batch: multiple dropped/browsed sources, all into one pack
 	var busy:Bool = false;
 	var cancelRequested:Bool = false;
 
@@ -110,7 +113,7 @@ class OsuConverterState extends MusicBeatState {
 		browseDir.resize(150, 26);
 		tab.add(browseDir);
 
-		label(tab, 10, 96, 'Tip: you can also drag & drop the file\nanywhere on this window.', 11);
+		label(tab, 10, 90, 'Tip: drag & drop anywhere. Batch: drop several\nfiles, or pick a folder of .osz - all go to one pack.', 11);
 
 		var convert:PsychUIButton = new PsychUIButton(10, 150, 'CONVERT', function() startConvert());
 		convert.resize(330, 40);
@@ -148,8 +151,16 @@ class OsuConverterState extends MusicBeatState {
 		sbCheck = new PsychUICheckBox(10, 198, 'Convert storyboard (deferred)', 220);
 		tab.add(sbCheck);
 
-		svCheck = new PsychUICheckBox(10, 224, 'Mimic SV (scroll speed events)', 220);
+		svCheck = new PsychUICheckBox(10, 224, 'Mimic SV (osu! scroll behavior)', 220);
 		tab.add(svCheck);
+
+		label(tab, 10, 254, 'SV script:');
+		svScriptDrop = new PsychUIDropDownMenu(140, 250, OsuConvertDefaults.SV_SCRIPTS.copy(), function(index, name) {}, 120);
+		svScriptDrop.selectedLabel = 'Lua';
+		tab.add(svScriptDrop);
+
+		quantizeCheck = new PsychUICheckBox(10, 282, 'Quantize notes (auto-snap timing)', 260);
+		tab.add(quantizeCheck);
 	}
 
 	function buildLogTab() {
@@ -239,22 +250,25 @@ class OsuConverterState extends MusicBeatState {
 	#end
 
 	function setPath(path:String) {
-		if (path == null || path.length < 1)
+		if (path == null || path.trim().length < 1)
 			return;
+		path = path.trim();
 		selectedPath = path;
+		if (!queuedPaths.contains(path))
+			queuedPaths.push(path); // drops/browses accumulate so several beatmaps batch at once
 		if (pathInput != null)
-			pathInput.text = path;
-		log('Selected: $path');
+			pathInput.text = (queuedPaths.length > 1) ? '${queuedPaths.length} sources queued' : path;
+		log('Added: $path (${queuedPaths.length} queued)');
 	}
 
 	function startConvert() {
 		if (busy)
 			return;
 
-		var path:String = selectedPath;
-		if ((path == null || path.length < 1) && pathInput != null)
-			path = pathInput.text;
-		if (path == null || path.trim().length < 1) {
+		var inputs:Array<String> = queuedPaths.copy();
+		if (inputs.length < 1 && pathInput != null && pathInput.text.trim().length > 0)
+			inputs.push(pathInput.text.trim()); // fall back to a manually typed path
+		if (inputs.length < 1) {
 			log('No source selected.');
 			return;
 		}
@@ -273,7 +287,10 @@ class OsuConverterState extends MusicBeatState {
 		opts.videoExtraArgs = extraInput.text;
 		opts.convertStoryboard = sbCheck.checked;
 		opts.mimicSV = svCheck.checked;
+		opts.svScript = OsuConvertDefaults.svScriptValue(svScriptDrop.selectedLabel);
+		opts.quantize = quantizeCheck.checked;
 
+		queuedPaths = []; // consumed by this run
 		logLines = [];
 		box.selectedIndex = 2; // jump to the Log tab
 		log('Starting conversion...');
@@ -285,25 +302,52 @@ class OsuConverterState extends MusicBeatState {
 		setProgress(0, 'Starting...');
 		refreshStopButton();
 
-		var input:String = path.trim();
 		sys.thread.Thread.create(function() {
-			var src = null;
-			var ok:Bool = false;
-			try {
-				src = OszArchive.prepare(input, TMP_ROOT);
-				if (src == null)
-					msgQueue.add('Could not read input (not an .osz/.osu/folder?).');
-				else {
-					var job = new OsuConversionJob(function(line) msgQueue.add(line), function(frac, label) msgQueue.add('__PROGRESS__:$frac|$label'),
-						function() return cancelRequested);
-					ok = job.run(src, opts);
-				}
-			} catch (error:Dynamic) {
-				msgQueue.add('ERROR: $error');
+			// Expand each picked path (a folder of .osz becomes one item per archive), dedupe.
+			var items:Array<String> = [];
+			for (input in inputs)
+				for (expanded in OszArchive.expandInputs(input))
+					if (!items.contains(expanded))
+						items.push(expanded);
+
+			var total:Int = items.length;
+			if (total < 1) {
+				msgQueue.add('No .osz / .osu / folder inputs found.');
+				msgQueue.add('__CONVDONE__:fail');
+				return;
 			}
-			if (src != null)
-				OszArchive.cleanup(src);
-			msgQueue.add('__CONVDONE__:' + (cancelRequested ? 'cancel' : (ok ? 'ok' : 'fail')));
+			msgQueue.add('Batch: $total beatmap(s) -> "${opts.packName}".');
+
+			var okCount:Int = 0;
+			for (i in 0...total) {
+				if (cancelRequested)
+					break;
+
+				var index:Int = i; // stable capture for the progress closure
+				var itemPath:String = items[index];
+				msgQueue.add('--- [${index + 1}/$total] ' + haxe.io.Path.withoutDirectory(itemPath) + ' ---');
+
+				var src = null;
+				try {
+					src = OszArchive.prepare(itemPath, TMP_ROOT);
+					if (src == null)
+						msgQueue.add('  Skipped (not a readable .osz/.osu/folder).');
+					else {
+						var job = new OsuConversionJob(function(line) msgQueue.add(line),
+							function(frac, label) msgQueue.add('__PROGRESS__:' + ((index + frac) / total) + '|[${index + 1}/$total] $label'),
+							function() return cancelRequested);
+						if (job.run(src, opts))
+							okCount++;
+					}
+				} catch (error:Dynamic) {
+					msgQueue.add('  ERROR: $error');
+				}
+				if (src != null)
+					OszArchive.cleanup(src);
+			}
+
+			msgQueue.add('Batch finished: $okCount/$total succeeded.');
+			msgQueue.add('__CONVDONE__:' + (cancelRequested ? 'cancel' : (okCount > 0 ? 'ok' : 'fail')));
 		});
 		#else
 		log('Conversion is only available on desktop builds.');
