@@ -329,6 +329,13 @@ class MainMenuState extends MusicBeatState {
 				MusicBeatState.switchState(new MasterEditorMenu());
 			}
 			#end
+			#if CONVERTERS_ALLOWED
+			if (controls.justPressed('debug_2')) {
+				selectedSomethin = true;
+				FlxG.mouse.visible = false;
+				MusicBeatState.switchState(new states.converters.MasterConverterState());
+			}
+			#end
 		}
 
 		super.update(elapsed);
