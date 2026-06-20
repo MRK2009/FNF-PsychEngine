@@ -14,6 +14,7 @@ import backend.tools.MediaConverter;
  */
 class MasterConverterState extends MusicBeatState {
 	var options:Array<String> = [
+		'osu! Beatmap Converter'
 	];
 
 	private var grpTexts:FlxTypedGroup<Alphabet>;
@@ -105,6 +106,8 @@ class MasterConverterState extends MusicBeatState {
 		FlxG.sound.music.volume = 0;
 		FreeplayState.destroyFreeplayVocals();
 		switch (name) {
+			case 'osu! Beatmap Converter':
+				MusicBeatState.switchState(new OsuConverterState());
 		}
 	}
 
