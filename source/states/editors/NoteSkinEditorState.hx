@@ -355,7 +355,11 @@ class NoteSkinEditorState extends MusicBeatState {
 		};
 		t.add(confirmFpsStep);
 
-		colorableCheck = makeCheck(t, 10, 78, 'Colorable (RGB)', function(v) config.colorable = v);
+		colorableCheck = makeCheck(t, 10, 78, 'Colorable (RGB) - all', function(v) {
+			config.colorable = v;
+			if (imgColorableCheck != null)
+				imgColorableCheck.checked = NoteSkinConfig.colorableFor(config, elemField(curElem));
+		});
 		rotateCheck = makeCheck(t, 160, 78, 'Rotate shared', function(v) config.rotate = v);
 		pixelCheck = makeCheck(t, 10, 104, 'Pixel perfect render', function(v) config.pixel = v);
 		aaCheck = makeCheck(t, 10, 130, 'Antialiasing', function(v) config.antialiasing = v);
@@ -395,6 +399,8 @@ class NoteSkinEditorState extends MusicBeatState {
 	var imgKeysLabel:FlxText;
 	var imgElemDrop:PsychUIDropDownMenu;
 	var imgPerDir:PsychUICheckBox;
+	var imgColorableCheck:PsychUICheckBox;
+	var imgAnimatedCheck:PsychUICheckBox;
 	var imgIn:Array<PsychUIInputText> = [];
 	var imgLbl:Array<FlxText> = [];
 	var curElem:String = 'Note';
@@ -419,7 +425,19 @@ class NoteSkinEditorState extends MusicBeatState {
 		};
 		t.add(imgPerDir);
 
-		var y:Float = 58;
+		imgColorableCheck = new PsychUICheckBox(8, 48, 'Colorable', 150);
+		imgColorableCheck.onClick = function() {
+			setColorable(elemField(curElem), imgColorableCheck.checked);
+		};
+		t.add(imgColorableCheck);
+
+		imgAnimatedCheck = new PsychUICheckBox(165, 48, 'Animated', 150);
+		imgAnimatedCheck.onClick = function() {
+			setAnimated(elemField(curElem), imgAnimatedCheck.checked);
+		};
+		t.add(imgAnimatedCheck);
+
+		var y:Float = 76;
 		for (i in 0...5) {
 			imgLbl.push(label(t, 8, y + 3, '', 11));
 			var inp = new PsychUIInputText(85, y, 150, '', 8);
@@ -471,6 +489,10 @@ class NoteSkinEditorState extends MusicBeatState {
 	function loadImageInputs() {
 		if (imgIn.length < 5)
 			return;
+		if (imgColorableCheck != null)
+			imgColorableCheck.checked = NoteSkinConfig.colorableFor(config, elemField(curElem));
+		if (imgAnimatedCheck != null)
+			imgAnimatedCheck.checked = NoteSkinConfig.animatedFor(config, elemField(curElem));
 		var eff:NoteSkinData = NoteSkinConfig.forCurrentKeys(skinName);
 		var field:Dynamic = (eff == null) ? null : Reflect.field(eff, elemField(curElem));
 
@@ -497,6 +519,39 @@ class NoteSkinEditorState extends MusicBeatState {
 			imgIn[0].text = fieldArrow(field);
 			imgLbl[1].text = imgLbl[2].text = imgLbl[3].text = imgLbl[4].text = '';
 		}
+	}
+
+	static final COLOR_ELEMS = ['notes', 'holds', 'ends', 'strums', 'pressed', 'confirm'];
+
+	function anyColorable(c:NoteSkinData):Bool {
+		if (c == null || c.colorable == null)
+			return false;
+		if (Std.isOfType(c.colorable, Bool))
+			return c.colorable == true;
+		for (e in COLOR_ELEMS)
+			if (NoteSkinConfig.colorableFor(c, e))
+				return true;
+		return false;
+	}
+
+	function setColorable(element:String, value:Bool) {
+		var obj:Dynamic = {};
+		for (e in COLOR_ELEMS)
+			Reflect.setField(obj, e, NoteSkinConfig.colorableFor(config, e));
+		Reflect.setField(obj, element, value);
+		config.colorable = obj;
+		if (colorableCheck != null)
+			colorableCheck.checked = anyColorable(config);
+		buildPreview();
+	}
+
+	function setAnimated(element:String, value:Bool) {
+		var obj:Dynamic = {};
+		for (e in COLOR_ELEMS)
+			Reflect.setField(obj, e, NoteSkinConfig.animatedFor(config, e));
+		Reflect.setField(obj, element, value);
+		config.animated = obj;
+		buildPreview();
 	}
 
 	function perDirVal(field:Dynamic, dir:String):String {
@@ -539,7 +594,7 @@ class NoteSkinEditorState extends MusicBeatState {
 		scaleStep.value = config.scale == null ? 0.7 : config.scale;
 		alphaStep.value = config.holdAlpha == null ? 0.6 : config.holdAlpha;
 		confirmFpsStep.value = config.confirmFPS == null ? 24 : config.confirmFPS;
-		colorableCheck.checked = config.colorable == true;
+		colorableCheck.checked = anyColorable(config);
 		rotateCheck.checked = config.rotate != false;
 		pixelCheck.checked = config.pixel == true;
 		pixelVarCheck.checked = config.pixelVariant == true;

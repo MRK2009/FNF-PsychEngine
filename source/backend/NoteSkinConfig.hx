@@ -27,6 +27,7 @@ typedef NoteSkinData = {
 	@:optional var scale:Float;
 	@:optional var confirmFPS:Int;
 	@:optional var colorable:Dynamic;
+	@:optional var animated:Dynamic;
 	@:optional var pixel:Bool;
 	@:optional var pixelVariant:Bool;
 	@:optional var rotate:Bool;
@@ -220,6 +221,22 @@ class NoteSkinConfig {
 		if (v == null)
 			return element != 'strums';
 		return v == true;
+	}
+
+	public static function animatedFor(cfg:NoteSkinData, element:String):Bool {
+		var a:Dynamic = cfg.animated;
+		if (a == null)
+			return true;
+		if (Std.isOfType(a, Bool))
+			return a == true;
+		var v:Dynamic = Reflect.field(a, element);
+		return v == null ? true : (v == true);
+	}
+
+	public static function staticFrame(keys:Array<String>, animated:Bool):Array<String> {
+		if (animated || keys == null || keys.length <= 1)
+			return keys;
+		return [keys[0]];
 	}
 
 	public static function direction(col:Int):String {

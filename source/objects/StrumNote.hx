@@ -210,6 +210,7 @@ class StrumNote extends FlxSprite {
 		var staticF:Array<String> = NoteSkinConfig.frameKeys(NoteSkinConfig.variant(base + st.key));
 		if (staticF == null)
 			return false;
+		staticF = NoteSkinConfig.staticFrame(staticF, NoteSkinConfig.animatedFor(cfg, 'strums'));
 		var staticA:Float = st.angle;
 
 		var pr = NoteSkinConfig.resolveColumn(cfg, cfg.pressed, c);
@@ -218,7 +219,8 @@ class StrumNote extends FlxSprite {
 		if (pressedF == null) {
 			pressedF = staticF;
 			pressedA = staticA;
-		}
+		} else
+			pressedF = NoteSkinConfig.staticFrame(pressedF, NoteSkinConfig.animatedFor(cfg, 'pressed'));
 
 		var cf = NoteSkinConfig.resolveColumn(cfg, cfg.confirm, c);
 		var confirmF:Array<String> = cf == null ? null : NoteSkinConfig.frameKeys(NoteSkinConfig.variant(base + cf.key));
@@ -226,7 +228,8 @@ class StrumNote extends FlxSprite {
 		if (confirmF == null) {
 			confirmF = pressedF;
 			confirmA = pressedA;
-		}
+		} else
+			confirmF = NoteSkinConfig.staticFrame(confirmF, NoteSkinConfig.animatedFor(cfg, 'confirm'));
 
 		var confirmFps:Int = cfg.confirmFPS == null ? 24 : cfg.confirmFPS;
 		var factor:Float = NoteSkinConfig.applyAnims(this, [
@@ -318,6 +321,9 @@ class StrumNote extends FlxSprite {
 	}
 
 	public function playAnim(anim:String, ?force:Bool = false) {
+		if (animation.curAnim != null && animation.curAnim.name == anim && animation.curAnim.numFrames <= 1)
+			return;
+
 		animation.play(anim, force);
 		if (animation.curAnim != null) {
 			centerOffsets();

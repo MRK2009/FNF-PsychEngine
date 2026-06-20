@@ -522,6 +522,8 @@ class Note extends FlxSprite {
 			var endFrames:Array<String> = NoteSkinConfig.frameKeys(NoteSkinConfig.variant(base + endKey));
 			if (holdFrames == null || endFrames == null)
 				return false;
+			holdFrames = NoteSkinConfig.staticFrame(holdFrames, NoteSkinConfig.animatedFor(cfg, 'holds'));
+			endFrames = NoteSkinConfig.staticFrame(endFrames, NoteSkinConfig.animatedFor(cfg, 'ends'));
 			factor = NoteSkinConfig.applyAnims(this, [
 				{
 					name: name + 'hold',
@@ -540,6 +542,7 @@ class Note extends FlxSprite {
 			var noteFrames:Array<String> = NoteSkinConfig.frameKeys(NoteSkinConfig.variant(base + note.key));
 			if (noteFrames == null)
 				return false;
+			noteFrames = NoteSkinConfig.staticFrame(noteFrames, NoteSkinConfig.animatedFor(cfg, 'notes'));
 			factor = NoteSkinConfig.applyAnims(this, [
 				{
 					name: name + 'Scroll',
