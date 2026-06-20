@@ -243,6 +243,26 @@ class MediaConverter {
 		#end
 	}
 
+	/** Writes a fully transparent `width`x`height` PNG to `output`. */
+	public static function writeBlankPng(output:String, width:Int = 1, height:Int = 1):Bool {
+		#if sys
+		try {
+			var dir:String = Path.directory(output);
+			if (dir != null && dir.length > 0 && !FileSystem.exists(dir))
+				FileSystem.createDirectory(dir);
+			var bmp:BitmapData = new BitmapData(width, height, true, 0x00000000);
+			File.saveBytes(output, bmp.encode(bmp.rect, new PNGEncoderOptions()));
+			bmp.dispose();
+			return true;
+		} catch (error:Dynamic) {
+			trace('writeBlankPng failed: $error');
+			return false;
+		}
+		#else
+		return false;
+		#end
+	}
+
 	/** Resize `input` to cover `width`x`height` and write a PNG to `output`. */
 	public static function resizeImage(input:String, output:String, width:Int = 1280, height:Int = 720):Bool {
 		#if sys
