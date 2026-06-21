@@ -2120,8 +2120,22 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 		return swagNote;
 	}
 
+	static function pruneBlankSubEvents(subEvents:Array<Dynamic>):Void {
+		if (subEvents == null || subEvents.length <= 1)
+			return;
+		var i:Int = subEvents.length;
+		while (--i >= 0) {
+			var se:Array<Dynamic> = subEvents[i];
+			if (se == null || se[0] == null || Std.string(se[0]).trim().length == 0)
+				subEvents.splice(i, 1);
+		}
+		if (subEvents.length == 0) // everything was blank -- keep one so the note stays valid
+			subEvents.push(['', '', '']);
+	}
+
 	function createEvent(event:Dynamic) {
 		var daStrumTime:Float = event[0];
+		pruneBlankSubEvents(event[1]);
 		var swagEvent:EventMetaNote = new EventMetaNote(daStrumTime, event);
 		positionEventX(swagEvent);
 		swagEvent.scrollFactor.x = 0;
@@ -5125,7 +5139,7 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 			var c:Character = editorChars[i];
 			if (c == null)
 				continue;
-			var b0 = c.getScreenBounds(null, camChars);
+			var b0 = charScreenBounds(c);
 			var keepX:Float = b0.x;
 			var keepBottom:Float = b0.y + b0.height;
 			b0.put();
@@ -5137,7 +5151,7 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 			if (anim != null)
 				c.playAnim(anim, true);
 
-			var b1 = c.getScreenBounds(null, camChars);
+			var b1 = charScreenBounds(c);
 			c.x += keepX - b1.x;
 			c.y += keepBottom - (b1.y + b1.height);
 			b1.put();
@@ -5155,7 +5169,7 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 				continue;
 			// Default: put the visible bottom-left of the sprite at (runX, screen bottom).
 			c.setPosition(0, 0);
-			var b = c.getScreenBounds(null, camChars);
+			var b = charScreenBounds(c);
 			c.x = runX - b.x;
 			c.y = (FlxG.height - 10) - (b.y + b.height);
 			runX += b.width + 12;
@@ -5192,7 +5206,7 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 			charDragOutline.cameras = [camChars];
 			add(charDragOutline);
 		}
-		var b = c.getScreenBounds(null, camChars);
+		var b = charScreenBounds(c);
 		var w:Int = Std.int(Math.max(b.width, 1));
 		var h:Int = Std.int(Math.max(b.height, 1));
 		if (w != _outlineW || h != _outlineH) {
@@ -5206,9 +5220,23 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 		b.put();
 	}
 
+	// Visible on-screen bounds for character hit-testing, outlining, floor-anchoring and
+	// clamping. Atlas (FlxAnimate) characters render through a child `atlas` sprite, so the
+	// Character's own frame box is empty and detached from the art -- measure the atlas
+	// instead (after syncing its transform) so atlas characters can be grabbed and moved.
+	inline function charScreenBounds(c:Character):flixel.math.FlxRect {
+		#if flixel_animate
+		if (c.isAnimateAtlas && c.atlas != null) {
+			c.copyAtlasValues(); // sync atlas x/y/scale/offset to the character before measuring
+			return c.atlas.getScreenBounds(null, camChars);
+		}
+		#end
+		return c.getScreenBounds(null, camChars);
+	}
+
 	// True if the mouse (already in camChars space) is over the character's visible box.
 	function mouseOverChar(c:Character, mp:FlxPoint):Bool {
-		var b = c.getScreenBounds(null, camChars);
+		var b = charScreenBounds(c);
 		var inside:Bool = (mp.x >= b.x && mp.x <= b.x + b.width && mp.y >= b.y && mp.y <= b.y + b.height);
 		b.put();
 		return inside;
@@ -5217,14 +5245,14 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 	// Move the character so its visible bottom sits on charsFloorY (keeps feet planted,
 	// so a flip/character-change/animation can't fling it off-screen vertically).
 	function anchorCharBottom(c:Character) {
-		var b = c.getScreenBounds(null, camChars);
+		var b = charScreenBounds(c);
 		c.y += charsFloorY - (b.y + b.height);
 		b.put();
 	}
 
 	// Keep the character's visible box inside the screen.
 	function clampCharToScreen(c:Character) {
-		var b = c.getScreenBounds(null, camChars);
+		var b = charScreenBounds(c);
 		var tx:Float = FlxMath.bound(b.x, 0, Math.max(0, FlxG.width - b.width));
 		var ty:Float = FlxMath.bound(b.y, 0, Math.max(0, FlxG.height - b.height));
 		c.x += tx - b.x;
@@ -5484,8 +5512,11 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 
 		events.sort(PlayState.sortByTime);
 		PlayState.SONG.events = [];
-		for (event in events)
+		for (event in events) {
+			pruneBlankSubEvents(event.songData[1]);
+			event.updateEventText();
 			PlayState.SONG.events.push(event.songData);
+		}
 	}
 
 	function saveChart(canQuickSave:Bool = true) {
