@@ -36,6 +36,9 @@ class LoadingState extends MusicBeatState {
 	static var progressMutex:Mutex = new Mutex(); // guards loaded/threadsCompleted counters
 	static var threadPool:FixedThreadPool = null;
 
+	static inline var LOAD_STALL_TIMEOUT:Float = 30.0; // seconds of zero progress before the watchdog forces completion
+	static inline var MAX_LOAD_THREADS:Int = 6; // extra workers past this just thrash disk/RAM during loading
+
 	function new(target:FlxState, stopMusic:Bool) {
 		this.target = target;
 		this.stopMusic = stopMusic;
@@ -167,6 +170,10 @@ class LoadingState extends MusicBeatState {
 
 	var transitioning:Bool = false;
 
+	var watchLoaded:Int = -1;
+	var watchInit:Bool = false;
+	var stallTime:Float = 0;
+
 	override function update(elapsed:Float) {
 		super.update(elapsed);
 		if (dontUpdate)
@@ -181,7 +188,22 @@ class LoadingState extends MusicBeatState {
 				} else
 					stateChangeDelay = Math.max(0, stateChangeDelay - elapsed);
 			}
-			intendedPercent = loaded / loadMax;
+			intendedPercent = (loadMax > 0) ? loaded / loadMax : 0;
+
+			/* watchdog: force completion if loading stalls (zero progress) instead of freezing */
+			if (!finishedLoading) {
+				if (loaded != watchLoaded || initialThreadCompleted != watchInit) {
+					watchLoaded = loaded;
+					watchInit = initialThreadCompleted;
+					stallTime = 0;
+				} else if ((stallTime += elapsed) >= LOAD_STALL_TIMEOUT) {
+					logLoadTimeout();
+					checkLoaded(); // cache whatever already decoded before bailing
+					transitioning = true;
+					onLoad();
+					return;
+				}
+			}
 		}
 
 		if (curPercent != intendedPercent) {
@@ -305,6 +327,9 @@ class LoadingState extends MusicBeatState {
 		mutex = null;
 	}
 
+	static function logLoadTimeout()
+		trace('LoadingState watchdog: no progress for ${LOAD_STALL_TIMEOUT}s at $loaded/$loadMax (prepDone=$initialThreadCompleted); forcing completion -- remaining assets will load on demand.');
+
 	public static function checkLoaded():Bool {
 		/* swap out pending bitmaps under mutex, then cache on the main thread outside the lock */
 		var pending:Map<String, BitmapData> = null;
@@ -355,12 +380,26 @@ class LoadingState extends MusicBeatState {
 		if (stopMusic && FlxG.sound.music != null)
 			FlxG.sound.music.stop();
 
+		var watchLoaded:Int = -1;
+		var watchInit:Bool = false;
+		var stallStart:Float = Sys.time();
 		while (true) {
 			if (checkLoaded()) {
 				_loaded();
 				break;
-			} else
-				Sys.sleep(0.001);
+			}
+
+			/* watchdog: same stall guard as the intrusive path so a stuck load can't hard-freeze */
+			if (loaded != watchLoaded || initialThreadCompleted != watchInit) {
+				watchLoaded = loaded;
+				watchInit = initialThreadCompleted;
+				stallStart = Sys.time();
+			} else if (Sys.time() - stallStart >= LOAD_STALL_TIMEOUT) {
+				logLoadTimeout();
+				_loaded();
+				break;
+			}
+			Sys.sleep(0.001);
 		}
 		return target;
 	}
@@ -392,6 +431,8 @@ class LoadingState extends MusicBeatState {
 		#if (MULTITHREADED_LOADING && cpp)
 		// Due to the Main thread and Discord thread, we decrease it by 2.
 		var threadCount:Int = Std.int(Math.max(1, getCPUThreadsCount() - #if DISCORD_ALLOWED 2 #else 1 #end));
+		if (threadCount > MAX_LOAD_THREADS)
+			threadCount = MAX_LOAD_THREADS;
 		#else
 		var threadCount:Int = 1;
 		#end
