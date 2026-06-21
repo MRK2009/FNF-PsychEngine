@@ -34,6 +34,13 @@ class OsuConversionJob {
 	var songKey:String = '';
 	var stageName:String = '';
 	var display:String = '';
+	var audioTrimMs:Int = 0; // ms trimmed off the audio start; charts shift to match (offset stays 0)
+
+	/* Pure leading silence (no alignment) below this (ms) isn't worth trimming the whole chart for. */
+	static inline var MIN_SILENCE_TRIM_MS:Int = 50;
+
+	/* Beat phase below this (ms) is treated as already aligned -- skip the alignment trim. */
+	static inline var ALIGN_EPSILON_MS:Float = 1;
 
 	public function new(log:String->Void, ?progress:Float->String->Void, ?isCancelled:Void->Bool) {
 		this.log = (log != null) ? log : function(_) {};
@@ -165,12 +172,95 @@ class OsuConversionJob {
 			log('Audio file not found in mapset: $audioName');
 		} else {
 			OszArchive.ensureDir('$packDir/songs/$songKey');
-			log('Transcoding audio -> Inst.ogg (${opts.audioBitrate})...');
+			var output:String = '$packDir/songs/$songKey/Inst.ogg';
+			audioTrimMs = computeAudioShift(input);
 
-			var ok:Bool = MediaConverter.convertAudio(input, '$packDir/songs/$songKey/Inst.ogg', opts.audioBitrate);
+			log('Transcoding audio -> Inst.ogg (${opts.audioBitrate})...');
+			if (audioTrimMs != 0)
+				log((audioTrimMs > 0 ? '  trimming ${audioTrimMs}ms off' : '  padding ${- audioTrimMs}ms of silence onto')
+					+ ' the start (charts shift to match; song.offset stays 0).');
+
+			var ok:Bool = MediaConverter.convertAudio(input, output, opts.audioBitrate, audioTrimMs);
+			if (!ok && audioTrimMs < 0) {
+				/* Padding needs an ffmpeg with `adelay`; if it isn't there, align by trimming instead. */
+				audioTrimMs = Std.int(Math.min(OsuChartConverter.beatAlignment(maps[0]).phase, earliestNoteTime()));
+				log('  padding unavailable; trimming ${audioTrimMs}ms to align instead.');
+				ok = MediaConverter.convertAudio(input, output, opts.audioBitrate, audioTrimMs);
+			}
+			if (audioTrimMs != 0)
+				applyAudioTrim();
 			log(ok ? '  audio OK' : '  audio FAILED (is ffmpeg available?) - song will have no instrumental');
 		}
 		stepDone();
+	}
+
+	/**
+	 * Signed audio shift (ms): `> 0` trims that much off the start, `< 0` pads that much leading
+	 * silence. The same shift is applied to every chart (`applyAudioTrim`) so audio and notes move
+	 * together and `song.offset` stays 0.
+	 *
+	 * It does two jobs, both content-safe:
+	 *  - **Beat alignment (quantize only):** slide osu's beat grid onto the engine's 0-anchored grid
+	 *    (the sub-beat `phase`) so quantize snaps notes to clean subdivisions ("snap up to the red
+	 *    line"). If leading silence covers the phase it's trimmed; otherwise we take the nearest beat
+	 *    -- a tiny trim into the lead-in, or a pad (never cutting real audio).
+	 *  - **Dead air:** when trimming, also drop whole beats of leading silence so the song doesn't
+	 *    open on silence (whole beats keep the grid aligned).
+	 *
+	 * Trims are capped at the earliest note so no note is pushed before 0; pads never risk that.
+	 */
+	function computeAudioShift(input:String):Int {
+		var earliest:Float = earliestNoteTime();
+		var silence:Float = Math.min(MediaConverter.detectLeadingSilence(input), earliest);
+
+		var align:{beatLength:Float, phase:Float} = OsuChartConverter.beatAlignment(maps[0]);
+		var beatLength:Float = align.beatLength;
+		var phase:Float = align.phase;
+		if (beatLength <= 0)
+			return 0;
+
+		/* No alignment wanted (quantize off, or already on-grid): just drop whole beats of dead air. */
+		if (!opts.quantize || phase < ALIGN_EPSILON_MS) {
+			var t:Float = 0;
+			while (t + beatLength <= silence)
+				t += beatLength;
+			return (t >= MIN_SILENCE_TRIM_MS) ? Std.int(Math.min(t, earliest)) : 0;
+		}
+
+		/* Enough lead-in silence to absorb the phase -> trim it (content-safe) + extra dead-air beats. */
+		if (silence >= phase) {
+			var t:Float = phase;
+			while (t + beatLength <= silence)
+				t += beatLength;
+			return Std.int(Math.min(t, earliest));
+		}
+
+		/**  Not enough silence: take the nearest beat (smallest possible shift, |s| <= beatLength/2). */
+		if (phase <= beatLength / 2)
+			return Std.int(Math.min(phase, earliest)); // trim earlier (≤ half a beat of lead-in)
+		return -Std.int(beatLength - phase); // pad later (≤ half a beat of silence, no audio lost)
+	}
+
+	/** Earliest hit-object time (ms) across all difficulties, or 0 when there are no notes. */
+	function earliestNoteTime():Float {
+		var earliest:Float = Math.POSITIVE_INFINITY;
+		for (map in maps)
+			if (map.hitObjects.length > 0 && map.hitObjects[0].time < earliest)
+				earliest = map.hitObjects[0].time;
+		return (earliest == Math.POSITIVE_INFINITY) ? 0 : earliest;
+	}
+
+	/** Shifts every chart time by `audioTrimMs` (earlier when trimming, later when padding) to track the audio. */
+	function applyAudioTrim() {
+		for (map in maps) {
+			for (obj in map.hitObjects) {
+				obj.time -= audioTrimMs;
+				if (obj.endTime > 0)
+					obj.endTime -= audioTrimMs;
+			}
+			for (point in map.timingPoints)
+				point.time -= audioTrimMs;
+		}
 	}
 
 	function convertBackground():Bool {

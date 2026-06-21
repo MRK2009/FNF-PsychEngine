@@ -3,7 +3,6 @@ package backend.tools;
 import openfl.display.BitmapData;
 import openfl.display.PNGEncoderOptions;
 import openfl.geom.Matrix;
-
 #if sys
 import sys.io.File;
 import sys.FileSystem;
@@ -189,19 +188,137 @@ class MediaConverter {
 		#end
 	}
 
-	public static function convertAudio(input:String, output:String, bitrate:String):Bool {
-		return run(['-y', '-i', input, '-vn', '-c:a', 'libvorbis', '-b:a', bitrate, output]);
+	public static function convertAudio(input:String, output:String, bitrate:String, shiftMs:Float = 0):Bool {
+		// NOTE TO SELF
+		// shiftMs > 0 trims that much off the start (`-ss`, fast, works on any ffmpeg);
+		// shiftMs < 0 pads that much leading silence (`adelay` -- needs a modern ffmpeg).
+		var args:Array<String> = ['-y'];
+		if (shiftMs > 0)
+			args = args.concat(['-ss', Std.string(shiftMs / 1000)]);
+		args = args.concat(['-i', input, '-vn']);
+		if (shiftMs < 0) {
+			// NOTE TO SELF
+			// Per-channel form (older builds lack `:all=1`); extra pipes past the real channel
+			// count are ignored, so this covers mono/stereo/5.1. Builds with no `adelay` fail
+			// (the caller falls back to trimming).
+			var d:String = Std.string(Math.round(-shiftMs));
+			args = args.concat(['-af', 'adelay=$d|$d|$d|$d|$d|$d']);
+		}
+		args = args.concat(['-c:a', 'libvorbis', '-b:a', bitrate, output]);
+		return run(args);
+	}
+
+	/**
+	 * Returns the leading silence (ms) at the START of an audio file via ffmpeg `silencedetect`,
+	 * or 0 when the file opens with sound, detection fails, or the filter is unavailable.
+	 *
+	 * @param input Audio file to probe.
+	 * @param thresholdDb Level below which audio counts as silence (dBFS, negative).
+	 * @param minDur Minimum silence length (s) for the filter to report it.
+	 */
+	public static function detectLeadingSilence(input:String, thresholdDb:Float = -45, minDur:Float = 0.1):Float {
+		#if desktop
+		try {
+			var proc:sys.io.Process = new sys.io.Process(ffmpegExe(), [
+				'-i',
+				input,
+				'-af',
+				'silencedetect=noise=${thresholdDb}dB:d=$minDur',
+				'-f',
+				'null',
+				'-'
+			]);
+			// NOTE TO SELF: silencedetect reports on stderr; drain stdout so its pipe can't deadlock.
+			sys.thread.Thread.create(() -> {
+				try
+					while (true)
+						proc.stdout.readByte()
+				catch (error:Dynamic) {}
+			});
+			var err:String = proc.stderr.readAll().toString();
+			proc.exitCode(true);
+			try
+				proc.close()
+			catch (error:Dynamic) {}
+
+			// NOTE TO SELF: A leading silence is a `silence_start` at (or near) 0 followed by a `silence_end`.
+			var startedAtZero:Bool = false;
+			for (line in err.split('\n')) {
+				var startAt:Int = line.indexOf('silence_start:');
+				if (startAt >= 0) {
+					var startVal:Float = Std.parseFloat(line.substr(startAt + 14).trim());
+					startedAtZero = !Math.isNaN(startVal) && startVal <= 0.05;
+					continue;
+				}
+				var endAt:Int = line.indexOf('silence_end:');
+				if (endAt >= 0 && startedAtZero) {
+					var endVal:Float = Std.parseFloat(line.substr(endAt + 12).split('|')[0].trim());
+					return (!Math.isNaN(endVal) && endVal > 0) ? endVal * 1000 : 0;
+				}
+			}
+		} catch (error:Dynamic) {
+			trace('detectLeadingSilence failed: $error');
+		}
+		#end
+		return 0;
 	}
 
 	public static function convertVideo(input:String, output:String, codec:String, extra:String):Bool {
-		var videoCodec:String = (codec == 'av1') ? 'libaom-av1' : 'libvpx-vp9';
-		var args:Array<String> = ['-y', '-i', input, '-c:v', videoCodec, '-b:v', '0', '-crf', '32', '-row-mt', '1', '-an'];
+		// NOTE TO SELF
+		// Fast, no-frills transcode: realtime mode at max speed, targeting the SOURCE bitrate so the
+		// output lands near the original file size. (CRF/quality mode at low cpu-used is what made VP9
+		// painfully slow.) Audio is dropped -- the song's Inst.ogg is the audio.
+		var kbps:Int = detectVideoBitrateKbps(input);
+		var rate:String = (kbps > 0 ? kbps : 4000) + 'k';
+
+		var args:Array<String> = ['-y', '-i', input, '-an', '-row-mt', '1'];
+		if (codec == 'av1')
+			args = args.concat(['-c:v', 'libaom-av1', '-usage', 'high', '-cpu-used', '8', '-b:v', rate]);
+		else
+			args = args.concat(['-c:v', 'libvpx-vp9', '-deadline', 'high', '-cpu-used', '8', '-b:v', rate]);
+
 		if (extra != null && extra.trim().length > 0)
 			for (arg in extra.trim().split(' '))
 				if (arg.length > 0)
 					args.push(arg);
 		args.push(output);
 		return run(args);
+	}
+
+	/**
+	 * Reads the source's overall bitrate (kb/s) from ffmpeg's input banner, used to target a
+	 * similar output size. Returns 0 if it can't be parsed.
+	 */
+	public static function detectVideoBitrateKbps(input:String):Int {
+		#if desktop
+		try {
+			// `ffmpeg -i <file>` prints the stream banner to stderr then exits (no decode) -- fast.
+			var proc:sys.io.Process = new sys.io.Process(ffmpegExe(), ['-i', input]);
+			sys.thread.Thread.create(() -> {
+				try
+					while (true)
+						proc.stdout.readByte()
+				catch (error:Dynamic) {}
+			});
+			var err:String = proc.stderr.readAll().toString();
+			proc.exitCode(true);
+			try
+				proc.close()
+			catch (error:Dynamic) {}
+
+			for (line in err.split('\n')) {
+				var at:Int = line.indexOf('bitrate:'); // "Duration: .., bitrate: 1234 kb/s"
+				if (at >= 0) {
+					var value:Null<Int> = Std.parseInt(line.substr(at + 8).trim().split(' ')[0]);
+					if (value != null && value > 0)
+						return value;
+				}
+			}
+		} catch (error:Dynamic) {
+			trace('detectVideoBitrateKbps failed: $error');
+		}
+		#end
+		return 0;
 	}
 
 	static function run(args:Array<String>):Bool {

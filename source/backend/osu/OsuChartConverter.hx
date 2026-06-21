@@ -8,13 +8,13 @@ import backend.osu.OsuBeatmap.OsuTimingPoint;
  * Converts a parsed osu!mania `OsuBeatmap` into a Psych Engine `SwagSong`.
  *
  * Note timing is preserved exactly (osu hit-object times are absolute ms from the
- * audio start, matching FNF `strumTime`). Sections are laid on a measure grid so
- * the engine's BPM map / beat visuals line up; uninherited timing points become
- * per-section BPM + time-signature changes (snapped to the nearest measure).
+ * audio start, matching FNF `strumTime`), so the chart stays in sync with NO
+ * `song.offset` -- offset is always 0 and the converter never computes it. Sections
+ * are laid on a measure grid so the engine's BPM map / beat visuals line up;
+ * uninherited timing points become per-section BPM + time-signature changes.
  *
- * When quantization is requested the timeline is first shifted so osu's beat grid
- * lines up with the engine's section grid (a `song.offset` keeps the audio in sync),
- * then each note is snapped to the nearest clean subdivision so charts stay editable.
+ * When quantization is requested each note is snapped to the nearest clean subdivision
+ * of that grid so charts stay editable.
  */
 class OsuChartConverter {
 	// Subdivisions per beat that are considered "on grid" (never grey). Mirrors the
@@ -60,13 +60,10 @@ class OsuChartConverter {
 	 * @param map The parsed osu!mania beatmap. Must be a mania map with 1-9 keys.
 	 * @param displayName Song title to store on the resulting `SwagSong`.
 	 * @param stageName Stage to assign to the converted song.
-	 * @param mimicSV When true, slider-velocity changes are emitted as "Change Scroll Speed"
-	 *        events, normalized so the map's most-common SV plays at the chart's base speed.
-	 * @param quantize When true, the timeline is aligned to the section grid and every note
-	 *        is snapped to the nearest clean beat subdivision (chosen per note).
-	 * @param audioPadMs Leading silence (ms) prepended to the shared audio. The grid is laid
-	 *        that much later so notes never fall before 0 after the alignment shift; song.offset
-	 *        still compensates only the shift, since the silence keeps the audio in sync.
+	 * @param mimicSV When true, slider-velocity changes are emitted as "Osu SV" events
+	 *        (handled by the bundled SV script), normalized so the map's most-common SV = 1x.
+	 * @param quantize When true, every note is snapped to the nearest clean beat subdivision
+	 *        of the section grid (chosen per note) so the chart stays easily editable.
 	 * @return The converted song, or `null` if `map` is missing, not mania, or has an
 	 *         unsupported key count.
 	 */
@@ -80,20 +77,19 @@ class OsuChartConverter {
 
 		var bpmPoints:Array<OsuTimingPoint> = uninheritedTimingPoints(map);
 
-		// Shift the whole timeline so osu's first downbeat lands on a section boundary;
-		// this makes the engine's 0-anchored beat grid coincide with osu's beat grid, so
-		// quantized notes stay in sync with the audio. song.offset undoes the shift.
-		var shift:Float = quantize ? alignmentShift(bpmPoints, earliestObjectTime(map)) : 0;
-		var gridPoints:Array<OsuTimingPoint> = (shift != 0) ? shiftPoints(bpmPoints, shift) : bpmPoints;
-
-		var lastTime:Float = map.lastObjectTime() - shift;
+		// NOTE TO SELF:
+		// osu hit times are absolute ms from the audio start = FNF strumTime, so notes keep their
+		// EXACT times and the chart stays in sync with NO song.offset. Offset is left at 0 (the
+		// converter never touches it); set it by ear in the editor if a song ever needs it.
+		// Quantize still snaps notes to the section grid below.
+		var lastTime:Float = map.lastObjectTime();
 		var sections:Array<SwagSection> = [];
 		var sectionStarts:Array<Float> = [];
 		var sectionCrochets:Array<Float> = [];
 
-		buildMeasureGrid(gridPoints, lastTime, sections, sectionStarts, sectionCrochets);
+		buildMeasureGrid(bpmPoints, lastTime, sections, sectionStarts, sectionCrochets);
 
-		bucketNotes(map, keyCount, shift, quantize, sections, sectionStarts, sectionCrochets);
+		bucketNotes(map, keyCount, 0, quantize, sections, sectionStarts, sectionCrochets);
 
 		var firstBpm:Float = 60000 / bpmPoints[0].beatLength;
 		var firstMeter:Int = meterOf(bpmPoints[0]);
@@ -101,11 +97,11 @@ class OsuChartConverter {
 		return {
 			song: displayName,
 			notes: sections,
-			events: mimicSV ? scrollSpeedEvents(map, shift) : [],
+			events: mimicSV ? scrollSpeedEvents(map, 0) : [],
 			bpm: firstBpm,
 			needsVoices: false,
 			speed: scrollSpeedFromDensity(map),
-			offset: -shift,
+			offset: 0,
 			player1: BLANK_BF,
 			player2: BLANK_DAD,
 			gfVersion: BLANK_GF,
@@ -117,44 +113,20 @@ class OsuChartConverter {
 	}
 
 	/**
-	 * Computes how far to slide the timeline so the first downbeat sits on a section boundary.
+	 * Beat length (ms) and sub-beat phase of the song's first sane BPM point.
 	 *
-	 * Always aligns to the EARLIER boundary (shift >= 0, so `song.offset = -shift <= 0`): a
-	 * positive offset can't be shown at the top of the chart editor -- its audio time would go
-	 * negative, so the editor clamps it and hides the start of the grid. A non-positive offset
-	 * keeps the whole grid reachable (it only skips the empty audio lead-in). The one exception
-	 * is when aligning earlier would push the earliest note before 0, in which case it falls back
-	 * to the later boundary (positive offset) since a negative strumTime is worse.
+	 * `phase = T0 mod beatLength` is how far osu's beat grid sits off the engine's 0-anchored
+	 * grid. The job trims this much off the audio (and shifts the charts with it) so the grids
+	 * coincide and quantize snaps notes onto clean beat subdivisions instead of fine ones.
 	 *
-	 * @param bpmPoints Uninherited timing points, sorted by time.
-	 * @param earliestTime Time (ms) of the earliest hit object, the floor the shift must not cross.
-	 * @return The signed shift in ms (positive moves notes earlier); 0 when the first
-	 *         measure has no valid duration.
+	 * @param map A beatmap of the song (all difficulties share the same timing).
+	 * @return `{beatLength, phase}` in ms; phase is in [0, beatLength).
 	 */
-	static function alignmentShift(bpmPoints:Array<OsuTimingPoint>, earliestTime:Float):Float {
-		var first:OsuTimingPoint = bpmPoints[0];
-		var measureDuration:Float = meterOf(first) * first.beatLength;
-		if (measureDuration <= 0)
-			return 0;
-
-		var phase:Float = first.time - Math.floor(first.time / measureDuration) * measureDuration; // in [0, measureDuration)
-		var shift:Float = phase; // earlier boundary -> offset <= 0 (editor-safe)
-		if (shift > earliestTime) // would push the earliest note negative -> align later instead
-			shift = phase - measureDuration;
-		return shift;
-	}
-
-	/** Time (ms) of the earliest hit object, or 0 when the map has none. */
-	static function earliestObjectTime(map:OsuBeatmap):Float {
-		return (map.hitObjects.length > 0) ? map.hitObjects[0].time : 0;
-	}
-
-	/** Returns copies of `points` with every `time` moved earlier by `shift`. */
-	static function shiftPoints(points:Array<OsuTimingPoint>, shift:Float):Array<OsuTimingPoint> {
-		return [
-			for (point in points)
-				{time: point.time - shift, beatLength: point.beatLength, meter: point.meter, uninherited: point.uninherited}
-		];
+	public static function beatAlignment(map:OsuBeatmap):{beatLength:Float, phase:Float} {
+		var first:OsuTimingPoint = uninheritedTimingPoints(map)[0];
+		var beatLength:Float = first.beatLength;
+		var phase:Float = (beatLength > 0) ? first.time - Math.floor(first.time / beatLength) * beatLength : 0;
+		return {beatLength: beatLength, phase: phase};
 	}
 
 	/**
@@ -253,7 +225,22 @@ class OsuChartConverter {
 			// timing region starts a fresh bar that quantizing can snap against.
 			var segStart:Float = (i == 0) ? 0 : point.time;
 			var segEnd:Float = (i + 1 < bpmPoints.length) ? bpmPoints[i + 1].time : lastTime + 1;
-			var segLength:Float = segEnd - segStart;
+			if (segEnd - segStart <= 0)
+				continue;
+
+			var cursor:Float = segStart;
+			// NOTE TO SELF:
+			// Segment 0 begins at time 0, before the first downbeat. The shift only beat-aligns
+			// so the downbeat is off the measure grid, use an integer pickup bar here so it still lands on a section boundary.
+			if (i == 0) {
+				var pickup:Int = Math.round(point.time / beatLength) % meter;
+				if (pickup > 0 && sections.length < MAX_SECTIONS) {
+					pushSection(pickup, cursor, beatLength, bpm);
+					cursor += pickup * beatLength;
+				}
+			}
+
+			var segLength:Float = segEnd - cursor;
 			if (segLength <= 0)
 				continue;
 
@@ -267,7 +254,6 @@ class OsuChartConverter {
 			if (fullBars < 1 && partialBeats < 1)
 				partialBeats = 1; // sub-beat segment: still give it one bar so its BPM/notes have a home
 
-			var cursor:Float = segStart;
 			for (bar in 0...fullBars) {
 				if (sections.length >= MAX_SECTIONS)
 					return;
@@ -304,8 +290,7 @@ class OsuChartConverter {
 	 * @param sectionStarts Ascending section start times (shifted), used to find each note's section.
 	 * @param sectionCrochets Per-section beat length (ms), used when quantizing.
 	 */
-	static function bucketNotes(map:OsuBeatmap, keyCount:Int, shift:Float, quantize:Bool, sections:Array<SwagSection>,
-			sectionStarts:Array<Float>, sectionCrochets:Array<Float>):Void {
+	static function bucketNotes(map:OsuBeatmap, keyCount:Int, shift:Float, quantize:Bool, sections:Array<SwagSection>, sectionStarts:Array<Float>, sectionCrochets:Array<Float>):Void {
 		for (obj in map.hitObjects) {
 			var column:Int = Math.floor(obj.posX * keyCount / OSU_PLAYFIELD_WIDTH);
 			column = Std.int(Math.max(0, Math.min(keyCount - 1, column)));
