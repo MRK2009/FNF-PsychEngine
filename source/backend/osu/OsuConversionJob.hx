@@ -119,7 +119,7 @@ class OsuConversionJob {
 		#end
 	}
 
-	// -- Conversion --
+	/* -- Conversion -- */
 	#if sys
 	function parseManiaCharts():Array<OsuBeatmap> {
 		var result:Array<OsuBeatmap> = [];
@@ -345,7 +345,7 @@ class OsuConversionJob {
 		File.saveContent('$packDir/data/stages/$stageName.json', genStageJson());
 	}
 
-	// -- Helpers --
+	/* -- Helpers -- */
 	function cancelledNow():Bool {
 		if (isCancelled()) {
 			log('Conversion cancelled. Partial files may remain in the modpack.');
@@ -421,7 +421,7 @@ class OsuConversionJob {
 		});
 	}
 
-	// -- Generate characters --
+	/* -- Generate characters -- */
 	function ensureBlankCharacters() {
 		var art:String = OsuChartConverter.BLANK_ART;
 
@@ -605,10 +605,12 @@ class OsuConversionJob {
 		}, null, '\t');
 	}
 
-	// -- SV script generation --
-	// Reproduces osu!mania slider-velocity scrolling by remapping each note's scroll
-	// distance to the integral of the "Osu SV" event timeline, so spacing changes only
-	// going forward (notes never teleport, unlike a flat "Change Scroll Speed" multiplier).
+	/*
+	 * -- SV script generation --
+	 * Reproduces osu!mania slider-velocity scrolling by remapping each note's scroll
+	 * distance to the integral of the "Osu SV" event timeline, so spacing changes only
+	 * going forward (notes never teleport, unlike a flat "Change Scroll Speed" multiplier).
+	 */
 	function writeSvScript() {
 		OszArchive.ensureDir('$packDir/custom_events');
 		var isHx:Bool = (opts.svScript == 'hscript');
@@ -786,7 +788,7 @@ function buildTimeline() {
 
 	if (svTimes.length < 1) return;
 
-	// scroll position = integral of velocity; velocity is 1.0 before the first event.
+	/* scroll position = integral of velocity; velocity is 1.0 before the first event. */
 	svCum.push(svTimes[0]);
 	for (i in 1...svTimes.length)
 		svCum.push(svCum[i - 1] + (svTimes[i] - svTimes[i - 1]) * svVels[i - 1]);
@@ -820,7 +822,7 @@ function velAt(t:Float):Float {
 	return svVels[svIndexAt(t)];
 }
 
-// Precompute this note's scroll position + hold scale once, so onUpdate stays O(1)/note.
+/* Precompute this note's scroll position + hold scale once, so onUpdate stays O(1)/note. */
 function onSpawnNote(note) {
 	if (!ready) return;
 	var st:Float = note.strumTime;

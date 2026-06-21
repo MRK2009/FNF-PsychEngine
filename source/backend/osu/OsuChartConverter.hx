@@ -17,12 +17,16 @@ import backend.osu.OsuBeatmap.OsuTimingPoint;
  * of that grid so charts stay editable.
  */
 class OsuChartConverter {
-	// Subdivisions per beat that are considered "on grid" (never grey). Mirrors the
-	// chart editor's QUANT_DIVS, ascending so the snap can prefer the coarsest match.
+	/*
+	 * Subdivisions per beat that are considered "on grid" (never grey). Mirrors the
+	 * chart editor's QUANT_DIVS, ascending so the snap can prefer the coarsest match.
+	 */
 	static final QUANT_DIVS:Array<Int> = [1, 2, 3, 4, 6, 8, 12, 16];
 
-	// A finer subdivision only wins a snap if it is closer by more than this many beats,
-	// so notes prefer the coarsest (least grey) grid line on near-ties.
+	/*
+	 * A finer subdivision only wins a snap if it is closer by more than this many beats,
+	 * so notes prefer the coarsest (least grey) grid line on near-ties.
+	 */
 	static inline var QUANT_PREFER_COARSE:Float = 0.0001;
 
 	/** Event name carrying the normalized SV multiplier; handled by the bundled SV script. */
@@ -41,9 +45,11 @@ class OsuChartConverter {
 	/** Beat length (ms) used when a map has no usable timing points; equals 120 BPM. */
 	static inline var FALLBACK_BEAT_LENGTH:Float = 500;
 
-	// Sane BPM window for the measure grid. osu maps use red lines with absurd BPM (e.g. 1 or
-	// 72727) as scroll-stop gimmicks; those would make sections hundreds of seconds (or fractions
-	// of a ms) long, so they're excluded from the grid (their scroll effect still rides on the SV).
+	/*
+	 * Sane BPM window for the measure grid. osu maps use red lines with absurd BPM (e.g. 1 or
+	 * 72727) as scroll-stop gimmicks; those would make sections hundreds of seconds (or fractions
+	 * of a ms) long, so they're excluded from the grid (their scroll effect still rides on the SV).
+	 */
 	static inline var MIN_GRID_BPM:Float = 20;
 
 	static inline var MAX_GRID_BPM:Float = 1000;
@@ -77,11 +83,12 @@ class OsuChartConverter {
 
 		var bpmPoints:Array<OsuTimingPoint> = uninheritedTimingPoints(map);
 
-		// NOTE TO SELF:
-		// osu hit times are absolute ms from the audio start = FNF strumTime, so notes keep their
-		// EXACT times and the chart stays in sync with NO song.offset. Offset is left at 0 (the
-		// converter never touches it); set it by ear in the editor if a song ever needs it.
-		// Quantize still snaps notes to the section grid below.
+		/*
+		 * osu hit times are absolute ms from the audio start = FNF strumTime, so notes keep their
+		 * EXACT times and the chart stays in sync with NO song.offset. Offset is left at 0 (the
+		 * converter never touches it); set it by ear in the editor if a song ever needs it.
+		 * Quantize still snaps notes to the section grid below.
+		 */
 		var lastTime:Float = map.lastObjectTime();
 		var sections:Array<SwagSection> = [];
 		var sectionStarts:Array<Float> = [];
@@ -221,17 +228,21 @@ class OsuChartConverter {
 				continue;
 
 			var bpm:Float = 60000 / beatLength;
-			// The first point reaches back to time 0; later points re-anchor here so each
-			// timing region starts a fresh bar that quantizing can snap against.
+			/*
+			 * The first point reaches back to time 0; later points re-anchor here so each
+			 * timing region starts a fresh bar that quantizing can snap against.
+			 */
 			var segStart:Float = (i == 0) ? 0 : point.time;
 			var segEnd:Float = (i + 1 < bpmPoints.length) ? bpmPoints[i + 1].time : lastTime + 1;
 			if (segEnd - segStart <= 0)
 				continue;
 
 			var cursor:Float = segStart;
-			// NOTE TO SELF:
-			// Segment 0 begins at time 0, before the first downbeat. The shift only beat-aligns
-			// so the downbeat is off the measure grid, use an integer pickup bar here so it still lands on a section boundary.
+			/*
+			 * Segment 0 begins at time 0, before the first downbeat. The shift only beat-aligns
+			 * so the downbeat is off the measure grid; use an integer pickup bar here so it still
+			 * lands on a section boundary.
+			 */
 			if (i == 0) {
 				var pickup:Int = Math.round(point.time / beatLength) % meter;
 				if (pickup > 0 && sections.length < MAX_SECTIONS) {
@@ -245,7 +256,7 @@ class OsuChartConverter {
 				continue;
 
 			var fullBars:Int = Math.floor(segLength / measureDuration);
-			// Section beats are whole numbers: round the leftover to the nearest beat.
+			/* Section beats are whole numbers: round the leftover to the nearest beat. */
 			var partialBeats:Int = Math.round((segLength - fullBars * measureDuration) / beatLength); // 0..meter
 			if (partialBeats >= meter) { // rounded up to a full bar
 				fullBars++;
@@ -371,7 +382,7 @@ class OsuChartConverter {
 			if (Math.abs(value - prevValue) < 0.0001)
 				continue;
 			prevValue = value;
-			// An event at exactly time 0 never fires, so nudge it just past the start.
+			/* An event at exactly time 0 never fires, so nudge it just past the start. */
 			var eventTime:Float = segment.time - gridShift;
 			if (eventTime <= 0)
 				eventTime = 0.001;
@@ -401,8 +412,10 @@ class OsuChartConverter {
 			raw.push({time: Math.max(0, point.time), sv: sv});
 		}
 
-		// map.timingPoints is already time-sorted, so raw stays ascending; merge equal
-		// times (later line wins) and drop runs that don't change the SV.
+		/*
+		 * map.timingPoints is already time-sorted, so raw stays ascending; merge equal
+		 * times (later line wins) and drop runs that don't change the SV.
+		 */
 		var segments:Array<{time:Float, sv:Float}> = [];
 		for (entry in raw) {
 			var last = (segments.length > 0) ? segments[segments.length - 1] : null;

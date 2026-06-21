@@ -128,12 +128,16 @@ class Note extends FlxSprite {
 	public var multAlpha:Float = 1;
 	public var multSpeed(default, set):Float = 1;
 
-	// Stretched sustain-body scale at the song's base speed, captured at creation so scripts
-	// (e.g. the osu! SV script) can rescale the hold length without compounding. 0 = not a body.
+	/*
+	 * Stretched sustain-body scale at the song's base speed, captured at creation so scripts
+	 * (e.g. the osu! SV script) can rescale the hold length without compounding. 0 = not a body.
+	 */
 	public var sustainBaseScaleY:Float = 0;
 
-	// Free per-note cache for scripts (the osu! SV script stores its precomputed scroll
-	// position here at spawn, so its per-frame work stays O(1) with no lookup).
+	/*
+	 * Free per-note cache for scripts (the osu! SV script stores its precomputed scroll
+	 * position here at spawn, so its per-frame work stays O(1) with no lookup).
+	 */
 	public var svScrollPos:Float = 0;
 
 	public var copyX:Bool = true;

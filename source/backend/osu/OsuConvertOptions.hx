@@ -34,7 +34,7 @@ class OsuConvertDefaults {
 	public static final AUDIO_BITRATES:Array<String> = ['96k', '128k', '192k', '256k', '320k'];
 	public static final VIDEO_CODECS:Array<String> = ['vp9', 'av1'];
 
-	// Dropdown labels for the SV script language; map back to OsuConvertOptions.svScript.
+	/* Dropdown labels for the SV script language; map back to OsuConvertOptions.svScript. */
 	public static final SV_SCRIPTS:Array<String> = ['Lua', 'HScript'];
 
 	public static inline function svScriptValue(label:String):String

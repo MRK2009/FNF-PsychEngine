@@ -303,7 +303,7 @@ class OsuConverterState extends MusicBeatState {
 		refreshStopButton();
 
 		sys.thread.Thread.create(function() {
-			// Expand each picked path (a folder of .osz becomes one item per archive), dedupe.
+			/* Expand each picked path (a folder of .osz becomes one item per archive), dedupe. */
 			var items:Array<String> = [];
 			for (input in inputs)
 				for (expanded in OszArchive.expandInputs(input))

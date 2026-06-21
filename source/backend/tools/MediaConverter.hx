@@ -21,9 +21,11 @@ class MediaConverter {
 	/** User-set ffmpeg path (takes priority when valid); also set after a download. */
 	public static var customFfmpegPath:String = null;
 
-	// Cached resolved ffmpeg file path. Only a POSITIVE result is cached (a missing
-	// ffmpeg stays unresolved so a later install is picked up). Invalidate by setting
-	// this to null (done after a fresh install via installFfmpegFromZip).
+	/*
+	 * Cached resolved ffmpeg file path. Only a POSITIVE result is cached (a missing
+	 * ffmpeg stays unresolved so a later install is picked up). Invalidate by setting
+	 * this to null (done after a fresh install via installFfmpegFromZip).
+	 */
 	static var cachedFfmpeg:String = null;
 
 	#if desktop
@@ -62,7 +64,7 @@ class MediaConverter {
 	 */
 	static function resolveFfmpegFile():String {
 		#if sys
-		// Return the cached hit if it's still valid.
+		/* Return the cached hit if it's still valid. */
 		if (cachedFfmpeg != null && FileSystem.exists(cachedFfmpeg))
 			return cachedFfmpeg;
 		cachedFfmpeg = null;
@@ -83,7 +85,7 @@ class MediaConverter {
 			if (FileSystem.exists(candidate))
 				return cachedFfmpeg = candidate;
 
-		// Walk PATH and look for the binary as a file (no exec -> no console flash).
+		/* Walk PATH and look for the binary as a file (no exec -> no console flash). */
 		var pathEnv:String = Sys.getEnv('PATH');
 		if (pathEnv != null) {
 			#if windows
@@ -107,8 +109,10 @@ class MediaConverter {
 		return null;
 	}
 
-	// A GPL static Windows build (includes libvorbis / libvpx / libaom) with a stable
-	// "latest" download URL.
+	/*
+	 * A GPL static Windows build (includes libvorbis / libvpx / libaom) with a stable
+	 * "latest" download URL.
+	 */
 	public static inline var DOWNLOAD_URL:String = 'https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/ffmpeg-master-latest-win64-gpl.zip';
 	public static inline var INSTALL_DIR:String = 'tools/ffmpeg';
 
@@ -189,18 +193,20 @@ class MediaConverter {
 	}
 
 	public static function convertAudio(input:String, output:String, bitrate:String, shiftMs:Float = 0):Bool {
-		// NOTE TO SELF
-		// shiftMs > 0 trims that much off the start (`-ss`, fast, works on any ffmpeg);
-		// shiftMs < 0 pads that much leading silence (`adelay` -- needs a modern ffmpeg).
+		/*
+		 * shiftMs > 0 trims that much off the start (`-ss`, fast, works on any ffmpeg);
+		 * shiftMs < 0 pads that much leading silence (`adelay` -- needs a modern ffmpeg).
+		 */
 		var args:Array<String> = ['-y'];
 		if (shiftMs > 0)
 			args = args.concat(['-ss', Std.string(shiftMs / 1000)]);
 		args = args.concat(['-i', input, '-vn']);
 		if (shiftMs < 0) {
-			// NOTE TO SELF
-			// Per-channel form (older builds lack `:all=1`); extra pipes past the real channel
-			// count are ignored, so this covers mono/stereo/5.1. Builds with no `adelay` fail
-			// (the caller falls back to trimming).
+			/*
+			 * Per-channel form (older builds lack `:all=1`); extra pipes past the real channel
+			 * count are ignored, so this covers mono/stereo/5.1. Builds with no `adelay` fail
+			 * (the caller falls back to trimming).
+			 */
 			var d:String = Std.string(Math.round(-shiftMs));
 			args = args.concat(['-af', 'adelay=$d|$d|$d|$d|$d|$d']);
 		}
@@ -228,7 +234,7 @@ class MediaConverter {
 				'null',
 				'-'
 			]);
-			// NOTE TO SELF: silencedetect reports on stderr; drain stdout so its pipe can't deadlock.
+			/* silencedetect reports on stderr; drain stdout so its pipe can't deadlock. */
 			sys.thread.Thread.create(() -> {
 				try
 					while (true)
@@ -241,7 +247,7 @@ class MediaConverter {
 				proc.close()
 			catch (error:Dynamic) {}
 
-			// NOTE TO SELF: A leading silence is a `silence_start` at (or near) 0 followed by a `silence_end`.
+			/* A leading silence is a `silence_start` at (or near) 0 followed by a `silence_end`. */
 			var startedAtZero:Bool = false;
 			for (line in err.split('\n')) {
 				var startAt:Int = line.indexOf('silence_start:');
@@ -264,18 +270,21 @@ class MediaConverter {
 	}
 
 	public static function convertVideo(input:String, output:String, codec:String, extra:String):Bool {
-		// NOTE TO SELF
-		// Fast, no-frills transcode: realtime mode at max speed, targeting the SOURCE bitrate so the
-		// output lands near the original file size. (CRF/quality mode at low cpu-used is what made VP9
-		// painfully slow.) Audio is dropped -- the song's Inst.ogg is the audio.
+		/*
+		 * Fast, no-frills transcode: realtime mode at max speed across all CPU cores, targeting HALF
+		 * the source bitrate (smaller files; backgrounds don't need full quality). Audio is dropped --
+		 * the song's Inst.ogg is the audio. -deadline/-usage must be best|good|realtime (an invalid
+		 * value writes a 0-byte file and the video gets silently dropped from the stage).
+		 */
 		var kbps:Int = detectVideoBitrateKbps(input);
-		var rate:String = (kbps > 0 ? kbps : 4000) + 'k';
+		var rate:String = ((kbps > 0 ? kbps : 4000) >> 1) + 'k';
+		var threads:String = Std.string(cpuCores());
 
-		var args:Array<String> = ['-y', '-i', input, '-an', '-row-mt', '1'];
+		var args:Array<String> = ['-y', '-i', input, '-an', '-row-mt', '1', '-threads', threads];
 		if (codec == 'av1')
-			args = args.concat(['-c:v', 'libaom-av1', '-usage', 'good', '-cpu-used', '8', '-b:v', rate]);
+			args = args.concat(['-c:v', 'libaom-av1', '-usage', 'realtime', '-cpu-used', '8', '-b:v', rate]);
 		else
-			args = args.concat(['-c:v', 'libvpx-vp9', '-deadline', 'good', '-cpu-used', '8', '-b:v', rate]);
+			args = args.concat(['-c:v', 'libvpx-vp9', '-deadline', 'realtime', '-cpu-used', '8', '-b:v', rate]);
 
 		if (extra != null && extra.trim().length > 0)
 			for (arg in extra.trim().split(' '))
@@ -285,6 +294,19 @@ class MediaConverter {
 		return run(args);
 	}
 
+	/** Logical CPU core count (Windows `NUMBER_OF_PROCESSORS`), for maxing ffmpeg threads; 4 if unknown. */
+	public static function cpuCores():Int {
+		#if sys
+		var env:String = Sys.getEnv('NUMBER_OF_PROCESSORS');
+		if (env != null) {
+			var n:Null<Int> = Std.parseInt(env);
+			if (n != null && n > 0)
+				return n;
+		}
+		#end
+		return 4;
+	}
+
 	/**
 	 * Reads the source's overall bitrate (kb/s) from ffmpeg's input banner, used to target a
 	 * similar output size. Returns 0 if it can't be parsed.
@@ -292,7 +314,7 @@ class MediaConverter {
 	public static function detectVideoBitrateKbps(input:String):Int {
 		#if desktop
 		try {
-			// `ffmpeg -i <file>` prints the stream banner to stderr then exits (no decode) -- fast.
+			/* `ffmpeg -i <file>` prints the stream banner to stderr then exits (no decode) -- fast. */
 			var proc:sys.io.Process = new sys.io.Process(ffmpegExe(), ['-i', input]);
 			sys.thread.Thread.create(() -> {
 				try
@@ -329,7 +351,7 @@ class MediaConverter {
 			currentProc = proc;
 			procMutex.release();
 
-			// Drain stdout/stderr so ffmpeg's pipe buffers don't fill and deadlock.
+			/* Drain stdout/stderr so ffmpeg's pipe buffers don't fill and deadlock. */
 			var drain = function(stream:haxe.io.Input) {
 				try
 					while (true)
