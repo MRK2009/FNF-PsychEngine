@@ -273,9 +273,9 @@ class MediaConverter {
 
 		var args:Array<String> = ['-y', '-i', input, '-an', '-row-mt', '1'];
 		if (codec == 'av1')
-			args = args.concat(['-c:v', 'libaom-av1', '-usage', 'high', '-cpu-used', '8', '-b:v', rate]);
+			args = args.concat(['-c:v', 'libaom-av1', '-usage', 'good', '-cpu-used', '8', '-b:v', rate]);
 		else
-			args = args.concat(['-c:v', 'libvpx-vp9', '-deadline', 'high', '-cpu-used', '8', '-b:v', rate]);
+			args = args.concat(['-c:v', 'libvpx-vp9', '-deadline', 'good', '-cpu-used', '8', '-b:v', rate]);
 
 		if (extra != null && extra.trim().length > 0)
 			for (arg in extra.trim().split(' '))
