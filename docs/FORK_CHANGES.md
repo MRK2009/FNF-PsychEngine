@@ -7,7 +7,6 @@ Baseline: archived-repo commit
 Summary of the diff `5c67ced..HEAD`: **147 commits, 172 files changed,
 ~17,400 insertions / ~16,900 deletions**. That's only for the updated libraries, formatting, bugfixes, more to come later!
 
-Project version bumped: **1.0.4 → 1.1.1**
 ([source/states/MainMenuState.hx](../source/states/MainMenuState.hx#L16))
 
 ---
@@ -97,7 +96,6 @@ Extended pack.json metadata a bit for convenience.
   - Mod packs run locally with the option to opt in using "runsGlobally" as usual. If a mod pack has settings, it will also show up in pause menus "Mod Settings".
 
 ## New feature: ModSecurity
-
 A new mod-script semi-sandboxing system was added across several commits
 ([`eb8811c`](https://github.com/MeguminBOT/FNF-PsychEngine/commit/eb8811c), [`6e8fa50`](https://github.com/MeguminBOT/FNF-PsychEngine/commit/6e8fa50), [`95f384e`](https://github.com/MeguminBOT/FNF-PsychEngine/commit/95f384e), [`7691e27`](https://github.com/MeguminBOT/FNF-PsychEngine/commit/7691e27), [`a42a83d`](https://github.com/MeguminBOT/FNF-PsychEngine/commit/a42a83d), [`472cb16`](https://github.com/MeguminBOT/FNF-PsychEngine/commit/472cb16), [`8d09b9c`](https://github.com/MeguminBOT/FNF-PsychEngine/commit/8d09b9c),
 [`4ea53b6`](https://github.com/MeguminBOT/FNF-PsychEngine/commit/4ea53b6), [`13f80a4`](https://github.com/MeguminBOT/FNF-PsychEngine/commit/13f80a4), [`abc2a27`](https://github.com/MeguminBOT/FNF-PsychEngine/commit/abc2a27)):
@@ -144,6 +142,27 @@ Over **80 distinct fixes** in the range — single-purpose commits. Grouped:
   `OptionsState`, `Conductor.judgeNote`, `MenuCharacter`, `Character`,
   `MusicPlayer.updatePlaybackTxt`, `OverlayShader`, `StageData`, and several
   Lua reflection callsites.
+
+### Multithreaded loading — song-load softlocks
+The threaded asset loader (`LoadingState`) could freeze the game indefinitely on
+song load. Reworked across three commits:
+
+- [`d2cab02`](https://github.com/MeguminBOT/FNF-PsychEngine/commit/d2cab02) -- Atomic
+  load counters. The `loaded++` mutex was commented out, so concurrent worker
+  increments were lost and `loaded` never reached `loadMax` — the loader waited
+  forever. Counters now use a dedicated always-alive mutex; `startThreads()` fires
+  exactly once; the thread pool is created once per load (was up to 3×, leaking
+  workers); `requestedBitmaps` is snapshot-swapped under its mutex in `checkLoaded`.
+- [`824a09a`](https://github.com/MeguminBOT/FNF-PsychEngine/commit/824a09a) -- Replaced
+  the lime `Future` chain + per-character thread fan-out + completion latch with one
+  sequential prep task on the pool (no more concurrent pushes into the prepare lists,
+  one threading system). Prep always reaches `startThreads()` even on exception, so a
+  failed prep can no longer leave the loader hung.
+- [`08b781f`](https://github.com/MeguminBOT/FNF-PsychEngine/commit/08b781f) -- Load
+  watchdog: if loading makes zero progress for 30s it force-completes (logging
+  diagnostics, lazy-loading the rest) instead of freezing, on both the loading-screen
+  and the headless busy-wait paths. Pool size capped at 6 (loading is I/O-bound too many threads loading would just be slower) 
+  and the progress bar is guarded against a divide-by-zero.
 
 ### Off-by-one / bounds
 - [`ef81461`](https://github.com/MeguminBOT/FNF-PsychEngine/commit/ef81461) -- `Note.defaultRGB`.
@@ -207,7 +226,6 @@ Over **80 distinct fixes** in the range — single-purpose commits. Grouped:
 ## Performance work
 
 Roughly **30 perf-focused commits**. Highlights:
-
 - [`2ed24c2`](https://github.com/MeguminBOT/FNF-PsychEngine/commit/2ed24c2) -- `FPSCounter` ring buffer + skip redundant `TextField` writes.
 - [`cb90687`](https://github.com/MeguminBOT/FNF-PsychEngine/commit/cb90687) -- `MusicBeatState` only writes `save.fullscreen` on change; inline
   `stepHit` loop.
@@ -232,7 +250,6 @@ Roughly **30 perf-focused commits**. Highlights:
 ---
 
 ## Other notable changes
-
 - [`f0d23af`](https://github.com/MeguminBOT/FNF-PsychEngine/commit/f0d23af) -- Source code formatting normalized across all classes (the bulk
   of the diff line count).
 - [`525c571`](https://github.com/MeguminBOT/FNF-PsychEngine/commit/525c571) -- Updated `hxformat.json` to match.
