@@ -5,4 +5,5 @@ typedef ChartNote = {
 	var lane:Int;
 	var length:Float;
 	var type:String;
+	@:optional var hitsounds:Array<{file:String, volume:Float}>;
 }

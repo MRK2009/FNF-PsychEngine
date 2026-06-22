@@ -65,13 +65,22 @@ class OsuSbObject {
 	}
 }
 
+class OsuSbSample {
+	public var time:Float = 0;
+	public var path:String = '';
+	public var volume:Float = 100;
+
+	public function new() {}
+}
+
 class OsuStoryboard {
 	public var objects:Array<OsuSbObject> = [];
+	public var samples:Array<OsuSbSample> = [];
 
 	public function new() {}
 
 	public function isEmpty():Bool
-		return objects.length < 1;
+		return objects.length < 1 && samples.length < 1;
 
 	public function imagePaths():Array<String> {
 		var seen:Map<String, Bool> = new Map();
@@ -85,12 +94,26 @@ class OsuStoryboard {
 		return out;
 	}
 
+	public function samplePaths():Array<String> {
+		var seen:Map<String, Bool> = new Map();
+		var out:Array<String> = [];
+		for (s in samples)
+			if (s.path.length > 0 && !seen.exists(s.path)) {
+				seen.set(s.path, true);
+				out.push(s.path);
+			}
+		return out;
+	}
+
 	public static function parse(text:String):OsuStoryboard {
 		var sb:OsuStoryboard = new OsuStoryboard();
 		if (text == null)
 			return sb;
 
 		var inEvents:Bool = false;
+		var inVariables:Bool = false;
+		var vars:Map<String, String> = new Map();
+		var varKeys:Array<String> = [];
 		var curObj:OsuSbObject = null;
 		var curContainer:OsuSbCommand = null;
 
@@ -101,13 +124,39 @@ class OsuStoryboard {
 
 			if (line.startsWith('[') && line.endsWith(']')) {
 				inEvents = (line == '[Events]');
+				inVariables = (line == '[Variables]');
+				if (inEvents)
+					varKeys.sort((a, b) -> b.length - a.length);
 				continue;
 			}
+
+			if (inVariables) {
+				var eq:Int = line.indexOf('=');
+				if (eq > 0) {
+					var key:String = line.substring(0, eq).trim();
+					vars.set(key, line.substring(eq + 1));
+					varKeys.push(key);
+				}
+				continue;
+			}
+
 			if (!inEvents)
 				continue;
 
+			if (varKeys.length > 0 && line.indexOf('$') >= 0)
+				for (key in varKeys)
+					line = line.replace(key, vars.get(key));
+
 			var depth:Int = indentDepth(line);
 			if (depth == 0) {
+				if (line.startsWith('Sample')) {
+					var sample:OsuSbSample = parseSampleLine(line);
+					if (sample != null)
+						sb.samples.push(sample);
+					curObj = null;
+					curContainer = null;
+					continue;
+				}
 				curObj = parseObjectLine(line);
 				curContainer = null;
 				if (curObj != null)
@@ -128,7 +177,24 @@ class OsuStoryboard {
 				curContainer.children.push(cmd);
 			}
 		}
+		sb.samples.sort((a, b) -> (a.time < b.time) ? -1 : (a.time > b.time ? 1 : 0));
 		return sb;
+	}
+
+	static function parseSampleLine(line:String):OsuSbSample {
+		var parts:Array<String> = line.split(',');
+		if (parts.length < 4)
+			return null;
+
+		var sample:OsuSbSample = new OsuSbSample();
+		sample.time = parseFloatSafe(parts[1], 0);
+		sample.path = stripQuotes(parts[3]);
+		sample.volume = (parts.length > 4) ? parseFloatSafe(parts[4], 100) : 100;
+		if (sample.volume <= 0)
+			sample.volume = 100;
+		if (sample.volume > 100)
+			sample.volume = 100;
+		return sample.path.length > 0 ? sample : null;
 	}
 
 	public static function frameName(path:String, index:Int):String {

@@ -4,8 +4,8 @@ import backend.patterns.ChartNote;
 import backend.osu.OsuBeatmap.OsuHitObject;
 
 /* This is a fully custom osu!standard beatmap converter.
-   It doesn't work the same way osu! does their conversion to mania, but there are similarities.
-   This means the osu!standard to VSRG charts won't look the same as if it were converted and used in osu!.
+	It doesn't work the same way osu! does their conversion to mania, but there are similarities.
+	This means the osu!standard to VSRG charts won't look the same as if it were converted and used in osu!.
  */
 class OsuStdConverter {
 	static inline var PLAYFIELD_WIDTH:Int = 512;
@@ -13,7 +13,7 @@ class OsuStdConverter {
 	static inline var JACK_GAP_BEATS:Float = 0.5;
 	static inline var MIN_HOLD_BEATS:Float = 0.125;
 
-	public static function convert(map:OsuBeatmap, keyCount:Int):Array<ChartNote> {
+	public static function convert(map:OsuBeatmap, keyCount:Int, withHitsounds:Bool = false):Array<ChartNote> {
 		var notes:Array<ChartNote> = [];
 		if (map == null || keyCount < 1)
 			return notes;
@@ -43,7 +43,13 @@ class OsuStdConverter {
 			else
 				col = pickColumn(mapColumn(obj.posX, keyCount), t, keyCount, lastTimeInColumn, beatLength * JACK_GAP_BEATS);
 
-			notes.push({time: t, lane: col, length: length, type: ""});
+			notes.push({
+				time: t,
+				lane: col,
+				length: length,
+				type: "",
+				hitsounds: withHitsounds ? OsuHitsounds.resolveHit(obj, map.timingPoints) : null
+			});
 			lastTimeInColumn[col] = t + length;
 		}
 

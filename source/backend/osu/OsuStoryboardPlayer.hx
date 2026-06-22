@@ -10,8 +10,11 @@ import openfl.display.BlendMode;
 import backend.Conductor;
 import backend.osu.OsuStoryboard.OsuSbObject;
 import backend.osu.OsuStoryboard.OsuSbCommand;
+import backend.osu.OsuStoryboard.OsuSbSample;
 #if sys
 import openfl.display.BitmapData;
+import openfl.media.Sound;
+import openfl.media.SoundTransform;
 import sys.FileSystem;
 import haxe.io.Path;
 #end
@@ -63,35 +66,52 @@ class OsuStoryboardPlayer extends FlxTypedGroup<OsuSbRuntimeSprite> {
 	static inline var OSU_BASE_W:Float = 640;
 	static inline var OSU_BASE_H:Float = 480;
 
+	static inline var SAMPLE_FIRE_WINDOW:Float = 1000;
+
 	var imageDir:String;
+	var soundDir:String;
 	var timeOffsetMs:Float;
 	var scale:Float;
 	var offsetX:Float;
+	var offsetY:Float;
 	var bitmapCache:Map<String, FlxGraphic> = new Map();
 
-	public function new(storyboard:OsuStoryboard, imageDir:String, timeOffsetMs:Float = 0) {
+	var samples:Array<OsuSbSample> = [];
+	var sampleIdx:Int = 0;
+	var lastT:Float = Math.NEGATIVE_INFINITY;
+	#if sys
+	var sampleCache:Map<String, Sound> = new Map();
+	#end
+
+	public function new(storyboard:OsuStoryboard, imageDir:String, soundDir:String, timeOffsetMs:Float = 0) {
 		super();
 		this.imageDir = imageDir;
+		this.soundDir = soundDir;
 		this.timeOffsetMs = timeOffsetMs;
-		this.scale = FlxG.height / OSU_BASE_H;
-		this.offsetX = (FlxG.width - OSU_BASE_W * scale) / 2;
+		var cam = FlxG.camera;
+		var cover:Float = (cam != null && cam.zoom > 0) ? (cam.height / cam.zoom) / FlxG.height : 1;
+		this.scale = (FlxG.height / OSU_BASE_H) * cover;
+		this.offsetX = FlxG.width / 2 - (OSU_BASE_W / 2) * scale;
+		this.offsetY = FlxG.height / 2 - (OSU_BASE_H / 2) * scale;
 
 		if (storyboard != null)
 			build(storyboard);
 	}
 
 	#if sys
-	public static function fromFile(osbPath:String, imageDir:String, timeOffsetMs:Float = 0):OsuStoryboardPlayer {
+	public static function fromFile(osbPath:String, imageDir:String, soundDir:String, timeOffsetMs:Float = 0):OsuStoryboardPlayer {
 		var text:String = null;
 		try {
 			if (FileSystem.exists(osbPath))
 				text = sys.io.File.getContent(osbPath);
 		} catch (e:Dynamic) {}
-		return new OsuStoryboardPlayer(OsuStoryboard.parse(text), imageDir, timeOffsetMs);
+		return new OsuStoryboardPlayer(OsuStoryboard.parse(text), imageDir, soundDir, timeOffsetMs);
 	}
 	#end
 
 	function build(storyboard:OsuStoryboard) {
+		samples = storyboard.samples;
+
 		// Stable layer ordering: Background, Fail/Pass, Foreground, Overlay (file order within a layer).
 		var ordered:Array<{obj:OsuSbObject, idx:Int}> = [for (i in 0...storyboard.objects.length) {obj: storyboard.objects[i], idx: i}];
 		ordered.sort((a, b) -> {
@@ -135,8 +155,13 @@ class OsuStoryboardPlayer extends FlxTypedGroup<OsuSbRuntimeSprite> {
 		sprite.active = false; // we drive everything from the player's update
 
 		var bounds = obj.timeBounds();
-		sprite.boundsMin = bounds.min;
-		sprite.boundsMax = (obj.isAnimation && sprite.loopForever && bounds.max <= bounds.min) ? Math.POSITIVE_INFINITY : bounds.max;
+		if (obj.commands.length == 0 && layerPriority(obj.layer) == 0) {
+			sprite.boundsMin = Math.NEGATIVE_INFINITY;
+			sprite.boundsMax = Math.POSITIVE_INFINITY;
+		} else {
+			sprite.boundsMin = bounds.min;
+			sprite.boundsMax = (obj.isAnimation && sprite.loopForever && bounds.max <= bounds.min) ? Math.POSITIVE_INFINITY : bounds.max;
+		}
 		sprite.baseX = obj.x;
 		sprite.baseY = obj.y;
 
@@ -218,6 +243,7 @@ class OsuStoryboardPlayer extends FlxTypedGroup<OsuSbRuntimeSprite> {
 
 	override public function update(elapsed:Float) {
 		var t:Float = Conductor.songPosition + timeOffsetMs;
+		updateSamples(t);
 		for (sprite in members) {
 			if (sprite == null)
 				continue;
@@ -230,6 +256,50 @@ class OsuStoryboardPlayer extends FlxTypedGroup<OsuSbRuntimeSprite> {
 		}
 		super.update(elapsed);
 	}
+
+	function updateSamples(t:Float) {
+		if (samples.length < 1)
+			return;
+		if (t < lastT - 5)
+			sampleIdx = 0; // backward jump (restart / seek): replay from the start
+		lastT = t;
+		while (sampleIdx < samples.length && samples[sampleIdx].time <= t) {
+			var s:OsuSbSample = samples[sampleIdx++];
+			if (t - s.time < SAMPLE_FIRE_WINDOW) // skip ones long past a forward seek
+				playSample(s);
+		}
+	}
+
+	function playSample(s:OsuSbSample) {
+		#if sys
+		var snd:Sound = resolveSound(s.path);
+		if (snd == null)
+			return;
+		try {
+			snd.play(0, 0, new SoundTransform((s.volume / 100) * FlxG.sound.volume));
+		} catch (e:Dynamic) {}
+		#end
+	}
+
+	#if sys
+	function resolveSound(osuPath:String):Sound {
+		var key:String = osuPath.toLowerCase();
+		if (sampleCache.exists(key))
+			return sampleCache.get(key);
+
+		var snd:Sound = null;
+		var file:String = resolveFile(soundDir, osuPath);
+		if (file != null) {
+			try {
+				snd = Sound.fromFile(file);
+			} catch (e:Dynamic) {
+				snd = null;
+			}
+		}
+		sampleCache.set(key, snd);
+		return snd;
+	}
+	#end
 
 	function applyAt(s:OsuSbRuntimeSprite, t:Float) {
 		s.alpha = channel(s.chAlpha, t, 1);
@@ -246,7 +316,7 @@ class OsuStoryboardPlayer extends FlxTypedGroup<OsuSbRuntimeSprite> {
 		var osuX:Float = s.chX.length > 0 ? channel(s.chX, t, s.baseX) : s.baseX;
 		var osuY:Float = s.chY.length > 0 ? channel(s.chY, t, s.baseY) : s.baseY;
 		s.x = osuX * scale + offsetX - s.origin.x;
-		s.y = osuY * scale - s.origin.y;
+		s.y = osuY * scale + offsetY - s.origin.y;
 
 		s.angle = channel(s.chRot, t, 0) * 180 / Math.PI;
 
@@ -391,6 +461,10 @@ class OsuStoryboardPlayer extends FlxTypedGroup<OsuSbRuntimeSprite> {
 					g.destroy();
 			bitmapCache.clear();
 		}
+		#if sys
+		if (sampleCache != null)
+			sampleCache.clear();
+		#end
 	}
 
 	function resolveGraphic(osuPath:String):FlxGraphic {
@@ -402,7 +476,7 @@ class OsuStoryboardPlayer extends FlxTypedGroup<OsuSbRuntimeSprite> {
 
 		var graphic:FlxGraphic = null;
 		#if sys
-		var file:String = resolveFile(osuPath);
+		var file:String = resolveFile(imageDir, osuPath);
 		if (file != null) {
 			try {
 				var bmp:BitmapData = BitmapData.fromFile(file);
@@ -420,13 +494,13 @@ class OsuStoryboardPlayer extends FlxTypedGroup<OsuSbRuntimeSprite> {
 	}
 
 	#if sys
-	function resolveFile(osuPath:String):String {
+	function resolveFile(baseDir:String, osuPath:String):String {
 		var rel:String = osuPath.split('\\').join('/');
-		var direct:String = Path.join([imageDir, rel]);
+		var direct:String = Path.join([baseDir, rel]);
 		if (FileSystem.exists(direct))
 			return direct;
 
-		var dir:String = imageDir;
+		var dir:String = baseDir;
 		var parts:Array<String> = rel.split('/');
 		for (i in 0...parts.length) {
 			if (!FileSystem.exists(dir) || !FileSystem.isDirectory(dir))

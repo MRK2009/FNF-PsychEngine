@@ -68,8 +68,12 @@ class OsuParser {
 		if (pair == null)
 			return;
 		switch (pair[0]) {
-			case 'AudioFilename': map.audioFilename = pair[1];
-			case 'Mode': map.mode = parseIntSafe(pair[1], 0);
+			case 'AudioFilename':
+				map.audioFilename = pair[1];
+			case 'Mode':
+				map.mode = parseIntSafe(pair[1], 0);
+			case 'WidescreenStoryboard':
+				map.widescreenStoryboard = (pair[1] == '1');
 		}
 	}
 
@@ -78,12 +82,18 @@ class OsuParser {
 		if (pair == null)
 			return;
 		switch (pair[0]) {
-			case 'Title': if (map.title == 'Unknown' || map.title.length < 1) map.title = pair[1];
+			case 'Title':
+				if (map.title == 'Unknown' || map.title.length < 1)
+					map.title = pair[1];
 			case 'TitleUnicode': // prefer the ASCII Title; ignore
-			case 'Artist': map.artist = pair[1];
-			case 'Creator': map.creator = pair[1];
-			case 'Version': map.version = pair[1];
-			case 'BeatmapSetID': map.beatmapSetId = parseIntSafe(pair[1], -1);
+			case 'Artist':
+				map.artist = pair[1];
+			case 'Creator':
+				map.creator = pair[1];
+			case 'Version':
+				map.version = pair[1];
+			case 'BeatmapSetID':
+				map.beatmapSetId = parseIntSafe(pair[1], -1);
 		}
 	}
 
@@ -92,11 +102,16 @@ class OsuParser {
 		if (pair == null)
 			return;
 		switch (pair[0]) {
-			case 'CircleSize': map.circleSize = parseFloatSafe(pair[1], 4);
-			case 'OverallDifficulty': map.overallDifficulty = parseFloatSafe(pair[1], 5);
-			case 'HPDrainRate': map.hpDrainRate = parseFloatSafe(pair[1], 5);
-			case 'ApproachRate': map.approachRate = parseFloatSafe(pair[1], 5);
-			case 'SliderMultiplier': map.sliderMultiplier = parseFloatSafe(pair[1], 1.4);
+			case 'CircleSize':
+				map.circleSize = parseFloatSafe(pair[1], 4);
+			case 'OverallDifficulty':
+				map.overallDifficulty = parseFloatSafe(pair[1], 5);
+			case 'HPDrainRate':
+				map.hpDrainRate = parseFloatSafe(pair[1], 5);
+			case 'ApproachRate':
+				map.approachRate = parseFloatSafe(pair[1], 5);
+			case 'SliderMultiplier':
+				map.sliderMultiplier = parseFloatSafe(pair[1], 1.4);
 		}
 	}
 
@@ -146,7 +161,10 @@ class OsuParser {
 			time: time,
 			beatLength: beatLength,
 			meter: meter,
-			uninherited: uninherited
+			uninherited: uninherited,
+			sampleSet: parts.length > 3 ? parseIntSafe(parts[3], 0) : 0,
+			sampleIndex: parts.length > 4 ? parseIntSafe(parts[4], 0) : 0,
+			volume: parts.length > 5 ? parseIntSafe(parts[5], 100) : 100
 		});
 	}
 
@@ -176,6 +194,22 @@ class OsuParser {
 			endTime = parseIntSafe(parts[5], time);
 		}
 
+		var hitSound:Int = (parts.length > 4) ? parseIntSafe(parts[4], 0) : 0;
+		var sampleField:String = '';
+		if ((type & OsuBeatmap.TYPE_HOLD) != 0) {
+			// mania hold combines "endTime:normalSet:additionSet:index:volume:filename" in one field.
+			if (parts.length > 5) {
+				var colon:Int = parts[5].indexOf(':');
+				sampleField = (colon >= 0) ? parts[5].substring(colon + 1) : '';
+			}
+		} else if (parts.length > 5) {
+			// hitSample is the trailing field; exclude slider edgeSets (those contain '|').
+			var last:String = parts[parts.length - 1];
+			if (last.indexOf(':') >= 0 && last.indexOf('|') < 0)
+				sampleField = last;
+		}
+		var hs = parseHitSample(sampleField);
+
 		map.hitObjects.push({
 			posX: posX,
 			posY: posY,
@@ -183,8 +217,46 @@ class OsuParser {
 			type: type,
 			endTime: endTime,
 			pixelLength: pixelLength,
-			repeats: repeats
+			repeats: repeats,
+			hitSound: hitSound,
+			sampleNormalSet: hs.normalSet,
+			sampleAdditionSet: hs.additionSet,
+			sampleIndex: hs.index,
+			sampleVolume: hs.volume,
+			sampleFile: hs.file
 		});
+	}
+
+	static function parseHitSample(field:String):{
+		normalSet:Int,
+		additionSet:Int,
+		index:Int,
+		volume:Int,
+		file:String
+	} {
+		var result = {
+			normalSet: 0,
+			additionSet: 0,
+			index: 0,
+			volume: 0,
+			file: ''
+		};
+		if (field == null || field.length < 1)
+			return result;
+		var hs:Array<String> = field.split(':');
+		result.normalSet = parseIntSafe(hs[0], 0);
+		if (hs.length > 1)
+			result.additionSet = parseIntSafe(hs[1], 0);
+		if (hs.length > 2)
+			result.index = parseIntSafe(hs[2], 0);
+		if (hs.length > 3)
+			result.volume = parseIntSafe(hs[3], 0);
+		if (hs.length > 4) {
+			result.file = hs[4];
+			for (i in 5...hs.length)
+				result.file += ':' + hs[i];
+		}
+		return result;
 	}
 
 	static inline function stripQuotes(raw:String):String {

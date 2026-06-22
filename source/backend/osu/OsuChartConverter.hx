@@ -74,22 +74,27 @@ class OsuChartConverter {
 	 * @return The converted song, or `null` if `map` is missing, not mania, or has an
 	 *         unsupported key count.
 	 */
-	public static function convert(map:OsuBeatmap, displayName:String, stageName:String, mimicSV:Bool, quantize:Bool = false, targetKeys:Int = 0):SwagSong {
+	public static function convert(map:OsuBeatmap, displayName:String, stageName:String, mimicSV:Bool, quantize:Bool = false, targetKeys:Int = 0,
+			?hitsoundsOut:Array<{
+			time:Float,
+			sounds:Array<{file:String, volume:Float}>
+		}>):SwagSong {
 		if (map == null)
 			return null;
 
+		var withHs:Bool = hitsoundsOut != null;
 		var keyCount:Int;
 		var chartNotes:Array<ChartNote>;
 		if (map.isMania()) {
 			keyCount = map.keyCount;
 			if (keyCount < 1 || keyCount > 9)
 				return null;
-			chartNotes = maniaNotes(map, keyCount);
+			chartNotes = maniaNotes(map, keyCount, withHs);
 		} else if (map.isStd()) {
 			keyCount = targetKeys;
 			if (keyCount < 1 || keyCount > 9)
 				return null;
-			chartNotes = OsuStdConverter.convert(map, keyCount);
+			chartNotes = OsuStdConverter.convert(map, keyCount, withHs);
 		} else
 			return null;
 
@@ -108,7 +113,7 @@ class OsuChartConverter {
 
 		buildMeasureGrid(bpmPoints, lastTime, sections, sectionStarts, sectionCrochets);
 
-		bucketNotes(chartNotes, quantize, sections, sectionStarts, sectionCrochets);
+		bucketNotes(chartNotes, quantize, sections, sectionStarts, sectionCrochets, hitsoundsOut);
 
 		var firstBpm:Float = 60000 / bpmPoints[0].beatLength;
 		var firstMeter:Int = meterOf(bpmPoints[0]);
@@ -129,7 +134,7 @@ class OsuChartConverter {
 			timeSignature: [firstMeter, 4],
 			keyCount: keyCount
 		};
-	}
+		}
 
 	/**
 	 * Beat length (ms) and sub-beat phase of the song's first sane BPM point.
@@ -179,7 +184,10 @@ class OsuChartConverter {
 					time: 0,
 					beatLength: FALLBACK_BEAT_LENGTH,
 					meter: 4,
-					uninherited: true
+					uninherited: true,
+					sampleSet: 0,
+					sampleIndex: 0,
+					volume: 100
 				}
 			];
 		return points;
@@ -313,17 +321,27 @@ class OsuChartConverter {
 	 * @param sectionStarts Ascending section start times (shifted), used to find each note's section.
 	 * @param sectionCrochets Per-section beat length (ms), used when quantizing.
 	 */
-	static function maniaNotes(map:OsuBeatmap, keyCount:Int):Array<ChartNote> {
+	static function maniaNotes(map:OsuBeatmap, keyCount:Int, withHitsounds:Bool):Array<ChartNote> {
 		var out:Array<ChartNote> = [];
 		for (obj in map.hitObjects) {
 			var column:Int = Std.int(Math.max(0, Math.min(keyCount - 1, Math.floor(obj.posX * keyCount / OSU_PLAYFIELD_WIDTH))));
 			var sustain:Float = (obj.endTime > obj.time) ? (obj.endTime - obj.time) : 0;
-			out.push({time: obj.time, lane: column, length: sustain, type: ""});
+			out.push({
+				time: obj.time,
+				lane: column,
+				length: sustain,
+				type: "",
+				hitsounds: withHitsounds ? OsuHitsounds.resolveHit(obj, map.timingPoints) : null
+			});
 		}
 		return out;
 	}
 
-	static function bucketNotes(notes:Array<ChartNote>, quantize:Bool, sections:Array<SwagSection>, sectionStarts:Array<Float>, sectionCrochets:Array<Float>):Void {
+	static function bucketNotes(notes:Array<ChartNote>, quantize:Bool, sections:Array<SwagSection>, sectionStarts:Array<Float>, sectionCrochets:Array<Float>,
+			?hitsoundsOut:Array<{
+			time:Float,
+			sounds:Array<{file:String, volume:Float}>
+		}>):Void {
 		for (note in notes) {
 			var time:Float = note.time;
 			var endTime:Float = time + note.length;
@@ -335,8 +353,11 @@ class OsuChartConverter {
 			var sustain:Float = (endTime > time) ? (endTime - time) : 0;
 			var index:Int = sectionIndexFor(sectionStarts, time);
 			sections[index].sectionNotes.push([time, note.lane, sustain, note.type]);
+
+			if (hitsoundsOut != null && note.hitsounds != null && note.hitsounds.length > 0)
+				hitsoundsOut.push({time: time, sounds: note.hitsounds});
 		}
-	}
+		}
 
 	/**
 	 * Snaps a time to the nearest clean beat subdivision relative to its section.

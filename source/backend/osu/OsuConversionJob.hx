@@ -110,7 +110,7 @@ class OsuConversionJob {
 
 		report('Finalizing (stage + metadata)...');
 
-		writeStage(hasBg, hasVideo, hasStoryboard);
+		writeStage(hasBg, hasVideo, hasStoryboard, maps[0].widescreenStoryboard);
 		stepDone();
 
 		if (opts.mimicSV)
@@ -121,7 +121,7 @@ class OsuConversionJob {
 
 		report('Done.');
 
-		log('Done. Launch the "${opts.packName}" mod to play "$display".');
+		log('"$display": Done');
 		return true;
 		#else
 		return false;
@@ -190,7 +190,7 @@ class OsuConversionJob {
 
 	function createPackFolders() {
 		packDir = Paths.mods(opts.packName);
-		for (sub in ['', 'data', 'songs', 'images', 'videos', 'stages'])
+		for (sub in ['', 'data', 'songs', 'images', 'videos', 'stages', 'sounds'])
 			OszArchive.ensureDir(sub.length < 1 ? packDir : '$packDir/$sub');
 		ensurePack(opts.packName);
 		ensureBlankCharacters();
@@ -248,6 +248,13 @@ class OsuConversionJob {
 				name: 'Mimic osu! SV',
 				type: 'bool',
 				description: 'Reproduce osu! slider-velocity scrolling.\nOnly affects songs converted with SV enabled.',
+				value: true
+			},
+			{
+				save: 'osu_hitsounds',
+				name: 'Hitsounds',
+				type: 'bool',
+				description: 'Play hitsounds embedded in the beatmap (custom samples only).',
 				value: true
 			}
 		];
@@ -446,11 +453,15 @@ class OsuConversionJob {
 		}
 
 		var imageBase:String = '$packDir/images/${stageName}_sb';
+		var soundBase:String = '$packDir/sounds/${stageName}_sb';
 		var copied:Int = copyStoryboardImages(sb, imageBase);
+		var samplesCopied:Int = copyStoryboardSamples(sb, soundBase);
 		File.copy(osbPath, '$packDir/stages/$stageName.osb');
 
-		log('Storyboard -> ${sb.objects.length} objects, $copied/${sb.imagePaths().length} images copied'
-			+ (audioTrimMs != 0 ? ' (timeline offset ${audioTrimMs}ms to match audio)' : '') + '.');
+		log('Storyboard -> ${sb.objects.length} objects, $copied/${sb.imagePaths().length} images, '
+			+ '$samplesCopied/${sb.samplePaths().length} samples copied'
+			+ (audioTrimMs != 0 ? ' (timeline offset ${audioTrimMs}ms to match audio)' : '')
+			+ '.');
 		stepDone();
 		return true;
 	}
@@ -467,6 +478,23 @@ class OsuConversionJob {
 	function copyStoryboardImages(sb:OsuStoryboard, destBase:String):Int {
 		var copied:Int = 0;
 		for (p in sb.imagePaths()) {
+			var input:String = resolveNested(src.dir, p);
+			if (input == null)
+				continue;
+			var dest:String = Path.join([destBase, p.split('\\').join('/')]);
+			OszArchive.ensureDir(Path.directory(dest));
+			try {
+				File.copy(input, dest);
+				copied++;
+			} catch (e:Dynamic) {}
+		}
+		return copied;
+	}
+
+	/** Copies every audio sample a storyboard references into `destBase`, preserving relative paths. */
+	function copyStoryboardSamples(sb:OsuStoryboard, destBase:String):Int {
+		var copied:Int = 0;
+		for (p in sb.samplePaths()) {
 			var input:String = resolveNested(src.dir, p);
 			if (input == null)
 				continue;
@@ -512,6 +540,8 @@ class OsuConversionJob {
 		var passes:Array<Int> = stdPasses();
 		var total:Int = chartCount();
 		var index:Int = 0;
+		var copiedHit:Map<String, Bool> = new Map();
+		var anyHit:Bool = false;
 
 		for (map in maps) {
 			var keyList:Array<Int> = map.isStd() ? passes : [map.keyCount];
@@ -521,12 +551,16 @@ class OsuConversionJob {
 
 				report('Writing chart ${++index}/$total...');
 
-				var song:SwagSong = OsuChartConverter.convert(map, display, stageName, opts.mimicSV, opts.quantize, keys);
+				var hsOut:Array<{time:Float, sounds:Array<{file:String, volume:Float}>}> = opts.convertHitsounds ? [] : null;
+				var song:SwagSong = OsuChartConverter.convert(map, display, stageName, opts.mimicSV, opts.quantize, keys, hsOut);
 				if (song == null) {
 					log('Chart conversion failed for version "${map.version}" (${keys}K).');
 					stepDone();
 					continue;
 				}
+
+				if (hsOut != null && hsOut.length > 0 && appendHitsoundEvents(song, hsOut, copiedHit))
+					anyHit = true;
 
 				var fileKey:String = uniqueKey(diffKey(map, keys), usedKeys);
 				var fileName:String = '$songKey-$fileKey.json';
@@ -544,12 +578,56 @@ class OsuConversionJob {
 			log('No charts were written.');
 			return null;
 		}
+		if (anyHit) {
+			writeHitsoundScript();
+			log('Hitsounds -> bundled (custom samples found in the beatmap).');
+		} else if (opts.convertHitsounds)
+			log('Hitsounds -> none bundled (this beatmap relies on osu!\'s default skin, which can\'t be shipped).');
 		entries.sort((a, b) -> a.notes - b.notes);
 		return [for (entry in entries) entry.label];
 	}
 
-	function writeStage(hasBg:Bool, hasVideo:Bool, hasStoryboard:Bool) {
-		File.saveContent('$packDir/stages/$stageName.lua', genStageLua(hasBg, hasVideo, hasStoryboard));
+	/** Copies present hitsound samples and appends per-note "Osu Hitsounds" events to the song. */
+	function appendHitsoundEvents(song:SwagSong, hsOut:Array<{time:Float, sounds:Array<{file:String, volume:Float}>}>, copiedHit:Map<String, Bool>):Bool {
+		var hitDir:String = '$packDir/sounds/${stageName}_hit';
+		var added:Bool = false;
+
+		for (entry in hsOut) {
+			var parts:Array<String> = [];
+			for (snd in entry.sounds) {
+				var rel:String = snd.file.split('\\').join('/');
+				if (!copiedHit.exists(rel)) {
+					var ok:Bool = false;
+					var input:String = resolveNested(src.dir, snd.file);
+					if (input != null) {
+						var dest:String = Path.join([hitDir, rel]);
+						OszArchive.ensureDir(Path.directory(dest));
+						try {
+							File.copy(input, dest);
+							ok = true;
+						} catch (e:Dynamic) {}
+					}
+					copiedHit.set(rel, ok);
+				}
+				if (copiedHit.get(rel) == true)
+					parts.push(rel + ':' + Std.int(snd.volume));
+			}
+			if (parts.length > 0) {
+				song.events.push([entry.time, [["Osu Hitsounds", parts.join('|'), ""]]]);
+				added = true;
+			}
+		}
+
+		if (added)
+			song.events.sort((a, b) -> {
+				var ta:Float = a[0], tb:Float = b[0];
+				return (ta < tb) ? -1 : (ta > tb ? 1 : 0);
+			});
+		return added;
+	}
+
+	function writeStage(hasBg:Bool, hasVideo:Bool, hasStoryboard:Bool, widescreen:Bool) {
+		File.saveContent('$packDir/stages/$stageName.lua', genStageLua(hasBg, hasVideo, hasStoryboard, widescreen));
 		OszArchive.ensureDir('$packDir/data/stages');
 		File.saveContent('$packDir/data/stages/$stageName.json', genStageJson());
 	}
@@ -735,8 +813,9 @@ class OsuConversionJob {
 	 * Builds the stage script from discrete blocks joined by a single blank line, so the output
 	 * is consistently formatted whether or not the song has a video.
 	 */
-	function genStageLua(hasBg:Bool, hasVideo:Bool, hasStoryboard:Bool):String {
+	function genStageLua(hasBg:Bool, hasVideo:Bool, hasStoryboard:Bool, widescreen:Bool):String {
 		var anyVisual:Bool = hasBg || hasVideo || hasStoryboard;
+		var letterbox:Bool = hasStoryboard && !widescreen;
 
 		var mod:String = opts.packName;
 
@@ -751,6 +830,8 @@ class OsuConversionJob {
 		var locals:Array<String> = [];
 		if (hasStoryboard)
 			locals.push("local osuSb = nil");
+		if (letterbox)
+			locals.push("local osuLetterbox = nil");
 		if (hasBg)
 			locals.push("local osuBg = nil");
 		if (hasVideo)
@@ -761,16 +842,17 @@ class OsuConversionJob {
 		var sections:Array<String> = [head.join("\n") + (locals.length > 0 ? "\n\n" + locals.join("\n") : "")];
 
 		if (anyVisual) {
-			var post:Array<String> = [];
-			var notStory:String = hasStoryboard ? " and not osuStoryActive" : "";
-			if (hasStoryboard)
-				post.push("\tlocal osuStoryActive = getModSetting('osu_showStory', '" + mod + "')");
+			var post:Array<String> = [
+				"\tlocal osuCover = game.camGame.height / (game.camGame.zoom > 0 and game.camGame.zoom or 1) / FlxG.height"
+			];
 			if (hasBg)
-				post.push(gate("getModSetting('osu_showBackground', '" + mod + "')" + notStory, bgBody()));
+				post.push(gate("getModSetting('osu_showBackground', '" + mod + "')", bgBody()));
 			if (hasVideo)
-				post.push(gate("getModSetting('osu_showVideo', '" + mod + "')" + notStory, videoBody()));
+				post.push(gate("getModSetting('osu_showVideo', '" + mod + "')", videoBody()));
+			if (letterbox)
+				post.push(gate("getModSetting('osu_showStory', '" + mod + "')", letterboxBody()));
 			if (hasStoryboard)
-				post.push(gate("osuStoryActive", storyboardBody()));
+				post.push(gate("getModSetting('osu_showStory', '" + mod + "')", storyboardBody()));
 			post.push("\tlocal osuDimAmount = getModSetting('osu_backgroundDim', '" + mod + "')");
 			post.push(gate("osuDimAmount ~= nil and osuDimAmount > 0", dimBody()));
 			sections.push(wrapFunc("onCreatePost", post));
@@ -805,8 +887,9 @@ class OsuConversionJob {
 	function storyboardBody():String {
 		var osb:String = "mods/" + opts.packName + "/stages/" + stageName + ".osb";
 		var imgDir:String = "mods/" + opts.packName + "/images/" + stageName + "_sb";
+		var sndDir:String = "mods/" + opts.packName + "/sounds/" + stageName + "_sb";
 		return [
-			"\tosuSb = OsuStoryboardPlayer.fromFile('" + osb + "', '" + imgDir + "', " + audioTrimMs + ")",
+			"\tosuSb = OsuStoryboardPlayer.fromFile('" + osb + "', '" + imgDir + "', '" + sndDir + "', " + audioTrimMs + ")",
 			"\tif osuSb ~= nil then game:add(osuSb) end"
 		].join("\n");
 	}
@@ -815,7 +898,7 @@ class OsuConversionJob {
 		return [
 			"\tosuBg = FlxSprite.new(0, 0)",
 			"\tosuBg:loadGraphic(Paths.image('" + stageName + "_bg'))",
-			"\tosuBg:setGraphicSize(FlxG.width, FlxG.height)",
+			"\tosuBg:setGraphicSize(FlxG.width * osuCover, FlxG.height * osuCover)",
 			"\tosuBg:updateHitbox()",
 			"\tosuBg:screenCenter()",
 			"\tosuBg.scrollFactor:set(0, 0)",
@@ -847,12 +930,25 @@ class OsuConversionJob {
 		return [
 			"\tosuDim = FlxSprite.new(0, 0)",
 			"\tosuDim:makeGraphic(1, 1, 0xFF000000)",
-			"\tosuDim.scale:set(FlxG.width, FlxG.height)",
+			"\tosuDim.scale:set(FlxG.width * osuCover, FlxG.height * osuCover)",
 			"\tosuDim:updateHitbox()",
 			"\tosuDim:screenCenter()",
 			"\tosuDim.scrollFactor:set(0, 0)",
 			"\tosuDim.alpha = osuDimAmount",
 			"\tgame:add(osuDim)"
+		].join("\n");
+	}
+
+	/* Black backdrop behind a 4:3 storyboard so its widescreen sides letterbox cleanly. */
+	function letterboxBody():String {
+		return [
+			"\tosuLetterbox = FlxSprite.new(0, 0)",
+			"\tosuLetterbox:makeGraphic(1, 1, 0xFF000000)",
+			"\tosuLetterbox.scale:set(FlxG.width * osuCover, FlxG.height * osuCover)",
+			"\tosuLetterbox:updateHitbox()",
+			"\tosuLetterbox:screenCenter()",
+			"\tosuLetterbox.scrollFactor:set(0, 0)",
+			"\tgame:add(osuLetterbox)"
 		].join("\n");
 	}
 
@@ -887,6 +983,72 @@ class OsuConversionJob {
 		log('SV script -> custom_events/$fileName (osu! slider-velocity scrolling).');
 	}
 
+	function writeHitsoundScript() {
+		OszArchive.ensureDir('$packDir/custom_events');
+		File.saveContent('$packDir/custom_events/Osu Hitsounds.lua', genHitsoundLua());
+	}
+
+	function genHitsoundLua():String {
+		return "-- Auto-generated by the osu! converter (LuaProxy hitsound script).
+-- Plays the beatmap's own hitsound samples on each note hit, read from 'Osu Hitsounds'
+-- events in the chart. Only samples shipped inside the beatmap are bundled.
+
+local ClientPrefs = import('backend.ClientPrefs')
+local Sound = import('openfl.media.Sound')
+local SoundTransform = import('openfl.media.SoundTransform')
+
+local hitMap = {}
+local cache = {}
+local hitDir = ''
+local enabled = false
+
+function onCreatePost()
+	enabled = getModSetting('osu_hitsounds', '"
+			+ opts.packName
+			+ "') ~= false
+	if not enabled then return end
+	hitDir = 'mods/"
+			+ opts.packName
+			+ "/sounds/osu_' .. songPath .. '_hit/'
+
+	local offset = ClientPrefs.data.noteOffset
+	local evs = game.eventNotes
+	if evs == nil then return end
+	for i = 1, #evs do
+		local e = evs[i]
+		if e.event == 'Osu Hitsounds' then
+			hitMap[math.floor((e.strumTime - offset) + 0.5)] = e.value1
+		end
+	end
+end
+
+local function playHits(data)
+	for part in string.gmatch(data, '([^|]+)') do
+		local file, vol = string.match(part, '^(.+):(%d+)$')
+		if file ~= nil then
+			local snd = cache[file]
+			if snd == nil then
+				local ok, s = pcall(function() return Sound.fromFile(hitDir .. file) end)
+				snd = (ok and s) or false
+				cache[file] = snd
+			end
+			if snd then
+				snd:play(0, 0, SoundTransform.new((tonumber(vol) / 100) * FlxG.sound.volume))
+			end
+		end
+	end
+end
+
+function goodNoteHit(id, noteData, noteType, isSustainNote)
+	if not enabled or isSustainNote then return end
+	local note = game.notes.members[id + 1]
+	if note == nil then return end
+	local data = hitMap[math.floor(note.strumTime + 0.5)]
+	if data ~= nil then playHits(data) end
+end
+";
+	}
+
 	function genSvLua():String {
 		return "-- Auto-generated by the osu! converter (LuaProxy SV script).
 -- Reproduces osu!mania slider-velocity scrolling (BPM-independent 'fixed scroll'):
@@ -915,7 +1077,9 @@ end
 function buildTimeline()
 	svTimes, svVels, svCum, count, ready = {}, {}, {}, 0, false
 
-	if getModSetting('osu_mimicSV', '" + opts.packName + "') == false then return end
+	if getModSetting('osu_mimicSV', '"
+			+ opts.packName
+			+ "') == false then return end
 
 	local evs = game.eventNotes
 	if evs == nil then return end
@@ -1040,7 +1204,9 @@ function buildTimeline() {
 	svCum = [];
 	ready = false;
 
-	if (getModSetting('osu_mimicSV', '" + opts.packName + "') == false) return;
+	if (getModSetting('osu_mimicSV', '"
+			+ opts.packName
+			+ "') == false) return;
 
 	if (PlayState.SONG == null || PlayState.SONG.events == null) return;
 	var events = PlayState.SONG.events;

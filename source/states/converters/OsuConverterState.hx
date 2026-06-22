@@ -39,6 +39,7 @@ class OsuConverterState extends MusicBeatState {
 	var bgCheck:PsychUICheckBox;
 	var videoCheck:PsychUICheckBox;
 	var sbCheck:PsychUICheckBox;
+	var hsCheck:PsychUICheckBox;
 	var svCheck:PsychUICheckBox;
 	var svScriptDrop:PsychUIDropDownMenu;
 	var quantizeCheck:PsychUICheckBox;
@@ -283,6 +284,10 @@ class OsuConverterState extends MusicBeatState {
 
 		stdKeysLabel = label(tab, 10, 338, '');
 		updateStdKeysLabel();
+
+		hsCheck = new PsychUICheckBox(10, 364, 'Convert hitsounds', 220);
+		hsCheck.checked = true;
+		tab.add(hsCheck);
 	}
 
 	function addStdKey() {
@@ -468,6 +473,7 @@ class OsuConverterState extends MusicBeatState {
 		opts.videoCodec = codecDrop.selectedLabel;
 		opts.videoExtraArgs = extraInput.text;
 		opts.convertStoryboard = sbCheck.checked;
+		opts.convertHitsounds = hsCheck.checked;
 		opts.mimicSV = svCheck.checked;
 		opts.svScript = OsuConvertDefaults.svScriptValue(svScriptDrop.selectedLabel);
 		opts.quantize = quantizeCheck.checked;

@@ -5,6 +5,9 @@ typedef OsuTimingPoint = {
 	var beatLength:Float;
 	var meter:Int;
 	var uninherited:Bool;
+	var sampleSet:Int;
+	var sampleIndex:Int;
+	var volume:Int;
 }
 
 typedef OsuHitObject = {
@@ -15,6 +18,12 @@ typedef OsuHitObject = {
 	var endTime:Int;
 	var pixelLength:Float;
 	var repeats:Int;
+	var hitSound:Int;
+	var sampleNormalSet:Int;
+	var sampleAdditionSet:Int;
+	var sampleIndex:Int;
+	var sampleVolume:Int;
+	var sampleFile:String;
 }
 
 class OsuBeatmap {
@@ -47,6 +56,7 @@ class OsuBeatmap {
 	public var background:String = null;
 	public var video:String = null;
 	public var videoOffset:Int = 0;
+	public var widescreenStoryboard:Bool = false;
 	public var storyboardLines:Array<String> = [];
 
 	public function new() {}
