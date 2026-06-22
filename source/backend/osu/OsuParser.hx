@@ -7,9 +7,6 @@ using StringTools;
  * Reference: https://osu.ppy.sh/wiki/en/Client/File_formats/osu_%28file_format%29
  */
 class OsuParser {
-	/** Hit-object type bit (value 128) that marks a mania hold/long note. */
-	static inline var HOLD_NOTE_FLAG:Int = 128;
-
 	/**
 	 * Parses raw `.osu` file text into an `OsuBeatmap`.
 	 *
@@ -97,6 +94,9 @@ class OsuParser {
 		switch (pair[0]) {
 			case 'CircleSize': map.circleSize = parseFloatSafe(pair[1], 4);
 			case 'OverallDifficulty': map.overallDifficulty = parseFloatSafe(pair[1], 5);
+			case 'HPDrainRate': map.hpDrainRate = parseFloatSafe(pair[1], 5);
+			case 'ApproachRate': map.approachRate = parseFloatSafe(pair[1], 5);
+			case 'SliderMultiplier': map.sliderMultiplier = parseFloatSafe(pair[1], 1.4);
 		}
 	}
 
@@ -155,22 +155,35 @@ class OsuParser {
 		if (parts.length < 4)
 			return;
 		var posX:Int = parseIntSafe(parts[0], 0);
+		var posY:Int = parseIntSafe(parts[1], 0);
 		var time:Int = parseIntSafe(parts[2], 0);
 		var type:Int = parseIntSafe(parts[3], 0);
 
 		var endTime:Int = -1;
-		if ((type & HOLD_NOTE_FLAG) != 0 && parts.length >= 6) {
-			// mania hold note: params field is "endTime:hitSample..."
+		var pixelLength:Float = 0;
+		var repeats:Int = 1;
+
+		if ((type & OsuBeatmap.TYPE_HOLD) != 0 && parts.length >= 6) {
 			var endField:String = parts[5];
 			var colon:Int = endField.indexOf(':');
 			endTime = parseIntSafe(colon >= 0 ? endField.substring(0, colon) : endField, time);
+		} else if ((type & OsuBeatmap.TYPE_SLIDER) != 0 && parts.length >= 8) {
+			repeats = parseIntSafe(parts[6], 1);
+			if (repeats < 1)
+				repeats = 1;
+			pixelLength = parseFloatSafe(parts[7], 0);
+		} else if ((type & OsuBeatmap.TYPE_SPINNER) != 0 && parts.length >= 6) {
+			endTime = parseIntSafe(parts[5], time);
 		}
 
 		map.hitObjects.push({
 			posX: posX,
+			posY: posY,
 			time: time,
 			type: type,
-			endTime: endTime
+			endTime: endTime,
+			pixelLength: pixelLength,
+			repeats: repeats
 		});
 	}
 

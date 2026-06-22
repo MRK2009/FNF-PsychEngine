@@ -11,6 +11,7 @@ typedef OsuConvertOptions = {
 	var mimicSV:Bool; // emit "Osu SV" events + bundle a script that reproduces osu! SV scrolling
 	var svScript:String; // which bundled SV script to write: "lua" | "hscript"
 	var quantize:Bool; // snap each note to its nearest clean beat subdivision (fixes loose timing)
+	var stdTargetKeys:Array<Int>; // osu!std -> mania: one converted difficulty per keycount in this list
 }
 
 class OsuConvertDefaults {
@@ -27,7 +28,8 @@ class OsuConvertDefaults {
 			convertStoryboard: false,
 			mimicSV: false,
 			svScript: 'lua',
-			quantize: false
+			quantize: false,
+			stdTargetKeys: [4]
 		};
 	}
 

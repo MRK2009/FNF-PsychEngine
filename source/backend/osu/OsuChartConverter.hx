@@ -3,6 +3,7 @@ package backend.osu;
 import backend.Song.SwagSong;
 import backend.Song.SwagSection;
 import backend.osu.OsuBeatmap.OsuTimingPoint;
+import backend.patterns.ChartNote;
 
 /**
  * Converts a parsed osu!mania `OsuBeatmap` into a Psych Engine `SwagSong`.
@@ -73,12 +74,23 @@ class OsuChartConverter {
 	 * @return The converted song, or `null` if `map` is missing, not mania, or has an
 	 *         unsupported key count.
 	 */
-	public static function convert(map:OsuBeatmap, displayName:String, stageName:String, mimicSV:Bool, quantize:Bool = false):SwagSong {
-		if (map == null || !map.isMania())
+	public static function convert(map:OsuBeatmap, displayName:String, stageName:String, mimicSV:Bool, quantize:Bool = false, targetKeys:Int = 0):SwagSong {
+		if (map == null)
 			return null;
 
-		var keyCount:Int = map.keyCount;
-		if (keyCount < 1 || keyCount > 9) // co-op / >9-column maps are unsupported in v1
+		var keyCount:Int;
+		var chartNotes:Array<ChartNote>;
+		if (map.isMania()) {
+			keyCount = map.keyCount;
+			if (keyCount < 1 || keyCount > 9)
+				return null;
+			chartNotes = maniaNotes(map, keyCount);
+		} else if (map.isStd()) {
+			keyCount = targetKeys;
+			if (keyCount < 1 || keyCount > 9)
+				return null;
+			chartNotes = OsuStdConverter.convert(map, keyCount);
+		} else
 			return null;
 
 		var bpmPoints:Array<OsuTimingPoint> = uninheritedTimingPoints(map);
@@ -96,7 +108,7 @@ class OsuChartConverter {
 
 		buildMeasureGrid(bpmPoints, lastTime, sections, sectionStarts, sectionCrochets);
 
-		bucketNotes(map, keyCount, 0, quantize, sections, sectionStarts, sectionCrochets);
+		bucketNotes(chartNotes, quantize, sections, sectionStarts, sectionCrochets);
 
 		var firstBpm:Float = 60000 / bpmPoints[0].beatLength;
 		var firstMeter:Int = meterOf(bpmPoints[0]);
@@ -107,7 +119,7 @@ class OsuChartConverter {
 			events: mimicSV ? scrollSpeedEvents(map, 0) : [],
 			bpm: firstBpm,
 			needsVoices: false,
-			speed: scrollSpeedFromDensity(map),
+			speed: scrollSpeedFromDensity(map, keyCount),
 			offset: 0,
 			player1: BLANK_BF,
 			player2: BLANK_DAD,
@@ -301,13 +313,20 @@ class OsuChartConverter {
 	 * @param sectionStarts Ascending section start times (shifted), used to find each note's section.
 	 * @param sectionCrochets Per-section beat length (ms), used when quantizing.
 	 */
-	static function bucketNotes(map:OsuBeatmap, keyCount:Int, shift:Float, quantize:Bool, sections:Array<SwagSection>, sectionStarts:Array<Float>, sectionCrochets:Array<Float>):Void {
+	static function maniaNotes(map:OsuBeatmap, keyCount:Int):Array<ChartNote> {
+		var out:Array<ChartNote> = [];
 		for (obj in map.hitObjects) {
-			var column:Int = Math.floor(obj.posX * keyCount / OSU_PLAYFIELD_WIDTH);
-			column = Std.int(Math.max(0, Math.min(keyCount - 1, column)));
+			var column:Int = Std.int(Math.max(0, Math.min(keyCount - 1, Math.floor(obj.posX * keyCount / OSU_PLAYFIELD_WIDTH))));
+			var sustain:Float = (obj.endTime > obj.time) ? (obj.endTime - obj.time) : 0;
+			out.push({time: obj.time, lane: column, length: sustain, type: ""});
+		}
+		return out;
+	}
 
-			var time:Float = obj.time - shift;
-			var endTime:Float = (obj.endTime > obj.time) ? (obj.endTime - shift) : time;
+	static function bucketNotes(notes:Array<ChartNote>, quantize:Bool, sections:Array<SwagSection>, sectionStarts:Array<Float>, sectionCrochets:Array<Float>):Void {
+		for (note in notes) {
+			var time:Float = note.time;
+			var endTime:Float = time + note.length;
 			if (quantize) {
 				time = quantizeTime(time, sectionStarts, sectionCrochets);
 				endTime = quantizeTime(endTime, sectionStarts, sectionCrochets);
@@ -315,7 +334,7 @@ class OsuChartConverter {
 
 			var sustain:Float = (endTime > time) ? (endTime - time) : 0;
 			var index:Int = sectionIndexFor(sectionStarts, time);
-			sections[index].sectionNotes.push([time, column, sustain, ""]);
+			sections[index].sectionNotes.push([time, note.lane, sustain, note.type]);
 		}
 	}
 
@@ -474,7 +493,7 @@ class OsuChartConverter {
 	 * @param map The beatmap whose note density drives the scroll speed.
 	 * @return A scroll speed in [1, 4], rounded to two decimals.
 	 */
-	static function scrollSpeedFromDensity(map:OsuBeatmap):Float {
+	static function scrollSpeedFromDensity(map:OsuBeatmap, keyCount:Int):Float {
 		var count:Int = map.hitObjects.length;
 		if (count < 2)
 			return 1;
@@ -485,8 +504,8 @@ class OsuChartConverter {
 			return 1;
 
 		var nps:Float = count / durationSec;
-		if (map.keyCount > 4)
-			nps *= 4 / map.keyCount;
+		if (keyCount > 4)
+			nps *= 4 / keyCount;
 
 		var lowNps:Float = 2.5;
 		var highNps:Float = 13.0;

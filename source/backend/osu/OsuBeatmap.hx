@@ -8,15 +8,23 @@ typedef OsuTimingPoint = {
 }
 
 typedef OsuHitObject = {
-	var posX:Int; // osu! playfield x (0..512), used to derive the mania column
+	var posX:Int;
+	var posY:Int;
 	var time:Int;
 	var type:Int;
-	var endTime:Int; // -1 for a tap note, otherwise the hold/long-note release time
+	var endTime:Int;
+	var pixelLength:Float;
+	var repeats:Int;
 }
 
 class OsuBeatmap {
-	/** Value of `mode` for an osu!mania beatmap (other modes are unsupported here). */
+	public static inline var MODE_STD:Int = 0;
 	public static inline var MODE_MANIA:Int = 3;
+
+	public static inline var TYPE_CIRCLE:Int = 1;
+	public static inline var TYPE_SLIDER:Int = 2;
+	public static inline var TYPE_SPINNER:Int = 8;
+	public static inline var TYPE_HOLD:Int = 128;
 
 	public var audioFilename:String = null;
 	public var mode:Int = 0;
@@ -29,6 +37,9 @@ class OsuBeatmap {
 
 	public var circleSize:Float = 4;
 	public var overallDifficulty:Float = 5;
+	public var hpDrainRate:Float = 5;
+	public var approachRate:Float = 5;
+	public var sliderMultiplier:Float = 1.4;
 
 	public var timingPoints:Array<OsuTimingPoint> = [];
 	public var hitObjects:Array<OsuHitObject> = [];
@@ -52,6 +63,9 @@ class OsuBeatmap {
 
 	public function isMania():Bool
 		return mode == MODE_MANIA;
+
+	public function isStd():Bool
+		return mode == MODE_STD;
 
 	/** Time (ms) of the latest note edge in the map, counting hold-note release times. */
 	public function lastObjectTime():Float {
