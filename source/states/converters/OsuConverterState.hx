@@ -21,8 +21,14 @@ class OsuConverterState extends MusicBeatState {
 	static inline var TMP_ROOT:String = '.osu_tmp';
 	static inline var BAR_W:Int = 500;
 	static inline var FILL_W:Int = 496;
+	static inline var ACCENT:Int = 0xFFFF64C8;
+	static inline var PANEL:Int = 0xFF14141F;
+	static inline var BOX_W:Int = 360;
+	static inline var BOX_H:Int = 470;
 
 	var box:PsychUIBox;
+	var queueText:FlxText;
+	var statusText:FlxText;
 	var fileDialog:FileDialogHandler;
 
 	var pathInput:PsychUIInputText;
@@ -36,9 +42,14 @@ class OsuConverterState extends MusicBeatState {
 	var svCheck:PsychUICheckBox;
 	var svScriptDrop:PsychUIDropDownMenu;
 	var quantizeCheck:PsychUICheckBox;
+	var stdKeyDrop:PsychUIDropDownMenu;
+	var stdKeysLabel:FlxText;
+	var stdKeys:Array<Int> = [4];
 
 	var logText:FlxText;
 	var logLines:Array<String> = [];
+	var logScroll:Float = 0;
+	var logAutoScroll:Bool = true;
 	var selectedPath:String = null;
 	var queuedPaths:Array<String> = []; // batch: multiple dropped/browsed sources, all into one pack
 	var busy:Bool = false;
@@ -61,17 +72,39 @@ class OsuConverterState extends MusicBeatState {
 
 		var bg:FlxSprite = new FlxSprite().loadGraphic(Paths.image('menuDesat'));
 		bg.scrollFactor.set();
-		bg.color = 0xFF1A1A1A;
+		bg.color = 0xFF15151F;
 		add(bg);
 
-		var title:FlxText = new FlxText(0, 14, FlxG.width, 'osu!mania -> Psych Converter', 28);
-		title.setFormat(font(), 28, FlxColor.WHITE, CENTER);
+		var titleBar:FlxSprite = new FlxSprite(0, 0).makeGraphic(FlxG.width, 60, 0xFF1B1B26);
+		titleBar.alpha = 0.92;
+		titleBar.scrollFactor.set();
+		add(titleBar);
+
+		var accentLine:FlxSprite = new FlxSprite(0, 60).makeGraphic(FlxG.width, 3, ACCENT);
+		accentLine.scrollFactor.set();
+		add(accentLine);
+
+		var title:FlxText = new FlxText(0, 8, FlxG.width, 'osu! -> Psych Converter', 30);
+		title.setFormat(font(), 30, FlxColor.WHITE, CENTER, OUTLINE, FlxColor.BLACK);
 		title.scrollFactor.set();
 		add(title);
 
-		box = new PsychUIBox(FlxG.width - 380, 70, 360, 470, ['Input', 'Options', 'Log']);
+		var subtitle:FlxText = new FlxText(0, 40, FlxG.width, 'mania & std beatmaps to Friday Night Funkin', 14);
+		subtitle.setFormat(font(), 14, 0xFFB7B7C9, CENTER);
+		subtitle.scrollFactor.set();
+		add(subtitle);
+
+		buildDropZone();
+
+		box = new PsychUIBox(FlxG.width - 380, 80, BOX_W, BOX_H, ['Input', 'Options', 'Log']);
+		box.canMove = box.canMinimize = true;
 		box.scrollFactor.set();
 		add(box);
+
+		statusText = new FlxText(12, FlxG.height - 26, FlxG.width - 24, 'ESC: back to Converters menu', 13);
+		statusText.setFormat(font(), 13, 0xFFB7B7C9, LEFT, OUTLINE, FlxColor.BLACK);
+		statusText.scrollFactor.set();
+		add(statusText);
 
 		buildInputTab();
 		buildOptionsTab();
@@ -97,6 +130,81 @@ class OsuConverterState extends MusicBeatState {
 		field.setFormat(font(), size, FlxColor.WHITE);
 		tab.add(field);
 		return field;
+	}
+
+	function buildDropZone() {
+		var px:Int = 40, py:Int = 80, pw:Int = 820, ph:Int = 430;
+
+		var border:FlxSprite = new FlxSprite(px, py).makeGraphic(pw, ph, ACCENT);
+		border.alpha = 0.5;
+		border.scrollFactor.set();
+		add(border);
+
+		var inner:FlxSprite = new FlxSprite(px + 3, py + 3).makeGraphic(pw - 6, ph - 6, PANEL);
+		inner.alpha = 0.92;
+		inner.scrollFactor.set();
+		add(inner);
+
+		var heading:FlxText = new FlxText(px, py + 64, pw, 'DROP BEATMAP HERE', 42);
+		heading.setFormat(font(), 42, FlxColor.WHITE, CENTER, OUTLINE, FlxColor.BLACK);
+		heading.scrollFactor.set();
+		add(heading);
+
+		var hint:FlxText = new FlxText(px, py + 126, pw, 'drag a .osz, .osu, or a folder anywhere on the window', 17);
+		hint.setFormat(font(), 17, 0xFFB7B7C9, CENTER);
+		hint.scrollFactor.set();
+		add(hint);
+
+		var hint2:FlxText = new FlxText(px, py + 152, pw, 'or use Browse in the Input tab', 14);
+		hint2.setFormat(font(), 14, 0xFF8A8AA0, CENTER);
+		hint2.scrollFactor.set();
+		add(hint2);
+
+		var divider:FlxSprite = new FlxSprite(px + 24, py + 200).makeGraphic(pw - 48, 2, ACCENT);
+		divider.alpha = 0.4;
+		divider.scrollFactor.set();
+		add(divider);
+
+		var qHead:FlxText = new FlxText(px + 24, py + 210, pw - 48, 'QUEUE', 15);
+		qHead.setFormat(font(), 15, ACCENT, LEFT);
+		qHead.scrollFactor.set();
+		add(qHead);
+
+		queueText = new FlxText(px + 24, py + 234, pw - 48, '', 14);
+		queueText.setFormat(font(), 14, FlxColor.WHITE, LEFT);
+		queueText.wordWrap = true;
+		queueText.scrollFactor.set();
+		add(queueText);
+
+		var clearBtn:PsychUIButton = new PsychUIButton(px + 24, py + ph - 42, 'Clear queue', function() clearQueue(), 130, 28);
+		clearBtn.scrollFactor.set();
+		add(clearBtn);
+
+		updateQueueText();
+	}
+
+	function clearQueue() {
+		queuedPaths = [];
+		if (pathInput != null)
+			pathInput.text = '';
+		updateQueueText();
+		log('Queue cleared.');
+	}
+
+	function updateQueueText() {
+		if (queueText == null)
+			return;
+		if (queuedPaths.length < 1) {
+			queueText.text = 'nothing queued yet';
+			return;
+		}
+		var lines:Array<String> = [];
+		var max:Int = Std.int(Math.min(queuedPaths.length, 10));
+		for (i in 0...max)
+			lines.push('${i + 1}.  ' + haxe.io.Path.withoutDirectory(queuedPaths[i]));
+		if (queuedPaths.length > max)
+			lines.push('... and ${queuedPaths.length - max} more');
+		queueText.text = lines.join('\n');
 	}
 
 	function buildInputTab() {
@@ -161,14 +269,87 @@ class OsuConverterState extends MusicBeatState {
 
 		quantizeCheck = new PsychUICheckBox(10, 282, 'Quantize notes (auto-snap timing)', 260);
 		tab.add(quantizeCheck);
+
+		label(tab, 10, 312, 'osu!std -> mania:');
+		stdKeyDrop = new PsychUIDropDownMenu(140, 308, ['4K', '5K', '6K', '7K', '8K', '9K'], function(index, name) {}, 80);
+		stdKeyDrop.selectedLabel = '4K';
+		tab.add(stdKeyDrop);
+
+		var addKeyBtn:PsychUIButton = new PsychUIButton(226, 308, '+', function() addStdKey(), 30, 22);
+		tab.add(addKeyBtn);
+
+		var resetKeyBtn:PsychUIButton = new PsychUIButton(262, 308, 'Reset', function() resetStdKeys(), 72, 22);
+		tab.add(resetKeyBtn);
+
+		stdKeysLabel = label(tab, 10, 338, '');
+		updateStdKeysLabel();
+	}
+
+	function addStdKey() {
+		var k:Int = parseKeyLabel(stdKeyDrop.selectedLabel);
+		if (k >= 1 && !stdKeys.contains(k)) {
+			stdKeys.push(k);
+			stdKeys.sort((a, b) -> a - b);
+			updateStdKeysLabel();
+		}
+	}
+
+	function resetStdKeys() {
+		stdKeys = [4];
+		updateStdKeysLabel();
+	}
+
+	function updateStdKeysLabel() {
+		if (stdKeysLabel != null)
+			stdKeysLabel.text = 'Generates: ' + (stdKeys.length > 0 ? [for (k in stdKeys) '${k}K'].join(', ') : '(none -> 4K)');
+	}
+
+	function parseKeyLabel(label:String):Int {
+		var n:Null<Int> = Std.parseInt(label.split('K')[0]);
+		return (n == null) ? 4 : n;
 	}
 
 	function buildLogTab() {
-		var tab = box.getTab('Log').menu;
-		logText = new FlxText(8, 8, 336, '', 11);
+		logText = new FlxText(0, 0, BOX_W - 20, '', 11);
 		logText.setFormat(font(), 11, FlxColor.WHITE);
 		logText.wordWrap = true;
-		tab.add(logText);
+		logText.scrollFactor.set();
+		logText.visible = false;
+		add(logText);
+	}
+
+	function updateLogView() {
+		if (logText == null || box == null)
+			return;
+
+		var show:Bool = !box.isMinimized && box.selectedIndex == 2;
+		logText.visible = show;
+		if (!show)
+			return;
+
+		var viewTop:Float = box.y + box.tabHeight + 8;
+		var viewH:Float = BOX_H - box.tabHeight - 16;
+		var maxScroll:Float = Math.max(0, logText.height - viewH);
+
+		var mx:Float = FlxG.mouse.x, my:Float = FlxG.mouse.y;
+		var overBox:Bool = mx >= box.x && mx <= box.x + BOX_W && my >= box.y && my <= box.y + BOX_H;
+		if (overBox && FlxG.mouse.wheel != 0) {
+			logScroll -= FlxG.mouse.wheel * 32;
+			logAutoScroll = false;
+		}
+
+		if (logAutoScroll)
+			logScroll = maxScroll;
+		if (logScroll < 0)
+			logScroll = 0;
+		if (logScroll > maxScroll)
+			logScroll = maxScroll;
+		if (logScroll >= maxScroll - 1)
+			logAutoScroll = true;
+
+		logText.x = box.x + 10;
+		logText.y = viewTop - logScroll;
+		logText.clipRect = new flixel.math.FlxRect(0, logScroll, logText.width, viewH);
 	}
 
 	function buildProgressBar() {
@@ -176,15 +357,15 @@ class OsuConverterState extends MusicBeatState {
 		var barY:Float = FlxG.height - 86;
 
 		progLabel = new FlxText(0, barY - 30, FlxG.width, '', 16);
-		progLabel.setFormat(font(), 16, FlxColor.WHITE, CENTER);
+		progLabel.setFormat(font(), 16, FlxColor.WHITE, CENTER, OUTLINE, FlxColor.BLACK);
 		progLabel.scrollFactor.set();
 		add(progLabel);
 
-		progBarBG = new FlxSprite(barX, barY).makeGraphic(BAR_W, 24, 0xFF1E1E1E);
+		progBarBG = new FlxSprite(barX, barY).makeGraphic(BAR_W, 24, 0xFF0E0E16);
 		progBarBG.scrollFactor.set();
 		add(progBarBG);
 
-		progBarFill = new FlxSprite(barX + 2, barY + 2).makeGraphic(FILL_W, 20, 0xFF55CC55);
+		progBarFill = new FlxSprite(barX + 2, barY + 2).makeGraphic(FILL_W, 20, ACCENT);
 		progBarFill.scrollFactor.set();
 		add(progBarFill);
 
@@ -258,6 +439,7 @@ class OsuConverterState extends MusicBeatState {
 			queuedPaths.push(path); // drops/browses accumulate so several beatmaps batch at once
 		if (pathInput != null)
 			pathInput.text = (queuedPaths.length > 1) ? '${queuedPaths.length} sources queued' : path;
+		updateQueueText();
 		log('Added: $path (${queuedPaths.length} queued)');
 	}
 
@@ -289,9 +471,13 @@ class OsuConverterState extends MusicBeatState {
 		opts.mimicSV = svCheck.checked;
 		opts.svScript = OsuConvertDefaults.svScriptValue(svScriptDrop.selectedLabel);
 		opts.quantize = quantizeCheck.checked;
+		opts.stdTargetKeys = stdKeys.copy();
 
 		queuedPaths = []; // consumed by this run
+		updateQueueText();
 		logLines = [];
+		logScroll = 0;
+		logAutoScroll = true;
 		box.selectedIndex = 2; // jump to the Log tab
 		log('Starting conversion...');
 
@@ -377,9 +563,12 @@ class OsuConverterState extends MusicBeatState {
 		Mods.updatedOnState = false; // re-scan mods so the new pack shows up
 		#end
 		switch (result) {
-			case 'cancel': log('Conversion stopped.');
-			case 'ok': log('Conversion complete.');
-			default: log('Conversion finished with errors (see log above).');
+			case 'cancel':
+				log('Conversion stopped.');
+			case 'ok':
+				log('Conversion complete.');
+			default:
+				log('Conversion finished with errors (see log above).');
 		}
 	}
 
@@ -422,6 +611,7 @@ class OsuConverterState extends MusicBeatState {
 			MusicBeatState.switchState(new MasterConverterState());
 		}
 		super.update(elapsed);
+		updateLogView();
 	}
 
 	override function destroy() {
