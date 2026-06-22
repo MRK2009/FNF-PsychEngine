@@ -188,6 +188,11 @@
 	<haxeflag name="--macro" value="allowPackage('flash')" />
 	<haxeflag name="--macro" value="include('my.pack')" />
 
+	<!-- osu! storyboard runtime: only referenced from generated Lua stages via import(), so force-compile it
+	     (keep = compile even if unreferenced AND survive DCE; include() takes a package, not a class).
+	     Belt-and-suspenders: OsuConversionJob also holds a hard @:keep reference to it. -->
+	<haxeflag name="--macro" value="keep('backend.osu.OsuStoryboardPlayer')" if="desktop" />
+
 	<!-- _________________________________ Custom _______________________________ -->
 
 	<assets path='art/icons/iconOG.png' rename='icon.png' if="linux || mac" />

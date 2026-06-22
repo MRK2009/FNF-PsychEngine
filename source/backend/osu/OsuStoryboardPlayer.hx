@@ -383,6 +383,16 @@ class OsuStoryboardPlayer extends FlxTypedGroup<OsuSbRuntimeSprite> {
 		return (i < 0) ? 0 : (i > 255 ? 255 : i);
 	}
 
+	override public function destroy() {
+		super.destroy();
+		if (bitmapCache != null) {
+			for (g in bitmapCache)
+				if (g != null)
+					g.destroy();
+			bitmapCache.clear();
+		}
+	}
+
 	function resolveGraphic(osuPath:String):FlxGraphic {
 		if (osuPath == null || osuPath.length < 1)
 			return null;
@@ -396,8 +406,10 @@ class OsuStoryboardPlayer extends FlxTypedGroup<OsuSbRuntimeSprite> {
 		if (file != null) {
 			try {
 				var bmp:BitmapData = BitmapData.fromFile(file);
-				if (bmp != null)
+				if (bmp != null) {
 					graphic = FlxGraphic.fromBitmapData(bmp, false, key, false);
+					graphic.destroyOnNoUse = false;
+				}
 			} catch (e:Dynamic) {
 				graphic = null;
 			}
