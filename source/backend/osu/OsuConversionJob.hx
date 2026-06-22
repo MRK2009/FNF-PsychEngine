@@ -21,6 +21,14 @@ using StringTools;
  * possible (a missing ffmpeg skips audio/video but still writes charts).
  */
 class OsuConversionJob {
+	/**
+	 * The play-time storyboard runtime is only ever invoked from a generated Lua `import()`
+	 * string -- not a Haxe reference -- so without this it would never be compiled into the
+	 * engine and the import would return nil at runtime. Touching the type here forces it in
+	 * (with `@:keep` on the class so DCE keeps it).
+	 */
+	@:keep static var _forceStoryboardRuntime:Class<OsuStoryboardPlayer> = OsuStoryboardPlayer;
+
 	var log:String->Void;
 	var progress:Float->String->Void;
 	var isCancelled:Void->Bool;
@@ -92,8 +100,9 @@ class OsuConversionJob {
 		if (cancelledNow())
 			return false;
 
-		if (opts.convertStoryboard)
-			log('Storyboard conversion is deferred in this version - skipped.');
+		var hasStoryboard:Bool = convertStoryboard();
+		if (cancelledNow())
+			return false;
 
 		var versions:Array<String> = writeCharts();
 		if (versions == null)
@@ -101,7 +110,8 @@ class OsuConversionJob {
 
 		report('Finalizing (stage + metadata)...');
 
-		writeStage(hasBg, hasVideo);
+		// A storyboard draws its own background (and replaces video), so the static bg/video are dropped.
+		writeStage(hasBg && !hasStoryboard, hasVideo && !hasStoryboard, hasStoryboard);
 		stepDone();
 
 		if (opts.mimicSV)
@@ -157,7 +167,8 @@ class OsuConversionJob {
 		var audio:Int = (maps[0].audioFilename != null) ? 1 : 0;
 		var bg:Int = opts.convertBackground ? 1 : 0;
 		var video:Int = opts.convertVideo ? 1 : 0;
-		return audio + bg + video + maps.length + 2; // +2 = stage + metadata
+		var storyboard:Int = opts.convertStoryboard ? 1 : 0;
+		return audio + bg + video + storyboard + maps.length + 2; // +2 = stage + metadata
 	}
 
 	function convertAudio() {
@@ -301,6 +312,92 @@ class OsuConversionJob {
 		return hasVideo;
 	}
 
+	/**
+	 * Parses the mapset's `.osb`, copies the images it references into the modpack, and ships
+	 * the `.osb` alongside the stage so the generated stage script can play it at runtime. The
+	 * storyboard timeline isn't rewritten -- the runtime is given `audioTrimMs` so it tracks the
+	 * same audio shift the charts got. Returns whether a storyboard was written.
+	 */
+	function convertStoryboard():Bool {
+		if (!opts.convertStoryboard)
+			return false;
+
+		report('Converting storyboard...');
+
+		var osbPath:String = findOsb(src.dir);
+		if (osbPath == null) {
+			log('No .osb storyboard found in the mapset.');
+			stepDone();
+			return false;
+		}
+
+		var sb:OsuStoryboard = OsuStoryboard.parse(File.getContent(osbPath));
+		if (sb.isEmpty()) {
+			log('Storyboard has no sprites - skipped.');
+			stepDone();
+			return false;
+		}
+
+		var imageBase:String = '$packDir/images/${stageName}_sb';
+		var copied:Int = copyStoryboardImages(sb, imageBase);
+		File.copy(osbPath, '$packDir/stages/$stageName.osb');
+
+		log('Storyboard -> ${sb.objects.length} objects, $copied/${sb.imagePaths().length} images copied'
+			+ (audioTrimMs != 0 ? ' (timeline offset ${audioTrimMs}ms to match audio)' : '') + '.');
+		stepDone();
+		return true;
+	}
+
+	/** First `.osb` file in the mapset directory, or null. */
+	function findOsb(dir:String):String {
+		for (entry in FileSystem.readDirectory(dir))
+			if (entry.toLowerCase().endsWith('.osb'))
+				return Path.join([dir, entry]);
+		return null;
+	}
+
+	/** Copies every image a storyboard references into `destBase`, preserving relative paths. */
+	function copyStoryboardImages(sb:OsuStoryboard, destBase:String):Int {
+		var copied:Int = 0;
+		for (p in sb.imagePaths()) {
+			var input:String = resolveNested(src.dir, p);
+			if (input == null)
+				continue;
+			var dest:String = Path.join([destBase, p.split('\\').join('/')]);
+			OszArchive.ensureDir(Path.directory(dest));
+			try {
+				File.copy(input, dest);
+				copied++;
+			} catch (e:Dynamic) {}
+		}
+		return copied;
+	}
+
+	/** Resolves a (possibly nested, backslash) relative path under `root`, case-insensitively. */
+	function resolveNested(root:String, osuPath:String):String {
+		var rel:String = osuPath.split('\\').join('/');
+		var direct:String = Path.join([root, rel]);
+		if (FileSystem.exists(direct))
+			return direct;
+
+		var dir:String = root;
+		for (part in rel.split('/')) {
+			if (!FileSystem.exists(dir) || !FileSystem.isDirectory(dir))
+				return null;
+			var want:String = part.toLowerCase();
+			var found:String = null;
+			for (entry in FileSystem.readDirectory(dir))
+				if (entry.toLowerCase() == want) {
+					found = entry;
+					break;
+				}
+			if (found == null)
+				return null;
+			dir = Path.join([dir, found]);
+		}
+		return FileSystem.exists(dir) ? dir : null;
+	}
+
 	function writeCharts():Array<String> {
 		OszArchive.ensureDir('$packDir/data/$songKey');
 		var entries:Array<{label:String, notes:Int}> = [];
@@ -339,8 +436,8 @@ class OsuConversionJob {
 		return [for (entry in entries) entry.label];
 	}
 
-	function writeStage(hasBg:Bool, hasVideo:Bool) {
-		File.saveContent('$packDir/stages/$stageName.lua', genStageLua(hasBg, hasVideo));
+	function writeStage(hasBg:Bool, hasVideo:Bool, hasStoryboard:Bool) {
+		File.saveContent('$packDir/stages/$stageName.lua', genStageLua(hasBg, hasVideo, hasStoryboard));
 		OszArchive.ensureDir('$packDir/data/stages');
 		File.saveContent('$packDir/data/stages/$stageName.json', genStageJson());
 	}
@@ -494,15 +591,18 @@ class OsuConversionJob {
 	 * Builds the stage script from discrete blocks joined by a single blank line, so the output
 	 * is consistently formatted whether or not the song has a video.
 	 */
-	function genStageLua(hasBg:Bool, hasVideo:Bool):String {
-		var head:Array<String> = [
-			'-- Auto-generated by the osu! converter for "$songKey" (LuaProxy stage).',
-			"local FlxSprite = import('flixel.FlxSprite')"
-		];
+	function genStageLua(hasBg:Bool, hasVideo:Bool, hasStoryboard:Bool):String {
+		var head:Array<String> = ['-- Auto-generated by the osu! converter for "$songKey" (LuaProxy stage).'];
+		if (hasBg)
+			head.push("local FlxSprite = import('flixel.FlxSprite')");
 		if (hasVideo)
 			head.push("local FlxVideoSprite = import('hxvlc.flixel.FlxVideoSprite')");
+		if (hasStoryboard)
+			head.push("local OsuStoryboardPlayer = import('backend.osu.OsuStoryboardPlayer')");
 
 		var locals:Array<String> = [];
+		if (hasStoryboard)
+			locals.push("local osuSb = nil");
 		if (hasBg)
 			locals.push("local osuBg = nil");
 		if (hasVideo)
@@ -512,8 +612,10 @@ class OsuConversionJob {
 
 		var sections:Array<String> = [head.join("\n") + "\n\n" + locals.join("\n")];
 
-		/* onCreate: background (+ dim here only when there's no video to sit between them). */
+		/* onCreate: storyboard (draws its own background), or static background (+ dim without video). */
 		var create:Array<String> = [];
+		if (hasStoryboard)
+			create.push(storyboardBody());
 		if (hasBg)
 			create.push(bgBody());
 		if (hasBg && !hasVideo)
@@ -541,6 +643,16 @@ class OsuConversionJob {
 	function wrapFunc(name:String, bodies:Array<String>):String {
 		var inner:String = bodies.join("\n\n");
 		return (inner.length > 0) ? 'function $name()\n$inner\nend' : 'function $name()\nend';
+	}
+
+	/* Boots the native storyboard runtime from the shipped `.osb`; it renders on camGame behind the notes. */
+	function storyboardBody():String {
+		var osb:String = "mods/" + opts.packName + "/stages/" + stageName + ".osb";
+		var imgDir:String = "mods/" + opts.packName + "/images/" + stageName + "_sb";
+		return [
+			"\tosuSb = OsuStoryboardPlayer.fromFile('" + osb + "', '" + imgDir + "', " + audioTrimMs + ")",
+			"\tif osuSb ~= nil then game:add(osuSb) end"
+		].join("\n");
 	}
 
 	function bgBody():String {

@@ -148,7 +148,7 @@ class OsuConverterState extends MusicBeatState {
 		extraInput = new PsychUIInputText(10, 170, 330, '', 8);
 		tab.add(extraInput);
 
-		sbCheck = new PsychUICheckBox(10, 198, 'Convert storyboard (deferred)', 220);
+		sbCheck = new PsychUICheckBox(10, 198, 'Convert storyboard (experimental)', 220);
 		tab.add(sbCheck);
 
 		svCheck = new PsychUICheckBox(10, 224, 'Mimic SV (osu! scroll behavior)', 220);

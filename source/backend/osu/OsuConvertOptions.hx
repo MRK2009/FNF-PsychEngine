@@ -7,7 +7,7 @@ typedef OsuConvertOptions = {
 	var convertVideo:Bool;
 	var videoCodec:String; // "vp9" | "av1"
 	var videoExtraArgs:String; // raw extra ffmpeg args appended to the video encode
-	var convertStoryboard:Bool; // v1: stub (logged, not emitted)
+	var convertStoryboard:Bool; // parse the .osb, copy its images, and play it via the native storyboard runtime
 	var mimicSV:Bool; // emit "Osu SV" events + bundle a script that reproduces osu! SV scrolling
 	var svScript:String; // which bundled SV script to write: "lua" | "hscript"
 	var quantize:Bool; // snap each note to its nearest clean beat subdivision (fixes loose timing)
