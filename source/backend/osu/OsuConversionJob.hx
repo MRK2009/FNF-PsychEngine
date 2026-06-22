@@ -72,9 +72,9 @@ class OsuConversionJob {
 			return false;
 		}
 
-		maps = parseManiaCharts();
+		maps = parseCharts();
 		if (maps.length < 1) {
-			log('No supported osu!mania (1K-9K) difficulties found.');
+			log('No supported osu! difficulties found (only osu!mania and osu!std are supported).');
 			return false;
 		}
 
@@ -110,8 +110,7 @@ class OsuConversionJob {
 
 		report('Finalizing (stage + metadata)...');
 
-		// A storyboard draws its own background (and replaces video), so the static bg/video are dropped.
-		writeStage(hasBg && !hasStoryboard, hasVideo && !hasStoryboard, hasStoryboard);
+		writeStage(hasBg, hasVideo, hasStoryboard);
 		stepDone();
 
 		if (opts.mimicSV)
@@ -131,19 +130,53 @@ class OsuConversionJob {
 
 	/* -- Conversion -- */
 	#if sys
-	function parseManiaCharts():Array<OsuBeatmap> {
+	function parseCharts():Array<OsuBeatmap> {
 		var result:Array<OsuBeatmap> = [];
 		for (osuPath in src.osuFiles) {
 			var map:OsuBeatmap = OsuParser.parse(File.getContent(osuPath));
 			var fileName:String = Path.withoutDirectory(osuPath);
-			if (!map.isMania())
-				log('Skipped (not osu!mania): $fileName');
-			else if (map.keyCount > 9)
-				log('Skipped (${map.keyCount}K co-op, >9 columns): $fileName');
-			else
+			if (map.isMania()) {
+				if (map.keyCount > 9)
+					log('Skipped (${map.keyCount}K co-op, >9 columns): $fileName');
+				else
+					result.push(map);
+			} else if (map.isStd())
 				result.push(map);
+			else
+				log('Skipped (unsupported mode, only std/mania): $fileName');
+		}
+
+		var hasMania:Bool = false;
+		for (map in result)
+			if (map.isMania()) {
+				hasMania = true;
+				break;
+			}
+		if (hasMania) {
+			var maniaOnly:Array<OsuBeatmap> = [];
+			for (map in result) {
+				if (map.isStd())
+					log('Skipped osu!std "${map.version}" (mapset already has osu!mania difficulties).');
+				else
+					maniaOnly.push(map);
+			}
+			result = maniaOnly;
 		}
 		return result;
+	}
+
+	function stdPasses():Array<Int> {
+		var out:Array<Int> = [];
+		var seen:Map<Int, Bool> = new Map();
+		if (opts.stdTargetKeys != null)
+			for (k in opts.stdTargetKeys)
+				if (k >= 1 && k <= 9 && !seen.exists(k)) {
+					seen.set(k, true);
+					out.push(k);
+				}
+		if (out.length < 1)
+			out.push(4);
+		return out;
 	}
 
 	function resolveNames() {
@@ -161,6 +194,72 @@ class OsuConversionJob {
 			OszArchive.ensureDir(sub.length < 1 ? packDir : '$packDir/$sub');
 		ensurePack(opts.packName);
 		ensureBlankCharacters();
+		writeSettings();
+	}
+
+	function writeSettings() {
+		var path:String = '$packDir/data/settings.json';
+		if (FileSystem.exists(path) && isOptionArray(path))
+			return;
+		OszArchive.ensureDir('$packDir/data');
+		var entries:Array<Dynamic> = [
+			{
+				save: 'osu_header',
+				name: '-OSU! SETTINGS-',
+				type: 'string',
+				description: 'Options for osu! converts',
+				value: ' ',
+				options: [' ', ' ', ' ', ' ']
+			},
+			{
+				save: 'osu_showBackground',
+				name: 'Show Background',
+				type: 'bool',
+				description: 'Show the converted song background image.',
+				value: true
+			},
+			{
+				save: 'osu_showStory',
+				name: 'Show Storyboard',
+				type: 'bool',
+				description: 'Play the converted osu! storyboard, when the song has one.',
+				value: true
+			},
+			{
+				save: 'osu_showVideo',
+				name: 'Show Video',
+				type: 'bool',
+				description: 'Play the converted background video, when the song has one.',
+				value: true
+			},
+			{
+				save: 'osu_backgroundDim',
+				name: 'Background Dim',
+				type: 'float',
+				description: 'Darken the background / video / storyboard.\n0 = none, 1 = fully black.',
+				value: 0.5,
+				min: 0,
+				max: 1,
+				step: 0.05,
+				decimals: 2
+			},
+			{
+				save: 'osu_mimicSV',
+				name: 'Mimic osu! SV',
+				type: 'bool',
+				description: 'Reproduce osu! slider-velocity scrolling.\nOnly affects songs converted with SV enabled.',
+				value: true
+			}
+		];
+		File.saveContent(path, haxe.Json.stringify(entries, null, '\t'));
+	}
+
+	function isOptionArray(path:String):Bool {
+		try {
+			return Std.isOfType(haxe.Json.parse(File.getContent(path)), Array);
+		} catch (e:Dynamic) {
+			return false;
+		}
 	}
 
 	function countSteps():Int {
@@ -168,7 +267,15 @@ class OsuConversionJob {
 		var bg:Int = opts.convertBackground ? 1 : 0;
 		var video:Int = opts.convertVideo ? 1 : 0;
 		var storyboard:Int = opts.convertStoryboard ? 1 : 0;
-		return audio + bg + video + storyboard + maps.length + 2; // +2 = stage + metadata
+		return audio + bg + video + storyboard + chartCount() + 2; // +2 = stage + metadata
+	}
+
+	function chartCount():Int {
+		var passes:Int = stdPasses().length;
+		var count:Int = 0;
+		for (map in maps)
+			count += map.isStd() ? passes : 1;
+		return count;
 	}
 
 	function convertAudio() {
@@ -402,30 +509,35 @@ class OsuConversionJob {
 		OszArchive.ensureDir('$packDir/data/$songKey');
 		var entries:Array<{label:String, notes:Int}> = [];
 		var usedKeys:Map<String, Bool> = new Map();
+		var passes:Array<Int> = stdPasses();
+		var total:Int = chartCount();
 		var index:Int = 0;
 
 		for (map in maps) {
-			if (cancelledNow())
-				return null;
+			var keyList:Array<Int> = map.isStd() ? passes : [map.keyCount];
+			for (keys in keyList) {
+				if (cancelledNow())
+					return null;
 
-			report('Writing chart ${++index}/${maps.length}...');
+				report('Writing chart ${++index}/$total...');
 
-			var song:SwagSong = OsuChartConverter.convert(map, display, stageName, opts.mimicSV, opts.quantize);
-			if (song == null) {
-				log('Chart conversion failed for version "${map.version}".');
+				var song:SwagSong = OsuChartConverter.convert(map, display, stageName, opts.mimicSV, opts.quantize, keys);
+				if (song == null) {
+					log('Chart conversion failed for version "${map.version}" (${keys}K).');
+					stepDone();
+					continue;
+				}
+
+				var fileKey:String = uniqueKey(diffKey(map, keys), usedKeys);
+				var fileName:String = '$songKey-$fileKey.json';
+				File.saveContent('$packDir/data/$songKey/$fileName', '{"song":' + PsychJsonPrinter.print(song, ['sectionNotes', 'events']) + '}');
+
+				var notes:Int = countNotes(song);
+				entries.push({label: diffLabel(map, keys), notes: notes});
+
+				log('  chart -> $fileName (${keys}K, $notes notes, speed ${song.speed})');
 				stepDone();
-				continue;
 			}
-
-			var versionKey:String = uniqueVersionKey(map.version, usedKeys);
-			var fileName:String = '$songKey-$versionKey.json';
-			File.saveContent('$packDir/data/$songKey/$fileName', '{"song":' + PsychJsonPrinter.print(song, ['sectionNotes', 'events']) + '}');
-
-			var notes:Int = countNotes(song);
-			entries.push({label: difficultyLabel(map.version, versionKey), notes: notes});
-
-			log('  chart -> $fileName (${map.keyCount}K, $notes notes, speed ${song.speed})');
-			stepDone();
 		}
 
 		if (entries.length < 1) {
@@ -460,24 +572,27 @@ class OsuConversionJob {
 		return null;
 	}
 
-	function uniqueVersionKey(version:String, used:Map<String, Bool>):String {
-		var key:String = Paths.formatToSongPath(version);
-		if (key.length < 1)
-			key = 'normal';
-
+	function uniqueKey(key:String, used:Map<String, Bool>):String {
 		var base:String = key;
 		var suffix:Int = 1;
-
 		while (used.exists(key))
 			key = '$base-${++suffix}';
 		used.set(key, true);
-
 		return key;
 	}
 
-	function difficultyLabel(version:String, versionKey:String):String {
-		var trimmed:String = (version != null) ? version.trim() : '';
-		return (trimmed.length > 0 && Paths.formatToSongPath(trimmed) == versionKey) ? trimmed : versionKey;
+	function diffKey(map:OsuBeatmap, keys:Int):String {
+		var v:String = Paths.formatToSongPath(map.version);
+		if (v.length < 1)
+			v = 'normal';
+		return map.isStd() ? '$v-${keys}k' : v;
+	}
+
+	function diffLabel(map:OsuBeatmap, keys:Int):String {
+		var v:String = (map.version != null) ? map.version.trim() : '';
+		if (v.length < 1)
+			v = 'Normal';
+		return map.isStd() ? '$v (${keys}K)' : v;
 	}
 
 	function countNotes(song:SwagSong):Int {
@@ -574,16 +689,45 @@ class OsuConversionJob {
 
 	function writeSongMetadata(diffs:Array<String>) {
 		var first:OsuBeatmap = maps[0];
-		File.saveContent('$packDir/data/$songKey/metadata.json', haxe.Json.stringify({
+		var path:String = '$packDir/data/$songKey/metadata.json';
+		File.saveContent(path, haxe.Json.stringify({
 			songName: display,
 			icon: OsuChartConverter.BLANK_ART,
 			color: [255, 100, 200],
-			difficulties: diffs,
+			difficulties: mergeDifficulties(path, diffs),
 			source: 'osu!',
 			artist: first.artist,
 			charter: first.creator,
 			beatmapId: first.beatmapSetId
 		}, null, '\t'));
+	}
+
+	function mergeDifficulties(path:String, diffs:Array<String>):Array<String> {
+		var out:Array<String> = [];
+		var seen:Map<String, Bool> = new Map();
+
+		if (FileSystem.exists(path)) {
+			try {
+				var data:Dynamic = haxe.Json.parse(File.getContent(path));
+				if (data != null && data.difficulties != null) {
+					var existing:Array<Dynamic> = data.difficulties;
+					for (d in existing) {
+						var s:String = Std.string(d);
+						if (!seen.exists(s)) {
+							seen.set(s, true);
+							out.push(s);
+						}
+					}
+				}
+			} catch (e:Dynamic) {}
+		}
+
+		for (d in diffs)
+			if (d != null && !seen.exists(d)) {
+				seen.set(d, true);
+				out.push(d);
+			}
+		return out;
 	}
 
 	/*
@@ -592,8 +736,12 @@ class OsuConversionJob {
 	 * is consistently formatted whether or not the song has a video.
 	 */
 	function genStageLua(hasBg:Bool, hasVideo:Bool, hasStoryboard:Bool):String {
+		var anyVisual:Bool = hasBg || hasVideo || hasStoryboard;
+
+		var mod:String = opts.packName;
+
 		var head:Array<String> = ['-- Auto-generated by the osu! converter for "$songKey" (LuaProxy stage).'];
-		if (hasBg)
+		if (anyVisual)
 			head.push("local FlxSprite = import('flixel.FlxSprite')");
 		if (hasVideo)
 			head.push("local FlxVideoSprite = import('hxvlc.flixel.FlxVideoSprite')");
@@ -607,25 +755,25 @@ class OsuConversionJob {
 			locals.push("local osuBg = nil");
 		if (hasVideo)
 			locals.push("local osuVideo = nil");
-		if (hasBg || hasVideo)
+		if (anyVisual)
 			locals.push("local osuDim = nil");
 
-		var sections:Array<String> = [head.join("\n") + "\n\n" + locals.join("\n")];
+		var sections:Array<String> = [head.join("\n") + (locals.length > 0 ? "\n\n" + locals.join("\n") : "")];
 
-		/* onCreate: storyboard (draws its own background), or static background (+ dim without video). */
-		var create:Array<String> = [];
-		if (hasStoryboard)
-			create.push(storyboardBody());
-		if (hasBg)
-			create.push(bgBody());
-		if (hasBg && !hasVideo)
-			create.push(dimBody());
-		sections.push(wrapFunc("onCreate", create));
+		if (anyVisual) {
+			var post:Array<String> = [];
+			if (hasBg)
+				post.push(gate("getModSetting('osu_showBackground', '" + mod + "')", bgBody()));
+			if (hasVideo)
+				post.push(gate("getModSetting('osu_showVideo', '" + mod + "')", videoBody()));
+			if (hasStoryboard)
+				post.push(gate("getModSetting('osu_showStory', '" + mod + "')", storyboardBody()));
+			post.push("\tlocal osuDimAmount = getModSetting('osu_backgroundDim', '" + mod + "')");
+			post.push(gate("osuDimAmount ~= nil and osuDimAmount > 0", dimBody()));
+			sections.push(wrapFunc("onCreatePost", post));
+		}
 
 		if (hasVideo) {
-			/* Video sits above the bg, dim above the video; both built in onCreatePost. */
-			sections.push(wrapFunc("onCreatePost", [videoBody(), dimBody()]));
-			/* Drive playback with the song: start it, and pause/resume with the game. */
 			sections.push(videoCall("onSongStart", "play"));
 			sections.push(videoCall("onPause", "pause"));
 			sections.push(videoCall("onResume", "resume"));
@@ -633,6 +781,11 @@ class OsuConversionJob {
 		}
 
 		return sections.join("\n\n") + "\n";
+	}
+
+	function gate(cond:String, body:String):String {
+		var inner:String = body.split("\n").map(line -> "\t" + line).join("\n");
+		return "\tif " + cond + " then\n" + inner + "\n\tend";
 	}
 
 	/** A one-line stage callback that runs `osuVideo:method()` when the video exists. */
@@ -695,7 +848,7 @@ class OsuConversionJob {
 			"\tosuDim:updateHitbox()",
 			"\tosuDim:screenCenter()",
 			"\tosuDim.scrollFactor:set(0, 0)",
-			"\tosuDim.alpha = 0.5",
+			"\tosuDim.alpha = osuDimAmount",
 			"\tgame:add(osuDim)"
 		].join("\n");
 	}
@@ -758,6 +911,8 @@ end
 
 function buildTimeline()
 	svTimes, svVels, svCum, count, ready = {}, {}, {}, 0, false
+
+	if getModSetting('osu_mimicSV', '" + opts.packName + "') == false then return end
 
 	local evs = game.eventNotes
 	if evs == nil then return end
@@ -881,6 +1036,8 @@ function buildTimeline() {
 	svVels = [];
 	svCum = [];
 	ready = false;
+
+	if (getModSetting('osu_mimicSV', '" + opts.packName + "') == false) return;
 
 	if (PlayState.SONG == null || PlayState.SONG.events == null) return;
 	var events = PlayState.SONG.events;
