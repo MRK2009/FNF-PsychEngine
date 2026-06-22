@@ -762,12 +762,15 @@ class OsuConversionJob {
 
 		if (anyVisual) {
 			var post:Array<String> = [];
-			if (hasBg)
-				post.push(gate("getModSetting('osu_showBackground', '" + mod + "')", bgBody()));
-			if (hasVideo)
-				post.push(gate("getModSetting('osu_showVideo', '" + mod + "')", videoBody()));
+			var notStory:String = hasStoryboard ? " and not osuStoryActive" : "";
 			if (hasStoryboard)
-				post.push(gate("getModSetting('osu_showStory', '" + mod + "')", storyboardBody()));
+				post.push("\tlocal osuStoryActive = getModSetting('osu_showStory', '" + mod + "')");
+			if (hasBg)
+				post.push(gate("getModSetting('osu_showBackground', '" + mod + "')" + notStory, bgBody()));
+			if (hasVideo)
+				post.push(gate("getModSetting('osu_showVideo', '" + mod + "')" + notStory, videoBody()));
+			if (hasStoryboard)
+				post.push(gate("osuStoryActive", storyboardBody()));
 			post.push("\tlocal osuDimAmount = getModSetting('osu_backgroundDim', '" + mod + "')");
 			post.push(gate("osuDimAmount ~= nil and osuDimAmount > 0", dimBody()));
 			sections.push(wrapFunc("onCreatePost", post));
