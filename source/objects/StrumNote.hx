@@ -16,6 +16,10 @@ class StrumNote extends FlxSprite {
 	public var downScroll:Bool = false;
 	public var sustainReduce:Bool = true;
 
+	// When true this strum's `angle` also rotates its notes' scroll axis (connected lane
+	// rotation). When false `angle` only spins the receptor sprite. See Note.followStrumNote.
+	public var rotateNotes:Bool = false;
+
 	public var skinOffsetX:Float = 0;
 	public var skinOffsetY:Float = 0;
 
