@@ -103,8 +103,6 @@ class Note extends FlxSprite {
 
 	public static var SUSTAIN_SIZE:Int = 44;
 
-	public static var SUSTAIN_OVERLAP:Float = 1.05;
-
 	public static var swagWidth:Float = 160 * 0.7;
 	public static var colArray:Array<String> = ['purple', 'blue', 'green', 'red'];
 	public static var defaultNoteSkin(default, never):String = 'noteSkins/NOTE_assets';
@@ -178,9 +176,7 @@ class Note extends FlxSprite {
 	public var hitsound:String = 'hitsound';
 
 	private function set_multSpeed(value:Float):Float {
-		resizeByRatio(value / multSpeed);
 		multSpeed = value;
-		// trace('fuck cock');
 		return value;
 	}
 
@@ -362,17 +358,17 @@ class Note extends FlxSprite {
 				if (aCfg != null && prevNote.rgbShader != null)
 					prevNote.rgbShader.enabled = !rgbOff && NoteSkinConfig.colorableFor(aCfg, 'holds');
 
-				var localStep:Float = Conductor.getBPMFromSeconds(prevNote.strumTime + 2).stepCrochet;
+				var delta:Float = this.strumTime - prevNote.strumTime;
 				var speed:Float = (createdFrom != null && createdFrom.songSpeed != null) ? createdFrom.songSpeed : 1;
 				var rate:Float = (createdFrom != null && createdFrom.playbackRate != null) ? createdFrom.playbackRate : 1;
 				if (PlayState.isPixelStage && NoteSkinConfig.activeSkin() == null) {
-					prevNote.scale.y *= (localStep / 100 * 1.05) * speed;
+					prevNote.scale.y *= (delta / 100) * speed;
 					prevNote.scale.y *= 1.19;
 					prevNote.scale.y *= (6 / height);
 				} else {
-					prevNote.scale.y = (localStep * 0.45 * speed / rate) * SUSTAIN_OVERLAP / prevNote.frameHeight;
+					prevNote.scale.y = (delta * 0.45 * speed / rate) / prevNote.frameHeight;
 				}
-				prevNote.sustainBaseScaleY = prevNote.scale.y; // base for SV hold rescaling
+				prevNote.sustainBaseScaleY = prevNote.scale.y;
 				prevNote.updateHitbox();
 			}
 
@@ -691,6 +687,16 @@ class Note extends FlxSprite {
 		var strumDirection:Float = myStrum.direction;
 
 		distance = (0.45 * (Conductor.songPosition - strumTime) * songSpeed * multSpeed);
+
+		if (isSustainNote && nextNote != null && frameHeight > 0 && animation.curAnim != null && !animation.curAnim.name.endsWith('end')) {
+			var nextDist:Float = 0.45 * (Conductor.songPosition - nextNote.strumTime) * songSpeed * nextNote.multSpeed;
+			var target:Float = Math.abs(nextDist - distance) / frameHeight;
+			if (Math.abs((target - scale.y) * frameHeight) > 0.1) {
+				scale.y = target;
+				updateHitbox();
+			}
+		}
+
 		if (!myStrum.downScroll)
 			distance *= -1;
 

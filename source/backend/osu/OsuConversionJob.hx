@@ -1132,24 +1132,13 @@ local function velAt(t)
 	return svVels[svIndexAt(t)]
 end
 
--- Precompute this note's scroll position + hold scale once, so onUpdate stays O(1)/note.
+-- Precompute this note's scroll position once, so onUpdate stays O(1)/note.
+-- Hold bodies are sized by the engine to the live gap, so SV needs only set positions here.
 function onSpawnNote(id, data, noteType, isSustain, strumTime)
 	if not ready then return end
 	local note = game.notes.members[1] -- just inserted at index 0 -> Lua index 1
 	if note == nil then return end
 	note.svScrollPos = scrollPosAt(strumTime)
-	-- Hold body: stretch it to reach the NEXT segment's SV position so bodies tile
-	-- seamlessly even across SV changes (scale by the average SV over the segment's step,
-	-- multiplying the engine's final base scale -- runs once, so it never compounds).
-	if note.sustainBaseScaleY > 0 then
-		local tail = note.parent.tail
-		if tail ~= nil and #tail >= 2 then
-			local step = tail[2].strumTime - tail[1].strumTime
-			if step > 0 then
-				note.scale.y = note.scale.y * (scrollPosAt(strumTime + step) - scrollPosAt(strumTime)) / step
-			end
-		end
-	end
 end
 
 function onUpdate(elapsed)
@@ -1260,24 +1249,11 @@ function velAt(t:Float):Float {
 	return svVels[svIndexAt(t)];
 }
 
-/* Precompute this note's scroll position + hold scale once, so onUpdate stays O(1)/note. */
+/* Precompute this note's scroll position once, so onUpdate stays O(1)/note.
+ * Hold bodies are sized by the engine to the live gap, so SV needs only set positions here. */
 function onSpawnNote(note) {
 	if (!ready) return;
-	var st:Float = note.strumTime;
-	note.svScrollPos = scrollPosAt(st);
-	/*
-	 * Hold body: stretch it to reach the NEXT segment's SV position so bodies tile seamlessly
-	 * even across SV changes (scale by the average SV over the segment's step, multiplying the
-	 * engine's final base scale -- runs once, so it never compounds).
-	 */
-	if (note.sustainBaseScaleY > 0) {
-		var tail = note.parent.tail;
-		if (tail != null && tail.length >= 2) {
-			var step:Float = tail[1].strumTime - tail[0].strumTime;
-			if (step > 0)
-				note.scale.y = note.scale.y * (scrollPosAt(st + step) - scrollPosAt(st)) / step;
-		}
-	}
+	note.svScrollPos = scrollPosAt(note.strumTime);
 }
 
 function onUpdate(elapsed:Float) {

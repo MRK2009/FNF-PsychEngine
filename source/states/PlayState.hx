@@ -672,15 +672,6 @@ class PlayState extends MusicBeatState {
 	}
 
 	function set_songSpeed(value:Float):Float {
-		if (generatedMusic) {
-			var ratio:Float = value / songSpeed; // funny word huh
-			if (ratio != 1) {
-				for (note in notes.members)
-					note.resizeByRatio(ratio);
-				for (note in unspawnNotes)
-					note.resizeByRatio(ratio);
-			}
-		}
 		songSpeed = value;
 		noteKillOffset = Math.max(Conductor.stepCrochet, 350 / songSpeed * playbackRate);
 		return value;
@@ -692,14 +683,6 @@ class PlayState extends MusicBeatState {
 			vocals.pitch = value;
 			opponentVocals.pitch = value;
 			FlxG.sound.music.pitch = value;
-
-			var ratio:Float = playbackRate / value; // funny word huh
-			if (ratio != 1) {
-				for (note in notes.members)
-					note.resizeByRatio(ratio);
-				for (note in unspawnNotes)
-					note.resizeByRatio(ratio);
-			}
 		}
 		playbackRate = value;
 		FlxG.animationTimeScale = value;
@@ -1424,19 +1407,8 @@ class PlayState extends MusicBeatState {
 						swagNote.tail.push(sustainNote);
 
 						sustainNote.correctionOffset = swagNote.height / 2;
-						if (!PlayState.isPixelStage) {
-							if (oldNote.isSustainNote) {
-								oldNote.scale.y *= Note.SUSTAIN_SIZE / oldNote.frameHeight;
-								oldNote.scale.y /= playbackRate;
-								oldNote.resizeByRatio(curStepCrochet / Conductor.stepCrochet);
-							}
-
-							if (ClientPrefs.data.downScroll)
-								sustainNote.correctionOffset = 0;
-						} else if (oldNote.isSustainNote) {
-							oldNote.scale.y /= playbackRate;
-							oldNote.resizeByRatio(curStepCrochet / Conductor.stepCrochet);
-						}
+						if (!PlayState.isPixelStage && ClientPrefs.data.downScroll)
+							sustainNote.correctionOffset = 0;
 
 						if (sustainNote.mustPress)
 							sustainNote.x += FlxG.width / 2; // general offset
