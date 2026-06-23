@@ -1,0 +1,147 @@
+package backend.osu;
+
+#if sys
+import sys.io.File;
+import sys.FileSystem;
+import haxe.io.Path;
+#end
+
+using StringTools;
+
+typedef OsuSource = {
+	var dir:String; // directory holding the media + .osu files
+	var osuFiles:Array<String>; // absolute paths to the .osu files inside `dir`
+	var temporary:Bool; // true if `dir` was extracted and may be deleted afterwards
+}
+
+/**
+ * Resolves a dropped/selected input (an `.osz` archive, a loose `.osu`, or a
+ * folder) into a working directory of files plus the list of `.osu` charts.
+ */
+class OszArchive {
+	/**
+	 * Resolves an input path into a usable `OsuSource`.
+	 *
+	 * @param inputPath A folder, a loose `.osu` file, or an `.osz` archive.
+	 * @param workRoot Directory under which an `.osz` is extracted (ignored otherwise).
+	 * @return The source dir and its `.osu` files, or `null` if the path is missing or
+	 *         not a supported kind. `temporary` is true only for extracted archives.
+	 */
+	public static function prepare(inputPath:String, workRoot:String):OsuSource {
+		#if sys
+		if (inputPath == null || !FileSystem.exists(inputPath))
+			return null;
+
+		if (FileSystem.isDirectory(inputPath))
+			return {dir: inputPath, osuFiles: listOsu(inputPath), temporary: false};
+
+		var ext:String = Path.extension(inputPath).toLowerCase();
+		if (ext == 'osu')
+			return {dir: Path.directory(inputPath), osuFiles: [inputPath], temporary: false};
+		if (ext == 'osz')
+			return extract(inputPath, workRoot);
+		#end
+		return null;
+	}
+
+	/**
+	 * Expands one selected input into the list of beatmaps to convert (batch support).
+	 *
+	 * A folder that directly contains `.osz` archives is treated as a batch -- each archive is
+	 * its own beatmap. Anything else (a single `.osz`/`.osu`, or a folder of loose `.osu` files)
+	 * stays a single input. Each returned path is fed through `prepare` individually.
+	 *
+	 * @param inputPath The dropped/selected path.
+	 * @return The input paths to convert (sorted), or an empty array when the path is missing.
+	 */
+	public static function expandInputs(inputPath:String):Array<String> {
+		#if sys
+		if (inputPath == null || !FileSystem.exists(inputPath))
+			return [];
+
+		if (FileSystem.isDirectory(inputPath)) {
+			var archives:Array<String> = [
+				for (entryName in FileSystem.readDirectory(inputPath))
+					if (entryName.toLowerCase().endsWith('.osz')) Path.join([inputPath, entryName])
+			];
+			if (archives.length > 0) {
+				archives.sort((first, second) -> (first < second) ? -1 : (first > second ? 1 : 0));
+				return archives; // a folder of archives -> convert each
+			}
+		}
+		return [inputPath]; // single .osz/.osu, or a folder of loose .osu files
+		#else
+		return [];
+		#end
+	}
+
+	public static function extract(oszPath:String, workRoot:String):OsuSource {
+		#if sys
+		var name:String = Path.withoutExtension(Path.withoutDirectory(oszPath));
+		var dir:String = Path.join([workRoot, sanitize(name)]);
+		ensureDir(dir);
+
+		var bytes = File.getBytes(oszPath);
+		var entries = haxe.zip.Reader.readZip(new haxe.io.BytesInput(bytes));
+		for (entry in entries) {
+			if (entry.fileName.endsWith('/'))
+				continue;
+			var outPath:String = Path.join([dir, entry.fileName]);
+			ensureDir(Path.directory(outPath));
+			File.saveBytes(outPath, haxe.zip.Reader.unzip(entry));
+		}
+		return {dir: dir, osuFiles: listOsu(dir), temporary: true};
+		#else
+		return null;
+		#end
+	}
+
+	static function listOsu(dir:String):Array<String> {
+		var found:Array<String> = [];
+		#if sys
+		for (entryName in FileSystem.readDirectory(dir))
+			if (entryName.toLowerCase().endsWith('.osu'))
+				found.push(Path.join([dir, entryName]));
+		#end
+		return found;
+	}
+
+	public static function ensureDir(dir:String) {
+		#if sys
+		if (dir == null || dir.length < 1 || FileSystem.exists(dir))
+			return;
+		FileSystem.createDirectory(dir);
+		#end
+	}
+
+	public static function cleanup(src:OsuSource) {
+		#if sys
+		if (src == null || !src.temporary || src.dir == null || !FileSystem.exists(src.dir))
+			return;
+		try
+			deleteRecursive(src.dir)
+		catch (error:Dynamic)
+			trace('OszArchive cleanup failed: $error');
+		#end
+	}
+
+	#if sys
+	static function deleteRecursive(path:String) {
+		if (FileSystem.isDirectory(path)) {
+			for (entryName in FileSystem.readDirectory(path))
+				deleteRecursive(Path.join([path, entryName]));
+			FileSystem.deleteDirectory(path);
+		} else
+			FileSystem.deleteFile(path);
+	}
+	#end
+
+	public static function sanitize(name:String):String {
+		var out:StringBuf = new StringBuf();
+		for (i in 0...name.length) {
+			var ch:String = name.charAt(i);
+			out.add('<>:"/\\|?*'.indexOf(ch) >= 0 ? '_' : ch);
+		}
+		return out.toString().trim();
+	}
+}

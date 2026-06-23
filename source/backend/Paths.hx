@@ -22,6 +22,7 @@ import backend.Mods;
 class Paths {
 	inline public static var SOUND_EXT = #if web "mp3" #else "ogg" #end;
 	inline public static var VIDEO_EXT = "mp4";
+	public static var VIDEO_EXTENSIONS:Array<String> = ["webm", "mp4"];
 
 	public static function excludeAsset(key:String) {
 		if (!dumpExclusions.contains(key))
@@ -188,6 +189,11 @@ class Paths {
 		if (FileSystem.exists(file))
 			return file;
 		#end
+		for (ext in VIDEO_EXTENSIONS) {
+			var path:String = 'assets/videos/$key.$ext';
+			if (OpenFlAssets.exists(path))
+				return path;
+		}
 		return 'assets/videos/$key.$VIDEO_EXT';
 	}
 
@@ -427,7 +433,7 @@ class Paths {
 	}
 
 	inline static public function formatToSongPath(path:String) {
-		final invalidChars = ~/[~&;:<>#\s]/g;
+		final invalidChars = ~/[~&;:<>#\s\/\\*?|]/g;
 		final hideChars = ~/[.,'"%?!]/g;
 
 		return hideChars.replace(invalidChars.replace(path, '-'), '').trim().toLowerCase();
@@ -465,8 +471,14 @@ class Paths {
 	inline static public function modsJson(key:String)
 		return modFolders('data/' + key + '.json');
 
-	inline static public function modsVideo(key:String)
+	static public function modsVideo(key:String) {
+		for (ext in VIDEO_EXTENSIONS) {
+			var file:String = modFolders('videos/' + key + '.' + ext);
+			if (FileSystem.exists(file))
+				return file;
+		}
 		return modFolders('videos/' + key + '.' + VIDEO_EXT);
+	}
 
 	inline static public function modsSounds(path:String, key:String)
 		return modFolders(path + '/' + key + '.' + SOUND_EXT);

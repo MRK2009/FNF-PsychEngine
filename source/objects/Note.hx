@@ -2,6 +2,8 @@ package objects;
 
 import backend.animation.PsychAnimationController;
 import backend.NoteTypesConfig;
+import backend.NoteSkinConfig;
+import backend.NoteSkinConfig.NoteSkinData;
 import shaders.RGBPalette;
 import shaders.RGBPalette.RGBShaderReference;
 import objects.StrumNote;
@@ -100,6 +102,7 @@ class Note extends FlxSprite {
 	public var lowPriority:Bool = false;
 
 	public static var SUSTAIN_SIZE:Int = 44;
+
 	public static var swagWidth:Float = 160 * 0.7;
 	public static var colArray:Array<String> = ['purple', 'blue', 'green', 'red'];
 	public static var defaultNoteSkin(default, never):String = 'noteSkins/NOTE_assets';
@@ -118,9 +121,22 @@ class Note extends FlxSprite {
 
 	public var offsetX:Float = 0;
 	public var offsetY:Float = 0;
+	public var centerOnStrum:Bool = false;
 	public var offsetAngle:Float = 0;
 	public var multAlpha:Float = 1;
 	public var multSpeed(default, set):Float = 1;
+
+	/*
+	 * Stretched sustain-body scale at the song's base speed, captured at creation so scripts
+	 * (e.g. the osu! SV script) can rescale the hold length without compounding. 0 = not a body.
+	 */
+	public var sustainBaseScaleY:Float = 0;
+
+	/*
+	 * Free per-note cache for scripts (the osu! SV script stores its precomputed scroll
+	 * position here at spawn, so its per-frame work stays O(1) with no lookup).
+	 */
+	public var svScrollPos:Float = 0;
 
 	public var copyX:Bool = true;
 	public var copyY:Bool = true;
@@ -160,9 +176,7 @@ class Note extends FlxSprite {
 	public var hitsound:String = 'hitsound';
 
 	private function set_multSpeed(value:Float):Float {
-		resizeByRatio(value / multSpeed);
 		multSpeed = value;
-		// trace('fuck cock');
 		return value;
 	}
 
@@ -311,6 +325,16 @@ class Note extends FlxSprite {
 		if (isSustainNote && prevNote != null) {
 			alpha = 0.6;
 			multAlpha = 0.6;
+			var aCfg:NoteSkinData = null;
+			var aSkin:String = NoteSkinConfig.activeSkin();
+			if (aSkin != null) {
+				aCfg = NoteSkinConfig.forCurrentKeys(aSkin);
+				if (aCfg != null && aCfg.holdAlpha != null) {
+					alpha = aCfg.holdAlpha;
+					multAlpha = aCfg.holdAlpha;
+				}
+			}
+			var rgbOff:Bool = (PlayState.SONG != null && PlayState.SONG.disableNoteRGB);
 			hitsoundDisabled = true;
 			if (ClientPrefs.data.downScroll)
 				flipY = true;
@@ -319,6 +343,8 @@ class Note extends FlxSprite {
 			copyAngle = false;
 
 			animation.play(colArray[noteData % colArray.length] + 'holdend');
+			if (aCfg != null && rgbShader != null)
+				rgbShader.enabled = !rgbOff && NoteSkinConfig.colorableFor(aCfg, 'ends');
 
 			updateHitbox();
 
@@ -329,17 +355,21 @@ class Note extends FlxSprite {
 
 			if (prevNote.isSustainNote) {
 				prevNote.animation.play(colArray[prevNote.noteData % colArray.length] + 'hold');
+				if (aCfg != null && prevNote.rgbShader != null)
+					prevNote.rgbShader.enabled = !rgbOff && NoteSkinConfig.colorableFor(aCfg, 'holds');
 
-				prevNote.scale.y *= Conductor.stepCrochet / 100 * 1.05;
-				if (createdFrom != null && createdFrom.songSpeed != null)
-					prevNote.scale.y *= createdFrom.songSpeed;
-
-				if (PlayState.isPixelStage) {
+				var delta:Float = this.strumTime - prevNote.strumTime;
+				var speed:Float = (createdFrom != null && createdFrom.songSpeed != null) ? createdFrom.songSpeed : 1;
+				var rate:Float = (createdFrom != null && createdFrom.playbackRate != null) ? createdFrom.playbackRate : 1;
+				if (PlayState.isPixelStage && NoteSkinConfig.activeSkin() == null) {
+					prevNote.scale.y *= (delta / 100) * speed;
 					prevNote.scale.y *= 1.19;
-					prevNote.scale.y *= (6 / height); // Auto adjust note size
+					prevNote.scale.y *= (6 / height);
+				} else {
+					prevNote.scale.y = (delta * 0.45 * speed / rate) / prevNote.frameHeight;
 				}
+				prevNote.sustainBaseScaleY = prevNote.scale.y;
 				prevNote.updateHitbox();
-				// prevNote.setGraphicSize();
 			}
 
 			if (PlayState.isPixelStage) {
@@ -404,6 +434,12 @@ class Note extends FlxSprite {
 			animName = animation.curAnim.name;
 		}
 
+		if (texture == null || texture.length < 1) {
+			var folderSkin:String = NoteSkinConfig.activeSkin();
+			if (folderSkin != null && reloadFolderNote(folderSkin, animName))
+				return;
+		}
+
 		var skinPixel:String = skin;
 		var lastScaleY:Float = scale.y;
 		var skinPostfix:String = getNoteSkinPostfix();
@@ -464,6 +500,110 @@ class Note extends FlxSprite {
 
 		if (animName != null)
 			animation.play(animName, true);
+	}
+
+	function reloadFolderNote(skinName:String, animName:String):Bool {
+		var cfg:NoteSkinData = NoteSkinConfig.forCurrentKeys(skinName);
+		if (cfg == null)
+			return false;
+
+		if (NoteSkinConfig.editorOverride == null)
+			NoteSkinConfig.pixelMode = (cfg.pixel == true) || (cfg.pixelVariant == true && PlayState.isPixelStage);
+
+		var base:String = NoteSkinConfig.folder(skinName);
+		var col:Int = noteData;
+		var name:String = colArray[col % colArray.length];
+		var kc:Int = Mania.clamp(Mania.current);
+		var scaleBase:Float = (cfg.scale == null ? 0.7 : cfg.scale) * Mania.noteSizes[kc - 1] / Mania.noteSizes[Mania.DEFAULT - 1];
+		var prevScaleY:Float = scale.y;
+
+		var note = NoteSkinConfig.resolveColumn(cfg, cfg.notes, col);
+		if (note == null)
+			return false;
+
+		var factor:Float;
+		if (isSustainNote) {
+			var holdKey:String = NoteSkinConfig.columnKey(cfg.holds, col);
+			var endKey:String = NoteSkinConfig.columnKey(cfg.ends, col);
+			if (holdKey == null || endKey == null)
+				return false;
+			var holdFrames:Array<String> = NoteSkinConfig.frameKeys(NoteSkinConfig.variant(base + holdKey));
+			var endFrames:Array<String> = NoteSkinConfig.frameKeys(NoteSkinConfig.variant(base + endKey));
+			if (holdFrames == null || endFrames == null)
+				return false;
+			holdFrames = NoteSkinConfig.staticFrame(holdFrames, NoteSkinConfig.animatedFor(cfg, 'holds'));
+			endFrames = NoteSkinConfig.staticFrame(endFrames, NoteSkinConfig.animatedFor(cfg, 'ends'));
+			factor = NoteSkinConfig.applyAnims(this, [
+				{
+					name: name + 'hold',
+					keys: holdFrames,
+					fps: 24,
+					loop: true
+				},
+				{
+					name: name + 'holdend',
+					keys: endFrames,
+					fps: 24,
+					loop: true
+				}
+			]);
+		} else {
+			var noteFrames:Array<String> = NoteSkinConfig.frameKeys(NoteSkinConfig.variant(base + note.key));
+			if (noteFrames == null)
+				return false;
+			noteFrames = NoteSkinConfig.staticFrame(noteFrames, NoteSkinConfig.animatedFor(cfg, 'notes'));
+			factor = NoteSkinConfig.applyAnims(this, [
+				{
+					name: name + 'Scroll',
+					keys: noteFrames,
+					fps: 24,
+					loop: false,
+					angle: note.angle,
+					square: true
+				}
+			]);
+		}
+
+		if (isSustainNote) {
+			if (animName != null) {
+				var rgbOff:Bool = (PlayState.SONG != null && PlayState.SONG.disableNoteRGB);
+				var role:String = animName.endsWith('holdend') ? 'ends' : 'holds';
+				rgbShader.enabled = !rgbOff && NoteSkinConfig.colorableFor(cfg, role);
+			}
+		} else {
+			var colorable:Bool = NoteSkinConfig.colorableFor(cfg, 'notes');
+			if (!colorable)
+				rgbShader.enabled = false;
+			if (cfg.splash != null)
+				noteSplashData.useRGBShader = colorable;
+		}
+		antialiasing = (cfg.pixel == true || NoteSkinConfig.pixelMode) ? false : (cfg.antialiasing == null ? ClientPrefs.data.antialiasing : cfg.antialiasing);
+		if (isSustainNote && cfg.holdAntialiasing != null)
+			antialiasing = cfg.holdAntialiasing;
+		if (cfg.splash != null)
+			noteSplashData.texture = base + cfg.splash;
+
+		if (isSustainNote) {
+			scale.x = scaleBase * factor;
+			// Preserve a body's computed height across mid-song skin swaps; tails reset to base.
+			scale.y = (animName != null && animName.endsWith('hold')) ? prevScaleY : scaleBase * factor;
+		} else {
+			scale.set(scaleBase * factor, scaleBase * factor);
+			centerOffsets();
+			centerOrigin();
+		}
+		updateHitbox();
+
+		centerOnStrum = true;
+		var off:Array<Float> = NoteSkinConfig.offsetFor(isSustainNote ? cfg.holdOffsets : cfg.noteOffsets, col);
+		offsetX = off[0];
+		offsetY = off[1];
+
+		if (animName != null && animation.getByName(animName) != null)
+			animation.play(animName, true);
+		else if (!isSustainNote)
+			animation.play(name + 'Scroll', true);
+		return true;
 	}
 
 	public static function getNoteSkinPostfix() {
@@ -547,45 +687,72 @@ class Note extends FlxSprite {
 		var strumDirection:Float = myStrum.direction;
 
 		distance = (0.45 * (Conductor.songPosition - strumTime) * songSpeed * multSpeed);
+
+		if (isSustainNote && nextNote != null && frameHeight > 0 && animation.curAnim != null && !animation.curAnim.name.endsWith('end')) {
+			var nextDist:Float = 0.45 * (Conductor.songPosition - nextNote.strumTime) * songSpeed * nextNote.multSpeed;
+			var target:Float = Math.abs(nextDist - distance) / frameHeight;
+			if (Math.abs((target - scale.y) * frameHeight) > 0.1) {
+				scale.y = target;
+				updateHitbox();
+			}
+		}
+
 		if (!myStrum.downScroll)
 			distance *= -1;
 
-		var angleDir = strumDirection * Math.PI / 180;
+		var rot:Float = (isSustainNote && parent != null) ? parent.offsetAngle : offsetAngle;
+		var axisDeg:Float = strumDirection + (myStrum.rotateNotes ? strumAngle : 0) + rot;
+		var angleDir:Float = axisDeg * Math.PI / 180;
+		var uX:Float = Math.cos(angleDir);
+		var uY:Float = Math.sin(angleDir);
+
 		if (copyAngle)
-			angle = strumDirection - 90 + strumAngle + offsetAngle;
+			angle = axisDeg - 90;
 
 		if (copyAlpha)
 			alpha = strumAlpha * multAlpha;
 
-		if (copyX)
-			x = strumX + offsetX + Math.cos(angleDir) * distance;
-
-		if (copyY) {
-			y = strumY + offsetY + correctionOffset + Math.sin(angleDir) * distance;
-			if (myStrum.downScroll && isSustainNote) {
-				if (PlayState.isPixelStage) {
-					y -= PlayState.daPixelZoom * 9.5;
-				}
-				y -= (frameHeight * scale.y) - (Note.swagWidth / 2);
-			}
+		var v:Float = 0;
+		if (myStrum.downScroll && isSustainNote) {
+			v = (frameHeight * scale.y) - (swagWidth / 2);
+			if (PlayState.isPixelStage)
+				v += PlayState.daPixelZoom * 9.5;
 		}
+		var along:Float = offsetY + correctionOffset + distance + height / 2 - v;
+		var perp:Float = offsetX + (centerOnStrum ? swagWidth / 2 : width / 2);
+		var cx:Float = strumX + uX * along + uY * perp;
+		var cy:Float = strumY + uY * along - uX * perp;
+
+		if (copyX)
+			x = cx - width / 2;
+		if (copyY)
+			y = cy - height / 2;
 	}
 
 	public function clipToStrumNote(myStrum:StrumNote) {
-		var center:Float = myStrum.y + offsetY + Note.swagWidth / 2;
 		if ((mustPress || !ignoreNote) && (wasGoodHit || (prevNote.wasGoodHit && !canBeHit))) {
+			var rot:Float = (isSustainNote && parent != null) ? parent.offsetAngle : offsetAngle;
+			var axisDeg:Float = myStrum.direction + (myStrum.rotateNotes ? myStrum.angle : 0) + rot;
+			var angleDir:Float = axisDeg * Math.PI / 180;
+			var uX:Float = Math.cos(angleDir);
+			var uY:Float = Math.sin(angleDir);
+			var perp:Float = offsetX + (centerOnStrum ? (Note.swagWidth - width) / 2 : 0);
+			var rX:Float = myStrum.x + uY * perp + uX * (offsetY + Note.swagWidth / 2);
+			var rY:Float = myStrum.y - uX * perp + uY * (offsetY + Note.swagWidth / 2);
+			var proj:Float = (rX - x) * uX + (rY - y) * uY;
+
 			var swagRect:FlxRect = clipRect;
 			if (swagRect == null)
 				swagRect = new FlxRect(0, 0, frameWidth, frameHeight);
 
 			if (myStrum.downScroll) {
-				if (y - offset.y * scale.y + height >= center) {
+				if (proj <= height - offset.y * scale.y) {
 					swagRect.width = frameWidth;
-					swagRect.height = (center - y) / scale.y;
+					swagRect.height = proj / scale.y;
 					swagRect.y = frameHeight - swagRect.height;
 				}
-			} else if (y + offset.y * scale.y <= center) {
-				swagRect.y = (center - y) / scale.y;
+			} else if (proj >= offset.y * scale.y) {
+				swagRect.y = proj / scale.y;
 				swagRect.width = width / scale.x;
 				swagRect.height = (height / scale.y) - swagRect.y;
 			}

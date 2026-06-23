@@ -3,6 +3,8 @@ package states;
 import backend.WeekData;
 import backend.Highscore;
 import backend.Song;
+import backend.SongMeta;
+import backend.SongMeta.SongMetaInfo;
 import objects.HealthIcon;
 import objects.MusicPlayer;
 import options.GameplayChangersSubstate;
@@ -51,6 +53,7 @@ class FreeplayState extends MusicBeatState {
 	var player:MusicPlayer;
 
 	var allSongs:Array<SongMetadata> = []; // unfiltered master list; `songs` is the filtered view
+	var initialized:Bool = false; // false until create() finishes building the song list
 	var grpIcons:FlxTypedGroup<HealthIcon>;
 	var grpStars:FlxTypedGroup<FlxSprite>; // star.png markers shown beside favorited songs
 
@@ -83,15 +86,6 @@ class FreeplayState extends MusicBeatState {
 		DiscordClient.changePresence("In the Menus", null);
 		#end
 
-		if (WeekData.weeksList.length < 1) {
-			FlxTransitionableState.skipNextTransIn = true;
-			persistentUpdate = false;
-			MusicBeatState.switchState(new states.ErrorState("NO WEEKS ADDED FOR FREEPLAY\n\nPress ACCEPT to go to the Week Editor Menu.\nPress BACK to return to Main Menu.",
-				function() MusicBeatState.switchState(new states.editors.WeekEditorState()),
-				function() MusicBeatState.switchState(new states.MainMenuState())));
-			return;
-		}
-
 		for (i in 0...WeekData.weeksList.length) {
 			var leWeek:WeekData = WeekData.weeksLoaded.get(WeekData.weeksList[i]);
 			// keep a label per week index (even locked ones) so song.week stays aligned
@@ -118,6 +112,20 @@ class FreeplayState extends MusicBeatState {
 				}
 				addSong(song[0], i, song[1], FlxColor.fromRGB(colors[0], colors[1], colors[2]), Difficulty.getDifficultiesForSong(song[0], weekDiffs));
 			}
+		}
+
+		// Freeplay no longer needs a week file: also list any song with charts on disk
+		// (data/<song>/<song>.json) that no week declared. Weeks remain for Story mode
+		// and for setting a custom icon/order without a metadata.json.
+		discoverFreeplaySongs(WeekData.weeksList.length);
+
+		if (allSongs.length < 1) {
+			FlxTransitionableState.skipNextTransIn = true;
+			persistentUpdate = false;
+			MusicBeatState.switchState(new states.ErrorState("NO SONGS FOUND FOR FREEPLAY\n\nAdd a song (data/<song>/<song>.json) to an enabled mod,\nor make a week.\n\nPress ACCEPT for the Week Editor.\nPress BACK to return to Main Menu.",
+				function() MusicBeatState.switchState(new states.editors.WeekEditorState()),
+				function() MusicBeatState.switchState(new states.MainMenuState())));
+			return;
 		}
 		Mods.loadTopMod();
 
@@ -205,6 +213,7 @@ class FreeplayState extends MusicBeatState {
 		updateHeader();
 		changeSelection();
 		updateTexts();
+		initialized = true;
 		super.create();
 
 		#if mobile
@@ -220,12 +229,104 @@ class FreeplayState extends MusicBeatState {
 	}
 
 	public function addSong(songName:String, weekNum:Int, songCharacter:String, color:Int, ?difficulties:Array<String>) {
-		var meta:SongMetadata = new SongMetadata(songName, weekNum, songCharacter, color);
+		// An optional data/<song>/metadata.json can override the icon, color and the
+		// difficulty order, and carry info (charter/source). It applies to any song.
+		var info:SongMetaInfo = SongMeta.load(Paths.formatToSongPath(songName));
+		var icon:String = songCharacter;
+		var col:Int = color;
+		var diffs:Array<String> = difficulties;
+		if (info != null) {
+			if (info.icon != null && info.icon.length > 0)
+				icon = info.icon;
+			if (info.color != null && info.color.length >= 3)
+				col = FlxColor.fromRGB(info.color[0], info.color[1], info.color[2]);
+			if (info.difficulties != null && info.difficulties.length > 0)
+				diffs = Difficulty.getDifficultiesForSong(songName, info.difficulties);
+		}
+
+		var meta:SongMetadata = new SongMetadata(songName, weekNum, icon, col);
 		meta.origIndex = allSongs.length;
-		if (difficulties != null && difficulties.length > 0)
-			meta.difficulties = difficulties;
+		if (diffs != null && diffs.length > 0)
+			meta.difficulties = diffs;
+		if (info != null) {
+			meta.charter = info.charter;
+			meta.source = info.source;
+		}
 		allSongs.push(meta);
 	}
+
+	// Lists songs that have charts on disk (data/<song>/<song>.json) in any enabled
+	// mod but aren't declared by a week, so Freeplay works without week files. Each
+	// gets a synthetic group `freeplayWeek`. Deduped against already-added songs.
+	function discoverFreeplaySongs(freeplayWeek:Int) {
+		#if (sys && MODS_ALLOWED)
+		var seen:Map<String, Bool> = new Map();
+		for (meta in allSongs)
+			seen.set(meta.folder + '|' + Paths.formatToSongPath(meta.songName), true);
+
+		var roots:Array<Array<String>> = []; // [modFolder, dataDir]
+		for (mod in Mods.parseList().enabled)
+			roots.push([mod, Paths.mods('$mod/data')]);
+		roots.push(['', Paths.mods('data')]);
+
+		var added:Bool = false;
+		for (root in roots) {
+			var modFolder:String = root[0];
+			var dataDir:String = root[1];
+			if (!FileSystem.exists(dataDir) || !FileSystem.isDirectory(dataDir))
+				continue;
+
+			for (entry in FileSystem.readDirectory(dataDir)) {
+				var songDir:String = '$dataDir/$entry';
+				if (!FileSystem.isDirectory(songDir))
+					continue;
+				var key:String = Paths.formatToSongPath(entry);
+				if (seen.exists('$modFolder|$key'))
+					continue;
+				var chart:String = representativeChart(songDir, key);
+				if (chart == null)
+					continue;
+				seen.set('$modFolder|$key', true);
+
+				Mods.currentModDirectory = modFolder;
+				var display:String = chartSongName(chart, entry);
+				if (Paths.formatToSongPath(display) != key)
+					display = entry; // keep it loadable (folder name must format to the key)
+				addSong(display, freeplayWeek, 'face', FlxColor.fromRGB(146, 113, 253), Difficulty.getDifficultiesForSong(display, null));
+				added = true;
+			}
+		}
+		if (added)
+			weekNames[freeplayWeek] = 'Other Songs';
+		#end
+	}
+
+	#if sys
+	function representativeChart(songDir:String, key:String):String {
+		var bare:String = '$songDir/$key.json';
+		if (FileSystem.exists(bare))
+			return bare;
+		for (file in FileSystem.readDirectory(songDir))
+			if (file.startsWith('$key-') && file.endsWith('.json'))
+				return '$songDir/$file';
+		return null;
+	}
+
+	function chartSongName(chartPath:String, fallback:String):String {
+		try {
+			var data:Dynamic = tjson.TJSON.parse(File.getContent(chartPath));
+			var sub:Dynamic = Reflect.field(data, 'song');
+			if (sub != null) {
+				if (Std.isOfType(sub, String))
+					return sub;
+				var inner:Dynamic = Reflect.field(sub, 'song');
+				if (inner != null)
+					return Std.string(inner);
+			}
+		} catch (error:Dynamic) {}
+		return fallback;
+	}
+	#end
 
 	function weekIsLocked(name:String):Bool {
 		var leWeek:WeekData = WeekData.weeksLoaded.get(name);
@@ -244,7 +345,7 @@ class FreeplayState extends MusicBeatState {
 	var stopMusicPlay:Bool = false;
 
 	override function update(elapsed:Float) {
-		if (WeekData.weeksList.length < 1)
+		if (!initialized)
 			return;
 
 		if (FlxG.sound.music.volume < 0.7)
@@ -933,6 +1034,8 @@ class SongMetadata {
 	public var lastDifficulty:String = null;
 	public var difficulties:Array<String> = Difficulty.defaultList.copy(); // per-song, derived from charts on disk
 	public var origIndex:Int = 0; // position in the unfiltered list (stable WEEK-order sort)
+	public var charter:String = null; // optional, from metadata.json
+	public var source:String = null; // optional, from metadata.json (e.g. "osu!")
 
 	public function new(song:String, week:Int, songCharacter:String, color:Int) {
 		this.songName = song;

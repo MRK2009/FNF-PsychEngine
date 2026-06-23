@@ -1,6 +1,8 @@
 package states;
 
 import backend.Highscore;
+import backend.NoteSkinConfig;
+import backend.NoteSkinConfig.SkinImage;
 import backend.StageData;
 import backend.WeekData;
 import backend.Song;
@@ -316,6 +318,8 @@ class PlayState extends MusicBeatState {
 		// references to last song's that might have been freed).
 		Note.precachedHitsounds = new Map();
 
+		NoteSkinConfig.reset();
+
 		if (FlxG.sound.music != null)
 			FlxG.sound.music.stop();
 
@@ -501,9 +505,10 @@ class PlayState extends MusicBeatState {
 
 		Conductor.songPosition = -Conductor.crochet * 5 + Conductor.offset;
 		var showTime:Bool = (ClientPrefs.data.timeBarType != 'Disabled');
-		timeTxt = new FlxText(STRUM_X + (FlxG.width / 2) - 248, 19, 400, "", 32);
+		timeTxt = new FlxText(0, 19, 400, "", 32);
 		timeTxt.setFormat(Paths.font("vcr.ttf"), 32, FlxColor.WHITE, CENTER, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 		timeTxt.scrollFactor.set();
+		timeTxt.screenCenter(X);
 		timeTxt.alpha = 0;
 		timeTxt.borderSize = 2;
 		timeTxt.visible = updateTime = showTime;
@@ -672,15 +677,6 @@ class PlayState extends MusicBeatState {
 	}
 
 	function set_songSpeed(value:Float):Float {
-		if (generatedMusic) {
-			var ratio:Float = value / songSpeed; // funny word huh
-			if (ratio != 1) {
-				for (note in notes.members)
-					note.resizeByRatio(ratio);
-				for (note in unspawnNotes)
-					note.resizeByRatio(ratio);
-			}
-		}
 		songSpeed = value;
 		noteKillOffset = Math.max(Conductor.stepCrochet, 350 / songSpeed * playbackRate);
 		return value;
@@ -692,14 +688,6 @@ class PlayState extends MusicBeatState {
 			vocals.pitch = value;
 			opponentVocals.pitch = value;
 			FlxG.sound.music.pitch = value;
-
-			var ratio:Float = playbackRate / value; // funny word huh
-			if (ratio != 1) {
-				for (note in notes.members)
-					note.resizeByRatio(ratio);
-				for (note in unspawnNotes)
-					note.resizeByRatio(ratio);
-			}
 		}
 		playbackRate = value;
 		FlxG.animationTimeScale = value;
@@ -1424,19 +1412,8 @@ class PlayState extends MusicBeatState {
 						swagNote.tail.push(sustainNote);
 
 						sustainNote.correctionOffset = swagNote.height / 2;
-						if (!PlayState.isPixelStage) {
-							if (oldNote.isSustainNote) {
-								oldNote.scale.y *= Note.SUSTAIN_SIZE / oldNote.frameHeight;
-								oldNote.scale.y /= playbackRate;
-								oldNote.resizeByRatio(curStepCrochet / Conductor.stepCrochet);
-							}
-
-							if (ClientPrefs.data.downScroll)
-								sustainNote.correctionOffset = 0;
-						} else if (oldNote.isSustainNote) {
-							oldNote.scale.y /= playbackRate;
-							oldNote.resizeByRatio(curStepCrochet / Conductor.stepCrochet);
-						}
+						if (!PlayState.isPixelStage && ClientPrefs.data.downScroll)
+							sustainNote.correctionOffset = 0;
 
 						if (sustainNote.mustPress)
 							sustainNote.x += FlxG.width / 2; // general offset
@@ -1640,6 +1617,25 @@ class PlayState extends MusicBeatState {
 
 			strumLineNotes.add(babyArrow);
 			babyArrow.playerPosition();
+		}
+
+		// Exact strum placement for any keycount/skin. Without middle scroll the two blocks sit on
+		// the quarter lines so they mirror around screen center; with it, the player block is
+		// centered and the opponent stays faded to the side.
+		var group:FlxTypedGroup<StrumNote> = (player == 1) ? playerStrums : opponentStrums;
+		var targetCenter:Float = -1;
+		if (ClientPrefs.data.middleScroll) {
+			if (player == 1)
+				targetCenter = FlxG.width / 2;
+		} else
+			targetCenter = (player == 1) ? FlxG.width * 0.75 : FlxG.width * 0.25;
+
+		if (targetCenter >= 0 && group.length > 0) {
+			var first:Float = group.members[0].x;
+			var last:Float = group.members[group.length - 1].x;
+			var delta:Float = targetCenter - ((first + last) / 2 + Note.swagWidth / 2);
+			for (strum in group)
+				strum.x += delta;
 		}
 	}
 
@@ -2741,6 +2737,29 @@ class PlayState extends MusicBeatState {
 		_popupPool.push(spr);
 	}
 
+	function folderUIImage(name:String):Null<SkinImage> {
+		var skin:String = NoteSkinConfig.activeSkin();
+		if (skin == null)
+			return null;
+		var cfg = NoteSkinConfig.get(skin);
+		if (cfg == null)
+			return null;
+
+		var base:String = NoteSkinConfig.folder(skin);
+		var key:String = null;
+		if (name == 'combo')
+			key = cfg.combo;
+		else if (name.startsWith('num')) {
+			if (cfg.comboNums != null)
+				key = cfg.comboNums + name.substr(3);
+		} else if (cfg.ratings != null && Reflect.hasField(cfg.ratings, name))
+			key = Reflect.field(cfg.ratings, name);
+
+		if (key == null)
+			return null;
+		return NoteSkinConfig.resolveImage(base + key);
+	}
+
 	private function popUpScore(note:Note = null):Void {
 		var noteDiff:Float = Math.abs(note.strumTime - Conductor.songPosition + ClientPrefs.data.ratingOffset);
 		vocals.volume = 1;
@@ -2789,7 +2808,13 @@ class PlayState extends MusicBeatState {
 			antialias = !isPixelStage;
 		}
 
-		rating.loadGraphic(Paths.image(uiFolder + daRating.image + uiPostfix));
+		var ratingFactor:Float = 1;
+		var ratingImg = folderUIImage(daRating.image);
+		if (ratingImg != null) {
+			rating.loadGraphic(ratingImg.graphic);
+			ratingFactor = ratingImg.factor;
+		} else
+			rating.loadGraphic(Paths.image(uiFolder + daRating.image + uiPostfix));
 		rating.screenCenter();
 		rating.x = placement - 40;
 		rating.y -= 60;
@@ -2802,7 +2827,13 @@ class PlayState extends MusicBeatState {
 		rating.antialiasing = antialias;
 
 		var comboSpr:FlxSprite = acquirePopupSprite();
-		comboSpr.loadGraphic(Paths.image(uiFolder + 'combo' + uiPostfix));
+		var comboFactor:Float = 1;
+		var comboImg = folderUIImage('combo');
+		if (comboImg != null) {
+			comboSpr.loadGraphic(comboImg.graphic);
+			comboFactor = comboImg.factor;
+		} else
+			comboSpr.loadGraphic(Paths.image(uiFolder + 'combo' + uiPostfix));
 		comboSpr.screenCenter();
 		comboSpr.x = placement;
 		comboSpr.acceleration.y = FlxG.random.int(200, 300) * playbackRate * playbackRate;
@@ -2816,8 +2847,8 @@ class PlayState extends MusicBeatState {
 		comboGroup.add(rating);
 
 		if (!PlayState.isPixelStage) {
-			rating.setGraphicSize(Std.int(rating.width * 0.7));
-			comboSpr.setGraphicSize(Std.int(comboSpr.width * 0.7));
+			rating.setGraphicSize(Std.int(rating.width * 0.7 * ratingFactor));
+			comboSpr.setGraphicSize(Std.int(comboSpr.width * 0.7 * comboFactor));
 		} else {
 			rating.setGraphicSize(Std.int(rating.width * daPixelZoom * 0.85));
 			comboSpr.setGraphicSize(Std.int(comboSpr.width * daPixelZoom * 0.85));
@@ -2834,13 +2865,19 @@ class PlayState extends MusicBeatState {
 		var separatedScore:String = Std.string(combo).lpad('0', 3);
 		for (i in 0...separatedScore.length) {
 			var numScore:FlxSprite = acquirePopupSprite();
-			numScore.loadGraphic(Paths.image(uiFolder + 'num' + Std.parseInt(separatedScore.charAt(i)) + uiPostfix));
+			var numFactor:Float = 1;
+			var numImg = folderUIImage('num' + Std.parseInt(separatedScore.charAt(i)));
+			if (numImg != null) {
+				numScore.loadGraphic(numImg.graphic);
+				numFactor = numImg.factor;
+			} else
+				numScore.loadGraphic(Paths.image(uiFolder + 'num' + Std.parseInt(separatedScore.charAt(i)) + uiPostfix));
 			numScore.screenCenter();
 			numScore.x = placement + (43 * daLoop) - 90 + ClientPrefs.data.comboOffset[2];
 			numScore.y += 80 - ClientPrefs.data.comboOffset[3];
 
 			if (!PlayState.isPixelStage)
-				numScore.setGraphicSize(Std.int(numScore.width * 0.5));
+				numScore.setGraphicSize(Std.int(numScore.width * 0.5 * numFactor));
 			else
 				numScore.setGraphicSize(Std.int(numScore.width * daPixelZoom));
 			numScore.updateHitbox();
@@ -2953,7 +2990,7 @@ class PlayState extends MusicBeatState {
 		Conductor.songPosition = lastTime;
 
 		var spr:StrumNote = playerStrums.members[key];
-		if (strumsBlocked[key] != true && spr != null && spr.animation.curAnim.name != 'confirm') {
+		if (strumsBlocked[key] != true && spr != null && spr.animation.curAnim != null && spr.animation.curAnim.name != 'confirm') {
 			spr.playAnim('pressed');
 			spr.resetAnim = 0;
 		}
