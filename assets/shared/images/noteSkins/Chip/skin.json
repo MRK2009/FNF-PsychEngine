@@ -1,0 +1,23 @@
+{
+	"colorable": {
+		"notes": true,
+		"holds": true,
+		"ends": true,
+		"strums": false,
+		"pressed": true,
+		"confirm": true
+	},
+	"rotate": true,
+	"scale": 0.7,
+	"antialiasing": true,
+	"holdAlpha": 0.5,
+	"holdAntialiasing": false,
+	"directionAngles": [0, 0, 0, 0],
+	"confirmFPS": 24,
+	"notes": { "arrow": "note", "square": "note" },
+	"holds": "holdBody",
+	"ends": "holdEnd",
+	"strums": { "arrow": "strum", "square": "strum" },
+	"pressed": { "arrow": "press", "square": "press" },
+	"confirm": { "arrow": "confirm" }
+}
