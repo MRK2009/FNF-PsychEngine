@@ -435,6 +435,22 @@ class EditorPlayState extends MusicBeatSubstate {
 			strumLineNotes.add(babyArrow);
 			babyArrow.playerPosition();
 		}
+
+		var group:FlxTypedGroup<StrumNote> = (player == 1) ? playerStrums : opponentStrums;
+		var targetCenter:Float = -1;
+		if (ClientPrefs.data.middleScroll) {
+			if (player == 1)
+				targetCenter = FlxG.width / 2;
+		} else
+			targetCenter = (player == 1) ? FlxG.width * 0.75 : FlxG.width * 0.25;
+
+		if (targetCenter >= 0 && group.length > 0) {
+			var first:Float = group.members[0].x;
+			var last:Float = group.members[group.length - 1].x;
+			var delta:Float = targetCenter - ((first + last) / 2 + Note.swagWidth / 2);
+			for (strum in group)
+				strum.x += delta;
+		}
 	}
 
 	public function finishSong():Void {

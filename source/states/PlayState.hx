@@ -505,9 +505,10 @@ class PlayState extends MusicBeatState {
 
 		Conductor.songPosition = -Conductor.crochet * 5 + Conductor.offset;
 		var showTime:Bool = (ClientPrefs.data.timeBarType != 'Disabled');
-		timeTxt = new FlxText(STRUM_X + (FlxG.width / 2) - 248, 19, 400, "", 32);
+		timeTxt = new FlxText(0, 19, 400, "", 32);
 		timeTxt.setFormat(Paths.font("vcr.ttf"), 32, FlxColor.WHITE, CENTER, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 		timeTxt.scrollFactor.set();
+		timeTxt.screenCenter(X);
 		timeTxt.alpha = 0;
 		timeTxt.borderSize = 2;
 		timeTxt.visible = updateTime = showTime;
@@ -1612,6 +1613,25 @@ class PlayState extends MusicBeatState {
 
 			strumLineNotes.add(babyArrow);
 			babyArrow.playerPosition();
+		}
+
+		// Exact strum placement for any keycount/skin. Without middle scroll the two blocks sit on
+		// the quarter lines so they mirror around screen center; with it, the player block is
+		// centered and the opponent stays faded to the side.
+		var group:FlxTypedGroup<StrumNote> = (player == 1) ? playerStrums : opponentStrums;
+		var targetCenter:Float = -1;
+		if (ClientPrefs.data.middleScroll) {
+			if (player == 1)
+				targetCenter = FlxG.width / 2;
+		} else
+			targetCenter = (player == 1) ? FlxG.width * 0.75 : FlxG.width * 0.25;
+
+		if (targetCenter >= 0 && group.length > 0) {
+			var first:Float = group.members[0].x;
+			var last:Float = group.members[group.length - 1].x;
+			var delta:Float = targetCenter - ((first + last) / 2 + Note.swagWidth / 2);
+			for (strum in group)
+				strum.x += delta;
 		}
 	}
 
