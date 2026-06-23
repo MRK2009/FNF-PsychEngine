@@ -101,7 +101,7 @@ class NoteSkinConfig {
 		return data;
 	}
 
-	public static inline var DEFAULT:String = 'noteSkins/New';
+	public static inline var DEFAULT:String = 'noteSkins/Default';
 
 	public static var editorOverride:String = null;
 
