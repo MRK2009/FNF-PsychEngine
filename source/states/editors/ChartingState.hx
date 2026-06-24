@@ -6313,8 +6313,7 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 				cachedSectionTimes[curSec + 1] - Conductor.offset, 1, wavData, height);
 		}
 
-		// Draws
-		var gSize:Int = Std.int(GRID_SIZE * 8);
+		var gSize:Int = Std.int(GRID_SIZE * GRID_COLUMNS_PER_PLAYER * GRID_PLAYERS);
 		var hSize:Int = Std.int(gSize / 2);
 		var size:Float = 1;
 
@@ -6366,7 +6365,7 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 
 		var rows:Float = 0;
 
-		var simpleSample:Bool = true; // samples > 17200;
+		var simpleSample:Bool = false;
 		var v1:Bool = false;
 
 		if (array == null)
