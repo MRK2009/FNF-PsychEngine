@@ -39,6 +39,14 @@ class CreditsState extends MusicBeatState {
 
 		var defaultList:Array<Array<String>> = [
 			// Name - Icon name - Description - Link - BG Color
+			["PE Continued Contributors"],
+			["Lulu", "lulu", "Maintainer", "https://github.com/MeguminBOT",	"8A6FB0"],
+			["Picsel", "picsel", "Freeplay Star Icon\nBughunting\nLulu icon", "https://twitter.com/Picsel326", "50346B"],
+			[""],
+			["Special thanks"],
+			["Vortex2Oblivion",		"",					"hxhardware and multikey code inspiration",					"",									"888888"],
+			["Inky03",				"",					"HScript Insanity",											"",									"888888"],
+			[""],
 			["Psych Engine Team"],
 			["Shadow Mario",		"shadowmario",		"Main Programmer and Head of Psych Engine",					"https://ko-fi.com/shadowmario",	"444444"],
 			["Riveren",				"riveren",			"Main Artist/Animator of Psych Engine",						"https://x.com/riverennn",			"14967B"],
@@ -53,7 +61,7 @@ class CreditsState extends MusicBeatState {
 			["Keoiki",				"keoiki",			"Note Splash Animations and Latin Alphabet",				"https://x.com/Keoiki_",			"D2D2D2"],
 			["SqirraRNG",			"sqirra",			"Crash Handler and Base code for\nChart Editor's Waveform",	"https://x.com/gedehari",			"E1843A"],
 			["EliteMasterEric",		"mastereric",		"Runtime Shaders support and Other PRs",					"https://x.com/EliteMasterEric",	"FFBD40"],
-			["MAJigsaw77",			"majigsaw",			".MP4 Video Loader Library (hxvlc)",						"https://x.com/MAJigsaw77",			"5F5F5F"],
+			["MAJigsaw77",			"majigsaw",			"Android extensions, hxluajit, and the\n.MP4 Video Loader Library (hxvlc)",	"https://x.com/MAJigsaw77",			"5F5F5F"],
 			["iFlicky",				"flicky",			"Composer of Psync and Tea Time\nAnd some sound effects",	"https://x.com/flicky_i",			"9E29CF"],
 			["KadeDev",				"kade",				"Fixed some issues on Chart Editor and Other PRs",			"https://x.com/kade0912",			"64A250"],
 			["superpowers04",		"superpowers04",	"LUA JIT Fork",												"https://x.com/superpowers04",		"B957ED"],
