@@ -386,7 +386,7 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 		infoBox.getTab('Information').menu.add(infoText);
 		add(infoBox);
 
-		mainBox = new PsychUIBox(mainBoxPosition.x, mainBoxPosition.y, 300, 320, ['Charting', 'Data', 'Events', 'Note', 'Section', 'Song']);
+		mainBox = new PsychUIBox(mainBoxPosition.x, mainBoxPosition.y, 300, 320, ['Charting', 'Data', 'Events', 'Note', 'Section', 'Song', 'Meta']);
 		mainBox.selectedName = 'Song';
 		mainBox.scrollFactor.set();
 		mainBox.cameras = [camUI];
@@ -438,6 +438,7 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 		addNoteTab();
 		addSectionTab();
 		addSongTab();
+		addMetaTab();
 
 		////// for upper box
 		addFileTab();
@@ -3709,6 +3710,194 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 			section.sectionDenominator = den;
 		}
 		adaptNotesToNewTimes(oldTimes);
+	}
+
+	/* -- Metadata tab --
+	 * Edits the per-song data/<song>/metadata.json that FreeplayState's info flyout reads.
+	 * Standard fields up top, optional display overrides, then a growable list of custom
+	 * label/value rows (the "+" button) that show in the flyout's MORE section. Unknown keys
+	 * already in the file (icon/color/difficulties/beatmapId from osu! converts) are preserved.
+	 */
+	var metaWorking:backend.SongMeta.SongMetaInfo;
+	var metaTabGroup:flixel.group.FlxSpriteGroup;
+	var metaTitleInput:PsychUIInputText;
+	var metaArtistInput:PsychUIInputText;
+	var metaCharterInput:PsychUIInputText;
+	var metaSourceInput:PsychUIInputText;
+	var metaTagsInput:PsychUIInputText;
+	var metaBpmStepper:PsychUINumericStepper;
+	var metaSigNumStepper:PsychUINumericStepper;
+	var metaSigDenStepper:PsychUINumericStepper;
+	var metaCustomData:Array<{label:String, value:String}> = [];
+	var metaCustomRows:Array<{label:PsychUIInputText, value:PsychUIInputText, del:PsychUIButton}> = [];
+	var metaCustomBaseY:Float = 0;
+
+	function addMetaTab() {
+		var tab_group = mainBox.getTab('Meta').menu;
+		metaTabGroup = tab_group;
+		loadMetaWorking();
+
+		var objX = 10;
+		var labW = 78;
+		var inX = objX + labW;
+		var inW = 200;
+		var y = 24;
+		var step = 24;
+
+		tab_group.add(new FlxText(objX, y + 2, labW, 'Title:'));
+		metaTitleInput = new PsychUIInputText(inX, y, inW, (metaWorking.songName != null) ? metaWorking.songName : '', 8);
+		metaTitleInput.onChange = function(old:String, cur:String) metaWorking.songName = cur;
+		tab_group.add(metaTitleInput);
+		y += step;
+
+		tab_group.add(new FlxText(objX, y + 2, labW, 'Artist:'));
+		metaArtistInput = new PsychUIInputText(inX, y, inW, (metaWorking.artist != null) ? metaWorking.artist : '', 8);
+		metaArtistInput.onChange = function(old:String, cur:String) metaWorking.artist = cur;
+		tab_group.add(metaArtistInput);
+		y += step;
+
+		tab_group.add(new FlxText(objX, y + 2, labW, 'Charter:'));
+		metaCharterInput = new PsychUIInputText(inX, y, inW, (metaWorking.charter != null) ? metaWorking.charter : '', 8);
+		metaCharterInput.onChange = function(old:String, cur:String) metaWorking.charter = cur;
+		tab_group.add(metaCharterInput);
+		y += step;
+
+		tab_group.add(new FlxText(objX, y + 2, labW, 'Source/Mod:'));
+		metaSourceInput = new PsychUIInputText(inX, y, inW, (metaSourceValue() != null) ? metaSourceValue() : '', 8);
+		metaSourceInput.onChange = function(old:String, cur:String) metaWorking.source = cur;
+		tab_group.add(metaSourceInput);
+		y += step;
+
+		tab_group.add(new FlxText(objX, y + 2, labW, 'Tags:'));
+		metaTagsInput = new PsychUIInputText(inX, y, inW, (metaWorking.tags != null) ? metaWorking.tags.join(', ') : '', 8);
+		metaTagsInput.onChange = function(old:String, cur:String) metaWorking.tags = parseMetaTags(cur);
+		tab_group.add(metaTagsInput);
+		y += step;
+
+		// Display overrides (0 / blank == use the chart's own value).
+		tab_group.add(new FlxText(objX, y + 2, labW, 'Disp BPM:'));
+		metaBpmStepper = new PsychUINumericStepper(inX, y, 1, (metaWorking.displayBpm != null) ? metaWorking.displayBpm : 0, 0, 999, 0, 55);
+		tab_group.add(metaBpmStepper);
+		var sig:Array<Int> = metaWorking.displayTimeSignature;
+		tab_group.add(new FlxText(inX + 65, y + 2, 30, 'Sig:'));
+		metaSigNumStepper = new PsychUINumericStepper(inX + 95, y, 1, (sig != null && sig.length > 0) ? sig[0] : 0, 0, 16, 0, 42);
+		tab_group.add(new FlxText(inX + 140, y + 2, 12, '/'));
+		metaSigDenStepper = new PsychUINumericStepper(inX + 150, y, 1, (sig != null && sig.length > 1) ? sig[1] : 0, 0, 16, 0, 42);
+		tab_group.add(metaSigNumStepper);
+		tab_group.add(metaSigDenStepper);
+		y += 30;
+
+		// Custom-field header + the "+" and Save buttons stay put as rows grow below them.
+		tab_group.add(new FlxText(objX, y + 4, 90, 'Custom Fields:'));
+		var addBtn = new PsychUIButton(objX + 95, y, '+', function() {
+			metaCustomData.push({label: '', value: ''});
+			rebuildMetaCustomRows();
+		}, 24);
+		tab_group.add(addBtn);
+		var saveBtn = new PsychUIButton(objX + 130, y, 'Save Metadata', function() saveMeta(), 110);
+		tab_group.add(saveBtn);
+
+		metaCustomBaseY = y + 26;
+		rebuildMetaCustomRows();
+	}
+
+	function loadMetaWorking() {
+		var key:String = Paths.formatToSongPath(PlayState.SONG.song);
+		var loaded:backend.SongMeta.SongMetaInfo = backend.SongMeta.load(key);
+		metaWorking = (loaded != null) ? loaded : (cast {});
+		metaCustomData = [];
+		if (metaWorking.info != null)
+			for (entry in metaWorking.info)
+				if (entry != null)
+					metaCustomData.push({label: entry.label, value: entry.value});
+	}
+
+	inline function metaSourceValue():String
+		return (metaWorking.source != null && metaWorking.source.length > 0) ? metaWorking.source : metaWorking.mod;
+
+	function parseMetaTags(raw:String):Array<String> {
+		var out:Array<String> = [];
+		for (part in raw.split(',')) {
+			var t:String = part.trim();
+			if (t.length > 0)
+				out.push(t);
+		}
+		return (out.length > 0) ? out : null;
+	}
+
+	// Rebuilds the custom-field row widgets from metaCustomData (simpler than repositioning
+	// survivors after a removal).
+	function rebuildMetaCustomRows() {
+		for (row in metaCustomRows) {
+			metaTabGroup.remove(row.label, true);
+			row.label.destroy();
+			metaTabGroup.remove(row.value, true);
+			row.value.destroy();
+			metaTabGroup.remove(row.del, true);
+			row.del.destroy();
+		}
+		metaCustomRows = [];
+
+		for (i in 0...metaCustomData.length) {
+			var data = metaCustomData[i];
+			var ry:Float = metaCustomBaseY + i * 24;
+			var lab = new PsychUIInputText(10, ry, 78, data.label, 8);
+			lab.onChange = function(old:String, cur:String) data.label = cur;
+			var val = new PsychUIInputText(92, ry, 132, data.value, 8);
+			val.onChange = function(old:String, cur:String) data.value = cur;
+			var del = new PsychUIButton(Std.int(230), Std.int(ry), 'X', function() {
+				metaCustomData.remove(data);
+				rebuildMetaCustomRows();
+			}, 20);
+			metaTabGroup.add(lab);
+			metaTabGroup.add(val);
+			metaTabGroup.add(del);
+			metaCustomRows.push({label: lab, value: val, del: del});
+		}
+	}
+
+	function saveMeta() {
+		#if sys
+		if (Song.chartPath == null) {
+			showOutput('Save the chart first so the editor knows where to write metadata.json.', true);
+			return;
+		}
+
+		// Sync the override steppers + custom rows into the working object.
+		var bpm:Float = metaBpmStepper.value;
+		if (bpm > 0) metaWorking.displayBpm = bpm; else Reflect.deleteField(metaWorking, 'displayBpm');
+
+		var sn:Int = Std.int(metaSigNumStepper.value);
+		var sd:Int = Std.int(metaSigDenStepper.value);
+		if (sn > 0 && sd > 0) metaWorking.displayTimeSignature = [sn, sd]; else Reflect.deleteField(metaWorking, 'displayTimeSignature');
+
+		var info:Array<{label:String, value:String}> = [];
+		for (data in metaCustomData)
+			if (data.label != null && data.label.trim().length > 0)
+				info.push({label: data.label.trim(), value: (data.value != null) ? data.value : ''});
+		if (info.length > 0) metaWorking.info = info; else Reflect.deleteField(metaWorking, 'info');
+
+		// Drop empty standard fields so we never write blank keys.
+		for (field in ['songName', 'artist', 'charter', 'source']) {
+			var v:Dynamic = Reflect.field(metaWorking, field);
+			if (v == null || Std.string(v).length < 1)
+				Reflect.deleteField(metaWorking, field);
+		}
+		if (metaWorking.tags != null && metaWorking.tags.length < 1)
+			Reflect.deleteField(metaWorking, 'tags');
+
+		var p:String = Song.chartPath.replace('\\', '/');
+		var dir:String = p.substr(0, p.lastIndexOf('/'));
+		var metaPath:String = '$dir/metadata.json';
+		try {
+			File.saveContent(metaPath, Json.stringify(metaWorking, null, '\t'));
+			showOutput('Metadata saved to: $metaPath');
+		} catch (e:Dynamic) {
+			showOutput('Error saving metadata: $e', true);
+		}
+		#else
+		showOutput('Metadata saving is only available on desktop.', true);
+		#end
 	}
 
 	function addFileTab() {
