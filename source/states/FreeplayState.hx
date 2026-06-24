@@ -227,7 +227,7 @@ class FreeplayState extends MusicBeatState {
 
 		#if mobile
 		addTouchPad('FULL', 'A_B');
-		addActionButtons([['SEARCH', 'SRCH'], ['SORT', 'SORT'], ['GROUPL', 'GRP-'], ['GROUPR', 'GRP+'], ['FAV', 'FAV'], ['INFO', 'INFO']]);
+		addActionButtons([['SEARCH', 'SRCH'], ['SORT', 'SORT'], ['GROUPL', 'GRP-'], ['GROUPR', 'GRP+'], ['FAV', 'FAV'], ['INFO', 'INFO'], ['CHANGERS', 'CHNG']]);
 		#end
 	}
 
@@ -517,7 +517,7 @@ class FreeplayState extends MusicBeatState {
 			}
 		}
 
-		if (FlxG.keys.justPressed.CONTROL && !player.playingMusic) {
+		if ((FlxG.keys.justPressed.CONTROL || actionButtonJustPressed('CHANGERS')) && !player.playingMusic) {
 			persistentUpdate = false;
 			openSubState(new GameplayChangersSubstate());
 		} else if (FlxG.keys.justPressed.SPACE && songs.length > 0) {

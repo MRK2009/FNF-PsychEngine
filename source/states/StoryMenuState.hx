@@ -179,6 +179,7 @@ class StoryMenuState extends MusicBeatState {
 
 		#if mobile
 		addTouchPad('FULL', 'A_B');
+		addActionButtons([['CHANGERS', 'CHNG']]);
 		#end
 	}
 
@@ -247,7 +248,7 @@ class StoryMenuState extends MusicBeatState {
 			else if (changeDiff)
 				changeDifficulty();
 
-			if (FlxG.keys.justPressed.CONTROL) {
+			if (FlxG.keys.justPressed.CONTROL || actionButtonJustPressed('CHANGERS')) {
 				persistentUpdate = false;
 				openSubState(new GameplayChangersSubstate());
 			} else if (controls.RESET) {
