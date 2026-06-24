@@ -337,6 +337,8 @@ class MainMenuState extends MusicBeatState {
 			if (actionButtonJustPressed('EDITORS')) {
 				selectedSomethin = true;
 				MusicBeatState.switchState(new MasterEditorMenu());
+			}
+			#end
 			#if CONVERTERS_ALLOWED
 			if (controls.justPressed('debug_2')) {
 				selectedSomethin = true;
