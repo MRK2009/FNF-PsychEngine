@@ -564,6 +564,23 @@ class OsuConversionJob {
 
 				var fileKey:String = uniqueKey(diffKey(map, keys), usedKeys);
 				var fileName:String = '$songKey-$fileKey.json';
+
+				// Safety + diagnostic: an event must be [time, [[name, v1, v2], ...]]. If any
+				// event's value slot isn't an array (the "[time, 0]" corruption), drop it so a
+				// malformed chart can never ship, and log it -- a non-zero count here proves the
+				// events were already malformed IN MEMORY (a generation bug), since the JSON
+				// printer is otherwise faithful.
+				if (song.events != null) {
+					var cleanEvents:Array<Dynamic> = [];
+					for (e in song.events)
+						if (e != null && Std.isOfType(e[1], Array))
+							cleanEvents.push(e);
+					if (cleanEvents.length != song.events.length) {
+						log('WARNING: dropped ${song.events.length - cleanEvents.length}/${song.events.length} malformed event(s) ([time, <non-array>]) before writing "$fileName" -- events were corrupt in memory.');
+						song.events = cleanEvents;
+					}
+				}
+
 				File.saveContent('$packDir/data/$songKey/$fileName', '{"song":' + PsychJsonPrinter.print(song, ['sectionNotes', 'events']) + '}');
 
 				var notes:Int = countNotes(song);
@@ -619,7 +636,11 @@ class OsuConversionJob {
 		}
 
 		if (added)
-			song.events.sort((a, b) -> {
+			// NOTE: params MUST be typed Array<Dynamic>. Writing `var ta:Float = a[0]` with
+			// untyped params makes Haxe infer them as Array<Float>, which on hxcpp coerces
+			// this Array<Dynamic> element-wise and zeroes every event's non-float `[1]` slot
+			// (the "[time, 0]" corruption seen only when hitsounds add events to sort).
+			song.events.sort((a:Array<Dynamic>, b:Array<Dynamic>) -> {
 				var ta:Float = a[0], tb:Float = b[0];
 				return (ta < tb) ? -1 : (ta > tb ? 1 : 0);
 			});
