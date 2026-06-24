@@ -5452,7 +5452,21 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 		#if flixel_animate
 		if (c.isAnimateAtlas && c.atlas != null) {
 			c.copyAtlasValues(); // sync atlas x/y/scale/offset to the character before measuring
-			return c.atlas.getScreenBounds(null, camChars);
+			// FlxAnimate.getScreenBounds sizes its rect from frameWidth/frameHeight (a single
+			// spritemap element), not the rendered art -- so the hit/outline box is the wrong
+			// size and the character can't be grabbed. getScreenBounds still builds the correct
+			// transform into the sprite's _matrix, so reuse that matrix on the real art
+			// rectangle (timeline._bounds) to get the true on-screen bounds.
+			var rect:flixel.math.FlxRect = c.atlas.getScreenBounds(null, camChars);
+			@:privateAccess
+			{
+				var bounds = c.atlas.timeline != null ? c.atlas.timeline._bounds : null;
+				if (bounds != null && bounds.width > 0 && bounds.height > 0) {
+					rect.set(bounds.x, bounds.y, bounds.width, bounds.height);
+					animate.internal.Timeline.applyMatrixToRect(rect, c.atlas._matrix);
+				}
+			}
+			return rect;
 		}
 		#end
 		return c.getScreenBounds(null, camChars);
