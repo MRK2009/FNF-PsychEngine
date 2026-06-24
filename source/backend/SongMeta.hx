@@ -13,10 +13,16 @@ typedef SongMetaInfo = {
 	@:optional var icon:String; // health icon character
 	@:optional var color:Array<Int>; // [r, g, b]
 	@:optional var difficulties:Array<String>; // explicit difficulty order
-	@:optional var artist:String;
-	@:optional var charter:String;
-	@:optional var source:String; // e.g. "osu!"
-	@:optional var beatmapId:Int;
+	@:optional var artist:String; // who made the song
+	@:optional var charter:String; // song-level charter (per-difficulty override lives in `charters`)
+	@:optional var source:String; // where the song originates, e.g. "osu!" (canonical key)
+	@:optional var mod:String; // alias for `source`; either may be authored, `source` wins if both present
+	@:optional var tags:Array<String>; // free-form tags, also matched by Freeplay search
+	@:optional var beatmapId:Int; // osu! beatmap set id (shown only for osu! converts)
+	@:optional var displayBpm:Float; // overrides the chart BPM shown in the info flyout (chart unchanged)
+	@:optional var displayTimeSignature:Array<Int>; // overrides the shown time signature [num, den]
+	@:optional var charters:haxe.DynamicAccess<String>; // per-difficulty charter override, keyed by difficulty name
+	@:optional var info:Array<{label:String, value:String}>; // free-form extra rows shown in the Freeplay info flyout
 }
 
 class SongMeta {

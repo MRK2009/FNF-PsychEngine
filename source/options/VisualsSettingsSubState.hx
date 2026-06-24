@@ -124,7 +124,25 @@ class VisualsSettingsSubState extends BaseOptionsMenu {
 		option.changeValue = 0.1;
 		option.decimals = 1;
 		addOption(option);
-		
+
+		var option:Option = new Option('Freeplay Info Flyout',
+			"If checked, lets you press I in Freeplay to open the song info / difficulty-rating panel.",
+			'difficultyFlyout',
+			BOOL);
+		addOption(option);
+
+		var option:Option = new Option('Show osu! Star Rating',
+			"Show the osu!mania star rating in the Freeplay info flyout.",
+			'showOsuRating',
+			BOOL);
+		addOption(option);
+
+		var option:Option = new Option('Show Etterna MSD',
+			"Show the Etterna MSD rating in the Freeplay info flyout.",
+			'showMsdRating',
+			BOOL);
+		addOption(option);
+
 		#if !mobile
 		var option:Option = new Option('FPS Counter',
 			'If unchecked, hides FPS Counter.',

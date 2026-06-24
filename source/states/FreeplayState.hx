@@ -7,6 +7,7 @@ import backend.SongMeta;
 import backend.SongMeta.SongMetaInfo;
 import objects.HealthIcon;
 import objects.MusicPlayer;
+import states.freeplay.FreeplayInfoFlyout;
 import options.GameplayChangersSubstate;
 import substates.ResetScoreSubState;
 import flixel.math.FlxMath;
@@ -51,6 +52,7 @@ class FreeplayState extends MusicBeatState {
 	var bottomBG:FlxSprite;
 
 	var player:MusicPlayer;
+	var infoFlyout:FreeplayInfoFlyout; // right-edge metadata + difficulty-rating panel
 
 	var allSongs:Array<SongMetadata> = []; // unfiltered master list; `songs` is the filtered view
 	var initialized:Bool = false; // false until create() finishes building the song list
@@ -199,7 +201,7 @@ class FreeplayState extends MusicBeatState {
 		bottomBG.alpha = 0.6;
 		add(bottomBG);
 
-		var leText:String = Language.getPhrase("freeplay_tip2", "TAB Search  Q/E Group  T Sort  F Favorite  SPACE Listen  CTRL Changers  RESET Score");
+		var leText:String = Language.getPhrase("freeplay_tip2", "TAB Search  Q/E Group  T Sort  F Favorite  I Info  SPACE Listen  CTRL Changers  RESET Score");
 		bottomString = leText;
 		var size:Int = 16;
 		bottomText = new FlxText(bottomBG.x, bottomBG.y + 4, FlxG.width, leText, size);
@@ -210,6 +212,13 @@ class FreeplayState extends MusicBeatState {
 		player = new MusicPlayer(this);
 		add(player);
 
+		infoFlyout = new FreeplayInfoFlyout();
+		infoFlyout.onChangeDiff = function(dir:Int) {
+			changeDiff(dir);
+			_updateSongLastDifficulty();
+		};
+		add(infoFlyout);
+
 		updateHeader();
 		changeSelection();
 		updateTexts();
@@ -218,7 +227,7 @@ class FreeplayState extends MusicBeatState {
 
 		#if mobile
 		addTouchPad('FULL', 'A_B');
-		addActionButtons([['SEARCH', 'SRCH'], ['SORT', 'SORT'], ['GROUPL', 'GRP-'], ['GROUPR', 'GRP+'], ['FAV', 'FAV']]);
+		addActionButtons([['SEARCH', 'SRCH'], ['SORT', 'SORT'], ['GROUPL', 'GRP-'], ['GROUPR', 'GRP+'], ['FAV', 'FAV'], ['INFO', 'INFO']]);
 		#end
 	}
 
@@ -250,7 +259,16 @@ class FreeplayState extends MusicBeatState {
 			meta.difficulties = diffs;
 		if (info != null) {
 			meta.charter = info.charter;
-			meta.source = info.source;
+			meta.source = (info.source != null && info.source.length > 0) ? info.source : info.mod; // `source` canonical, `mod` alias
+			meta.artist = info.artist;
+			if (info.beatmapId != null)
+				meta.beatmapId = info.beatmapId;
+			meta.info = info.info;
+			meta.tags = info.tags;
+			if (info.displayBpm != null)
+				meta.displayBpm = info.displayBpm;
+			meta.displayTimeSignature = info.displayTimeSignature;
+			meta.charters = info.charters;
 		}
 		allSongs.push(meta);
 	}
@@ -392,6 +410,19 @@ class FreeplayState extends MusicBeatState {
 			return;
 		}
 
+		// Info flyout is a focused sub-mode: while open it captures navigation so the
+		// song list stays put, and it handles its own scroll / collapse / diff-switch.
+		if (infoFlyout != null && infoFlyout.open) {
+			infoFlyout.updateInput(elapsed);
+			if (FlxG.keys.justPressed.I || controls.BACK) {
+				infoFlyout.close();
+				FlxG.sound.play(Paths.sound('cancelMenu'));
+			}
+			updateTexts(elapsed);
+			super.update(elapsed);
+			return;
+		}
+
 		if (!player.playingMusic) {
 			scoreText.text = Language.getPhrase('personal_best', 'PERSONAL BEST: {1} ({2}%)', [lerpScore, ratingSplit.join('.')]);
 			positionHighscore();
@@ -448,6 +479,11 @@ class FreeplayState extends MusicBeatState {
 				cycleGroup(1);
 			else if (FlxG.keys.justPressed.F || actionButtonJustPressed('FAV'))
 				toggleFavorite();
+			else if ((FlxG.keys.justPressed.I || actionButtonJustPressed('INFO')) && songs.length > 0 && ClientPrefs.data.difficultyFlyout) {
+				infoFlyout.setSong(songs[curSelected], curDifficulty);
+				infoFlyout.openFlyout();
+				FlxG.sound.play(Paths.sound('scrollMenu'), 0.5);
+			}
 		}
 
 		if (controls.BACK) {
@@ -739,6 +775,21 @@ class FreeplayState extends MusicBeatState {
 		return Highscore.songScores.exists(key) ? Highscore.songScores.get(key) : 0;
 	}
 
+	// Search matches the song title, artist, source/mod and any metadata tags.
+	function matchesQuery(s:SongMetadata, q:String):Bool {
+		if (s.songName.toLowerCase().indexOf(q) >= 0)
+			return true;
+		if (s.artist != null && s.artist.toLowerCase().indexOf(q) >= 0)
+			return true;
+		if (s.source != null && s.source.toLowerCase().indexOf(q) >= 0)
+			return true;
+		if (s.tags != null)
+			for (tag in s.tags)
+				if (tag != null && tag.toLowerCase().indexOf(q) >= 0)
+					return true;
+		return false;
+	}
+
 	function applyFilters() {
 		var g:Int = groupOptions[curGroupIdx];
 		var q:String = searchQuery.toLowerCase();
@@ -746,7 +797,7 @@ class FreeplayState extends MusicBeatState {
 		for (s in allSongs) {
 			if (g >= 0 && s.week != g)
 				continue;
-			if (q.length > 0 && s.songName.toLowerCase().indexOf(q) < 0)
+			if (q.length > 0 && !matchesQuery(s, q))
 				continue;
 			filtered.push(s);
 		}
@@ -1036,6 +1087,13 @@ class SongMetadata {
 	public var origIndex:Int = 0; // position in the unfiltered list (stable WEEK-order sort)
 	public var charter:String = null; // optional, from metadata.json
 	public var source:String = null; // optional, from metadata.json (e.g. "osu!")
+	public var artist:String = null; // optional, from metadata.json
+	public var beatmapId:Int = 0; // optional, from metadata.json (osu! converts)
+	public var info:Array<{label:String, value:String}> = null; // optional free-form rows, from metadata.json
+	public var tags:Array<String> = null; // optional, from metadata.json (also matched by search)
+	public var displayBpm:Float = 0; // optional BPM override for the info flyout (0 == use chart bpm)
+	public var displayTimeSignature:Array<Int> = null; // optional time-signature override for the info flyout
+	public var charters:haxe.DynamicAccess<String> = null; // optional per-difficulty charter overrides
 
 	public function new(song:String, week:Int, songCharacter:String, color:Int) {
 		this.songName = song;

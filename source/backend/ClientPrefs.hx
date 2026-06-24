@@ -48,6 +48,10 @@ import states.TitleState;
 	public var pauseMusic:String = 'Tea Time';
 	public var checkForUpdates:Bool = true;
 	public var comboStacking:Bool = true;
+	// Freeplay difficulty-rating flyout (objects.../states.freeplay.FreeplayInfoFlyout)
+	public var difficultyFlyout:Bool = true; // master toggle for the Freeplay info flyout
+	public var showOsuRating:Bool = true; // show the osu!mania star rating block
+	public var showMsdRating:Bool = true; // show the Etterna MSD rating block
 	// Mobile on-screen controls
 	public var controlsAlpha:Float = 0.6;
 	public var vibration:Bool = true;
