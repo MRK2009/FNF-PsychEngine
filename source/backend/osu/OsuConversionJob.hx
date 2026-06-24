@@ -648,9 +648,11 @@ class OsuConversionJob {
 	}
 
 	function writeStage(hasBg:Bool, hasVideo:Bool, hasStoryboard:Bool, widescreen:Bool) {
+		// Both the stage script and its data JSON live in stages/ -- StageData.getStageFile
+		// loads the JSON from 'stages/<name>.json', not 'data/stages/'.
+		OszArchive.ensureDir('$packDir/stages');
 		File.saveContent('$packDir/stages/$stageName.lua', genStageLua(hasBg, hasVideo, hasStoryboard, widescreen));
-		OszArchive.ensureDir('$packDir/data/stages');
-		File.saveContent('$packDir/data/stages/$stageName.json', genStageJson());
+		File.saveContent('$packDir/stages/$stageName.json', genStageJson());
 	}
 
 	/* -- Helpers -- */
