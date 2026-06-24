@@ -866,8 +866,16 @@ class FreeplayState extends MusicBeatState {
 			grpIcons.add(icon);
 
 			// Star marker overlapping the title's left edge on favorited songs
-			// (positioned in updateTexts).
-			var star:FlxSprite = new FlxSprite().loadGraphic(Paths.image('starMarker'));
+			// (positioned in updateTexts). Animated unless Low Quality is on -- only
+			// favorited, on-screen stars are active, so the animation cost is bounded.
+			var star:FlxSprite = new FlxSprite();
+			if (!ClientPrefs.data.lowQuality) {
+				star.frames = Paths.getSparrowAtlas('starMarkerAnimated');
+				star.animation.addByPrefix('active', 'active', 24, true);
+				star.animation.play('active');
+			} else
+				star.loadGraphic(Paths.image('starMarker'));
+			star.antialiasing = ClientPrefs.data.antialiasing;
 			star.setGraphicSize(LIST_STAR, LIST_STAR);
 			star.updateHitbox();
 			star.visible = star.active = false;
