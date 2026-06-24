@@ -174,6 +174,8 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 	var eventLockOverlay:FlxSprite;
 	var vortexIndicator:FlxSprite;
 	var strumLineNotes:FlxTypedGroup<StrumNote> = new FlxTypedGroup<StrumNote>();
+	var strumCellCenterX:Array<Float> = [];
+	var strumCellCenterY:Array<Float> = [];
 	var dummyArrow:FlxSprite;
 	var isMovingNotes:Bool = false;
 	var movingNotesLastData:Int = 0;
@@ -940,6 +942,8 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 		}
 
 		super.update(elapsed);
+
+		reanchorEditorStrums();
 
 		if (songFinished) {
 			onSongComplete();
@@ -1763,6 +1767,8 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 		for (note in strumLineNotes)
 			note.destroy();
 		strumLineNotes.clear();
+		strumCellCenterX.resize(0);
+		strumCellCenterY.resize(0);
 
 		var startX:Float = gridBg.x;
 		var startY:Float = strumLineY();
@@ -1784,6 +1790,24 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 			note.x += GRID_SIZE / 2 - note.width / 2;
 			note.y += GRID_SIZE / 2 - note.height / 2;
 			strumLineNotes.add(note);
+			var b = note.getScreenBounds();
+			strumCellCenterX.push(b.x + b.width / 2);
+			strumCellCenterY.push(b.y + b.height / 2);
+			b.put();
+		}
+	}
+
+	function reanchorEditorStrums() {
+		if (!strumLineNotes.visible)
+			return;
+		for (i in 0...strumLineNotes.members.length) {
+			var note:StrumNote = strumLineNotes.members[i];
+			if (note == null || i >= strumCellCenterX.length)
+				continue;
+			var b = note.getScreenBounds();
+			note.x += strumCellCenterX[i] - (b.x + b.width / 2);
+			note.y += strumCellCenterY[i] - (b.y + b.height / 2);
+			b.put();
 		}
 	}
 
