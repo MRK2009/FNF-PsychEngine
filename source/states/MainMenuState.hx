@@ -13,7 +13,7 @@ enum MainMenuColumn {
 }
 
 class MainMenuState extends MusicBeatState {
-	public static var psychEngineVersion:String = '1.2.1'; // This is also used for Discord RPC
+	public static var psychEngineVersion:String = 'dev-1.3.0'; // This is also used for Discord RPC
 	public static var curSelected:Int = 0;
 	public static var curColumn:MainMenuColumn = CENTER;
 
@@ -38,6 +38,7 @@ class MainMenuState extends MusicBeatState {
 	var camFollow:FlxObject;
 
 	static var showOutdatedWarning:Bool = true;
+	var awaitingUpdateCheck:Bool = false;
 
 	override function create() {
 		backend.Mods.allowCurrentModAssets = false; // core menu: engine + global mods only
@@ -115,10 +116,9 @@ class MainMenuState extends MusicBeatState {
 		#end
 
 		#if CHECK_FOR_UPDATES
-		if (showOutdatedWarning && ClientPrefs.data.checkForUpdates && substates.OutdatedSubState.updateVersion != psychEngineVersion) {
-			persistentUpdate = false;
-			showOutdatedWarning = false;
-			openSubState(new substates.OutdatedSubState());
+		if (showOutdatedWarning && ClientPrefs.data.checkForUpdates && !backend.updater.UpdateManager.dismissedThisSession) {
+			awaitingUpdateCheck = true;
+			backend.updater.UpdateManager.beginBackgroundCheck(backend.updater.UpdateManager.currentChannel());
 		}
 		#end
 
@@ -160,6 +160,26 @@ class MainMenuState extends MusicBeatState {
 	override function update(elapsed:Float) {
 		if (FlxG.sound.music.volume < 0.8)
 			FlxG.sound.music.volume = Math.min(FlxG.sound.music.volume + 0.5 * elapsed, 0.8);
+
+		#if CHECK_FOR_UPDATES
+		if (awaitingUpdateCheck) {
+			switch (backend.updater.UpdateManager.checkState) {
+				case 'done':
+					awaitingUpdateCheck = false;
+					showOutdatedWarning = false;
+					var info = backend.updater.UpdateManager.result;
+					if (info != null && backend.updater.UpdateManager.isNewer(info)
+						&& !backend.updater.UpdateManager.dismissedThisSession) {
+						MusicBeatState.switchState(new OutdatedState(info));
+						return;
+					}
+				case 'failed':
+					awaitingUpdateCheck = false;
+					showOutdatedWarning = false;
+				default:
+			}
+		}
+		#end
 
 		if (!selectedSomethin) {
 			if (controls.UI_UP_P)

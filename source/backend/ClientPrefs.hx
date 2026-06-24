@@ -47,6 +47,7 @@ import states.TitleState;
 	public var hitsoundVolume:Float = 0;
 	public var pauseMusic:String = 'Tea Time';
 	public var checkForUpdates:Bool = true;
+	public var updateChannel:String = 'stable'; // 'stable' | 'bleeding' (in-engine self-updater)
 	public var comboStacking:Bool = true;
 	// Freeplay difficulty-rating flyout (objects.../states.freeplay.FreeplayInfoFlyout)
 	public var difficultyFlyout:Bool = true; // master toggle for the Freeplay info flyout
