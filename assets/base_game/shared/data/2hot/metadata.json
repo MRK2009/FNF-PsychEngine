@@ -1,0 +1,21 @@
+{
+	"songName": "2Hot",
+	"tags": [
+		"Base game",
+		"weekend1"
+	],
+	"displayBpm": 182,
+	"displayTimeSignature": [
+		4,
+		4
+	],
+	"info": [
+		{
+			"value": "Re-timed",
+			"label": "Other:"
+		}
+	],
+	"source": "V-Slice",
+	"charter": "Jenny Crowe, Spazkid, ninjamuffin99",
+	"artist": "Kawai Sprite"
+}
