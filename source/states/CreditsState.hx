@@ -60,6 +60,7 @@ class CreditsState extends MusicBeatState {
 
 	var sidebarTexts:Array<FlxText> = [];
 	var sidebarBgs:Array<FlxSprite> = [];
+	var sidebarIcons:Array<FlxSprite> = [];
 	var sidebarSlotSection:Array<Int> = [];
 	var sidebarHint:FlxText;
 
