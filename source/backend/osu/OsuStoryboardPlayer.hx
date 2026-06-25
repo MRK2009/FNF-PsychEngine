@@ -8,6 +8,7 @@ import flixel.tweens.FlxEase;
 import flixel.util.FlxColor;
 import openfl.display.BlendMode;
 import backend.Conductor;
+import backend.ClientPrefs;
 import backend.osu.OsuStoryboard.OsuSbObject;
 import backend.osu.OsuStoryboard.OsuSbCommand;
 import backend.osu.OsuStoryboard.OsuSbSample;
@@ -75,6 +76,8 @@ class OsuStoryboardPlayer extends FlxTypedGroup<OsuSbRuntimeSprite> {
 	var offsetX:Float;
 	var offsetY:Float;
 	var bitmapCache:Map<String, FlxGraphic> = new Map();
+
+	public var soundsEnabled:Bool = true;
 
 	var samples:Array<OsuSbSample> = [];
 	var sampleIdx:Int = 0;
@@ -258,7 +261,7 @@ class OsuStoryboardPlayer extends FlxTypedGroup<OsuSbRuntimeSprite> {
 	}
 
 	function updateSamples(t:Float) {
-		if (samples.length < 1)
+		if (!soundsEnabled || samples.length < 1)
 			return;
 		if (t < lastT - 5)
 			sampleIdx = 0; // backward jump (restart / seek): replay from the start
@@ -276,7 +279,7 @@ class OsuStoryboardPlayer extends FlxTypedGroup<OsuSbRuntimeSprite> {
 		if (snd == null)
 			return;
 		try {
-			snd.play(0, 0, new SoundTransform((s.volume / 100) * FlxG.sound.volume));
+			snd.play(0, 0, new SoundTransform((s.volume / 100) * ClientPrefs.data.hitsoundVolume * FlxG.sound.volume));
 		} catch (e:Dynamic) {}
 		#end
 	}

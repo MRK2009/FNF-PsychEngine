@@ -233,6 +233,13 @@ class OsuConversionJob {
 				value: true
 			},
 			{
+				save: 'osu_storyboardSounds',
+				name: 'Storyboard Sounds',
+				type: 'bool',
+				description: 'Play storyboard sample sounds, when the song has a storyboard.',
+				value: true
+			},
+			{
 				save: 'osu_backgroundDim',
 				name: 'Background Dim',
 				type: 'float',
@@ -913,7 +920,10 @@ class OsuConversionJob {
 		var sndDir:String = "mods/" + opts.packName + "/sounds/" + stageName + "_sb";
 		return [
 			"\tosuSb = OsuStoryboardPlayer.fromFile('" + osb + "', '" + imgDir + "', '" + sndDir + "', " + audioTrimMs + ")",
-			"\tif osuSb ~= nil then game:add(osuSb) end"
+			"\tif osuSb ~= nil then",
+			"\t\tosuSb.soundsEnabled = getModSetting('osu_storyboardSounds', '" + opts.packName + "') ~= false",
+			"\t\tgame:add(osuSb)",
+			"\tend"
 		].join("\n");
 	}
 
@@ -957,7 +967,8 @@ class OsuConversionJob {
 			"\tosuDim:updateHitbox()",
 			"\tosuDim:screenCenter()",
 			"\tosuDim.scrollFactor:set(0, 0)",
-			"\tosuDim.alpha = osuDimAmount",
+			// gamma-correct so perceived darkening tracks the slider (plain alpha 0.9 still reads ~35% bright on sRGB)
+			"\tosuDim.alpha = 1 - math.pow(1 - osuDimAmount, 2.2)",
 			"\tgame:add(osuDim)"
 		].join("\n");
 	}
@@ -1056,7 +1067,7 @@ local function playHits(data)
 				cache[file] = snd
 			end
 			if snd then
-				snd:play(0, 0, SoundTransform.new((tonumber(vol) / 100) * FlxG.sound.volume))
+				snd:play(0, 0, SoundTransform.new((tonumber(vol) / 100) * ClientPrefs.data.hitsoundVolume * FlxG.sound.volume))
 			end
 		end
 	end
