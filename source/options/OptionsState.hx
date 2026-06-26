@@ -1354,7 +1354,7 @@ class OptionsState extends MusicBeatState {
 		var vs:String = (o.type == PERCENT) ? Std.string(Math.round((o.getValue() : Float) * 100)) : Std.string(o.getValue());
 		return text.replace('%v', vs).replace('%d', Std.string(o.defaultValue));
 	}
-		- /**
+		 /**
 		 * Creates a small checkbox graphic for the options menu.
 		 *
 		 * @param on Whether the checkbox should be rendered in the checked state.
