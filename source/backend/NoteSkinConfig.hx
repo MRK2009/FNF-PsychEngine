@@ -21,17 +21,20 @@ typedef NoteSkinData = {
 	@:optional var comboNums:String;
 	@:optional var combo:String;
 	@:optional var splash:String;
-	@:optional var antialiasing:Bool;
+	@:optional var antialiasing:Dynamic; // Bool, or a per-lane object (arrow/center/col index)
 	@:optional var holdAntialiasing:Bool;
-	@:optional var holdAlpha:Float;
-	@:optional var scale:Float;
-	@:optional var confirmFPS:Int;
+	@:optional var holdAlpha:Dynamic; // Float, or per-lane object
+	@:optional var scale:Dynamic; // Float, or per-lane object
+	@:optional var fps:Dynamic; // anim fps (Int, or per-lane object)
+	@:optional var hiRes:Bool; // hint: skin ships @2x assets (@2x is auto-detected regardless)
+	@:optional var endOffsets:Dynamic; // sustain-tail offsets (per-lane); falls back to holdOffsets
 	@:optional var colorable:Dynamic;
 	@:optional var animated:Dynamic;
 	@:optional var pixel:Bool;
 	@:optional var pixelVariant:Bool;
 	@:optional var rotate:Bool;
 	@:optional var directionAngles:Array<Float>;
+	@:optional var columnAngles:Array<Float>; // per-column angle override (indexed by column, beats directionAngles)
 	@:optional var noteOffsets:Dynamic;
 	@:optional var strumOffsets:Dynamic;
 	@:optional var holdOffsets:Dynamic;
@@ -75,12 +78,26 @@ class NoteSkinConfig {
 		frameKeysCache.clear();
 	}
 
+	// Supported config formats, in resolution priority. The tabbed `.tcfg` format is primary; plain
+	// JSON is the secondary fallback.
+	public static final EXTS:Array<String> = ['tcfg', 'json'];
+
+	// First existing images/<name>/skin.<ext>, or null if the folder has no skin config.
+	static function skinFile(name:String):Null<{path:String, ext:String}> {
+		for (ext in EXTS) {
+			var path:String = 'images/$name/skin.$ext';
+			if (Paths.fileExists(path, TEXT))
+				return {path: path, ext: ext};
+		}
+		return null;
+	}
+
 	public static function isFolderSkin(name:String):Bool {
 		if (name == null || name.length < 1)
 			return false;
 		if (folderCache.exists(name))
 			return folderCache.get(name);
-		var exists:Bool = Paths.fileExists('images/$name/skin.json', TEXT);
+		var exists:Bool = skinFile(name) != null;
 		folderCache.set(name, exists);
 		return exists;
 	}
@@ -90,12 +107,14 @@ class NoteSkinConfig {
 			return configCache.get(name);
 
 		var data:NoteSkinData = null;
-		var raw:String = Paths.getTextFromFile('images/$name/skin.json');
-		if (raw != null) {
-			try
-				data = cast tjson.TJSON.parse(raw)
-			catch (e:Dynamic)
-				FlxG.log.error('NoteSkinConfig: failed to parse "images/$name/skin.json": $e');
+		var file = skinFile(name);
+		if (file != null) {
+			var raw:String = Paths.getTextFromFile(file.path);
+			if (raw != null) {
+				// Both parsers (TcfgParser for .tcfg, tjson for .json) emit the internal
+				// NoteSkinData shape directly, so no remap step is needed here.
+				data = cast backend.config.ConfigParser.parse(file.ext, raw);
+			}
 		}
 		configCache.set(name, data);
 		return data;
@@ -107,8 +126,23 @@ class NoteSkinConfig {
 
 	public static var pixelMode:Bool = false;
 
-	public static function variant(key:String):String
-		return (pixelMode && frameExists('$key-pixel')) ? '$key-pixel' : key;
+	// In pixel mode, resolve a key's pixel variant: prefer a dedicated "pixel" subfolder
+	// (e.g. noteSkins/Default/pixel/noteArrow), then the legacy "-pixel" suffix
+	// (noteSkins/Default/noteArrow-pixel), else the base key unchanged.
+	public static function variant(key:String):String {
+		if (!pixelMode)
+			return key;
+
+		// frameKeys(...) != null matches a single image OR a numbered sequence, so animated
+		// pixel variants resolve too.
+		var slash:Int = key.lastIndexOf('/');
+		if (slash >= 0) {
+			var sub:String = key.substr(0, slash) + '/pixel' + key.substr(slash);
+			if (frameKeys(sub) != null)
+				return sub;
+		}
+		return (frameKeys('$key-pixel') != null) ? '$key-pixel' : key;
+	}
 
 	public static function setConfig(name:String, data:NoteSkinData) {
 		configCache.set(name, data);
@@ -163,7 +197,16 @@ class NoteSkinConfig {
 			if (!sys.FileSystem.exists(root) || !sys.FileSystem.isDirectory(root))
 				continue;
 			for (entry in sys.FileSystem.readDirectory(root)) {
-				if (sys.FileSystem.isDirectory('$root/$entry') && sys.FileSystem.exists('$root/$entry/skin.json')) {
+				var dir:String = '$root/$entry';
+				if (!sys.FileSystem.isDirectory(dir))
+					continue;
+				var hasSkin:Bool = false;
+				for (ext in EXTS)
+					if (sys.FileSystem.exists('$dir/skin.$ext')) {
+						hasSkin = true;
+						break;
+					}
+				if (hasSkin) {
 					var name:String = 'noteSkins/$entry';
 					if (!result.contains(name))
 						result.push(name);
@@ -202,13 +245,65 @@ class NoteSkinConfig {
 			return [0, 0];
 		if (Std.isOfType(field, Array)) {
 			var a:Array<Dynamic> = field;
-			return [a.length > 0 ? num(a[0]) : 0, a.length > 1 ? num(a[1]) : 0];
+			// Per-column form: an array of [x,y] pairs indexed by column.
+			if (a.length > 0 && Std.isOfType(a[0], Array)) {
+				if (col >= 0 && col < a.length && Std.isOfType(a[col], Array))
+					return pair(a[col]);
+				return [0, 0];
+			}
+			// Single [x, y] applied to every column.
+			return pair(a);
 		}
-		var v:Dynamic = Reflect.field(field, direction(col));
-		if (v == null || !Std.isOfType(v, Array))
-			return [0, 0];
-		var a:Array<Dynamic> = v;
+		// Object: resolve per lane (column index -> square/center -> name -> arrow).
+		var v:Dynamic = rawForColumn(field, col);
+		return Std.isOfType(v, Array) ? pair(v) : [0, 0];
+	}
+
+	static inline function pair(a:Array<Dynamic>):Array<Float>
 		return [a.length > 0 ? num(a[0]) : 0, a.length > 1 ? num(a[1]) : 0];
+
+	// Pick the value for a column from a per-lane field. Scalars apply to every lane; an object is
+	// resolved column-index -> square/center (center lane) -> direction name -> arrow. Returns the
+	// raw value or null. Shared by the scalar/bool/offset resolvers.
+	static function rawForColumn(field:Dynamic, col:Int):Dynamic {
+		if (field == null)
+			return null;
+		if (Std.isOfType(field, Bool) || Std.isOfType(field, Float) || Std.isOfType(field, Int) || Std.isOfType(field, String))
+			return field; // scalar applies to all lanes
+		if (Std.isOfType(field, Array))
+			return field; // an array value is itself the per-lane payload (e.g. an [x,y] offset)
+		var byIdx:Dynamic = Reflect.field(field, Std.string(col));
+		if (byIdx != null)
+			return byIdx;
+		var dir:String = direction(col);
+		if (dir == 'square') {
+			var sq:Dynamic = Reflect.field(field, 'square');
+			if (sq == null)
+				sq = Reflect.field(field, 'center');
+			if (sq != null)
+				return sq;
+		}
+		var dname:Dynamic = Reflect.field(field, dir);
+		if (dname != null)
+			return dname;
+		return Reflect.field(field, 'arrow');
+	}
+
+	public static function numForColumn(field:Dynamic, col:Int, fallback:Float):Float {
+		var v:Dynamic = rawForColumn(field, col);
+		return v == null ? fallback : num(v);
+	}
+
+	public static function boolForColumn(field:Dynamic, col:Int, fallback:Bool):Bool {
+		var v:Dynamic = rawForColumn(field, col);
+		if (v == null)
+			return fallback;
+		return Std.isOfType(v, Bool) ? v : (Std.string(v) == 'true');
+	}
+
+	// Animation fps for a lane (`fps`, scalar or per-lane; defaults to 24).
+	public static function fpsForColumn(cfg:NoteSkinData, col:Int):Int {
+		return Std.int(numForColumn(cfg.fps, col, 24));
 	}
 
 	public static function colorableFor(cfg:NoteSkinData, element:String):Bool {
@@ -257,6 +352,19 @@ class NoteSkinConfig {
 		}
 	}
 
+	// Rotation for a column: a per-column `columnAngles` entry wins (lets two same-named
+	// directions, e.g. the two "left" lanes in 6K, rotate differently); else fall back to
+	// the cardinal `directionAngles` lookup by direction name.
+	static function angleForColumn(cfg:NoteSkinData, col:Int, dir:String):Float {
+		var ca:Dynamic = cfg.columnAngles;
+		if (ca != null && Std.isOfType(ca, Array)) {
+			var a:Array<Dynamic> = ca;
+			if (col >= 0 && col < a.length && a[col] != null)
+				return num(a[col]);
+		}
+		return angleForDir(cfg, dir);
+	}
+
 	static function allCardinalsSame(field:Dynamic):Bool {
 		var l:Dynamic = Reflect.field(field, 'left');
 		if (l == null)
@@ -279,16 +387,27 @@ class NoteSkinConfig {
 		if (Std.isOfType(field, String)) {
 			if (dir == 'square')
 				return null;
-			return {key: field, angle: rotateOn ? angleForDir(cfg, dir) : 0};
+			return {key: field, angle: rotateOn ? angleForColumn(cfg, col, dir) : 0};
 		}
 		if (Std.isOfType(field, Array)) {
 			var arr:Array<Dynamic> = field;
-			return (col >= 0 && col < arr.length && arr[col] != null) ? {key: Std.string(arr[col]), angle: 0} : null;
+			if (col < 0 || col >= arr.length || arr[col] == null)
+				return null;
+			// Per-column array images are assumed pre-oriented (angle 0), unless an explicit
+			// columnAngles is provided -- then honor it so array skins can rotate per lane too.
+			var ang:Float = (rotateOn && dir != 'square' && cfg.columnAngles != null) ? angleForColumn(cfg, col, dir) : 0;
+			return {key: Std.string(arr[col]), angle: ang};
 		}
+
+		// Column-index keys win (e.g. { "0": "...", "1": "..." }) -- this disambiguates lanes that
+		// share a direction name in multikey. Direction-name keys (below) are the fallback.
+		var byIdx:Dynamic = Reflect.field(field, Std.string(col));
+		if (byIdx != null)
+			return {key: Std.string(byIdx), angle: (rotateOn && dir != 'square') ? angleForColumn(cfg, col, dir) : 0};
 
 		var direct:Dynamic = Reflect.field(field, dir);
 		if (direct != null) {
-			var ang:Float = (rotateOn && dir != 'square' && allCardinalsSame(field)) ? angleForDir(cfg, dir) : 0;
+			var ang:Float = (rotateOn && dir != 'square' && allCardinalsSame(field)) ? angleForColumn(cfg, col, dir) : 0;
 			return {key: Std.string(direct), angle: ang};
 		}
 		if (dir == 'square') {
@@ -296,7 +415,7 @@ class NoteSkinConfig {
 			return sq == null ? null : {key: Std.string(sq), angle: 0};
 		}
 		var arrow:Dynamic = Reflect.field(field, 'arrow');
-		return arrow == null ? null : {key: Std.string(arrow), angle: rotateOn ? angleForDir(cfg, dir) : 0};
+		return arrow == null ? null : {key: Std.string(arrow), angle: rotateOn ? angleForColumn(cfg, col, dir) : 0};
 	}
 
 	public static function columnKey(field:Dynamic, col:Int):String {
@@ -308,6 +427,10 @@ class NoteSkinConfig {
 			var arr:Array<Dynamic> = field;
 			return (col >= 0 && col < arr.length && arr[col] != null) ? Std.string(arr[col]) : null;
 		}
+		// Column-index key first, direction-name fallback.
+		var byIdx:Dynamic = Reflect.field(field, Std.string(col));
+		if (byIdx != null)
+			return Std.string(byIdx);
 		var dir:String = direction(col);
 		var d:Dynamic = Reflect.field(field, dir);
 		if (d != null)
@@ -378,7 +501,8 @@ class NoteSkinConfig {
 	public static function applyAnims(sprite:flixel.FlxSprite, anims:Array<SkinAnim>):Float {
 		var cacheKey:String = [
 			for (a in anims)
-				a.name + '@' + (a.angle == null ? 0 : a.angle) + (a.square == true ? 'sq' : '') + '=' + a.keys.join(',')
+				a.name + '@' + (a.angle == null ? 0 : a.angle) + (a.square == true ? 'sq' : '') + 'f' + (a.fps == null ? 24 : a.fps) + '='
+				+ a.keys.join(',')
 		].join('|');
 		var built:BuiltAnims = animCache.get(cacheKey);
 

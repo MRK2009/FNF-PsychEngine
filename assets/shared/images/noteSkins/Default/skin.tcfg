@@ -1,0 +1,35 @@
+# Default note skin. Tabbed config (.tcfg) -- the primary note-skin format.
+# See skin.example.tcfg for the full field reference and per-lane/per-keycount options.
+
+images:
+	notes:
+		arrow: noteArrow
+		center: noteCenter
+	strums:
+		arrow: strumArrow
+		center: strumCenter
+	pressed:
+		arrow: pressArrow
+		center: pressCenter
+	confirm:
+		arrow: confirmArrow
+	holdBody: holdBody
+	holdEnd: holdEnd
+
+general:
+	rotate: true
+	directionAngles: [-90, 180, 0, 90]
+	fps: 24
+	scale: 0.7
+	antialiasing: true
+	holdAntialiasing: false
+	holdAlpha: 0.5
+	pixelVariant: true
+
+colorable:
+	notes: true
+	strums: false
+	pressed: true
+	confirm: true
+	holdBody: true
+	holdEnd: true

@@ -1,0 +1,108 @@
+# Folder note skin -- TABBED CONFIG (.tcfg), the primary format. Rename to skin.tcfg to use.
+# Indentation = nesting (tabs or spaces, don't mix in a block). 'key: value' is a leaf;
+# 'key:' with indented lines under it is a group. '#'/'###' comments + blank lines are ignored.
+#
+# Special target keys (indent them under any image/setting to specialize):
+#   arrow      -> the cardinal lanes (left/down/up/right)
+#   center     -> the odd-keycount center lane
+#   col<N>     -> a specific column, 1-indexed (col and center are mutually exclusive)
+# A bare 'thing: value' applies to every lane; indent to override per arrow/center/col.
+
+### ---------------------------------------------------------------------------
+### SIMPLE (no key-count sections) -- applies to all key counts.
+### ---------------------------------------------------------------------------
+images:
+	notes:
+		arrow: noteArrow      # all cardinal notes
+		center: noteCenter    # center note on odd key counts
+	strums:
+		arrow: strumArrow
+		center: strumCenter
+	pressed:
+		arrow: pressArrow
+		center: pressCenter
+	confirm:
+		arrow: confirmArrow
+		center: confirmCenter
+	holdBody: holdBody        # unified sustain body
+	holdEnd: holdEnd          # unified sustain tail
+
+general:
+	rotate: true
+	directionAngles: [-90, 180, 0, 90]   # left, down, up, right
+	fps: 24                   # unified animation fps (see ADVANCED for per-lane fps)
+	scale: 0.9
+	antialiasing: true
+	holdAntialiasing: false
+	holdAlpha: 0.5
+	pixel: false
+	pixelVariant: true        # use pixel/ subfolder or *-pixel files on a pixel stage
+	hi-res: false             # ships @2x assets (auto-detected regardless)
+
+animated:
+	notes: false
+	strums: false
+	pressed: true
+	confirm: true
+	holdBody: false
+	holdEnd: false
+
+colorable:
+	notes: true
+	strums: false
+	pressed: true
+	confirm: true
+	holdBody: true
+	holdEnd: true
+
+offsets:
+	notes: [0, 0]
+	strums: [0, 0]
+	holdBody: [0, 0]
+	holdEnd: [0, 0]
+
+### ---------------------------------------------------------------------------
+### ADVANCED -- a key-count section (here 4K) with per-column images/offsets and
+### per-target / per-column settings. Key-count sections are merged over the base.
+### Columns for 4K: col1=left, col2=down, col3=up, col4=right.
+### ---------------------------------------------------------------------------
+4K:
+	images:
+		notes:
+			col1: noteLEFT
+			col2: noteDOWN
+			col3: noteUP
+			col4: noteRIGHT
+		strums:
+			col1: strumLEFT
+			col2: strumDOWN
+			col3: strumUP
+			col4: strumRIGHT
+		pressed:
+			arrow: pressArrow
+		confirm:
+			arrow: confirmArrow
+		holdBody: holdBody
+		holdEnd: holdEnd
+	general:
+		rotate: true
+		directionAngles: [-90, 180, 0, 90]
+		# per-column fps: each lane animates at its own rate
+		fps:
+			col1: 12
+			col2: 24
+			col3: 24
+			col4: 12
+		# per-target scale: cardinals one size, center another
+		scale:
+			arrow: 0.9
+			center: 0.8
+		antialiasing: true
+		holdAlpha: 0.5
+		pixelVariant: true
+	offsets:
+		notes:
+			col1: [0, 0]
+			col2: [0, 2]
+			col3: [0, 2]
+			col4: [0, 0]

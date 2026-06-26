@@ -109,7 +109,7 @@ class NoteSkinEditorState extends MusicBeatState {
 			holdAlpha: 1,
 			holdAntialiasing: false,
 			directionAngles: [-90, 180, 0, 90],
-			confirmFPS: 24,
+			fps: 24,
 			notes: {arrow: 'note', square: 'noteCenter'},
 			holds: 'holdPiece',
 			ends: 'holdEnd',
@@ -347,10 +347,10 @@ class NoteSkinEditorState extends MusicBeatState {
 		};
 		t.add(alphaStep);
 
-		label(t, 10, 44, 'Confirm FPS:');
+		label(t, 10, 44, 'Anim FPS:');
 		confirmFpsStep = new PsychUINumericStepper(105, 41, 1, 24, 0, 60, 0, 60);
 		confirmFpsStep.onValueChange = function() {
-			config.confirmFPS = Std.int(confirmFpsStep.value);
+			config.fps = Std.int(confirmFpsStep.value);
 			buildPreview();
 		};
 		t.add(confirmFpsStep);
@@ -593,7 +593,7 @@ class NoteSkinEditorState extends MusicBeatState {
 
 		scaleStep.value = config.scale == null ? 0.7 : config.scale;
 		alphaStep.value = config.holdAlpha == null ? 0.6 : config.holdAlpha;
-		confirmFpsStep.value = config.confirmFPS == null ? 24 : config.confirmFPS;
+		confirmFpsStep.value = config.fps == null ? 24 : config.fps;
 		colorableCheck.checked = anyColorable(config);
 		rotateCheck.checked = config.rotate != false;
 		pixelCheck.checked = config.pixel == true;
@@ -780,17 +780,27 @@ class NoteSkinEditorState extends MusicBeatState {
 	function saveDir():String {
 		var name = skinName.substr(skinName.lastIndexOf('/') + 1);
 		#if sys
-		var sharedPath = 'assets/shared/images/$skinName/skin.json';
-		var inMod = sys.FileSystem.exists('mods/images/$skinName/skin.json');
+		var hasShared = sys.FileSystem.exists('assets/shared/images/$skinName/skin.tcfg')
+			|| sys.FileSystem.exists('assets/shared/images/$skinName/skin.json');
+		var inMod = skinFileExists('mods/images/$skinName');
 		#if MODS_ALLOWED
 		if (!inMod && Mods.currentModDirectory != null && Mods.currentModDirectory.length > 0)
-			inMod = sys.FileSystem.exists('mods/${Mods.currentModDirectory}/images/$skinName/skin.json');
+			inMod = skinFileExists('mods/${Mods.currentModDirectory}/images/$skinName');
 		#end
-		var fromShared = sys.FileSystem.exists(sharedPath) && !inMod;
+		var fromShared = hasShared && !inMod;
 		if (fromShared)
 			name += '-modified';
 		#end
 		return 'mods/images/noteSkins/$name';
+	}
+
+	// Exists check for either supported folder-skin config in a dir.
+	inline function skinFileExists(dir:String):Bool {
+		#if sys
+		return sys.FileSystem.exists('$dir/skin.tcfg') || sys.FileSystem.exists('$dir/skin.json');
+		#else
+		return false;
+		#end
 	}
 
 	function saveSkin() {
@@ -798,9 +808,9 @@ class NoteSkinEditorState extends MusicBeatState {
 		var dir = saveDir();
 		try {
 			ensureDir(dir);
-			sys.io.File.saveContent('$dir/skin.json', Json.stringify(config, '\t'));
+			sys.io.File.saveContent('$dir/skin.tcfg', backend.config.TcfgWriter.write(config));
 			NoteSkinConfig.reset();
-			notify('Saved to $dir/skin.json');
+			notify('Saved to $dir/skin.tcfg');
 		} catch (e:Dynamic)
 			notify('Save failed: $e', false);
 		#else
@@ -811,9 +821,9 @@ class NoteSkinEditorState extends MusicBeatState {
 	function saveToRoot() {
 		#if sys
 		try {
-			var path = Sys.getCwd() + '/skin.json';
-			sys.io.File.saveContent(path, Json.stringify(config, '\t'));
-			notify('Saved skin.json to game folder');
+			var path = Sys.getCwd() + '/skin.tcfg';
+			sys.io.File.saveContent(path, backend.config.TcfgWriter.write(config));
+			notify('Saved skin.tcfg to game folder');
 		} catch (e:Dynamic)
 			notify('Save failed: $e', false);
 		#else
@@ -832,14 +842,14 @@ class NoteSkinEditorState extends MusicBeatState {
 		try {
 			ensureDir(dir);
 			config = defaultConfig();
-			sys.io.File.saveContent('$dir/skin.json', Json.stringify(config, '\t'));
+			sys.io.File.saveContent('$dir/skin.tcfg', backend.config.TcfgWriter.write(config));
 			NoteSkinConfig.reset();
 			skinName = 'noteSkins/$name';
 			skinDropDown.list = NoteSkinConfig.list();
 			skinDropDown.selectedLabel = skinName;
 			loadSkin(skinName);
 			refreshFields();
-			notify('Created $dir/skin.json');
+			notify('Created $dir/skin.tcfg');
 		} catch (e:Dynamic)
 			notify('Create failed: $e', false);
 		#else
