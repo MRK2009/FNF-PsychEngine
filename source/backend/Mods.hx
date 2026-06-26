@@ -329,6 +329,14 @@ class Mods {
 		return pack != null && pack.nativeMobile == true;
 	}
 
+	/** pack.json "compatibilityMode": when true the mod runs gameplay on the legacy note/strum
+	 *  runtime, so old scripts relying on the pre-v2 Note/StrumNote API (and the `notes` /
+	 *  `unspawnNotes` groups + callback object identity) keep working. */
+	public static function noteCompatibilityMode(?folder:String = null):Bool {
+		var pack:Dynamic = getPack(folder);
+		return pack != null && pack.compatibilityMode == true;
+	}
+
 	/** A mod is launchable if it ships its entry state at states/<entry>.hx. */
 	public static function isLaunchable(?folder:String = null):Bool {
 		#if (MODS_ALLOWED && HSCRIPT_ALLOWED)

@@ -66,6 +66,30 @@ class ReflectionFunctions {
 				LuaUtils.setVarInArray(myClass, variable, allowInstances ? parseInstances(value) : value, allowMaps);
 				return value;
 			});
+		// Re-skin the note currently in onSpawnNote -- the v2 way to give one note a custom look from
+		// plain Lua (frames can't be set directly). HScript/luaproxy can just touch spawnNote.head.
+		Lua_helper.add_callback(lua, "setNoteSkin", function(image:String):Bool {
+			var sn:Dynamic = PlayState.instance.spawnNote;
+			if (sn == null || sn.head == null)
+				return false;
+			var col:Int = sn.data.column;
+			sn.head.frames = Paths.getSparrowAtlas(image);
+			sn.head.animation.addByPrefix('note', objects.Note.colArray[col] + '0');
+			sn.head.animation.play('note', true);
+			sn.head.centerOffsets();
+			sn.head.centerOrigin();
+			return true;
+		});
+		Lua_helper.add_callback(lua, "addScrollVelocity", function(time:Float, mult:Float):Void {
+			PlayState.instance.addScrollVelocity(time, mult);
+		});
+		Lua_helper.add_callback(lua, "clearScrollVelocity", function():Void {
+			PlayState.instance.clearScrollVelocity();
+		});
+		Lua_helper.add_callback(lua, "setScrollVelocityMode", function(mode:String):Void {
+			PlayState.instance.scrollVelocity.mode = (mode != null && mode.toLowerCase() == 'overlapping') ? 1 : 0;
+			PlayState.instance.recomputeScrollVelocity();
+		});
 		Lua_helper.add_callback(lua, "getPropertyFromGroup", function(group:String, index:Int, variable:Dynamic, ?allowMaps:Bool = false) {
 			var split:Array<String> = group.split('.');
 			var realObject:Dynamic = null;

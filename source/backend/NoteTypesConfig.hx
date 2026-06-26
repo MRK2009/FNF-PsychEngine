@@ -50,7 +50,9 @@ class NoteTypesConfig {
 		return parsed;
 	}
 
-	public static function applyNoteTypeData(note:Note, name:String) {
+	// `note` is `Dynamic` so this works on both the legacy `Note` and the v2 `NoteData` -- all field
+	// access goes through Reflect, and both expose an `extraData` map.
+	public static function applyNoteTypeData(note:Dynamic, name:String) {
 		var data:Array<NoteTypeProperty> = loadNoteTypeData(name);
 		if (data == null || data.length < 1)
 			return;

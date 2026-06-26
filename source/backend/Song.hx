@@ -59,6 +59,11 @@ typedef SwagSection = {
 	// changeScrollSpeed + scrollSpeed: set the song's scroll speed at this section.
 	@:optional var changeScrollSpeed:Bool;
 	@:optional var scrollSpeed:Float;
+	// changeScrollVelocity + scrollVelocity: Scroll Velocity from this section onward. 
+	// Distinct from scrollSpeed -- SV integrates smoothly (spacing changes going
+	// forward) instead of teleporting the whole field.
+	@:optional var changeScrollVelocity:Bool;
+	@:optional var scrollVelocity:Float;
 	// changeKeyCount + keyCount: change the number of columns/lanes from this
 	// section onward (multikey mid-song lane change).
 	@:optional var changeKeyCount:Bool;

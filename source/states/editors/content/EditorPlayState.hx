@@ -655,7 +655,7 @@ class EditorPlayState extends MusicBeatSubstate {
 		var plrInputNotes:Array<Note> = notes.members.filter(function(n:Note) return n != null && n.canBeHit && n.mustPress && !n.tooLate && !n.wasGoodHit
 			&& !n.blockHit && !n.isSustainNote && n.noteData == key);
 
-		plrInputNotes.sort(PlayState.sortHitNotes);
+		plrInputNotes.sort(Note.sortHitNotes);
 
 		var shouldMiss:Bool = !ClientPrefs.data.ghostTapping;
 
