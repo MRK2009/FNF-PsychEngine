@@ -62,7 +62,7 @@ final class Receptor extends FlxSprite {
 			useRGBShader = false;
 
 		var arr:Array<FlxColor>;
-		if (Mania.current != Mania.DEFAULT && !PlayState.isPixelStage)
+		if (Mania.current != Mania.DEFAULT)
 			arr = Mania.getColors(Mania.current)[column];
 		else {
 			arr = ClientPrefs.data.arrowRGB[column];

@@ -48,13 +48,13 @@ class FolderNoteSkin implements INoteSkin {
 		var base:String = NoteSkinConfig.folder(skinName);
 		var col:Int = column;
 		var kc:Int = Mania.clamp(keyCount);
-		var scaleBase:Float = NoteSkinConfig.numForColumn(cfg.scale, col, 0.7) * Mania.noteSizes[kc - 1] / Mania.noteSizes[Mania.DEFAULT - 1];
+		var scaleBase:Float = NoteSkinConfig.scaleForColumn(cfg, col) * Mania.noteSizes[kc - 1] / Mania.noteSizes[Mania.DEFAULT - 1];
 		var laneFps:Int = NoteSkinConfig.fpsForColumn(cfg, col);
 
 		var note = NoteSkinConfig.resolveColumn(cfg, cfg.notes, col);
 		if (note == null)
 			return fallback.applyNote(spr, rgb, column, keyCount, animName);
-		var noteFrames:Array<String> = NoteSkinConfig.frameKeys(NoteSkinConfig.variant(base + note.key));
+		var noteFrames:Array<String> = NoteSkinConfig.resolveFrames(base + note.key);
 		if (noteFrames == null)
 			return fallback.applyNote(spr, rgb, column, keyCount, animName);
 		noteFrames = NoteSkinConfig.staticFrame(noteFrames, NoteSkinConfig.animatedFor(cfg, 'notes'));
@@ -103,15 +103,15 @@ class FolderNoteSkin implements INoteSkin {
 		var base:String = NoteSkinConfig.folder(skinName);
 		var col:Int = column;
 		var kc:Int = Mania.clamp(keyCount);
-		var scaleBase:Float = NoteSkinConfig.numForColumn(cfg.scale, col, 0.7) * Mania.noteSizes[kc - 1] / Mania.noteSizes[Mania.DEFAULT - 1];
+		var scaleBase:Float = NoteSkinConfig.scaleForColumn(cfg, col) * Mania.noteSizes[kc - 1] / Mania.noteSizes[Mania.DEFAULT - 1];
 		var laneFps:Int = NoteSkinConfig.fpsForColumn(cfg, col);
 
 		var holdKey:String = NoteSkinConfig.columnKey(cfg.holds, col);
 		var endKey:String = NoteSkinConfig.columnKey(cfg.ends, col);
 		if (holdKey == null || endKey == null)
 			return fallback.applySustain(body, bodyRGB, tail, tailRGB, column, keyCount);
-		var holdFrames:Array<String> = NoteSkinConfig.frameKeys(NoteSkinConfig.variant(base + holdKey));
-		var endFrames:Array<String> = NoteSkinConfig.frameKeys(NoteSkinConfig.variant(base + endKey));
+		var holdFrames:Array<String> = NoteSkinConfig.resolveFrames(base + holdKey);
+		var endFrames:Array<String> = NoteSkinConfig.resolveFrames(base + endKey);
 		if (holdFrames == null || endFrames == null)
 			return fallback.applySustain(body, bodyRGB, tail, tailRGB, column, keyCount);
 		holdFrames = NoteSkinConfig.staticFrame(holdFrames, NoteSkinConfig.animatedFor(cfg, 'holds'));
@@ -163,14 +163,14 @@ class FolderNoteSkin implements INoteSkin {
 		var st = NoteSkinConfig.resolveColumn(cfg, cfg.strums, c);
 		if (st == null)
 			return fallback.applyReceptor(spr, rgb, column, keyCount, lastAnim);
-		var staticF:Array<String> = NoteSkinConfig.frameKeys(NoteSkinConfig.variant(base + st.key));
+		var staticF:Array<String> = NoteSkinConfig.resolveFrames(base + st.key);
 		if (staticF == null)
 			return fallback.applyReceptor(spr, rgb, column, keyCount, lastAnim);
 		staticF = NoteSkinConfig.staticFrame(staticF, NoteSkinConfig.animatedFor(cfg, 'strums'));
 		var staticA:Float = st.angle;
 
 		var pr = NoteSkinConfig.resolveColumn(cfg, cfg.pressed, c);
-		var pressedF:Array<String> = pr == null ? null : NoteSkinConfig.frameKeys(NoteSkinConfig.variant(base + pr.key));
+		var pressedF:Array<String> = pr == null ? null : NoteSkinConfig.resolveFrames(base + pr.key);
 		var pressedA:Float = pr == null ? staticA : pr.angle;
 		if (pressedF == null) {
 			pressedF = staticF;
@@ -179,7 +179,7 @@ class FolderNoteSkin implements INoteSkin {
 			pressedF = NoteSkinConfig.staticFrame(pressedF, NoteSkinConfig.animatedFor(cfg, 'pressed'));
 
 		var cf = NoteSkinConfig.resolveColumn(cfg, cfg.confirm, c);
-		var confirmF:Array<String> = cf == null ? null : NoteSkinConfig.frameKeys(NoteSkinConfig.variant(base + cf.key));
+		var confirmF:Array<String> = cf == null ? null : NoteSkinConfig.resolveFrames(base + cf.key);
 		var confirmA:Float = cf == null ? pressedA : cf.angle;
 		if (confirmF == null) {
 			confirmF = pressedF;
@@ -206,7 +206,7 @@ class FolderNoteSkin implements INoteSkin {
 		v.offsetY = soff[1];
 		v.laneCenter = true;
 
-		var scaleBase:Float = NoteSkinConfig.numForColumn(cfg.scale, c, 0.7) * Mania.noteSizes[kc - 1] / Mania.noteSizes[Mania.DEFAULT - 1];
+		var scaleBase:Float = NoteSkinConfig.scaleForColumn(cfg, c) * Mania.noteSizes[kc - 1] / Mania.noteSizes[Mania.DEFAULT - 1];
 		spr.scale.set(scaleBase * factor, scaleBase * factor);
 		spr.updateHitbox();
 		v.scaleFactor = scaleBase * factor;

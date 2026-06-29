@@ -176,6 +176,11 @@ final class NoteData {
 			if (section.changeBPM == true && section.bpm != null && daBpm != section.bpm)
 				daBpm = section.bpm;
 
+			// Step length (16th) for this section's BPM. Sustains are quantised to whole steps (as the
+			// legacy engine did via floor(susLength / stepCrochet)) so the tail caps the LAST step
+			// rather than the raw length, whose fractional remainder rendered ~a step too long.
+			var stepMs:Float = (60 / daBpm * 1000) / 4;
+
 			if (section.changeKeyCount == true && section.keyCount != null) {
 				var newCount:Int = Mania.clamp(section.keyCount);
 				if (newCount != curKeyCount) {
@@ -198,6 +203,8 @@ final class NoteData {
 				var holdLength:Float = songNotes[2];
 				if (Math.isNaN(holdLength))
 					holdLength = 0;
+				if (holdLength > 0 && stepMs > 0)
+					holdLength = Math.floor(holdLength / stepMs + 0.0001) * stepMs; // epsilon: don't chop a step on float drift
 				note.length = holdLength;
 				note.scrollPos = note.time;
 				note.endScrollPos = note.time + holdLength;

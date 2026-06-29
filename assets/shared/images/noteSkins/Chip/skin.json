@@ -19,5 +19,6 @@
 	"ends": "holdEnd",
 	"strums": { "arrow": "strum", "square": "strum" },
 	"pressed": { "arrow": "press", "square": "press" },
-	"confirm": { "arrow": "confirm" }
+	"confirm": { "arrow": "confirm" },
+	"pixelVariant": true
 }

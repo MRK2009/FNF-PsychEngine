@@ -209,7 +209,7 @@ class LegacyNote extends FlxSprite {
 
 	public function defaultRGB() {
 		var arr:Array<FlxColor>;
-		if (Mania.current != Mania.DEFAULT && !PlayState.isPixelStage)
+		if (Mania.current != Mania.DEFAULT)
 			arr = Mania.getColors(Mania.current)[noteData]; // multikey palette
 		else {
 			arr = ClientPrefs.data.arrowRGB[noteData];
@@ -229,7 +229,7 @@ class LegacyNote extends FlxSprite {
 			// Multikey: the splash atlas only has 4 colours, so the splash anim is
 			// chosen by column % 4 -- tint it with this note's actual palette so a
 			// 6th/7th-column splash isn't recoloured to the wrong cardinal hue.
-			if (Mania.current != Mania.DEFAULT && !PlayState.isPixelStage) {
+			if (Mania.current != Mania.DEFAULT) {
 				noteSplashData.r = arr[0];
 				noteSplashData.g = arr[1];
 				noteSplashData.b = arr[2];
@@ -400,7 +400,7 @@ class LegacyNote extends FlxSprite {
 		if (globalRgbShaders[noteData] == null) {
 			var newRGB:RGBPalette = new RGBPalette();
 			var arr:Array<FlxColor>;
-			if (Mania.current != Mania.DEFAULT && !PlayState.isPixelStage)
+			if (Mania.current != Mania.DEFAULT)
 				arr = Mania.getColors(Mania.current)[noteData]; // multikey palette
 			else
 				arr = (!PlayState.isPixelStage) ? ClientPrefs.data.arrowRGB[noteData] : ClientPrefs.data.arrowRGBPixel[noteData];
@@ -482,8 +482,8 @@ class LegacyNote extends FlxSprite {
 			var endKey:String = NoteSkinConfig.columnKey(cfg.ends, col);
 			if (holdKey == null || endKey == null)
 				return false;
-			var holdFrames:Array<String> = NoteSkinConfig.frameKeys(NoteSkinConfig.variant(base + holdKey));
-			var endFrames:Array<String> = NoteSkinConfig.frameKeys(NoteSkinConfig.variant(base + endKey));
+			var holdFrames:Array<String> = NoteSkinConfig.resolveFrames(base + holdKey);
+			var endFrames:Array<String> = NoteSkinConfig.resolveFrames(base + endKey);
 			if (holdFrames == null || endFrames == null)
 				return false;
 			holdFrames = NoteSkinConfig.staticFrame(holdFrames, NoteSkinConfig.animatedFor(cfg, 'holds'));
@@ -503,7 +503,7 @@ class LegacyNote extends FlxSprite {
 				}
 			]);
 		} else {
-			var noteFrames:Array<String> = NoteSkinConfig.frameKeys(NoteSkinConfig.variant(base + note.key));
+			var noteFrames:Array<String> = NoteSkinConfig.resolveFrames(base + note.key);
 			if (noteFrames == null)
 				return false;
 			noteFrames = NoteSkinConfig.staticFrame(noteFrames, NoteSkinConfig.animatedFor(cfg, 'notes'));

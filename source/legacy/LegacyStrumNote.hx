@@ -54,7 +54,7 @@ class LegacyStrumNote extends FlxSprite {
 			useRGBShader = false;
 
 		var arr:Array<FlxColor>;
-		if (Mania.current != Mania.DEFAULT && !PlayState.isPixelStage)
+		if (Mania.current != Mania.DEFAULT)
 			arr = Mania.getColors(Mania.current)[leData]; // multikey palette
 		else {
 			arr = ClientPrefs.data.arrowRGB[leData];
@@ -126,14 +126,14 @@ class LegacyStrumNote extends FlxSprite {
 		var st = NoteSkinConfig.resolveColumn(cfg, cfg.strums, c);
 		if (st == null)
 			return false;
-		var staticF:Array<String> = NoteSkinConfig.frameKeys(NoteSkinConfig.variant(base + st.key));
+		var staticF:Array<String> = NoteSkinConfig.resolveFrames(base + st.key);
 		if (staticF == null)
 			return false;
 		staticF = NoteSkinConfig.staticFrame(staticF, NoteSkinConfig.animatedFor(cfg, 'strums'));
 		var staticA:Float = st.angle;
 
 		var pr = NoteSkinConfig.resolveColumn(cfg, cfg.pressed, c);
-		var pressedF:Array<String> = pr == null ? null : NoteSkinConfig.frameKeys(NoteSkinConfig.variant(base + pr.key));
+		var pressedF:Array<String> = pr == null ? null : NoteSkinConfig.resolveFrames(base + pr.key);
 		var pressedA:Float = pr == null ? staticA : pr.angle;
 		if (pressedF == null) {
 			pressedF = staticF;
@@ -142,7 +142,7 @@ class LegacyStrumNote extends FlxSprite {
 			pressedF = NoteSkinConfig.staticFrame(pressedF, NoteSkinConfig.animatedFor(cfg, 'pressed'));
 
 		var cf = NoteSkinConfig.resolveColumn(cfg, cfg.confirm, c);
-		var confirmF:Array<String> = cf == null ? null : NoteSkinConfig.frameKeys(NoteSkinConfig.variant(base + cf.key));
+		var confirmF:Array<String> = cf == null ? null : NoteSkinConfig.resolveFrames(base + cf.key);
 		var confirmA:Float = cf == null ? pressedA : cf.angle;
 		if (confirmF == null) {
 			confirmF = pressedF;

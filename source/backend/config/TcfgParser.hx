@@ -1,8 +1,8 @@
 package backend.config;
 
-using StringTools;
+import backend.config.TcfgLexer.TcfgLine as Line;
 
-private typedef Line = {indent:Int, key:String, value:Null<String>};
+using StringTools;
 
 /**
  * Real parser for the tabbed note-skin format (`.tcfg`). Reads the indented
@@ -17,13 +17,12 @@ private typedef Line = {indent:Int, key:String, value:Null<String>};
  * Values: true/false -> Bool, `[a, b]` -> Array, numeric -> Int/Float, else String.
  */
 class TcfgParser {
-	static var numberReg:EReg = ~/^-?[0-9]+(\.[0-9]+)?$/;
 	static var keycountReg:EReg = ~/^([0-9]+)k$/i;
 	static var colReg:EReg = ~/^col([0-9]+)$/i;
 
 	public static function parse(text:String):Dynamic {
 		var root:Dynamic = {};
-		var lines:Array<Line> = tokenize(text);
+		var lines:Array<Line> = TcfgLexer.tokenize(text);
 		if (lines.length == 0)
 			return root;
 
@@ -35,7 +34,7 @@ class TcfgParser {
 				i++;
 				continue;
 			}
-			var end:Int = blockEnd(lines, i, lines.length);
+			var end:Int = TcfgLexer.blockEnd(lines, i, lines.length);
 			if (keycountReg.match(lines[i].key)) {
 				if (keys == null)
 					keys = {};
@@ -55,7 +54,7 @@ class TcfgParser {
 		var out:Dynamic = {};
 		var i:Int = start;
 		while (i < end) {
-			var e:Int = blockEnd(lines, i, end);
+			var e:Int = TcfgLexer.blockEnd(lines, i, end);
 			applyGroup(out, lines[i].key, lines, i + 1, e);
 			i = e;
 		}
@@ -82,30 +81,10 @@ class TcfgParser {
 		}
 	}
 
-	// Visit each member line in [start, end): a leaf (`key: value`) yields a scalar/array; a
-	// `key:` with indented children yields a per-target object (center->square, col<N>->"N-1").
-	static function eachMember(lines:Array<Line>, start:Int, end:Int, cb:String->Dynamic->Void):Void {
-		var i:Int = start;
-		while (i < end) {
-			var ml:Line = lines[i];
-			var e:Int = blockEnd(lines, i, end);
-			var v:Dynamic = (ml.value != null) ? parseValue(ml.value) : targetObject(lines, i + 1, e);
-			cb(ml.key, v);
-			i = e;
-		}
-	}
-
-	static function targetObject(lines:Array<Line>, start:Int, end:Int):Dynamic {
-		var o:Dynamic = {};
-		var i:Int = start;
-		while (i < end) {
-			var tl:Line = lines[i];
-			var e:Int = blockEnd(lines, i, end);
-			var v:Dynamic = (tl.value != null) ? parseValue(tl.value) : targetObject(lines, i + 1, e);
-			Reflect.setField(o, remapTarget(tl.key), v);
-			i = e;
-		}
-		return o;
+	// Visit each member line in [start, end), remapping per-target child keys (center->square,
+	// col<N>->"N-1"). Thin wrapper over the shared lexer so call sites stay terse.
+	static inline function eachMember(lines:Array<Line>, start:Int, end:Int, cb:String->Dynamic->Void):Void {
+		TcfgLexer.eachMember(lines, start, end, cb, remapTarget);
 	}
 
 	// images/animated/colorable category -> internal element field.
@@ -118,6 +97,7 @@ class TcfgParser {
 			case 'strums': 'strumOffsets';
 			case 'holdBody': 'holdOffsets';
 			case 'holdEnd': 'endOffsets';
+			case 'splash': 'splashOffsets';
 			default: null;
 		}
 	}
@@ -128,92 +108,5 @@ class TcfgParser {
 		if (colReg.match(k))
 			return Std.string(Std.parseInt(colReg.matched(1)) - 1); // col1 -> "0"
 		return k;
-	}
-
-	// ---- lexing / value parsing ----
-	static function tokenize(text:String):Array<Line> {
-		var out:Array<Line> = [];
-		if (text == null)
-			return out;
-		for (raw in text.split('\n')) {
-			var line:String = stripComment(raw.split('\r').join(''));
-			if (line.trim().length == 0)
-				continue;
-			var indent:Int = indentOf(line);
-			var content:String = line.substr(indent);
-			var colon:Int = content.indexOf(':');
-			if (colon < 0)
-				continue;
-			var key:String = content.substr(0, colon).trim();
-			if (key.length == 0)
-				continue;
-			var rest:String = content.substr(colon + 1).trim();
-			out.push({indent: indent, key: key, value: rest.length > 0 ? rest : null});
-		}
-		return out;
-	}
-
-	static function blockEnd(lines:Array<Line>, headerIdx:Int, limit:Int):Int {
-		var hi:Int = lines[headerIdx].indent;
-		var j:Int = headerIdx + 1;
-		while (j < limit && lines[j].indent > hi)
-			j++;
-		return j;
-	}
-
-	static function indentOf(line:String):Int {
-		var i:Int = 0;
-		while (i < line.length) {
-			var c:String = line.charAt(i);
-			if (c != ' ' && c != '\t')
-				break;
-			i++;
-		}
-		return i;
-	}
-
-	static function stripComment(line:String):String {
-		for (i in 0...line.length) {
-			if (line.charAt(i) == '#') {
-				if (i == 0)
-					return '';
-				var p:String = line.charAt(i - 1);
-				if (p == ' ' || p == '\t')
-					return line.substr(0, i);
-			}
-		}
-		return line;
-	}
-
-	static function parseValue(v:String):Dynamic {
-		var s:String = v.trim();
-		if (s.endsWith(','))
-			s = s.substr(0, s.length - 1).trim();
-		if (s.startsWith('[') && s.endsWith(']')) {
-			var inner:String = s.substr(1, s.length - 2).trim();
-			var out:Array<Dynamic> = [];
-			if (inner.length > 0)
-				for (part in inner.split(','))
-					out.push(parseScalar(part.trim()));
-			return out;
-		}
-		return parseScalar(s);
-	}
-
-	static function parseScalar(s:String):Dynamic {
-		if (s.endsWith(','))
-			s = s.substr(0, s.length - 1).trim();
-		if (s.length >= 2) {
-			var q:String = s.charAt(0);
-			if ((q == '"' || q == "'") && s.charAt(s.length - 1) == q)
-				return s.substr(1, s.length - 2); // quoted string value
-		}
-		if (s == 'true')
-			return true;
-		if (s == 'false')
-			return false;
-		if (numberReg.match(s))
-			return (s.indexOf('.') >= 0) ? Std.parseFloat(s) : Std.parseInt(s);
-		return s;
 	}
 }

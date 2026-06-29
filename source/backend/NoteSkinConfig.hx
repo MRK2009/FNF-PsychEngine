@@ -76,6 +76,8 @@ class NoteSkinConfig {
 		mergedCache.clear();
 		frameExistsCache.clear();
 		frameKeysCache.clear();
+		pixelVariantCache = null;
+		pixelVariantComputed = false;
 	}
 
 	// Supported config formats, in resolution priority. The tabbed `.tcfg` format is primary; plain
@@ -125,24 +127,6 @@ class NoteSkinConfig {
 	public static var editorOverride:String = null;
 
 	public static var pixelMode:Bool = false;
-
-	// In pixel mode, resolve a key's pixel variant: prefer a dedicated "pixel" subfolder
-	// (e.g. noteSkins/Default/pixel/noteArrow), then the legacy "-pixel" suffix
-	// (noteSkins/Default/noteArrow-pixel), else the base key unchanged.
-	public static function variant(key:String):String {
-		if (!pixelMode)
-			return key;
-
-		// frameKeys(...) != null matches a single image OR a numbered sequence, so animated
-		// pixel variants resolve too.
-		var slash:Int = key.lastIndexOf('/');
-		if (slash >= 0) {
-			var sub:String = key.substr(0, slash) + '/pixel' + key.substr(slash);
-			if (frameKeys(sub) != null)
-				return sub;
-		}
-		return (frameKeys('$key-pixel') != null) ? '$key-pixel' : key;
-	}
 
 	public static function setConfig(name:String, data:NoteSkinData) {
 		configCache.set(name, data);
@@ -221,6 +205,29 @@ class NoteSkinConfig {
 		if (editorOverride != null)
 			return editorOverride;
 
+		var sel:String = selectSkin();
+
+		// On a pixel stage, swap a non-pixel folder skin (or the classic default) for a skin flagged
+		// `pixelVariant: true` so its pixel art is used. A song that explicitly picked a classic
+		// `arrowSkin` is left alone -- it brings its own `pixelUI/` sheet.
+		if (PlayState.isPixelStage) {
+			var cfg:NoteSkinData = (sel != null) ? get(sel) : null;
+			var hasPixel:Bool = (cfg != null) && (cfg.pixelVariant == true || cfg.pixel == true);
+			var song = PlayState.SONG;
+			var explicitClassic:Bool = (sel == null) && (song != null && song.arrowSkin != null && song.arrowSkin.length > 1);
+			if (!hasPixel && !explicitClassic) {
+				var pv:String = pixelVariantSkin();
+				if (pv != null)
+					return pv;
+			}
+		}
+
+		return sel;
+	}
+
+	// The selected skin from chart `arrowSkin` / the player's `noteSkin` pref / the default, or null
+	// when none resolve to a folder skin (the classic skin then renders).
+	static function selectSkin():String {
 		var song = PlayState.SONG;
 		if (song != null && song.arrowSkin != null && song.arrowSkin.length > 1)
 			return isFolderSkin(song.arrowSkin) ? song.arrowSkin : null;
@@ -292,6 +299,15 @@ class NoteSkinConfig {
 	public static function numForColumn(field:Dynamic, col:Int, fallback:Float):Float {
 		var v:Dynamic = rawForColumn(field, col);
 		return v == null ? fallback : num(v);
+	}
+
+	// Base note/strum/hold scale for a column. Uses `pixelScale` when the skin is rendering in pixel
+	// mode and defines one (low-res pixel art usually needs a larger zoom than the HD art), otherwise
+	// `scale` (default 0.7). The multikey size ratio is applied on top of this by the caller.
+	public static function scaleForColumn(cfg:NoteSkinData, col:Int):Float {
+		if (pixelMode && cfg.pixelScale != null)
+			return numForColumn(cfg.pixelScale, col, numForColumn(cfg.scale, col, 0.7));
+		return numForColumn(cfg.scale, col, 0.7);
 	}
 
 	public static function boolForColumn(field:Dynamic, col:Int, fallback:Bool):Bool {
@@ -458,29 +474,64 @@ class NoteSkinConfig {
 		return exists;
 	}
 
-	public static function frameKeys(key:String):Array<String> {
+	// Frame list for a key: a single image, or a numbered sequence (any of `0001`/`001`/`1`, with no
+	// separator or a `-`/`_`). `suffix`, when given, is appended AFTER the frame number -- this is how
+	// the `-pixel` per-frame naming (`confirmArrow1-pixel`) resolves.
+	public static function frameKeys(key:String, ?suffix:String = ''):Array<String> {
 		if (key == null || key.length < 1)
 			return null;
-		if (frameKeysCache.exists(key))
-			return frameKeysCache.get(key);
+		if (suffix == null)
+			suffix = '';
+		var cacheKey:String = (suffix.length == 0) ? key : '$key|$suffix';
+		if (frameKeysCache.exists(cacheKey))
+			return frameKeysCache.get(cacheKey);
 
-		var result:Array<String> = resolveFrameKeys(key);
-		frameKeysCache.set(key, result);
+		var result:Array<String> = resolveFrameKeys(key, suffix);
+		frameKeysCache.set(cacheKey, result);
 		return result;
 	}
 
-	static function resolveFrameKeys(key:String):Array<String> {
-		if (frameExists(key))
-			return [key];
+	// Pixel-variant-aware frame list for `key`: in pixel mode prefers a pixel variant, else the base
+	// art. The single resolver the skin builders use so every element finds its pixel art the same way.
+	public static function resolveFrames(key:String):Array<String> {
+		if (pixelMode) {
+			var p:Array<String> = pixelFrameKeys(key);
+			if (p != null)
+				return p;
+		}
+		return frameKeys(key);
+	}
+
+	// Tries the pixel variants of `key`, or null when none exist. Covers every common layout: a
+	// `pixel/` subfolder (bare `pixel/x` or per-frame `pixel/x<N>-pixel`) and a `-pixel` suffix on the
+	// key itself (`x-pixel` single, or `x<N>-pixel` sequence). Falls through to null so `resolveFrames`
+	// can use the base art when a skin genuinely ships no pixel variant for this element.
+	static function pixelFrameKeys(key:String):Array<String> {
+		var slash:Int = key.lastIndexOf('/');
+		if (slash >= 0) {
+			var sub:String = key.substr(0, slash) + '/pixel' + key.substr(slash);
+			var r:Array<String> = frameKeys(sub);
+			if (r != null)
+				return r;
+			r = frameKeys(sub, '-pixel');
+			if (r != null)
+				return r;
+		}
+		return frameKeys(key, '-pixel');
+	}
+
+	static function resolveFrameKeys(key:String, suffix:String):Array<String> {
+		if (frameExists(key + suffix))
+			return [key + suffix];
 
 		for (sep in ['', '-', '_']) {
 			for (pad in [4, 3, 2, 1]) {
 				for (start in [0, 1]) {
-					if (frameExists(key + sep + zeroPad(start, pad))) {
+					if (frameExists(key + sep + zeroPad(start, pad) + suffix)) {
 						var list:Array<String> = [];
 						var i:Int = start;
-						while (frameExists(key + sep + zeroPad(i, pad))) {
-							list.push(key + sep + zeroPad(i, pad));
+						while (frameExists(key + sep + zeroPad(i, pad) + suffix)) {
+							list.push(key + sep + zeroPad(i, pad) + suffix);
 							i++;
 						}
 						return list;
@@ -577,6 +628,18 @@ class NoteSkinConfig {
 		var rad:Float = deg * Math.PI / 180;
 		var cos:Float = Math.abs(Math.cos(rad));
 		var sin:Float = Math.abs(Math.sin(rad));
+
+		// Snap near-zero/near-one cos/sin so cardinal rotations (90/180/270) 
+		// keep exact integer dimensions so no 1px growth, no half-pixel offset.
+		if (cos < 1e-9)
+			cos = 0;
+		else if (cos > 1 - 1e-9)
+			cos = 1;
+		if (sin < 1e-9)
+			sin = 0;
+		else if (sin > 1 - 1e-9)
+			sin = 1;
+
 		var nw:Int = Math.ceil(src.width * cos + src.height * sin);
 		var nh:Int = Math.ceil(src.width * sin + src.height * cos);
 		if (square) {
@@ -591,7 +654,7 @@ class NoteSkinConfig {
 		m.translate(nw / 2, nh / 2);
 
 		var out:BitmapData = new BitmapData(nw, nh, true, 0x00000000);
-		out.draw(src, m, null, null, null, true);
+		out.draw(src, m, null, null, null, !pixelMode);
 		return out;
 	}
 }

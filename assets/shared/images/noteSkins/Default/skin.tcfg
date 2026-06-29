@@ -15,12 +15,14 @@ images:
 		arrow: confirmArrow
 	holdBody: holdBody
 	holdEnd: holdEnd
+	splash: splash
 
 general:
 	rotate: true
 	directionAngles: [-90, 180, 0, 90]
 	fps: 24
 	scale: 0.7
+	pixelScale: 6
 	antialiasing: true
 	holdAntialiasing: false
 	holdAlpha: 0.5
@@ -33,3 +35,4 @@ colorable:
 	confirm: true
 	holdBody: true
 	holdEnd: true
+	splash: true

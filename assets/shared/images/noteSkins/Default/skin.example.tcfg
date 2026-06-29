@@ -26,17 +26,27 @@ images:
 		center: confirmCenter
 	holdBody: holdBody        # unified sustain body
 	holdEnd: holdEnd          # unified sustain tail
+	# Note splash (optional). A single image, a numbered sequence (splash0001, splash0002, ...), or
+	# an @2x / pixel/ variant -- same resolution as notes. White art is recoloured per lane via the
+	# arrow palette (set colorable.splash: false for pre-coloured art). Indent for per-lane art.
+	# Omit `splash` to use the engine's default note splash; it also falls back to the legacy
+	# noteSplashes/ sparrow atlas if you point `splash` at a packed .png + .xml instead of images.
+	splash: splash
 
 general:
 	rotate: true
 	directionAngles: [-90, 180, 0, 90]   # left, down, up, right
 	fps: 24                   # unified animation fps (see ADVANCED for per-lane fps)
 	scale: 0.9
+	pixelScale: 6             # scale used on a pixel stage instead of `scale` (low-res pixel art
+	                          # needs a bigger zoom); per-lane allowed. Falls back to `scale` if unset.
 	antialiasing: true
 	holdAntialiasing: false
 	holdAlpha: 0.5
 	pixel: false
 	pixelVariant: true        # use pixel/ subfolder or *-pixel files on a pixel stage
+	splashScale: 1            # note-splash scale (default 1)
+	splashFps: [22, 26]       # note-splash fps; a random rate in this range is picked per splash
 	hi-res: false             # ships @2x assets (auto-detected regardless)
 
 animated:
@@ -54,12 +64,14 @@ colorable:
 	confirm: true
 	holdBody: true
 	holdEnd: true
+	splash: true              # recolour the splash per lane via the arrow palette
 
 offsets:
 	notes: [0, 0]
 	strums: [0, 0]
 	holdBody: [0, 0]
 	holdEnd: [0, 0]
+	splash: [0, 0]
 
 ### ---------------------------------------------------------------------------
 ### ADVANCED -- a key-count section (here 4K) with per-column images/offsets and
