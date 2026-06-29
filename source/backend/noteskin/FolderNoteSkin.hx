@@ -67,11 +67,7 @@ class FolderNoteSkin implements INoteSkin {
 		if (!colorable && rgb != null)
 			rgb.enabled = false;
 		v.colorable = colorable;
-		if (cfg.splash != null) {
-			v.splashTexture = base + cfg.splash;
-			v.splashUseRGB = colorable;
-			v.hasSplashOverride = true;
-		}
+		// (Note splashes are built separately by NoteSkinConfig.applySplash / NoteSplash, not here.)
 
 		spr.antialiasing = (cfg.pixel == true
 			|| NoteSkinConfig.pixelMode) ? false : NoteSkinConfig.boolForColumn(cfg.antialiasing, col, ClientPrefs.data.antialiasing);

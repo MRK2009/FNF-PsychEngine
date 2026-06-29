@@ -28,12 +28,6 @@ final class NoteVisual {
 	/** Whether this note role's palette shader should stay enabled (note head / sustain). **/
 	public var colorable:Bool = true;
 
-	/** Splash texture override for note heads, or `null` to leave the default. **/
-	public var splashTexture:String = null;
-
-	public var splashUseRGB:Bool = true;
-	public var hasSplashOverride:Bool = false;
-
 	/** Receptor recolors per played anim (static/pressed/confirm) instead of via a single flag. **/
 	public var colorPerAnim:Bool = false;
 

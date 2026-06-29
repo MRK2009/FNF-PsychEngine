@@ -31,7 +31,7 @@ class NoteSplash extends FlxSprite {
 	public var rgbShader:PixelSplashShaderRef;
 	public var texture:String;
 	public var config(default, set):NoteSplashConfig;
-	public var babyArrow:StrumNote;
+	public var babyArrow:FlxSprite;
 	public var noteData:Int = 0;
 
 	public var copyX:Bool = true;
@@ -41,8 +41,27 @@ class NoteSplash extends FlxSprite {
 	var spawned:Bool = false;
 	var noteDataMap:Map<Int, String> = new Map();
 
+	// Cache identity (`NoteSkinConfig.splashSourceKey`) of the folder-native splash currently loaded,
+	// or null when a legacy sparrow atlas is loaded instead. Avoids rebuilding the splash every spawn.
+	public var folderSkinSource:String = null;
+
+	// True when the loaded folder splash is pixel art (force antialiasing off without shader blocking).
+	var folderSplashPixel:Bool = false;
+
+	// True for folder-native splashes: centre on the lane (the same reference the notes/receptor use)
+	// instead of the legacy sparrow splash's hand-tuned offset. `splashNudge*` adds the config offset.
+	var folderCentered:Bool = false;
+	var splashNudgeX:Float = 0;
+	var splashNudgeY:Float = 0;
+
 	public static var defaultNoteSplash(default, never):String = "noteSplashes/noteSplashes";
 	public static var configs:Map<String, NoteSplashConfig> = new Map();
+
+	// "Note Splashes" option value that defers to the active note skin's `splash`. Default selection.
+	public static final FROM_NOTESKIN:String = 'From Noteskin';
+
+	// Display name of the engine-default splash atlas (`noteSplashes/noteSplashes`, no postfix).
+	public static final BASE_SKIN:String = 'Psych';
 
 	// Splash anim/colour basis. Splash atlases only carry the 4 cardinal colours,
 	// so splashes always map columns via `% 4` -- this is deliberately NOT
@@ -66,11 +85,15 @@ class NoteSplash extends FlxSprite {
 	public function loadSplash(?splash:String) {
 		config = null;
 		maxAnims = 0;
+		folderSkinSource = null; // a legacy sparrow atlas is being loaded; drop any folder-splash state
+		folderSplashPixel = false;
+		folderCentered = false;
 
 		if (splash == null) {
-			splash = defaultNoteSplash + getSplashSkinPostfix();
 			if (PlayState.SONG != null && PlayState.SONG.splashSkin != null && PlayState.SONG.splashSkin.length > 0)
 				splash = PlayState.SONG.splashSkin;
+			else
+				splash = preferredSplashTexture();
 		}
 
 		texture = splash;
@@ -188,6 +211,51 @@ class NoteSplash extends FlxSprite {
 		configs.set(path, this.config);
 	}
 
+	/**
+		Loads the active note skin's folder-native splash (built from individual images / sequences via
+		`NoteSkinConfig.applySplash`, with `@2x` and `pixel/` variants), reusing the cached build when the
+		skin/keycount/pixel state is unchanged.
+		@return `true` if a folder splash was loaded; `false` if the skin provides none (use the legacy path)
+	**/
+	public function tryFolderSplash():Bool {
+		var source:String = backend.NoteSkinConfig.splashSourceKey();
+		if (source == null)
+			return false;
+		if (folderSkinSource == source && config != null && frames != null)
+			return true; // already built for this skin/keycount/pixel state
+
+		@:privateAccess animation.clearAnimations();
+		noteDataMap.clear();
+
+		var info:backend.NoteSkinConfig.SplashInfo = backend.NoteSkinConfig.applySplash(this);
+		if (info == null) {
+			folderSkinSource = null;
+			return false;
+		}
+
+		var cfg:NoteSplashConfig = createConfig();
+		cfg.scale = info.scale;
+		cfg.allowRGB = info.allowRGB;
+		cfg.allowPixel = info.allowPixel;
+		cfg.rgb = null; // recolour from the arrow palette, like the default white splash
+		for (col in 0...info.names.length) {
+			var nm:String = info.names[col];
+			cfg.animations.set(nm, {name: nm, noteData: col, prefix: '', indices: [], offsets: info.offsets[col], fps: info.fps});
+			noteDataMap.set(col, nm);
+		}
+
+		// The anims are already on the sprite (applySplash -> applyAnims); bypass set_config so it
+		// doesn't wipe and try to rebuild them from prefixes.
+		@:bypassAccessor this.config = cfg;
+		@:bypassAccessor this.maxAnims = 1;
+		scale.set(info.scale, info.scale);
+		texture = null;
+		folderSkinSource = info.source;
+		folderSplashPixel = info.pixel;
+		folderCentered = true;
+		return true;
+	}
+
 	public function spawnSplashNote(?x:Float = 0, ?y:Float = 0, ?noteData:Int = 0, ?note:Note, ?randomize:Bool = true) {
 		if (note != null && note.noteSplashData.disabled)
 			return;
@@ -195,26 +263,39 @@ class NoteSplash extends FlxSprite {
 		aliveTime = 0;
 
 		if (!inEditor) {
-			var loadedTexture:String = defaultNoteSplash + getSplashSkinPostfix();
-			if (note != null && note.noteSplashData.texture != null)
-				loadedTexture = note.noteSplashData.texture;
+			// Resolution priority: a note-type's explicit splash override > the chart's `splashSkin`
+			// (songs override the player's option) > the player's "Note Splashes" choice (which is
+			// "From Noteskin" by default). "From Noteskin" prefers the active skin's folder-native
+			// splash and only falls back to the legacy sparrow path when the skin provides one.
+			var legacyTexture:String = null;
+			if (note != null && note.noteSplashData.texture != null && note.noteSplashData.texture.length > 0)
+				legacyTexture = note.noteSplashData.texture;
 			else if (PlayState.SONG != null && PlayState.SONG.splashSkin != null && PlayState.SONG.splashSkin.length > 0)
-				loadedTexture = PlayState.SONG.splashSkin;
+				legacyTexture = PlayState.SONG.splashSkin;
+			else if (ClientPrefs.data.splashSkin != FROM_NOTESKIN)
+				legacyTexture = defaultNoteSplash + getSplashSkinPostfix();
 
-			if (texture != loadedTexture)
-				loadSplash(loadedTexture);
+			if (legacyTexture != null) {
+				if (folderSkinSource != null || texture != legacyTexture)
+					loadSplash(legacyTexture);
+			} else if (!tryFolderSplash()) {
+				// "From Noteskin" but the skin has no folder splash: its named sparrow atlas, or the base.
+				var sparrow:String = backend.NoteSkinConfig.currentSplash();
+				var baseTexture:String = (sparrow != null) ? sparrow : defaultNoteSplash;
+				if (folderSkinSource != null || texture != baseTexture)
+					loadSplash(baseTexture);
+			}
 		}
 
 		setPosition(x, y);
 
-		if (babyArrow != null)
-			setPosition(babyArrow.x - Note.swagWidth * 0.95, babyArrow.y - Note.swagWidth); // To prevent it from being misplaced for one game tick
-
 		if (note != null)
 			noteData = note.noteData;
 
-		if (randomize && maxAnims > 1)
-			noteData = noteData % colArray.length + (FlxG.random.int(0, maxAnims - 1) * colArray.length);
+		// Always map the column to one of the 4 cardinal splash colours (`% 4`); pick a random variant
+		// only when the atlas ships more than one. (Plain `% 4` also keeps multikey columns in range.)
+		var variant:Int = (randomize && maxAnims > 1) ? FlxG.random.int(0, maxAnims - 1) : 0;
+		noteData = noteData % colArray.length + variant * colArray.length;
 
 		this.noteData = noteData;
 		var anim:String = playDefaultAnim();
@@ -289,12 +370,16 @@ class NoteSplash extends FlxSprite {
 		else if (PlayState.isPixelStage)
 			rgbShader.pixelAmount = 6;
 
-		offset.set(10, 10);
 		var conf:NoteSplashAnim = config.animations.get(anim);
-		var offsets:Array<Float> = [0, 0];
-		if (conf != null)
-			offsets = conf.offsets;
-		if (offsets != null) {
+		var offsets:Array<Float> = (conf != null && conf.offsets != null) ? conf.offsets : [0, 0];
+		if (folderCentered) {
+			// Folder splashes are centred on the lane in followArrow(); the config offsets nudge that
+			// centre via the position (not `offset`, which would cancel against the centring math).
+			offset.set(0, 0);
+			splashNudgeX = offsets[0];
+			splashNudgeY = offsets[1];
+		} else {
+			offset.set(10, 10);
 			offset.x += offsets[0];
 			offset.y += offsets[1];
 		}
@@ -312,6 +397,8 @@ class NoteSplash extends FlxSprite {
 		if (note != null)
 			antialiasing = note.noteSplashData.antialiasing;
 		if (PlayState.isPixelStage && config.allowPixel)
+			antialiasing = false;
+		if (folderSplashPixel) // folder pixel splash: crisp art, but no extra shader blocking
 			antialiasing = false;
 
 		var minFps:Int = 22;
@@ -334,13 +421,39 @@ class NoteSplash extends FlxSprite {
 		if (!inEditor && Mania.current != Mania.DEFAULT) {
 			var ratio:Float = Mania.noteSizes[Mania.current - 1] / 0.7;
 			scale.set(config.scale * ratio, config.scale * ratio);
-			centerOffsets();
-			var mOff:Array<Float> = Mania.splashOffsets[Mania.current - 1];
-			offset.x += mOff[0];
-			offset.y += mOff[1];
+			// Folder splashes re-centre in followArrow() (frame size * scale), so they don't need the
+			// legacy centerOffsets + Mania.splashOffsets nudge.
+			if (!folderCentered) {
+				centerOffsets();
+				var mOff:Array<Float> = Mania.splashOffsets[Mania.current - 1];
+				offset.x += mOff[0];
+				offset.y += mOff[1];
+			}
 		}
 
+		followArrow();
 		spawned = true;
+	}
+
+	// Keeps the spawned splash glued to its receptor. Folder splashes centre on the lane -- the same
+	// `swagWidth`-square reference the notes/receptor use -- so the burst sits exactly on the strum;
+	// legacy sparrow splashes keep their historical hand-tuned offset. Called on spawn and every frame.
+	function followArrow():Void {
+		if (babyArrow == null)
+			return;
+		if (folderCentered) {
+			var laneCx:Float = babyArrow.x + Note.swagWidth / 2;
+			var laneCy:Float = babyArrow.y + Note.swagWidth / 2;
+			if (copyX)
+				x = laneCx - frameWidth * scale.x / 2 + splashNudgeX;
+			if (copyY)
+				y = laneCy - frameHeight * scale.y / 2 + splashNudgeY;
+		} else {
+			if (copyX)
+				x = babyArrow.x - Note.swagWidth * 0.95;
+			if (copyY)
+				y = babyArrow.y - Note.swagWidth;
+		}
 	}
 
 	public function playDefaultAnim() {
@@ -372,21 +485,30 @@ class NoteSplash extends FlxSprite {
 			}
 		}
 
-		if (babyArrow != null) {
-			if (copyX)
-				x = babyArrow.x - Note.swagWidth * 0.95;
-
-			if (copyY)
-				y = babyArrow.y - Note.swagWidth;
-		}
+		followArrow();
 		super.update(elapsed);
 	}
 
 	public static function getSplashSkinPostfix() {
-		var skin:String = '';
-		if (ClientPrefs.data.splashSkin != ClientPrefs.defaultData.splashSkin)
-			skin = '-' + ClientPrefs.data.splashSkin.trim().toLowerCase().replace(' ', '-');
-		return skin;
+		var sel:String = ClientPrefs.data.splashSkin;
+		// Both "From Noteskin" (skin-provided) and the base "Psych" atlas use no filename postfix.
+		if (sel == FROM_NOTESKIN || sel == BASE_SKIN)
+			return '';
+		return '-' + sel.trim().toLowerCase().replace(' ', '-');
+	}
+
+	/**
+		The splash atlas the player's "Note Splashes" option resolves to, ignoring per-note and
+		per-chart overrides. "From Noteskin" -> the active note skin's `splash` (or the base atlas when
+		the skin provides none); any other value -> the base atlas plus that skin's filename postfix.
+	**/
+	public static function preferredSplashTexture():String {
+		if (ClientPrefs.data.splashSkin == FROM_NOTESKIN) {
+			var fromSkin:String = backend.NoteSkinConfig.currentSplash();
+			if (fromSkin != null && fromSkin.length > 0)
+				return fromSkin;
+		}
+		return defaultNoteSplash + getSplashSkinPostfix();
 	}
 
 	public static function createConfig():NoteSplashConfig {

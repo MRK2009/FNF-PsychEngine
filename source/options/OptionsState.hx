@@ -108,6 +108,7 @@ class OptionsState extends MusicBeatState {
 		DiscordClient.changePresence("Options Menu", null);
 		#end
 		persistentUpdate = true;
+		FlxG.mouse.visible = true;
 
 		sidebar = OptionsCatalog.build();
 		wireDynamicOptions();
@@ -929,8 +930,9 @@ class OptionsState extends MusicBeatState {
 			note.visible = false;
 			notes.add(note);
 
-			var splash:NoteSplash = new NoteSplash(0, 0, NoteSplash.defaultNoteSplash + NoteSplash.getSplashSkinPostfix());
+			var splash:NoteSplash = new NoteSplash(0, 0);
 			splash.inEditor = true;
+			loadPreviewSplash(splash);
 			splash.babyArrow = note;
 			splash.ID = i;
 			splash.kill();
@@ -1009,6 +1011,9 @@ class OptionsState extends MusicBeatState {
 			note.centerOffsets();
 			note.centerOrigin();
 		});
+		// "From Noteskin" splashes follow the selected note skin, so refresh the splash preview too.
+		if (ClientPrefs.data.splashSkin == NoteSplash.FROM_NOTESKIN)
+			onChangeSplashSkin();
 	}
 
 	/**
@@ -1030,10 +1035,17 @@ class OptionsState extends MusicBeatState {
 	 * Updates all live preview splashes to use the currently selected splash skin.
 	 */
 	function onChangeSplashSkin():Void {
-		var skin:String = NoteSplash.defaultNoteSplash + NoteSplash.getSplashSkinPostfix();
 		for (splash in splashes)
-			splash.loadSplash(skin);
+			loadPreviewSplash(splash);
 		playNoteSplashes();
+	}
+
+	// Loads the preview splash the same way gameplay does: the active skin's folder-native splash when
+	// "From Noteskin" is selected, otherwise the legacy sparrow atlas the option resolves to.
+	function loadPreviewSplash(splash:NoteSplash):Void {
+		if (ClientPrefs.data.splashSkin == NoteSplash.FROM_NOTESKIN && splash.tryFolderSplash())
+			return;
+		splash.loadSplash(NoteSplash.preferredSplashTexture());
 	}
 
 	/**

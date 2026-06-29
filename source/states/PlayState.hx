@@ -2560,7 +2560,7 @@ class PlayState extends MusicBeatState {
 		return false;
 	}
 
-	public function spawnNoteSplash(x:Float = 0, y:Float = 0, ?data:Int = 0, ?note:Note, ?strum:StrumNote) {
+	public function spawnNoteSplash(x:Float = 0, y:Float = 0, ?data:Int = 0, ?note:Note, ?strum:FlxSprite) {
 		var splash:NoteSplash = grpNoteSplashes.recycle(NoteSplash);
 		splash.babyArrow = strum;
 		splash.spawnSplashNote(x, y, data, note);
@@ -3194,7 +3194,7 @@ class PlayState extends MusicBeatState {
 	function splashOnColumn(col:Int):Void {
 		var strum:Receptor = (col >= 0 && col < playerReceptors.length) ? playerReceptors[col] : null;
 		if (strum != null)
-			spawnNoteSplash(strum.x, strum.y, col);
+			spawnNoteSplash(strum.x, strum.y, col, null, strum); // pass the receptor so it follows + centers (was misplaced)
 	}
 
 	// NoteSystem V2

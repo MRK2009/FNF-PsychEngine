@@ -17,14 +17,15 @@ typedef NoteSkinData = {
 	@:optional var strums:Dynamic;
 	@:optional var pressed:Dynamic;
 	@:optional var confirm:Dynamic;
-	@:optional var ratings:Dynamic;
-	@:optional var comboNums:String;
-	@:optional var combo:String;
-	@:optional var splash:String;
+	@:optional var splash:Dynamic; // folder-native splash frame key (String, or per-lane object), or a sparrow atlas name
+	@:optional var splashScale:Dynamic; // splash scale (Float, or per-lane); defaults to 1
+	@:optional var splashFps:Dynamic; // splash fps range ([min,max] or a single Int); defaults to [22,26]
+	@:optional var splashOffsets:Dynamic; // per-lane splash offsets
 	@:optional var antialiasing:Dynamic; // Bool, or a per-lane object (arrow/center/col index)
 	@:optional var holdAntialiasing:Bool;
 	@:optional var holdAlpha:Dynamic; // Float, or per-lane object
 	@:optional var scale:Dynamic; // Float, or per-lane object
+	@:optional var pixelScale:Dynamic; // scale used while rendering pixel art (Float, or per-lane); falls back to `scale`
 	@:optional var fps:Dynamic; // anim fps (Int, or per-lane object)
 	@:optional var hiRes:Bool; // hint: skin ships @2x assets (@2x is auto-detected regardless)
 	@:optional var endOffsets:Dynamic; // sustain-tail offsets (per-lane); falls back to holdOffsets
@@ -59,6 +60,20 @@ typedef BuiltAnims = {
 	frames:FlxAtlasFrames,
 	factor:Float,
 	anims:Array<{name:String, indices:Array<Int>, fps:Int, loop:Bool}>
+}
+
+// Look details for a folder-native note splash. `NoteSkinConfig.applySplash` builds the frames/anims
+// onto the splash sprite and returns this; `NoteSplash` turns it into its `NoteSplashConfig`. `names`
+// and `offsets` are indexed by the 4 cardinal splash colours (note column % 4).
+typedef SplashInfo = {
+	source:String,
+	scale:Float,
+	allowRGB:Bool,
+	allowPixel:Bool,
+	pixel:Bool,
+	fps:Array<Int>,
+	names:Array<String>,
+	offsets:Array<Array<Float>>
 }
 
 class NoteSkinConfig {
@@ -239,6 +254,144 @@ class NoteSkinConfig {
 		}
 
 		return isFolderSkin(DEFAULT) ? DEFAULT : null;
+	}
+
+	static var pixelVariantCache:String = null;
+	static var pixelVariantComputed:Bool = false;
+
+	// The first available folder skin flagged `pixelVariant: true` (the `Default` skin preferred), or
+	// null. Cached; cleared by `reset()`. Drives the pixel-stage auto-swap in `activeSkin`.
+	public static function pixelVariantSkin():Null<String> {
+		if (pixelVariantComputed)
+			return pixelVariantCache;
+		pixelVariantComputed = true;
+
+		var def:NoteSkinData = get(DEFAULT);
+		if (def != null && def.pixelVariant == true) {
+			pixelVariantCache = DEFAULT;
+			return pixelVariantCache;
+		}
+		for (name in list()) {
+			var cfg:NoteSkinData = get(name);
+			if (cfg != null && cfg.pixelVariant == true) {
+				pixelVariantCache = name;
+				return pixelVariantCache;
+			}
+		}
+		pixelVariantCache = null;
+		return null;
+	}
+
+	// The active folder skin's splash as a legacy *sparrow atlas* name (`<skin>/` + its `splash` key),
+	// or null. Returns null when the active skin's `splash` resolves to folder-native frames (handled
+	// by `applySplash`) or when there's no skin splash. Used by `NoteSplash` for "From Noteskin".
+	public static function currentSplash():Null<String> {
+		var active:String = activeSkin();
+		if (active == null)
+			return null;
+		var cfg:NoteSkinData = forCurrentKeys(active);
+		if (cfg == null || cfg.splash == null)
+			return null;
+		if (splashSourceKey() != null) // folder-native splash -> not a sparrow atlas name
+			return null;
+		var key:String = columnKey(cfg.splash, 0);
+		return key == null ? null : folder(active) + key;
+	}
+
+	// Pixel-mode decision for a skin (matches `FolderNoteSkin.isPixel`): an explicit `pixel`, or a
+	// `pixelVariant` while on a pixel stage.
+	static inline function pixelForSkin(cfg:NoteSkinData):Bool
+		return (cfg.pixel == true) || (cfg.pixelVariant == true && PlayState.isPixelStage);
+
+	// A cache identity for the active skin's folder-native splash (skin|keycount|pixel), or null when
+	// the active skin provides no folder splash (no `splash`, or it resolves only as a sparrow atlas).
+	// Setting up `pixelMode` here lets `resolveFrames` resolve the splash's pixel/@2x frames.
+	public static function splashSourceKey():String {
+		var active:String = activeSkin();
+		if (active == null)
+			return null;
+		var cfg:NoteSkinData = forCurrentKeys(active);
+		if (cfg == null || cfg.splash == null)
+			return null;
+
+		var pix:Bool = pixelForSkin(cfg);
+		if (editorOverride == null)
+			pixelMode = pix;
+
+		var key:String = columnKey(cfg.splash, 0);
+		if (key == null || resolveFrames(folder(active) + key) == null)
+			return null; // not folder-native (single image / sequence) -> caller uses the legacy path
+		return '$active|${Mania.clamp(Mania.current)}|$pix';
+	}
+
+	static function splashFpsRange(cfg:NoteSkinData):Array<Int> {
+		var f:Dynamic = cfg.splashFps;
+		if (f == null)
+			return [22, 26];
+		if (Std.isOfType(f, Array)) {
+			var a:Array<Dynamic> = f;
+			var lo:Int = a.length > 0 ? Std.int(num(a[0])) : 22;
+			var hi:Int = a.length > 1 ? Std.int(num(a[1])) : lo;
+			return [lo, hi];
+		}
+		var n:Int = Std.int(num(f));
+		return [n, n];
+	}
+
+	/**
+		Builds a folder-native splash onto `spr` (frames + `splash0..3` anims, one per cardinal colour),
+		reusing the same individual-image / sequence / `@2x` / `pixel/` machinery as notes. Returns the
+		non-sprite look details, or null when the active skin has no folder splash (the caller then uses
+		the legacy `NoteSplash` sparrow path).
+	**/
+	public static function applySplash(spr:flixel.FlxSprite):SplashInfo {
+		var source:String = splashSourceKey();
+		if (source == null)
+			return null;
+		var active:String = activeSkin();
+		var cfg:NoteSkinData = forCurrentKeys(active);
+		var base:String = folder(active);
+
+		// Per-colour keys (dir/index/arrow), defaulting a missing lane to colour 0's key so a single
+		// `splash: burst` covers all four; identical keys are built once and shared.
+		var keyByCol:Array<String> = [];
+		for (col in 0...4) {
+			var k:String = columnKey(cfg.splash, col);
+			keyByCol[col] = (k != null) ? k : columnKey(cfg.splash, 0);
+		}
+		var uniqueKeys:Array<String> = [];
+		for (k in keyByCol)
+			if (!uniqueKeys.contains(k))
+				uniqueKeys.push(k);
+
+		var fps:Array<Int> = splashFpsRange(cfg);
+		var anims:Array<SkinAnim> = [];
+		for (i in 0...uniqueKeys.length) {
+			var frames:Array<String> = resolveFrames(base + uniqueKeys[i]);
+			if (frames == null)
+				return null;
+			anims.push({name: 'splashU$i', keys: frames, fps: fps[1], loop: false});
+		}
+
+		var factor:Float = applyAnims(spr, anims);
+
+		var names:Array<String> = [];
+		var offsets:Array<Array<Float>> = [];
+		for (col in 0...4) {
+			names[col] = 'splashU' + uniqueKeys.indexOf(keyByCol[col]);
+			offsets[col] = offsetFor(cfg.splashOffsets, col);
+		}
+
+		return {
+			source: source,
+			scale: numForColumn(cfg.splashScale, 0, 1) * factor,
+			allowRGB: colorableFor(cfg, 'splash'),
+			allowPixel: false, // folder skins ship their own pixel art; no extra shader blocking
+			pixel: pixelForSkin(cfg), // but still drop antialiasing so that art stays crisp
+			fps: fps,
+			names: names,
+			offsets: offsets
+		};
 	}
 
 	public static inline function folder(name:String):String

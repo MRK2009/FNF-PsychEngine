@@ -32,6 +32,7 @@ class TcfgWriter {
 			add(img, node, cat, cat);
 		add(img, node, 'holds', 'holdBody');
 		add(img, node, 'ends', 'holdEnd');
+		add(img, node, 'splash', 'splash');
 		emitGroup('images', img, b, indent);
 
 		// general
@@ -41,11 +42,14 @@ class TcfgWriter {
 		add(gen, node, 'columnAngles', 'columnAngles');
 		add(gen, node, 'fps', 'fps');
 		add(gen, node, 'scale', 'scale');
+		add(gen, node, 'pixelScale', 'pixelScale');
 		add(gen, node, 'antialiasing', 'antialiasing');
 		add(gen, node, 'holdAntialiasing', 'holdAntialiasing');
 		add(gen, node, 'holdAlpha', 'holdAlpha');
 		add(gen, node, 'pixel', 'pixel');
 		add(gen, node, 'pixelVariant', 'pixelVariant');
+		add(gen, node, 'splashScale', 'splashScale');
+		add(gen, node, 'splashFps', 'splashFps');
 		add(gen, node, 'hiRes', 'hi-res');
 		emitGroup('general', gen, b, indent);
 
@@ -58,6 +62,7 @@ class TcfgWriter {
 		add(off, node, 'strumOffsets', 'strums');
 		add(off, node, 'holdOffsets', 'holdBody');
 		add(off, node, 'endOffsets', 'holdEnd');
+		add(off, node, 'splashOffsets', 'splash');
 		emitGroup('offsets', off, b, indent);
 	}
 

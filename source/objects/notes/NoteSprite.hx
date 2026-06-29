@@ -103,10 +103,6 @@ final class NoteSprite extends FlxSprite {
 		centerOnStrum = v.centerOnStrum;
 		pixel = v.pixel;
 		scaleFactor = v.scaleFactor;
-		if (v.hasSplashOverride) {
-			noteSplashData.texture = v.splashTexture;
-			noteSplashData.useRGBShader = v.splashUseRGB;
-		}
 	}
 
 	/**
