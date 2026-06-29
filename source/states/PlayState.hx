@@ -3,6 +3,9 @@ package states;
 import backend.Highscore;
 import backend.NoteSkinConfig;
 import backend.NoteSkinConfig.SkinImage;
+import backend.UISkinConfig;
+import backend.UISkinConfig.UIJudgement;
+import backend.UISkinConfig.UIPlacement;
 import backend.StageData;
 import backend.WeekData;
 import backend.Song;
@@ -329,6 +332,7 @@ class PlayState extends MusicBeatState {
 		Note.precachedHitsounds = new Map();
 
 		NoteSkinConfig.reset();
+		UISkinConfig.reset();
 
 		if (FlxG.sound.music != null)
 			FlxG.sound.music.stop();
@@ -955,6 +959,10 @@ class PlayState extends MusicBeatState {
 		for (asset in introAlts)
 			Paths.image(asset);
 
+		// UI Skin: warm the active skin's countdown images (no-op when the pref has no folder skin).
+		for (logical in ['ready', 'set', 'go'])
+			UISkinConfig.image(logical);
+
 		Paths.sound('intro3' + introSoundsSuffix);
 		Paths.sound('intro2' + introSoundsSuffix);
 		Paths.sound('intro1' + introSoundsSuffix);
@@ -1018,15 +1026,15 @@ class PlayState extends MusicBeatState {
 						FlxG.sound.play(Paths.sound('intro3' + introSoundsSuffix), 0.6);
 						tick = THREE;
 					case 1:
-						countdownReady = createCountdownSprite(introAlts[0], antialias);
+						countdownReady = createCountdownSprite(introAlts[0], antialias, 'ready');
 						FlxG.sound.play(Paths.sound('intro2' + introSoundsSuffix), 0.6);
 						tick = TWO;
 					case 2:
-						countdownSet = createCountdownSprite(introAlts[1], antialias);
+						countdownSet = createCountdownSprite(introAlts[1], antialias, 'set');
 						FlxG.sound.play(Paths.sound('intro1' + introSoundsSuffix), 0.6);
 						tick = ONE;
 					case 3:
-						countdownGo = createCountdownSprite(introAlts[2], antialias);
+						countdownGo = createCountdownSprite(introAlts[2], antialias, 'go');
 						FlxG.sound.play(Paths.sound('introGo' + introSoundsSuffix), 0.6);
 						tick = GO;
 					case 4:
@@ -1054,14 +1062,22 @@ class PlayState extends MusicBeatState {
 		return true;
 	}
 
-	inline private function createCountdownSprite(image:String, antialias:Bool):FlxSprite {
-		var spr:FlxSprite = new FlxSprite().loadGraphic(Paths.image(image));
+	inline private function createCountdownSprite(image:String, antialias:Bool, ?logical:String):FlxSprite {
+		var spr:FlxSprite = new FlxSprite();
+		// UI Skin: prefer the active skin's ready/set/go image; fall back to the base stageUI asset.
+		var skinImg = (logical != null) ? UISkinConfig.image(logical) : null;
+		if (skinImg != null)
+			spr.loadGraphic(skinImg.graphic);
+		else
+			spr.loadGraphic(Paths.image(image));
 		spr.cameras = [camHUD];
 		spr.scrollFactor.set();
 		spr.updateHitbox();
 
 		if (PlayState.isPixelStage)
 			spr.setGraphicSize(Std.int(spr.width * daPixelZoom));
+		else if (skinImg != null && skinImg.factor != 1)
+			spr.setGraphicSize(Std.int(spr.width * skinImg.factor));
 
 		spr.screenCenter();
 		spr.antialiasing = antialias;
@@ -2422,6 +2438,16 @@ class PlayState extends MusicBeatState {
 			Paths.image(uiFolder + rating.image + uiPostfix);
 		for (i in 0...10)
 			Paths.image(uiFolder + 'num' + i + uiPostfix);
+
+		// UI Skin: warm the active skin's folder images (resolveImage caches them). No-op when the
+		// pref has no folder skin, in which case the base assets above are used.
+		UISkinConfig.image('combo');
+		for (rating in ratingsData)
+			UISkinConfig.image(rating.image);
+		for (j in UISkinConfig.judgements())
+			UISkinConfig.image(j.image);
+		for (i in 0...10)
+			UISkinConfig.image('num' + i);
 	}
 
 	// Pool of FlxSprite objects recycled across popUpScore() calls.
@@ -2457,29 +2483,6 @@ class PlayState extends MusicBeatState {
 		if (comboGroup != null) comboGroup.remove(spr, true);
 		spr.kill();
 		_popupPool.push(spr);
-	}
-
-	function folderUIImage(name:String):Null<SkinImage> {
-		var skin:String = NoteSkinConfig.activeSkin();
-		if (skin == null)
-			return null;
-		var cfg = NoteSkinConfig.get(skin);
-		if (cfg == null)
-			return null;
-
-		var base:String = NoteSkinConfig.folder(skin);
-		var key:String = null;
-		if (name == 'combo')
-			key = cfg.combo;
-		else if (name.startsWith('num')) {
-			if (cfg.comboNums != null)
-				key = cfg.comboNums + name.substr(3);
-		} else if (cfg.ratings != null && Reflect.hasField(cfg.ratings, name))
-			key = Reflect.field(cfg.ratings, name);
-
-		if (key == null)
-			return null;
-		return NoteSkinConfig.resolveImage(base + key);
 	}
 
 	public var strumsBlocked:Array<Bool> = [];
@@ -3209,7 +3212,9 @@ class PlayState extends MusicBeatState {
 			}
 		}
 
-		var placement:Float = FlxG.width * 0.35;
+		// All popup placement comes from the UI skin (anchor, per-element positions, digit spacing).
+		var pl:UIPlacement = UISkinConfig.placement();
+		var placement:Float = FlxG.width * pl.anchorX;
 		var rating:FlxSprite = acquirePopupSprite();
 		var score:Int = 350;
 
@@ -3240,27 +3245,33 @@ class PlayState extends MusicBeatState {
 			antialias = !isPixelStage;
 		}
 
+		// UI Skin: motion config per element (null = use the engine defaults below), and the *visual*
+		// rating tier (a custom window-keyed image swap; scoring/combo already came from daRating).
+		var twR:Dynamic = UISkinConfig.tweenFor('rating');
+		var twC:Dynamic = UISkinConfig.tweenFor('combo');
+		var twN:Dynamic = UISkinConfig.tweenFor('numbers');
+		var vis:UIJudgement = UISkinConfig.pickVisual(noteDiff / playbackRate, daRating.name);
+
 		var ratingFactor:Float = 1;
-		var ratingImg = folderUIImage(daRating.image);
+		var ratingImg = UISkinConfig.image(vis.image);
 		if (ratingImg != null) {
 			rating.loadGraphic(ratingImg.graphic);
 			ratingFactor = ratingImg.factor;
 		} else
-			rating.loadGraphic(Paths.image(uiFolder + daRating.image + uiPostfix));
+			rating.loadGraphic(Paths.image(uiFolder + vis.image + uiPostfix));
+		var ratingScaleMul:Float = (vis.scale != null) ? vis.scale : 1;
 		rating.screenCenter();
-		rating.x = placement - 40;
-		rating.y -= 60;
-		rating.acceleration.y = 550 * playbackRate * playbackRate;
-		rating.velocity.y -= FlxG.random.int(140, 175) * playbackRate;
-		rating.velocity.x -= FlxG.random.int(0, 10) * playbackRate;
+		rating.x = placement + pl.rating[0];
+		rating.y += pl.rating[1];
+		rating.acceleration.y = UISkinConfig.tRange(twR, 'accelY', 550, 550) * playbackRate * playbackRate;
+		rating.velocity.y -= UISkinConfig.tRange(twR, 'velocityY', 140, 175) * playbackRate;
+		rating.velocity.x -= UISkinConfig.tRange(twR, 'velocityX', 0, 10) * playbackRate;
 		rating.visible = (!ClientPrefs.data.hideHud && showRating);
-		rating.x += ClientPrefs.data.comboOffset[0];
-		rating.y -= ClientPrefs.data.comboOffset[1];
-		rating.antialiasing = antialias;
+		rating.antialiasing = (vis.antialias != null) ? vis.antialias : antialias;
 
 		var comboSpr:FlxSprite = acquirePopupSprite();
 		var comboFactor:Float = 1;
-		var comboImg = folderUIImage('combo');
+		var comboImg = UISkinConfig.image('combo');
 		if (comboImg != null) {
 			comboSpr.loadGraphic(comboImg.graphic);
 			comboFactor = comboImg.factor;
@@ -3268,19 +3279,17 @@ class PlayState extends MusicBeatState {
 			comboSpr.loadGraphic(Paths.image(uiFolder + 'combo' + uiPostfix));
 		comboSpr.screenCenter();
 		comboSpr.x = placement;
-		comboSpr.acceleration.y = FlxG.random.int(200, 300) * playbackRate * playbackRate;
-		comboSpr.velocity.y -= FlxG.random.int(140, 160) * playbackRate;
+		comboSpr.acceleration.y = UISkinConfig.tRange(twC, 'accelY', 200, 300) * playbackRate * playbackRate;
+		comboSpr.velocity.y -= UISkinConfig.tRange(twC, 'velocityY', 140, 160) * playbackRate;
 		comboSpr.visible = (!ClientPrefs.data.hideHud && showCombo);
-		comboSpr.x += ClientPrefs.data.comboOffset[0];
-		comboSpr.y -= ClientPrefs.data.comboOffset[1];
 		comboSpr.antialiasing = antialias;
-		comboSpr.y += 60;
-		comboSpr.velocity.x += FlxG.random.int(1, 10) * playbackRate;
+		comboSpr.y += pl.combo[1];
+		comboSpr.velocity.x += UISkinConfig.tRange(twC, 'velocityX', 1, 10) * playbackRate;
 		comboGroup.add(rating);
 
 		if (!PlayState.isPixelStage) {
-			rating.setGraphicSize(Std.int(rating.width * 0.7 * ratingFactor));
-			comboSpr.setGraphicSize(Std.int(comboSpr.width * 0.7 * comboFactor));
+			rating.setGraphicSize(Std.int(rating.width * UISkinConfig.tFloat(twR, 'scale', 0.7) * ratingScaleMul * ratingFactor));
+			comboSpr.setGraphicSize(Std.int(comboSpr.width * UISkinConfig.tFloat(twC, 'scale', 0.7) * comboFactor));
 		} else {
 			rating.setGraphicSize(Std.int(rating.width * daPixelZoom * 0.85));
 			comboSpr.setGraphicSize(Std.int(comboSpr.width * daPixelZoom * 0.85));
@@ -3298,54 +3307,57 @@ class PlayState extends MusicBeatState {
 		for (i in 0...separatedScore.length) {
 			var numScore:FlxSprite = acquirePopupSprite();
 			var numFactor:Float = 1;
-			var numImg = folderUIImage('num' + Std.parseInt(separatedScore.charAt(i)));
+			var numImg = UISkinConfig.image('num' + Std.parseInt(separatedScore.charAt(i)));
 			if (numImg != null) {
 				numScore.loadGraphic(numImg.graphic);
 				numFactor = numImg.factor;
 			} else
 				numScore.loadGraphic(Paths.image(uiFolder + 'num' + Std.parseInt(separatedScore.charAt(i)) + uiPostfix));
 			numScore.screenCenter();
-			numScore.x = placement + (43 * daLoop) - 90 + ClientPrefs.data.comboOffset[2];
-			numScore.y += 80 - ClientPrefs.data.comboOffset[3];
+			numScore.x = placement + (pl.numSpacing * daLoop) + pl.numbers[0];
+			numScore.y += pl.numbers[1];
 
 			if (!PlayState.isPixelStage)
-				numScore.setGraphicSize(Std.int(numScore.width * 0.5 * numFactor));
+				numScore.setGraphicSize(Std.int(numScore.width * UISkinConfig.tFloat(twN, 'scale', 0.5) * numFactor));
 			else
 				numScore.setGraphicSize(Std.int(numScore.width * daPixelZoom));
 			numScore.updateHitbox();
 
-			numScore.acceleration.y = FlxG.random.int(200, 300) * playbackRate * playbackRate;
-			numScore.velocity.y -= FlxG.random.int(140, 160) * playbackRate;
-			numScore.velocity.x = FlxG.random.float(-5, 5) * playbackRate;
+			numScore.acceleration.y = UISkinConfig.tRange(twN, 'accelY', 200, 300) * playbackRate * playbackRate;
+			numScore.velocity.y -= UISkinConfig.tRange(twN, 'velocityY', 140, 160) * playbackRate;
+			numScore.velocity.x = UISkinConfig.tRange(twN, 'velocityX', -5, 5) * playbackRate;
 			numScore.visible = !ClientPrefs.data.hideHud;
 			numScore.antialiasing = antialias;
 
 			if (showComboNum)
 				comboGroup.add(numScore);
 
-			FlxTween.tween(numScore, {alpha: 0}, 0.2 / playbackRate, {
+			FlxTween.tween(numScore, {alpha: 0}, UISkinConfig.tFloat(twN, 'duration', 0.2) / playbackRate, {
+				ease: UISkinConfig.tEase(twN),
 				onComplete: function(tween:FlxTween) {
 					releasePopupSprite(numScore);
 				},
-				startDelay: Conductor.crochet * 0.002 / playbackRate
+				startDelay: UISkinConfig.tStartDelay(twN, Conductor.crochet * 0.002) / playbackRate
 			});
 
 			daLoop++;
 			if (numScore.x > xThing)
 				xThing = numScore.x;
 		}
-		comboSpr.x = xThing + 50;
-		FlxTween.tween(rating, {alpha: 0}, 0.2 / playbackRate, {
+		comboSpr.x = xThing + pl.combo[0];
+		FlxTween.tween(rating, {alpha: 0}, UISkinConfig.tFloat(twR, 'duration', 0.2) / playbackRate, {
+			ease: UISkinConfig.tEase(twR),
 			onComplete: function(tween:FlxTween) {
 				releasePopupSprite(rating);
 			},
-			startDelay: Conductor.crochet * 0.001 / playbackRate
+			startDelay: UISkinConfig.tStartDelay(twR, Conductor.crochet * 0.001) / playbackRate
 		});
-		FlxTween.tween(comboSpr, {alpha: 0}, 0.2 / playbackRate, {
+		FlxTween.tween(comboSpr, {alpha: 0}, UISkinConfig.tFloat(twC, 'duration', 0.2) / playbackRate, {
+			ease: UISkinConfig.tEase(twC),
 			onComplete: function(tween:FlxTween) {
 				releasePopupSprite(comboSpr);
 			},
-			startDelay: Conductor.crochet * 0.002 / playbackRate
+			startDelay: UISkinConfig.tStartDelay(twC, Conductor.crochet * 0.002) / playbackRate
 		});
 	}
 

@@ -1,0 +1,78 @@
+### =====================================================================================
+### UI SKIN -- full reference. A UI skin themes the judgement popups (rating images, the
+### "combo" word and combo numbers) and the ready/set/go countdown, and tunes how they animate.
+### It is completely separate from note skins. Drop this (renamed skin.tcfg) into
+###   images/uiSkins/<YourSkin>/   (assets/shared, or any mod's images/uiSkins)
+### then pick it in Options > UI Skin. Indentation is tabs OR spaces (don't mix in a block).
+### Image keys resolve to images/uiSkins/<YourSkin>/<key>.png (an @2x variant is auto-used).
+### =====================================================================================
+
+### ---- images: the element graphics ----
+images:
+	combo: combo          # the "combo" word image
+	num: num              # number PREFIX -> num0, num1, ... num9
+	ready: ready          # countdown sprites
+	set: set
+	go: go
+
+### ---- general: look / pixel handling ----
+### (popup SIZE is per-element under `tween` -> rating/combo/numbers -> scale; there is no general scale)
+general:
+	antialiasing: true
+	pixel: false          # true = treat art as pixel art (no smoothing, daPixelZoom sizing)
+	pixelVariant: false   # true = auto-selected on pixel stages (like note skins)
+	# pixelScale: 6       # size multiplier used only while rendering pixel art
+
+### ---- ratings: baseline image per REAL rating (from the hit windows) ----
+ratings:
+	sick: sick
+	good: good
+	bad: bad
+	shit: shit
+
+### ---- tween: how popups animate. Global values apply to every element; the rating / combo /
+###      numbers sub-blocks override per element. Velocities/accel may be a single number or a
+###      [min, max] range (a random value in range is used, like vanilla). ----
+tween:
+	duration: 0.2         # alpha fade time (seconds)
+	ease: linear          # linear, sineOut, quadOut, cubeOut, expoOut, backOut, elasticOut, bounceOut, ...
+	rating:
+		velocityY: [140, 175]   # initial upward speed
+		velocityX: [0, 10]
+		accelY: 550             # gravity pulling it back down
+		scale: 0.7
+		startDelay: 0.0         # seconds before the fade starts
+	combo:
+		velocityY: [140, 160]
+		velocityX: [1, 10]
+		accelY: [200, 300]
+		scale: 0.7
+	numbers:
+		velocityY: [140, 160]
+		velocityX: [-5, 5]
+		accelY: [200, 300]
+		scale: 0.5
+
+### ---- judgements: OPTIONAL custom visual rating tiers, keyed by absolute hit time (ms). The
+###      tightest window whose range covers the hit decides which IMAGE shows -- scoring and combo
+###      are unchanged (they still come from the real hit windows). Example: show a "perfect" image
+###      for hits within 22.5ms even though it still counts as Sick. Each tier needs its own
+###      <name>.png in the skin folder. ----
+judgements:
+	perfect:
+		image: perfect
+		window: 22.5
+	# sick:
+	#	image: sick
+	#	window: 45
+
+### ---- placement: ALL popup positioning lives here (the engine adds none of its own). anchorX is the
+###      centre column as a fraction of screen width; numSpacing is the per-digit gap; each [x, y] is the
+###      element's position relative to that anchor / the screen centre. The UI Skin editor's draggable
+###      hitboxes author these. Defaults shown = vanilla layout. ----
+# placement:
+#	anchorX: 0.35
+#	numSpacing: 43
+#	rating: [-40, -60]
+#	combo: [50, 60]
+#	numbers: [-90, 80]

@@ -131,13 +131,28 @@ class OptionsCatalog {
 		noteSkins.insert(0, ClientPrefs.defaultData.noteSkin);
 		rows.push(Setting(new Option('Note Skins:', 'Select your prefered Note skin.', 'noteSkin', STRING, noteSkins)));
 
-		var noteSplashes:Array<String> = Mods.mergeAllTextsNamed('images/noteSplashes/list.txt');
-		if (noteSplashes.length > 0) {
-			if (!noteSplashes.contains(ClientPrefs.data.splashSkin))
-				ClientPrefs.data.splashSkin = ClientPrefs.defaultData.splashSkin;
-			noteSplashes.insert(0, ClientPrefs.defaultData.splashSkin);
-			rows.push(Setting(new Option('Note Splashes:', 'Select your prefered Note Splash variation.', 'splashSkin', STRING, noteSplashes)));
+		// UI Skins (judgement popups / combo / countdown), default first, then mod/folder skins.
+		var uiSkins:Array<String> = Mods.mergeAllTextsNamed('images/uiSkins/list.txt');
+		for (folder in backend.UISkinConfig.list()) {
+			var name:String = folder.substr(folder.lastIndexOf('/') + 1);
+			if (!uiSkins.contains(name))
+				uiSkins.push(name);
 		}
+		if (!uiSkins.contains(ClientPrefs.data.uiSkin))
+			ClientPrefs.data.uiSkin = ClientPrefs.defaultData.uiSkin;
+		uiSkins.remove(ClientPrefs.defaultData.uiSkin);
+		uiSkins.insert(0, ClientPrefs.defaultData.uiSkin);
+		rows.push(Setting(new Option('UI Skin:', 'Select your prefered judgement UI skin\n(rating popups, combo, countdown).', 'uiSkin', STRING, uiSkins)));
+
+		// "From Noteskin" (default) defers to the active note skin's own splash; "Psych" is the base
+		// atlas; the rest come from noteSplashes/list.txt. A chart's splashSkin still overrides this.
+		var noteSplashes:Array<String> = Mods.mergeAllTextsNamed('images/noteSplashes/list.txt');
+		if (!noteSplashes.contains(objects.NoteSplash.BASE_SKIN))
+			noteSplashes.insert(0, objects.NoteSplash.BASE_SKIN);
+		noteSplashes.insert(0, objects.NoteSplash.FROM_NOTESKIN);
+		if (!noteSplashes.contains(ClientPrefs.data.splashSkin))
+			ClientPrefs.data.splashSkin = ClientPrefs.defaultData.splashSkin;
+		rows.push(Setting(new Option('Note Splashes:', 'Select your prefered Note Splash variation.', 'splashSkin', STRING, noteSplashes)));
 
 		rows.push(Setting(percent('Note Splash Opacity', 'How much transparent should the Note Splashes be.', 'splashAlpha')));
 		rows.push(Setting(new Option('Hide HUD', 'If checked, hides most HUD elements.', 'hideHud', BOOL)));

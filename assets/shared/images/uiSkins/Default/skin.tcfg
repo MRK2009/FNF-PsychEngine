@@ -1,0 +1,47 @@
+### Default UI skin -- vanilla judgement popups, combo word, numbers and countdown.
+### Behaves identically to the stock engine when selected. See skin.example.tcfg for every option.
+
+images:
+	combo: combo
+	num: num
+	ready: ready
+	set: set
+	go: go
+
+general:
+	antialiasing: true
+
+ratings:
+	sick: sick
+	good: good
+	bad: bad
+	shit: shit
+
+### Motion -- the historic engine values, now spelled out so the skin owns them. `startDelay` is left
+### unset on purpose so it stays beat-relative (Conductor.crochet based) instead of a fixed value.
+tween:
+	duration: 0.2
+	ease: linear
+	rating:
+		velocityY: [140, 175]
+		velocityX: [0, 10]
+		accelY: 550
+		scale: 0.7
+	combo:
+		velocityY: [140, 160]
+		velocityX: [1, 10]
+		accelY: [200, 300]
+		scale: 0.7
+	numbers:
+		velocityY: [140, 160]
+		velocityX: [-5, 5]
+		accelY: [200, 300]
+		scale: 0.5
+
+### Positioning -- the vanilla layout (anchor column, per-digit gap, per-element [x, y]).
+placement:
+	anchorX: 0.35
+	numSpacing: 43
+	rating: [-40, -60]
+	combo: [50, 60]
+	numbers: [-90, 80]
