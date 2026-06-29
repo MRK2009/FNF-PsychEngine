@@ -1,7 +1,10 @@
-package states.editors.content;
+package editors.charting;
 
 import backend.Song;
 import backend.Rating;
+import backend.UISkinConfig;
+import backend.UISkinConfig.UIJudgement;
+import backend.UISkinConfig.UIPlacement;
 import objects.Note;
 import objects.NoteSplash;
 import objects.StrumNote;
@@ -77,10 +80,8 @@ class EditorPlayState extends MusicBeatSubstate {
 
 	override function create() {
 		// Multikey: derive columns + binds from the chart (absent == 4K).
-		totalColumns = Mania.clamp((PlayState.SONG != null && PlayState.SONG.keyCount != null) ? PlayState.SONG.keyCount : Mania.DEFAULT);
-		Mania.current = totalColumns;
-		Note.colArray = Mania.colArray[totalColumns - 1];
-		Note.swagWidth = 160 * Mania.noteSizes[totalColumns - 1];
+		totalColumns = Mania.resolveKeyCount(PlayState.SONG != null ? PlayState.SONG.keyCount : null);
+		Mania.apply(totalColumns);
 		keysArray = Mania.keyNames(totalColumns);
 
 		Conductor.safeZoneOffset = (ClientPrefs.data.safeFrames / 60) * 1000 * playbackRate;
@@ -510,7 +511,9 @@ class EditorPlayState extends MusicBeatSubstate {
 			}
 		}
 
-		var placement:Float = FlxG.width * 0.35;
+		// Placement + images come from the active UI skin (same as PlayState); no magic numbers here.
+		var pl:UIPlacement = UISkinConfig.placement();
+		var placement:Float = FlxG.width * pl.anchorX;
 		var rating:FlxSprite = new FlxSprite();
 		var score:Int = 350;
 
@@ -536,34 +539,48 @@ class EditorPlayState extends MusicBeatSubstate {
 			antialias = !PlayState.isPixelStage;
 		}
 
-		rating.loadGraphic(Paths.image(uiFolder + daRating.image + PlayState.uiPostfix));
-		rating.screenCenter();
-		rating.x = placement - 40;
-		rating.y -= 60;
-		rating.acceleration.y = 550 * playbackRate * playbackRate;
-		rating.velocity.y -= FlxG.random.int(140, 175) * playbackRate;
-		rating.velocity.x -= FlxG.random.int(0, 10) * playbackRate;
-		rating.visible = (!ClientPrefs.data.hideHud && showRating);
-		rating.x += ClientPrefs.data.comboOffset[0];
-		rating.y -= ClientPrefs.data.comboOffset[1];
-		rating.antialiasing = antialias;
+		var twR:Dynamic = UISkinConfig.tweenFor('rating');
+		var twC:Dynamic = UISkinConfig.tweenFor('combo');
+		var twN:Dynamic = UISkinConfig.tweenFor('numbers');
+		var vis:UIJudgement = UISkinConfig.pickVisual(noteDiff / playbackRate, daRating.name);
 
-		var comboSpr:FlxSprite = new FlxSprite().loadGraphic(Paths.image(uiFolder + 'combo' + PlayState.uiPostfix));
+		var ratingFactor:Float = 1;
+		var ratingImg = UISkinConfig.image(vis.image);
+		if (ratingImg != null) {
+			rating.loadGraphic(ratingImg.graphic);
+			ratingFactor = ratingImg.factor;
+		} else
+			rating.loadGraphic(Paths.image(uiFolder + vis.image + PlayState.uiPostfix));
+		rating.screenCenter();
+		rating.x = placement + pl.rating[0];
+		rating.y += pl.rating[1];
+		rating.acceleration.y = UISkinConfig.tRange(twR, 'accelY', 550, 550) * playbackRate * playbackRate;
+		rating.velocity.y -= UISkinConfig.tRange(twR, 'velocityY', 140, 175) * playbackRate;
+		rating.velocity.x -= UISkinConfig.tRange(twR, 'velocityX', 0, 10) * playbackRate;
+		rating.visible = (!ClientPrefs.data.hideHud && showRating);
+		rating.antialiasing = (vis.antialias != null) ? vis.antialias : antialias;
+
+		var comboSpr:FlxSprite = new FlxSprite();
+		var comboFactor:Float = 1;
+		var comboImg = UISkinConfig.image('combo');
+		if (comboImg != null) {
+			comboSpr.loadGraphic(comboImg.graphic);
+			comboFactor = comboImg.factor;
+		} else
+			comboSpr.loadGraphic(Paths.image(uiFolder + 'combo' + PlayState.uiPostfix));
 		comboSpr.screenCenter();
 		comboSpr.x = placement;
-		comboSpr.acceleration.y = FlxG.random.int(200, 300) * playbackRate * playbackRate;
-		comboSpr.velocity.y -= FlxG.random.int(140, 160) * playbackRate;
+		comboSpr.acceleration.y = UISkinConfig.tRange(twC, 'accelY', 200, 300) * playbackRate * playbackRate;
+		comboSpr.velocity.y -= UISkinConfig.tRange(twC, 'velocityY', 140, 160) * playbackRate;
 		comboSpr.visible = (!ClientPrefs.data.hideHud && showCombo);
-		comboSpr.x += ClientPrefs.data.comboOffset[0];
-		comboSpr.y -= ClientPrefs.data.comboOffset[1];
 		comboSpr.antialiasing = antialias;
-		comboSpr.y += 60;
-		comboSpr.velocity.x += FlxG.random.int(1, 10) * playbackRate;
+		comboSpr.y += pl.combo[1];
+		comboSpr.velocity.x += UISkinConfig.tRange(twC, 'velocityX', 1, 10) * playbackRate;
 		comboGroup.add(rating);
 
 		if (!PlayState.isPixelStage) {
-			rating.setGraphicSize(Std.int(rating.width * 0.7));
-			comboSpr.setGraphicSize(Std.int(comboSpr.width * 0.7));
+			rating.setGraphicSize(Std.int(rating.width * UISkinConfig.tFloat(twR, 'scale', 0.7) * (vis.scale != null ? vis.scale : 1) * ratingFactor));
+			comboSpr.setGraphicSize(Std.int(comboSpr.width * UISkinConfig.tFloat(twC, 'scale', 0.7) * comboFactor));
 		} else {
 			rating.setGraphicSize(Std.int(rating.width * PlayState.daPixelZoom * 0.85));
 			comboSpr.setGraphicSize(Std.int(comboSpr.width * PlayState.daPixelZoom * 0.85));
@@ -579,49 +596,58 @@ class EditorPlayState extends MusicBeatSubstate {
 
 		var separatedScore:String = Std.string(combo).lpad('0', 3);
 		for (i in 0...separatedScore.length) {
-			var numScore:FlxSprite = new FlxSprite().loadGraphic(Paths.image(uiFolder + 'num' + Std.parseInt(separatedScore.charAt(i)) + PlayState.uiPostfix));
+			var numScore:FlxSprite = new FlxSprite();
+			var numFactor:Float = 1;
+			var numImg = UISkinConfig.image('num' + Std.parseInt(separatedScore.charAt(i)));
+			if (numImg != null) {
+				numScore.loadGraphic(numImg.graphic);
+				numFactor = numImg.factor;
+			} else
+				numScore.loadGraphic(Paths.image(uiFolder + 'num' + Std.parseInt(separatedScore.charAt(i)) + PlayState.uiPostfix));
 			numScore.screenCenter();
-			numScore.x = placement + (43 * daLoop) - 90 + ClientPrefs.data.comboOffset[2];
-			numScore.y += 80 - ClientPrefs.data.comboOffset[3];
+			numScore.x = placement + (pl.numSpacing * daLoop) + pl.numbers[0];
+			numScore.y += pl.numbers[1];
 
 			if (!PlayState.isPixelStage)
-				numScore.setGraphicSize(Std.int(numScore.width * 0.5));
+				numScore.setGraphicSize(Std.int(numScore.width * UISkinConfig.tFloat(twN, 'scale', 0.5) * numFactor));
 			else
 				numScore.setGraphicSize(Std.int(numScore.width * PlayState.daPixelZoom));
 			numScore.updateHitbox();
 
-			numScore.acceleration.y = FlxG.random.int(200, 300) * playbackRate * playbackRate;
-			numScore.velocity.y -= FlxG.random.int(140, 160) * playbackRate;
-			numScore.velocity.x = FlxG.random.float(-5, 5) * playbackRate;
+			numScore.acceleration.y = UISkinConfig.tRange(twN, 'accelY', 200, 300) * playbackRate * playbackRate;
+			numScore.velocity.y -= UISkinConfig.tRange(twN, 'velocityY', 140, 160) * playbackRate;
+			numScore.velocity.x = UISkinConfig.tRange(twN, 'velocityX', -5, 5) * playbackRate;
 			numScore.visible = !ClientPrefs.data.hideHud;
 			numScore.antialiasing = antialias;
 
-			// if (combo >= 10 || combo == 0)
 			if (showComboNum)
 				comboGroup.add(numScore);
 
-			FlxTween.tween(numScore, {alpha: 0}, 0.2 / playbackRate, {
+			FlxTween.tween(numScore, {alpha: 0}, UISkinConfig.tFloat(twN, 'duration', 0.2) / playbackRate, {
+				ease: UISkinConfig.tEase(twN),
 				onComplete: function(tween:FlxTween) {
 					numScore.destroy();
 				},
-				startDelay: Conductor.crochet * 0.002 / playbackRate
+				startDelay: UISkinConfig.tStartDelay(twN, Conductor.crochet * 0.002) / playbackRate
 			});
 
 			daLoop++;
 			if (numScore.x > xThing)
 				xThing = numScore.x;
 		}
-		comboSpr.x = xThing + 50;
-		FlxTween.tween(rating, {alpha: 0}, 0.2 / playbackRate, {
-			startDelay: Conductor.crochet * 0.001 / playbackRate
+		comboSpr.x = xThing + pl.combo[0];
+		FlxTween.tween(rating, {alpha: 0}, UISkinConfig.tFloat(twR, 'duration', 0.2) / playbackRate, {
+			ease: UISkinConfig.tEase(twR),
+			startDelay: UISkinConfig.tStartDelay(twR, Conductor.crochet * 0.001) / playbackRate
 		});
 
-		FlxTween.tween(comboSpr, {alpha: 0}, 0.2 / playbackRate, {
+		FlxTween.tween(comboSpr, {alpha: 0}, UISkinConfig.tFloat(twC, 'duration', 0.2) / playbackRate, {
+			ease: UISkinConfig.tEase(twC),
 			onComplete: function(tween:FlxTween) {
 				comboSpr.destroy();
 				rating.destroy();
 			},
-			startDelay: Conductor.crochet * 0.002 / playbackRate
+			startDelay: UISkinConfig.tStartDelay(twC, Conductor.crochet * 0.002) / playbackRate
 		});
 	}
 

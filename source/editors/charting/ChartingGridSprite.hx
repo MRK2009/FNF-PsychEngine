@@ -1,4 +1,4 @@
-package states.editors.content;
+package editors.charting;
 
 import flixel.addons.display.FlxGridOverlay;
 
