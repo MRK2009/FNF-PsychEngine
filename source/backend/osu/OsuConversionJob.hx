@@ -3,7 +3,7 @@ package backend.osu;
 import backend.Song.SwagSong;
 import backend.osu.OszArchive.OsuSource;
 import backend.tools.MediaConverter;
-import states.editors.content.PsychJsonPrinter;
+import editors.content.PsychJsonPrinter;
 #if sys
 import sys.io.File;
 import sys.FileSystem;

@@ -1,4 +1,4 @@
-package states.editors;
+package editors;
 
 import backend.StageData;
 import backend.PsychCamera;
@@ -16,8 +16,8 @@ import openfl.events.Event;
 import openfl.events.IOErrorEvent;
 import psychlua.ModchartSprite;
 import flash.net.FileFilter;
-import states.editors.content.Prompt;
-import states.editors.content.PreloadListSubState;
+import editors.content.Prompt;
+import editors.content.PreloadListSubState;
 
 class StageEditorState extends MusicBeatState implements PsychUIEventHandler.PsychUIEvent {
 	final minZoom = 0.1;
@@ -1288,7 +1288,7 @@ class StageEditorState extends MusicBeatState implements PsychUIEventHandler.Psy
 
 		if (FlxG.keys.justPressed.ESCAPE || controls.BACK) {
 			if (!unsavedProgress) {
-				MusicBeatState.switchState(new states.editors.MasterEditorMenu());
+				MusicBeatState.switchState(new editors.MasterEditorMenu());
 				FlxG.sound.playMusic(Paths.music('freakyMenu'));
 			} else
 				openSubState(new ExitConfirmationPrompt());

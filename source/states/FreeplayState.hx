@@ -125,7 +125,7 @@ class FreeplayState extends MusicBeatState {
 			FlxTransitionableState.skipNextTransIn = true;
 			persistentUpdate = false;
 			MusicBeatState.switchState(new states.ErrorState("NO SONGS FOUND FOR FREEPLAY\n\nAdd a song (data/<song>/<song>.json) to an enabled mod,\nor make a week.\n\nPress ACCEPT for the Week Editor.\nPress BACK to return to Main Menu.",
-				function() MusicBeatState.switchState(new states.editors.WeekEditorState()),
+				function() MusicBeatState.switchState(new editors.WeekEditorState()),
 				function() MusicBeatState.switchState(new states.MainMenuState())));
 			return;
 		}

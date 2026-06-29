@@ -4,8 +4,8 @@ import haxe.Json;
 import haxe.Exception;
 import backend.Song;
 import editors.charting.VSlice;
-import states.editors.content.Prompt;
-import states.editors.content.PsychJsonPrinter;
+import editors.content.Prompt;
+import editors.content.PsychJsonPrinter;
 import editors.ChartingState;
 
 /**
@@ -665,7 +665,7 @@ class FileTab {
 		btnY += 20;
 		var btn:PsychUIButton = new PsychUIButton(btnX, btnY, '  Exit', function() {
 			PlayState.chartingMode = false;
-			MusicBeatState.switchState(new states.editors.MasterEditorMenu());
+			MusicBeatState.switchState(new editors.MasterEditorMenu());
 			FlxG.sound.playMusic(Paths.music('freakyMenu'));
 			FlxG.mouse.visible = false;
 		}, btnWid);

@@ -1,4 +1,4 @@
-package states.editors;
+package editors;
 
 import backend.WeekData;
 import openfl.utils.Assets;
@@ -11,8 +11,8 @@ import haxe.Json;
 import objects.HealthIcon;
 import objects.MenuCharacter;
 import objects.MenuItem;
-import states.editors.MasterEditorMenu;
-import states.editors.content.Prompt;
+import editors.MasterEditorMenu;
+import editors.content.Prompt;
 
 class WeekEditorState extends MusicBeatState implements PsychUIEventHandler.PsychUIEvent {
 	var txtWeekTitle:FlxText;

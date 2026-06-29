@@ -23,7 +23,7 @@ import cutscenes.DialogueBoxPsych;
 import states.StoryMenuState;
 import states.FreeplayState;
 import editors.ChartingState;
-import states.editors.CharacterEditorState;
+import editors.CharacterEditorState;
 import substates.PauseSubState;
 import substates.GameOverSubstate;
 #if !flash

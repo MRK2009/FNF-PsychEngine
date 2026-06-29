@@ -1,4 +1,4 @@
-package states.editors;
+package editors;
 
 import flixel.graphics.FlxGraphic;
 import flixel.util.FlxDestroyUtil;
@@ -9,8 +9,8 @@ import openfl.utils.Assets;
 import objects.Character;
 import objects.HealthIcon;
 import objects.Bar;
-import states.editors.content.Prompt;
-import states.editors.content.PsychJsonPrinter;
+import editors.content.Prompt;
+import editors.content.PsychJsonPrinter;
 
 class CharacterEditorState extends MusicBeatState implements PsychUIEventHandler.PsychUIEvent {
 	var character:Character;
@@ -1069,7 +1069,7 @@ class CharacterEditorState extends MusicBeatState implements PsychUIEventHandler
 		} else if (FlxG.keys.justPressed.ESCAPE || controls.BACK) {
 			if (!_goToPlayState) {
 				if (!unsavedProgress) {
-					MusicBeatState.switchState(new states.editors.MasterEditorMenu());
+					MusicBeatState.switchState(new editors.MasterEditorMenu());
 					FlxG.sound.playMusic(Paths.music('freakyMenu'));
 				} else
 					openSubState(new ExitConfirmationPrompt());

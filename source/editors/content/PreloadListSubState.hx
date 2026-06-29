@@ -1,4 +1,4 @@
-package states.editors.content;
+package editors.content;
 
 import haxe.io.Path;
 import flixel.util.FlxDestroyUtil;
@@ -8,7 +8,7 @@ import backend.ui.PsychUIButton;
 import backend.ui.PsychUIRadioGroup;
 import backend.ui.PsychUICheckBox;
 import backend.ui.PsychUIEventHandler;
-import states.editors.content.FileDialogHandler;
+import editors.content.FileDialogHandler;
 
 class PreloadListSubState extends MusicBeatSubstate implements PsychUIEvent {
 	var lockedList:Array<String>;

@@ -1,4 +1,5 @@
-package states.editors;
+package editors;
+import editors.ChartingState;
 
 import backend.WeekData;
 import objects.Character;
@@ -15,7 +16,8 @@ class MasterEditorMenu extends MusicBeatState {
 		'Dialogue Editor',
 		'Dialogue Portrait Editor',
 		'Note Splash Editor',
-		'Note Skin Editor'
+		'Note Skin Editor',
+		'UI Skin Editor'
 	];
 	private var grpTexts:FlxTypedGroup<Alphabet>;
 	private var directories:Array<String> = [null];
@@ -116,6 +118,8 @@ class MasterEditorMenu extends MusicBeatState {
 					MusicBeatState.switchState(new NoteSplashEditorState());
 				case 'Note Skin Editor':
 					MusicBeatState.switchState(new NoteSkinEditorState());
+				case 'UI Skin Editor':
+					MusicBeatState.switchState(new UISkinEditorState());
 			}
 			FlxG.sound.music.volume = 0;
 			FreeplayState.destroyFreeplayVocals();

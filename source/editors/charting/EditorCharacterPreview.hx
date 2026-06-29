@@ -4,7 +4,7 @@ import objects.Character;
 import backend.Song.SwagSection;
 import flixel.math.FlxPoint;
 import flixel.util.FlxSpriteUtil;
-import states.editors.content.Prompt;
+import editors.content.Prompt;
 import editors.ChartingState;
 
 /**

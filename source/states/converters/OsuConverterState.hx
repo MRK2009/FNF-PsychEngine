@@ -6,7 +6,7 @@ import backend.osu.OsuConvertOptions.OsuConvertDefaults;
 import backend.osu.OszArchive;
 import backend.osu.OsuConversionJob;
 import backend.tools.MediaConverter;
-import states.editors.content.FileDialogHandler;
+import editors.content.FileDialogHandler;
 import flash.net.FileFilter;
 import flixel.group.FlxSpriteGroup;
 

@@ -1,7 +1,7 @@
 package editors.charting.tabs;
 
 import backend.StageData;
-import states.editors.content.Prompt;
+import editors.content.Prompt;
 import editors.ChartingState;
 
 /**

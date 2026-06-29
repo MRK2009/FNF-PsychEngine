@@ -1,4 +1,4 @@
-package states.editors;
+package editors;
 
 import openfl.net.FileReference;
 import openfl.events.Event;
@@ -8,7 +8,7 @@ import haxe.Json;
 import objects.TypedAlphabet;
 import cutscenes.DialogueBoxPsych;
 import cutscenes.DialogueCharacter;
-import states.editors.content.Prompt;
+import editors.content.Prompt;
 
 class DialogueEditorState extends MusicBeatState implements PsychUIEventHandler.PsychUIEvent {
 	var character:DialogueCharacter;
@@ -326,7 +326,7 @@ class DialogueEditorState extends MusicBeatState implements PsychUIEventHandler.
 			}
 			if (FlxG.keys.justPressed.ESCAPE || controls.BACK) {
 				if (!unsavedProgress) {
-					MusicBeatState.switchState(new states.editors.MasterEditorMenu());
+					MusicBeatState.switchState(new editors.MasterEditorMenu());
 					FlxG.sound.playMusic(Paths.music('freakyMenu'));
 					transitioning = true;
 				} else

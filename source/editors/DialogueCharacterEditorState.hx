@@ -1,4 +1,4 @@
-package states.editors;
+package editors;
 
 import openfl.net.FileReference;
 import openfl.events.Event;
@@ -9,7 +9,7 @@ import lime.system.Clipboard;
 import objects.TypedAlphabet;
 import cutscenes.DialogueBoxPsych;
 import cutscenes.DialogueCharacter;
-import states.editors.content.Prompt;
+import editors.content.Prompt;
 
 class DialogueCharacterEditorState extends MusicBeatState implements PsychUIEventHandler.PsychUIEvent {
 	var box:FlxSprite;
@@ -639,7 +639,7 @@ class DialogueCharacterEditorState extends MusicBeatState implements PsychUIEven
 
 			if (FlxG.keys.justPressed.ESCAPE || controls.BACK) {
 				if (!unsavedProgress) {
-					MusicBeatState.switchState(new states.editors.MasterEditorMenu());
+					MusicBeatState.switchState(new editors.MasterEditorMenu());
 					FlxG.sound.playMusic(Paths.music('freakyMenu'));
 					transitioning = true;
 				} else

@@ -1,4 +1,4 @@
-package states.editors.content;
+package editors.content;
 
 import openfl.net.FileReference;
 import openfl.events.Event;

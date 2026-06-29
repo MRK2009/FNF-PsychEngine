@@ -1,4 +1,4 @@
-package states.editors;
+package editors;
 
 import backend.NoteSkinConfig;
 import backend.NoteSkinConfig.NoteSkinData;
@@ -82,10 +82,7 @@ class NoteSkinEditorState extends MusicBeatState {
 	}
 
 	inline function setKeyCount(count:Int) {
-		curKeys = Mania.clamp(count);
-		Mania.current = curKeys;
-		Note.colArray = Mania.colArray[curKeys - 1];
-		Note.swagWidth = 160 * Mania.noteSizes[curKeys - 1];
+		curKeys = Mania.apply(count);
 	}
 
 	function loadSkin(name:String) {

@@ -512,7 +512,7 @@ class Character extends FlxSprite {
 	 */
 	public var swfMode:Bool = false;
 
-	@:allow(states.editors.CharacterEditorState)
+	@:allow(editors.CharacterEditorState)
 	public var isAnimateAtlas(default, null):Bool = false;
 	#if flixel_animate
 	public var atlas:FlxAnimate;

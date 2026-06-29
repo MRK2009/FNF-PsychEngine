@@ -1,4 +1,4 @@
-package states.editors;
+package editors;
 
 import objects.Note;
 import objects.NoteSplash;

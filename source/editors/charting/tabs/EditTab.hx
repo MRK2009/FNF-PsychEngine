@@ -1,6 +1,6 @@
 package editors.charting.tabs;
 
-import states.editors.content.Prompt;
+import editors.content.Prompt;
 import editors.ChartingState;
 import editors.ChartingState.UndoAction;
 
