@@ -191,18 +191,8 @@ class Song {
 				songJson = subSong;
 		}
 
-		// Resolve the keycount (multikey support): explicit `keyCount`, else legacy
-		// `mania` (keyCount - 1), else 4. Normalize onto `keyCount` so the rest of
-		// the engine has a single field to read, and drop the legacy `mania` field.
-		if (!Reflect.hasField(songJson, 'keyCount') || songJson.keyCount == null) {
-			if (Reflect.hasField(songJson, 'mania') && Reflect.field(songJson, 'mania') != null)
-				songJson.keyCount = Std.int(Reflect.field(songJson, 'mania')) + 1;
-			else
-				songJson.keyCount = 4;
-		}
-		songJson.keyCount = Mania.clamp(songJson.keyCount);
-		if (Reflect.hasField(songJson, 'mania'))
-			Reflect.deleteField(songJson, 'mania');
+		// Multikey: resolve `keyCount` (or the legacy `mania` entry) onto a single clamped field.
+		Mania.normalizeChart(songJson);
 
 		if (convertTo != null && convertTo.length > 0) {
 			var fmt:String = songJson.format;

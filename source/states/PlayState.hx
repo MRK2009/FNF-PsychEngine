@@ -317,7 +317,7 @@ class PlayState extends MusicBeatState {
 		// Multikey: derive the column count from the chart (absent == 4K) and feed
 		// every keycount-dependent global from the Mania tables. 4K resolves to the
 		// classic values, so the default path is unchanged.
-		totalColumns = Mania.clamp((SONG != null && SONG.keyCount != null) ? SONG.keyCount : Mania.DEFAULT);
+		totalColumns = Mania.resolveKeyCount(SONG != null ? SONG.keyCount : null);
 		applyKeyCountGlobals(totalColumns);
 
 		keysArray = Mania.keyNames(totalColumns);
@@ -1390,11 +1390,8 @@ class PlayState extends MusicBeatState {
 	// Multikey: point every keycount-dependent global at `count`. Notes bake their
 	// visuals at creation, so changing this later only affects newly-made objects.
 	private function applyKeyCountGlobals(count:Int) {
-		count = Mania.clamp(count);
-		Mania.current = count;
-		Note.colArray = Mania.colArray[count - 1];
-		Note.swagWidth = 160 * Mania.noteSizes[count - 1];
-		singAnimations = Mania.singAnimations[count - 1];
+		count = Mania.apply(count);
+		singAnimations = Mania.singAnims(count);
 	}
 
 	// Multikey mid-song lane change: switch to `count` columns and rebuild the
@@ -3397,9 +3394,7 @@ class PlayState extends MusicBeatState {
 
 		// Multikey: restore the classic 4K globals so later states aren't left
 		// using a previous song's keycount palette/anim tables.
-		Mania.current = Mania.DEFAULT;
-		Note.colArray = Mania.colArray[Mania.DEFAULT - 1];
-		Note.swagWidth = 160 * Mania.noteSizes[Mania.DEFAULT - 1];
+		Mania.apply(Mania.DEFAULT);
 
 		NoteSplash.configs.clear();
 		instance = null;

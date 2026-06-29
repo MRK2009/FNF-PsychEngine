@@ -20,16 +20,69 @@ class Mania {
 
 	// The keycount currently in effect. Note/StrumNote/NoteSplash read this to
 	// decide whether to use the classic 4K assets or the multikey square atlas.
-	// PlayState and ChartingState set it; it stays 4 everywhere else.
+	// PlayState and ChartingState set it (via `apply`); it stays 4 everywhere else.
 	public static var current:Int = DEFAULT;
+
+	// Active per-column anim colour names + note width for `current`. Mania owns these (canonical);
+	// `Note.colArray` / `Note.swagWidth` are thin forwarders to them. `apply` keeps them in sync.
+	// Defaults are the 4K values (== colArrayTable[DEFAULT-1] / 160 * noteSizes[DEFAULT-1]); kept as
+	// literals so they don't depend on the tables below being initialised first.
+	public static var colArray:Array<String> = ['purple', 'blue', 'green', 'red'];
+	public static var swagWidth:Float = 160 * 0.7;
 
 	// Bound a keycount to the supported range.
 	public static inline function clamp(count:Int):Int {
 		return count < MIN ? MIN : (count > MAX ? MAX : count);
 	}
 
-	// Anim colour names per column (drives Note.colArray).
-	public static var colArray:Array<Array<String>> = [
+	// Resolve a chart/setting's optional keycount: its value, else the 4K default, clamped. The one
+	// place to turn a nullable `SONG.keyCount` (or `section.keyCount`) into a usable column count.
+	public static inline function resolveKeyCount(count:Null<Int>):Int {
+		return clamp(count != null ? count : DEFAULT);
+	}
+
+	/**
+		Point every keycount-derived global at `count` -- the single writer of `Mania.current`,
+		`Note.colArray` and `Note.swagWidth`. Called by PlayState, the chart/note-skin editors and on
+		state teardown (with `DEFAULT`). Notes bake their visuals at creation, so changing this later
+		only affects newly-made objects.
+		@return the clamped keycount that was applied
+	**/
+	public static function apply(count:Int):Int {
+		count = clamp(count);
+		current = count;
+		colArray = colArrayTable[count - 1];
+		swagWidth = 160 * noteSizes[count - 1];
+		return count;
+	}
+
+	// Character sing/miss animations for a keycount (clamped). PlayState mirrors this onto its
+	// `singAnimations` field; the chart editor reads it directly.
+	public static inline function singAnims(count:Int):Array<String> {
+		return singAnimations[clamp(count) - 1];
+	}
+
+	/**
+		Normalize a raw chart's keycount in place: prefer an explicit `keyCount`, else the legacy
+		`mania` field (`keyCount - 1`), else 4; clamp it and drop `mania` so the rest of the engine
+		reads a single field. Keeps charts authored with the old `mania` entry working.
+	**/
+	public static function normalizeChart(songJson:Dynamic):Void {
+		if (songJson == null)
+			return;
+		if (!Reflect.hasField(songJson, 'keyCount') || songJson.keyCount == null) {
+			if (Reflect.hasField(songJson, 'mania') && Reflect.field(songJson, 'mania') != null)
+				songJson.keyCount = Std.int(Reflect.field(songJson, 'mania')) + 1;
+			else
+				songJson.keyCount = DEFAULT;
+		}
+		songJson.keyCount = clamp(Std.int(songJson.keyCount));
+		if (Reflect.hasField(songJson, 'mania'))
+			Reflect.deleteField(songJson, 'mania');
+	}
+
+	// Anim colour names per column, per keycount (the lookup table behind `colArray`/`Note.colArray`).
+	public static var colArrayTable:Array<Array<String>> = [
 		["square"],
 		["purple", "red"],
 		["purple", "square", "red"],

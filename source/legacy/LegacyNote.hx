@@ -103,8 +103,19 @@ class LegacyNote extends FlxSprite {
 
 	public static var SUSTAIN_SIZE:Int = 44;
 
-	public static var swagWidth:Float = 160 * 0.7;
-	public static var colArray:Array<String> = ['purple', 'blue', 'green', 'red'];
+	// Keycount-derived globals now live on (and are owned by) `Mania`; these stay as the historical
+	// `Note.swagWidth` / `Note.colArray` read API (Lua, editors, legacy) and forward to it. Inline,
+	// so reads compile to a direct `Mania.*` field access -- no call overhead in the hot paths.
+	public static var swagWidth(get, never):Float;
+
+	static inline function get_swagWidth():Float
+		return Mania.swagWidth;
+
+	public static var colArray(get, never):Array<String>;
+
+	static inline function get_colArray():Array<String>
+		return Mania.colArray;
+
 	public static var defaultNoteSkin(default, never):String = 'noteSkins/NOTE_assets';
 
 	public var noteSplashData:NoteSplashData = {

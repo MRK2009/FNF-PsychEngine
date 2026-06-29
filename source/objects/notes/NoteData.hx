@@ -167,7 +167,7 @@ final class NoteData {
 
 		var noteOffset:Float = inEditor ? 0 : ClientPrefs.data.noteOffset;
 		var daBpm:Float = song.bpm;
-		var curKeyCount:Int = (song.keyCount != null) ? Mania.clamp(song.keyCount) : Mania.DEFAULT;
+		var curKeyCount:Int = Mania.resolveKeyCount(song.keyCount);
 		var sectionStartTime:Float = 0;
 		var secIndex:Int = 0;
 		var seen:Map<String, Bool> = new Map();
