@@ -6,6 +6,10 @@ import legacy.LegacyStrumNote;
 using StringTools;
 
 /**
+ * **LEGACY (pre-v2) classic note-skin loader — deprecated.** Fallback texture loader for the legacy
+ * `LegacyNote`/`LegacyStrumNote` runtime only; the v2 path resolves looks through
+ * `backend.noteskin.*` (`NoteSkinService` -> `ClassicNoteSkin`/`FolderNoteSkin`). Methods are `@:deprecated`.
+ *
  * The classic, pre-NoteSkinConfig note-skin system: sparrow-sheet arrows, multikey atlas merging,
  * and pixel UI sheets. Quarantined here out of LegacyNote/LegacyStrumNote so the modern folder-skin
  * (NoteSkinConfig / .tcfg) path stays clean. Still wired as the fallback: LegacyNote.reloadNote /
@@ -15,7 +19,13 @@ using StringTools;
 @:access(legacy.LegacyNote)
 @:access(legacy.LegacyStrumNote)
 class LegacyNoteSkin {
-	// Classic receptor build (formerly LegacyStrumNote.reloadNote's non-folder branch).
+	/**
+		Classic receptor build (formerly `LegacyStrumNote.reloadNote`'s non-folder branch): loads the
+		strum's sparrow/pixel sheet, adds the `static`/`pressed`/`confirm` animations and sizes/centers it.
+		@param strum the receptor to (re)build
+		@param lastAnim the animation to restore afterwards (may be `null`)
+	**/
+	@:deprecated("Legacy pre-v2 note runtime; kept for compatibilityMode only. The v2 path lives in objects.notes.*")
 	public static function reloadStrum(strum:LegacyStrumNote, lastAnim:String):Void {
 		var texture:String = strum.texture;
 		var noteData:Int = strum.noteData;
@@ -105,8 +115,15 @@ class LegacyNoteSkin {
 			strum.playAnim(lastAnim, true);
 	}
 
-	// Classic note build (formerly LegacyNote.reloadNote's non-folder branch). `skin` is the resolved
-	// base skin, `texture` the explicit per-note override (if any), `animName` the anim to restore.
+	/**
+		Classic note build (formerly `LegacyNote.reloadNote`'s non-folder branch): loads the note's
+		sparrow/pixel/multikey sheet, adds its head or hold/end animations and sizes/centers it.
+		@param note the note to (re)build
+		@param skin the resolved base skin image name
+		@param texture the explicit per-note texture override, or `''`/`null` for the base skin
+		@param animName the animation to restore afterwards (may be `null`)
+	**/
+	@:deprecated("Legacy pre-v2 note runtime; kept for compatibilityMode only. The v2 path lives in objects.notes.*")
 	public static function reloadNote(note:LegacyNote, skin:String, texture:String, animName:String):Void {
 		var skinPixel:String = skin;
 		var lastScaleY:Float = note.scale.y;

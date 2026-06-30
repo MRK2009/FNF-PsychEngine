@@ -7,6 +7,11 @@ import backend.NoteSkinConfig.NoteSkinData;
 import shaders.RGBPalette;
 import shaders.RGBPalette.RGBShaderReference;
 
+/**
+ * **LEGACY (pre-v2) strum/receptor — deprecated.** The old `objects.StrumNote`, kept for editors,
+ * stages and Lua/HScript that reference `StrumNote`, and for the `compatibilityMode` strum mirror. The
+ * live runtime uses `objects.notes.Receptor`. Its methods are `@:deprecated`.
+**/
 class LegacyStrumNote extends FlxSprite {
 	public var rgbShader:RGBShaderReference;
 	public var resetAnim:Float = 0;
@@ -35,6 +40,12 @@ class LegacyStrumNote extends FlxSprite {
 
 	public var texture(default, set):String = null;
 
+	/**
+		Setter for the receptor skin image; assigning a new value reloads the static/pressed/confirm
+		animations from it.
+		@param value the skin image name (no extension)
+		@return the assigned value
+	**/
 	private function set_texture(value:String):String {
 		if (texture != value) {
 			texture = value;
@@ -45,6 +56,15 @@ class LegacyStrumNote extends FlxSprite {
 
 	public var useRGBShader:Bool = true;
 
+	/**
+		Builds a legacy receptor for one lane: seeds its RGB palette from the multikey/arrow-colour prefs,
+		resolves the chart's `arrowSkin` (or the default) plus the user's note-skin postfix, loads it, and
+		plays the `static` animation.
+		@param x screen x
+		@param y screen y
+		@param leData the 0-based lane this receptor serves
+		@param player `0` for the opponent side, `1` for the player side
+	**/
 	public function new(x:Float, y:Float, leData:Int, player:Int) {
 		animation = new PsychAnimationController(this);
 
@@ -96,6 +116,11 @@ class LegacyStrumNote extends FlxSprite {
 		playAnim('static');
 	}
 
+	/**
+		(Re)builds the receptor's look: uses the active folder skin (`.tcfg`/`.json`) when one resolves,
+		otherwise falls back to the classic sparrow/pixel/multikey build via `LegacyNoteSkin`.
+	**/
+	@:deprecated("Legacy pre-v2 note runtime; kept for compatibilityMode only. The v2 path lives in objects.notes.*")
 	public function reloadNote() {
 		var lastAnim:String = null;
 		if (animation.curAnim != null)
@@ -112,6 +137,13 @@ class LegacyStrumNote extends FlxSprite {
 		legacy.LegacyNoteSkin.reloadStrum(this, lastAnim);
 	}
 
+	/**
+		Builds the static/pressed/confirm look from a folder skin's config for this lane, applying its
+		per-column frames, colorability, antialiasing, offsets and scale.
+		@param skinName the active folder skin
+		@param lastAnim the animation to restore afterwards (may be `null`)
+		@return `true` if the folder skin supplied this lane (so the classic fallback is skipped)
+	**/
 	function reloadFolderStrum(skinName:String, lastAnim:String):Bool {
 		var cfg:NoteSkinData = NoteSkinConfig.forCurrentKeys(skinName);
 		if (cfg == null)
@@ -198,6 +230,12 @@ class LegacyStrumNote extends FlxSprite {
 		return true;
 	}
 
+	/**
+		Applies this receptor's on-screen placement for its lane/side: classic 4K spacing on the default
+		key count, otherwise the multikey layout (per-lane step + gap, re-centred so the row stays aligned
+		with where the 4K row centres).
+	**/
+	@:deprecated("Legacy pre-v2 note runtime; kept for compatibilityMode only. The v2 path lives in objects.notes.*")
 	public function playerPosition() {
 		final kc:Int = Mania.current;
 		if (kc == Mania.DEFAULT) {
@@ -229,6 +267,10 @@ class LegacyStrumNote extends FlxSprite {
 		y += skinOffsetY;
 	}
 
+	/**
+		Per-frame update: counts down `resetAnim` and drops the receptor back to `static` when it elapses.
+		@param elapsed seconds since the last frame
+	**/
 	override function update(elapsed:Float) {
 		if (resetAnim > 0) {
 			resetAnim -= elapsed;
@@ -240,6 +282,12 @@ class LegacyStrumNote extends FlxSprite {
 		super.update(elapsed);
 	}
 
+	/**
+		Plays a receptor animation and re-applies lane centering + per-anim colorability.
+		@param anim one of `static` / `pressed` / `confirm`
+		@param force restart the animation even if it's already playing
+	**/
+	@:deprecated("Legacy pre-v2 note runtime; kept for compatibilityMode only. The v2 path lives in objects.notes.*")
 	public function playAnim(anim:String, ?force:Bool = false) {
 		if (animation.curAnim != null && animation.curAnim.name == anim && animation.curAnim.numFrames <= 1)
 			return;

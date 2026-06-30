@@ -7,45 +7,34 @@ import backend.NoteSkinConfig.NoteSkinData;
 import shaders.RGBPalette;
 import shaders.RGBPalette.RGBShaderReference;
 import objects.StrumNote;
+import objects.notes.NoteDefaults;
 import flixel.math.FlxRect;
 
 using StringTools;
 
-typedef EventNote = {
-	strumTime:Float,
-	event:String,
-	value1:String,
-	value2:String
-}
-
-typedef NoteSplashData = {
-	disabled:Bool,
-	texture:String,
-	useGlobalShader:Bool, // breaks r/g/b but makes it copy default colors for your custom note
-	useRGBShader:Bool,
-	antialiasing:Bool,
-	r:FlxColor,
-	g:FlxColor,
-	b:FlxColor,
-	a:Float
-}
+// These typedefs now live on the neutral `objects.notes.NoteDefaults`; re-exported here so the long-
+// standing `legacy.LegacyNote.EventNote` / `.NoteSplashData` (and `objects.Note.*`) names keep working.
+typedef EventNote = objects.notes.NoteDefaults.EventNote;
+typedef NoteSplashData = objects.notes.NoteDefaults.NoteSplashData;
 
 /**
- * The note object used as a data structure to spawn and manage notes during gameplay.
- * 
+ * **LEGACY (pre-v2) note object — deprecated.** This is the old `objects.Note`, kept only so editors,
+ * stages and Lua/HScript that reference `Note` keep working, and so a `compatibilityMode` modpack can
+ * run on the legacy script API. The live gameplay runtime is `objects.notes.*` (`NoteData` +
+ * `NoteSprite`/`SustainSprite`/`Receptor`/`NoteField`). Its gameplay methods are `@:deprecated`; the
+ * remaining static forwarders (`swagWidth`/`colArray`/`initializeGlobalRGBShader`/...) are NOT — they
+ * just re-export the neutral `objects.notes.NoteDefaults` / `Mania` so `Note.*` reads still resolve.
+ *
  * If you want to make a custom note type, you should search for: "function set_noteType"
 **/
 class LegacyNote extends FlxSprite {
-	// This is needed for the hardcoded note types to appear on the Chart Editor,
-	// It's also used for backwards compatibility with 0.1 - 0.3.2 charts.
-	public static final defaultNoteTypes:Array<String> = [
-		'', // Always leave this one empty pls
-		'Alt Animation',
-		'Hey!',
-		'Hurt LegacyNote',
-		'GF Sing',
-		'No Animation'
-	];
+	// Note constants/helpers now live on the neutral `objects.notes.NoteDefaults`; these forwarders keep
+	// the historical `Note.*` read/write API for editors, stages and Lua. Inline, so they compile to a
+	// direct access on `NoteDefaults` with no call overhead.
+	public static var defaultNoteTypes(get, never):Array<String>;
+
+	static inline function get_defaultNoteTypes():Array<String>
+		return NoteDefaults.defaultNoteTypes;
 
 	public var extraData:Map<String, Dynamic> = new Map<String, Dynamic>();
 
@@ -83,7 +72,13 @@ class LegacyNote extends FlxSprite {
 
 	public var rgbShader:RGBShaderReference;
 
-	public static var globalRgbShaders:Array<RGBPalette> = [];
+	public static var globalRgbShaders(get, set):Array<RGBPalette>;
+
+	static inline function get_globalRgbShaders():Array<RGBPalette>
+		return NoteDefaults.globalRgbShaders;
+
+	static inline function set_globalRgbShaders(value:Array<RGBPalette>):Array<RGBPalette>
+		return NoteDefaults.globalRgbShaders = value;
 
 	// Per-song dedupe set for hitsound precaching. set_noteType used to
 	// call Paths.sound(hitsound) for every note that referenced a custom
@@ -101,7 +96,10 @@ class LegacyNote extends FlxSprite {
 	public var lateHitMult:Float = 1;
 	public var lowPriority:Bool = false;
 
-	public static var SUSTAIN_SIZE:Int = 44;
+	public static var SUSTAIN_SIZE(get, never):Int;
+
+	static inline function get_SUSTAIN_SIZE():Int
+		return NoteDefaults.SUSTAIN_SIZE;
 
 	// Keycount-derived globals now live on (and are owned by) `Mania`; these stay as the historical
 	// `Note.swagWidth` / `Note.colArray` read API (Lua, editors, legacy) and forward to it. Inline,
@@ -116,7 +114,10 @@ class LegacyNote extends FlxSprite {
 	static inline function get_colArray():Array<String>
 		return Mania.colArray;
 
-	public static var defaultNoteSkin(default, never):String = 'noteSkins/NOTE_assets';
+	public static var defaultNoteSkin(get, never):String;
+
+	static inline function get_defaultNoteSkin():String
+		return NoteDefaults.defaultNoteSkin;
 
 	public var noteSplashData:NoteSplashData = {
 		disabled: false,
@@ -177,6 +178,11 @@ class LegacyNote extends FlxSprite {
 
 	public var hitsoundVolume(get, default):Float = 1.0;
 
+	/**
+		Effective hitsound volume: the user's preference when non-zero, else `1` only if this note forces
+		its hitsound (`hitsoundForce`), else `0` (muted).
+		@return the volume in the `0...1` range
+	**/
 	function get_hitsoundVolume():Float {
 		if (ClientPrefs.data.hitsoundVolume > 0)
 			return ClientPrefs.data.hitsoundVolume;
@@ -186,11 +192,22 @@ class LegacyNote extends FlxSprite {
 
 	public var hitsound:String = 'hitsound';
 
+	/**
+		Setter for the per-note scroll-speed multiplier.
+		@param value the new multiplier
+		@return the assigned value
+	**/
 	private function set_multSpeed(value:Float):Float {
 		multSpeed = value;
 		return value;
 	}
 
+	/**
+		Scales a sustain body's length by `ratio` (no-op on note heads and tail caps), e.g. for runtime
+		scroll-speed changes.
+		@param ratio the multiplier to apply to `scale.y`
+	**/
+	@:deprecated("Legacy pre-v2 note runtime; kept for compatibilityMode only. The v2 path lives in objects.notes.*")
 	public function resizeByRatio(ratio:Float) // haha funny twitter shit
 	{
 		if (isSustainNote && animation.curAnim != null && !animation.curAnim.name.endsWith('end')) {
@@ -199,6 +216,11 @@ class LegacyNote extends FlxSprite {
 		}
 	}
 
+	/**
+		Setter for the note's skin image; assigning a new value reloads the note graphic/animations.
+		@param value the skin image name (no extension)
+		@return the assigned value
+	**/
 	private function set_texture(value:String):String {
 		if (texture != value)
 			reloadNote(value);
@@ -207,6 +229,11 @@ class LegacyNote extends FlxSprite {
 		return value;
 	}
 
+	/**
+		Reseeds this note's RGB palette (and, for multikey, its splash tint) from the active multikey or
+		arrow-colour prefs for its column.
+	**/
+	@:deprecated("Legacy pre-v2 note runtime; kept for compatibilityMode only. The v2 path lives in objects.notes.*")
 	public function defaultRGB() {
 		var arr:Array<FlxColor>;
 		if (Mania.current != Mania.DEFAULT)
@@ -241,13 +268,19 @@ class LegacyNote extends FlxSprite {
 		}
 	}
 
+	/**
+		Setter for the note's type; applies the built-in type effects (Hurt Note tint/health, Alt
+		Animation, GF Sing, …) and any `NoteTypesConfig` data, precaching a custom hitsound once.
+		@param value the note-type name (`''` for a normal note)
+		@return the assigned value
+	**/
 	private function set_noteType(value:String):String {
 		noteSplashData.texture = PlayState.SONG != null ? PlayState.SONG.splashSkin : 'noteSplashes/noteSplashes';
 		defaultRGB();
 
 		if (noteData > -1 && noteType != value) {
 			switch (value) {
-				case 'Hurt LegacyNote':
+				case 'Hurt Note':
 					ignoreNote = mustPress;
 					// reloadNote('HURTNOTE_assets');
 					// this used to change the note texture to HURTNOTE_assets.png,
@@ -288,6 +321,17 @@ class LegacyNote extends FlxSprite {
 		return value;
 	}
 
+	/**
+		Builds a legacy note (head or one sustain piece): applies the user note offset, seeds the RGB
+		palette, loads the skin and (for sustains) links to the previous piece, flips/sizes the tail for
+		the scroll direction and folder-skin hold alpha.
+		@param strumTime the note's hit time in ms (before the user note-offset is applied)
+		@param noteData the lane/direction (`-1` for an event placeholder)
+		@param prevNote the previous note in the sustain chain (or `null`)
+		@param sustainNote `true` if this is a sustain piece rather than a head
+		@param inEditor `true` when built for an editor preview (skips the user note-offset)
+		@param createdFrom the owning state (defaults to `PlayState.instance`)
+	**/
 	public function new(strumTime:Float, noteData:Int, ?prevNote:LegacyNote, ?sustainNote:Bool = false, ?inEditor:Bool = false, ?createdFrom:Dynamic = null) {
 		super();
 
@@ -396,29 +440,14 @@ class LegacyNote extends FlxSprite {
 		x += offsetX;
 	}
 
-	public static function initializeGlobalRGBShader(noteData:Int) {
-		if (globalRgbShaders[noteData] == null) {
-			var newRGB:RGBPalette = new RGBPalette();
-			var arr:Array<FlxColor>;
-			if (Mania.current != Mania.DEFAULT)
-				arr = Mania.getColors(Mania.current)[noteData]; // multikey palette
-			else
-				arr = (!PlayState.isPixelStage) ? ClientPrefs.data.arrowRGB[noteData] : ClientPrefs.data.arrowRGBPixel[noteData];
-
-			if (arr != null && arr.length >= 3) {
-				newRGB.r = arr[0];
-				newRGB.g = arr[1];
-				newRGB.b = arr[2];
-			} else {
-				newRGB.r = 0xFFFF0000;
-				newRGB.g = 0xFF00FF00;
-				newRGB.b = 0xFF0000FF;
-			}
-
-			globalRgbShaders[noteData] = newRGB;
-		}
-		return globalRgbShaders[noteData];
-	}
+	/**
+		Forwards to `objects.notes.NoteDefaults.initializeGlobalRGBShader`, kept so legacy `Note.*` callers
+		still resolve.
+		@param noteData the 0-based column
+		@return the shared per-column `RGBPalette`
+	**/
+	public static inline function initializeGlobalRGBShader(noteData:Int):RGBPalette
+		return NoteDefaults.initializeGlobalRGBShader(noteData);
 
 	var _lastNoteOffX:Float = 0;
 
@@ -427,6 +456,14 @@ class LegacyNote extends FlxSprite {
 	public var originalHeight:Float = 6;
 	public var correctionOffset:Float = 0; // dont mess with this
 
+	/**
+		(Re)loads this note's graphic + animations: uses the active folder skin when one resolves (and no
+		explicit `texture` override is given), otherwise the classic sparrow/pixel/multikey build. An
+		explicit `texture` disables the RGB shader (the override supplies its own colours).
+		@param texture an explicit per-note texture override, or `''` for the chart/default skin
+		@param postfix an optional skin postfix appended to the resolved skin name
+	**/
+	@:deprecated("Legacy pre-v2 note runtime; kept for compatibilityMode only. The v2 path lives in objects.notes.*")
 	public function reloadNote(texture:String = '', postfix:String = '') {
 		if (texture == null)
 			texture = '';
@@ -456,6 +493,13 @@ class LegacyNote extends FlxSprite {
 		legacy.LegacyNoteSkin.reloadNote(this, skin, texture, animName);
 	}
 
+	/**
+		Builds this note's head (or hold/end) look from a folder skin's config for its column, applying the
+		per-column frames, colorability, antialiasing, scale and offsets.
+		@param skinName the active folder skin
+		@param animName the animation to restore afterwards (may be `null`)
+		@return `true` if the folder skin supplied this note (so the classic fallback is skipped)
+	**/
 	function reloadFolderNote(skinName:String, animName:String):Bool {
 		var cfg:NoteSkinData = NoteSkinConfig.forCurrentKeys(skinName);
 		if (cfg == null)
@@ -564,12 +608,13 @@ class LegacyNote extends FlxSprite {
 		return true;
 	}
 
-	public static function getNoteSkinPostfix() {
-		var skin:String = '';
-		if (ClientPrefs.data.noteSkin != ClientPrefs.defaultData.noteSkin)
-			skin = '-' + ClientPrefs.data.noteSkin.trim().toLowerCase().replace(' ', '_');
-		return skin;
-	}
+	/**
+		Forwards to `objects.notes.NoteDefaults.getNoteSkinPostfix`, kept so legacy `Note.*` callers still
+		resolve.
+		@return the skin postfix for the user's note-skin pref (empty for the default)
+	**/
+	public static inline function getNoteSkinPostfix():String
+		return NoteDefaults.getNoteSkinPostfix();
 
 	/**
 		Orders hittable notes for input: lower-priority notes last, then by earliest strum time.
@@ -577,6 +622,7 @@ class LegacyNote extends FlxSprite {
 		@param b the second note to compare
 		@return a negative/zero/positive sort value
 	**/
+	@:deprecated("Legacy pre-v2 note runtime; kept for compatibilityMode only. The v2 path lives in objects.notes.*")
 	public static function sortHitNotes(a:LegacyNote, b:LegacyNote):Int {
 		if (a.lowPriority && !b.lowPriority)
 			return 1;
@@ -585,6 +631,8 @@ class LegacyNote extends FlxSprite {
 		return flixel.util.FlxSort.byValues(flixel.util.FlxSort.ASCENDING, a.strumTime, b.strumTime);
 	}
 
+	/** Adds the classic sparrow head (`<color>Scroll`) or hold/end animations for this note's column and
+		sizes it for the active key count. **/
 	function loadNoteAnims() {
 		if (colArray[noteData] == null)
 			return;
@@ -601,6 +649,8 @@ class LegacyNote extends FlxSprite {
 		updateHitbox();
 	}
 
+	/** Adds the pixel-sheet head or hold/end animations for this note's column (frame indices, not
+		prefixes, since pixel sheets are grids). **/
 	function loadPixelNoteAnims() {
 		if (colArray[noteData] == null)
 			return;
@@ -612,6 +662,14 @@ class LegacyNote extends FlxSprite {
 			animation.add(colArray[noteData] + 'Scroll', [noteData + 4], 24, true);
 	}
 
+	/**
+		Adds an animation by frame prefix only when that prefix actually resolves to frames, avoiding
+		"no frames" warnings for sheets missing an optional animation.
+		@param name the animation name to register
+		@param prefix the frame-name prefix to match
+		@param framerate the animation framerate
+		@param doLoop whether the animation loops
+	**/
 	function attemptToAddAnimationByPrefix(name:String, prefix:String, framerate:Float = 24, doLoop:Bool = true) {
 		var animFrames = [];
 		@:privateAccess
@@ -622,6 +680,11 @@ class LegacyNote extends FlxSprite {
 		animation.addByPrefix(name, prefix, framerate, doLoop);
 	}
 
+	/**
+		Per-frame judgement-window bookkeeping: updates `canBeHit`/`tooLate` for player notes, auto-marks
+		opponent (and chained sustain) notes hit at their strum time, and dims notes that scrolled past.
+		@param elapsed seconds since the last frame
+	**/
 	override function update(elapsed:Float) {
 		super.update(elapsed);
 
@@ -646,11 +709,21 @@ class LegacyNote extends FlxSprite {
 		}
 	}
 
+	/** Frees this note and clears the cached skin-existence check. **/
 	override public function destroy() {
 		super.destroy();
 		_lastValidChecked = '';
 	}
 
+	/**
+		Positions this note relative to its receptor for the current song time: derives the scroll
+		distance, rotates onto the strum's scroll axis, recomputes a sustain body's length, and copies
+		angle/alpha/x/y per the `copy*` flags.
+		@param myStrum the receptor for this note's column
+		@param fakeCrochet the section crochet used for sustain length (legacy parameter)
+		@param songSpeed the active scroll speed
+	**/
+	@:deprecated("Legacy pre-v2 note runtime; kept for compatibilityMode only. The v2 path lives in objects.notes.*")
 	public function followStrumNote(myStrum:StrumNote, fakeCrochet:Float, songSpeed:Float = 1) {
 		var strumX:Float = myStrum.x;
 		var strumY:Float = myStrum.y;
@@ -705,6 +778,13 @@ class LegacyNote extends FlxSprite {
 			y = cy - height / 2;
 	}
 
+	/**
+		Clips the consumed portion of a held sustain against its receptor so the trail shortens as it's
+		held, projecting the note onto the strum's scroll axis and trimming the `clipRect` accordingly
+		(handles up/down scroll).
+		@param myStrum the receptor this note scrolls toward
+	**/
+	@:deprecated("Legacy pre-v2 note runtime; kept for compatibilityMode only. The v2 path lives in objects.notes.*")
 	public function clipToStrumNote(myStrum:StrumNote) {
 		if ((mustPress || !ignoreNote) && (wasGoodHit || (prevNote.wasGoodHit && !canBeHit))) {
 			var rot:Float = (isSustainNote && parent != null) ? parent.offsetAngle : offsetAngle;
@@ -736,6 +816,12 @@ class LegacyNote extends FlxSprite {
 		}
 	}
 
+	/**
+		Setter for `clipRect` that re-resolves the current frame so the clip applies immediately (the base
+		`FlxSprite` setter doesn't refresh the frame).
+		@param rect the clip rectangle (or `null` to clear)
+		@return the assigned rectangle
+	**/
 	@:noCompletion
 	override function set_clipRect(rect:FlxRect):FlxRect {
 		// @:bypassAccessor avoids recursing into this setter through the
