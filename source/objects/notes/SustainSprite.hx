@@ -153,9 +153,17 @@ final class SustainSprite extends FlxSprite {
 		var bodyLen:Float = totalLen - tailLen;
 		if (bodyLen < 0)
 			bodyLen = 0;
-		if (frameHeight > 0)
-			scale.y = bodyLen / frameHeight;
-		updateHitbox();
+		// bodyLen is constant while scrolling (headDist - endDist reduces to 0.45*rate*(endScrollPos -
+		// scrollPos), independent of scrollNow), so scale.y only really moves on spawn/speed change and
+		// while a held note clips. Only pay updateHitbox when it actually changed (legacy's 0.1px gate);
+		// width/height stay valid on the skipped frames since scale.x/frameWidth don't change.
+		if (frameHeight > 0) {
+			var newScaleY:Float = bodyLen / frameHeight;
+			if (Math.abs((newScaleY - scale.y) * frameHeight) > 0.1) {
+				scale.y = newScaleY;
+				updateHitbox();
+			}
+		}
 
 		var perp:Float = offsetX + (centerOnStrum ? Note.swagWidth / 2 : width / 2);
 		var bodyA:Float = (nearA + farA + sign * tailLen) / 2;
