@@ -78,6 +78,12 @@ final class NoteField {
 		@param scrollNow the SV-mapped position of `songPos` (`== songPos` when SV is off)
 	**/
 	public function update(songPos:Float, scrollNow:Float):Void {
+		// Refresh each receptor's cached scroll-axis vector once per frame; the per-note follow below
+		// then reads the cache instead of recomputing cos/sin per note.
+		for (r in receptors)
+			if (r != null)
+				r.refreshAxis();
+
 		while (nextSpawn < notes.length) {
 			var data:NoteData = notes[nextSpawn];
 			if (data.scrollPos - scrollNow >= spawnAhead)

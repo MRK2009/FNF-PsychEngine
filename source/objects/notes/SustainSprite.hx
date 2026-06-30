@@ -127,20 +127,11 @@ final class SustainSprite extends FlxSprite {
 		var sign:Float = strum.downScroll ? 1 : -1;
 		var rate:Float = songSpeed * multSpeed;
 
-		var axisDeg:Float = strum.direction + (strum.rotateNotes ? strum.angle : 0);
-		var uX:Float;
-		var uY:Float;
-		if (axisDeg == 90) {
-			uX = 0;
-			uY = 1;
-		} else {
-			var ad:Float = axisDeg * Math.PI / 180;
-			uX = Math.cos(ad);
-			uY = Math.sin(ad);
-		}
+		var uX:Float = strum.axisX;
+		var uY:Float = strum.axisY;
 
 		if (copyAngle)
-			angle = axisDeg - 90;
+			angle = strum.axisAngle;
 		if (copyAlpha) {
 			alpha = strum.alpha * multAlpha;
 			tail.alpha = alpha;
@@ -173,7 +164,7 @@ final class SustainSprite extends FlxSprite {
 		var tailA:Float = farA + sign * (tailLen / 2);
 		var tcx:Float = strum.x + uX * tailA + uY * tperp;
 		var tcy:Float = strum.y + uY * tailA - uX * tperp;
-		tail.angle = copyAngle ? axisDeg - 90 : tail.angle;
+		tail.angle = copyAngle ? strum.axisAngle : tail.angle;
 		tail.x = tcx - tail.width / 2;
 		tail.y = tcy - tail.height / 2;
 

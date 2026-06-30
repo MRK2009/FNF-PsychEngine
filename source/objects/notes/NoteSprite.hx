@@ -119,20 +119,11 @@ final class NoteSprite extends FlxSprite {
 		if (!strum.downScroll)
 			distance *= -1;
 
-		var axisDeg:Float = strum.direction + (strum.rotateNotes ? strum.angle : 0);
-		var uX:Float;
-		var uY:Float;
-		if (axisDeg == 90) {
-			uX = 0;
-			uY = 1;
-		} else {
-			var ad:Float = axisDeg * Math.PI / 180;
-			uX = Math.cos(ad);
-			uY = Math.sin(ad);
-		}
+		var uX:Float = strum.axisX;
+		var uY:Float = strum.axisY;
 
 		if (copyAngle)
-			angle = axisDeg - 90;
+			angle = strum.axisAngle;
 		if (copyAlpha)
 			alpha = strum.alpha * multAlpha;
 

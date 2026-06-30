@@ -22,6 +22,18 @@ final class Receptor extends FlxSprite {
 	public var sustainReduce:Bool = true;
 	public var rotateNotes:Bool = false;
 
+	/**
+		Cached scroll-axis unit vector and the matching sprite angle (`axisDeg - 90`). Recomputed by
+		`refreshAxis` only when the effective axis angle changes, so the per-note `follow` reads these
+		instead of paying `cos`/`sin` every frame. `axisDeg` defaults to 90 (vertical scroll): straight up.
+	**/
+	public var axisX(default, null):Float = 0;
+
+	public var axisY(default, null):Float = 1;
+	public var axisAngle(default, null):Float = 0;
+
+	var _axisDeg:Float = Math.NaN;
+
 	public var resetAnim:Float = 0;
 
 	public var skinOffsetX:Float = 0;
@@ -120,6 +132,28 @@ final class Receptor extends FlxSprite {
 		y += Mania.noteOffsetsY[kc - 1];
 		x += skinOffsetX;
 		y += skinOffsetY;
+	}
+
+	/**
+		Recomputes the cached scroll-axis vector when the effective axis angle (`direction` plus the
+		sprite `angle` when `rotateNotes`) changed. Cheap to call per frame: it only runs `cos`/`sin`
+		on an actual angle change, so a script rotating the receptor stays correct. Call once per frame
+		before the drawables read `axisX`/`axisY`/`axisAngle`.
+	**/
+	public inline function refreshAxis():Void {
+		final deg:Float = direction + (rotateNotes ? angle : 0);
+		if (deg != _axisDeg) {
+			_axisDeg = deg;
+			axisAngle = deg - 90;
+			if (deg == 90) {
+				axisX = 0;
+				axisY = 1;
+			} else {
+				final rad:Float = deg * Math.PI / 180;
+				axisX = Math.cos(rad);
+				axisY = Math.sin(rad);
+			}
+		}
 	}
 
 	override function update(elapsed:Float) {
