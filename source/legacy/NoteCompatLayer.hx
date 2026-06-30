@@ -102,14 +102,21 @@ class NoteCompatLayer {
 
 	function makeAdapter(note:ActiveNote):Note {
 		var d:NoteData = note.data;
-		// Inert data carrier: build it, then park it out of the draw/update path. The note-type is set
-		// once here (the setter is heavy) since a note's type never changes after spawn.
-		var a:Note = new Note(d.time, d.column, null, d.isSustain(), false);
+		// Inert data carrier, built as a HEAD (sustainNote = false) so it carries the pre-v2 head shape
+		// (`isSustainNote == false`, `sustainLength > 0`, non-empty `tail` for a hold); the note-type is
+		// set once here (the setter is heavy) since a note's type never changes after spawn.
+		var a:Note = new Note(d.time, d.column, null, false, false);
 		a.visible = false;
 		a.active = false;
 		a.mustPress = d.mustPress;
 		a.animSuffix = d.animSuffix;
 		a.gfNote = d.gfNote;
+		a.sustainLength = d.length;
+		// Share the data's extraData so script-set flags (e.g. the double-chart `noteOriginDad`) survive
+		// into the goodNoteHit/noteMiss callbacks, and any callback-time writes persist on the NoteData.
+		a.extraData = d.extraData;
+		if (d.isSustain())
+			a.tail = [a];
 		if (d.type != null && d.type.length > 0)
 			a.noteType = d.type;
 		return a;
@@ -145,6 +152,30 @@ class NoteCompatLayer {
 	}
 
 	/**
+		Resolves a script-passed legacy note -- a live `game.notes` adapter or an `UnspawnNoteProxy` -- back
+		to the v2 `ActiveNote` it stands for, so old `game.goodNoteHit(note)` / `noteMiss(note)` calls reach
+		the real runtime. Returns `null` when the note isn't currently active (it can't be hit in v2).
+		@param legacyNote the note object an old script passed
+		@return the matching active note, or `null`
+	**/
+	public function resolveActive(legacyNote:Dynamic):ActiveNote {
+		if (legacyNote == null)
+			return null;
+		// A live game.notes adapter maps straight back to its ActiveNote.
+		for (an in noteAdapters.keys())
+			if (noteAdapters.get(an) == legacyNote)
+				return an;
+		// An unspawn proxy carries the NoteData; match it against a currently-active note.
+		if (Std.isOfType(legacyNote, UnspawnNoteProxy)) {
+			var d:NoteData = cast(legacyNote, UnspawnNoteProxy).dataRef;
+			for (an in noteAdapters.keys())
+				if (an.data == d)
+					return an;
+		}
+		return null;
+	}
+
+	/**
 		Fills `game.unspawnNotes` with one write-through `UnspawnNoteProxy` per chart note, so old
 		load-time scripts that iterate `unspawnNotes` (in `onCreatePost`) can set per-note props. Call
 		during `generateSong`, before `onCreatePost`.
@@ -160,12 +191,56 @@ class NoteCompatLayer {
 	}
 
 	/**
-		Copies every proxy's script-mutated props back onto its `NoteData`. Call once after `onCreatePost`
-		and before `buildNoteFields`, so the changes are live when the field spawns the notes.
+		Re-derives the typed v2 chart from the FINAL `game.unspawnNotes`, after `onCreatePost` and before
+		`buildNoteFields`. This is how pre-spawn chart transforms take effect: a script can flip `mustPress`,
+		reorder, filter, or even replace the whole `unspawnNotes` array (e.g. the double-chart script), and
+		the rebuilt list -- one `NoteData` per surviving entry, in that array's order, re-sorted by time --
+		is what `buildNoteFields` decodes. Proxies hand back their (now-updated) `dataRef`; a raw `Note` a
+		script inserted is converted to a fresh `NoteData`.
+
+		Note: this only serves LOAD-time transforms (before spawn). Mid-song note add/remove still can't be
+		reproduced over the pooled runtime.
+		@param unspawn the post-`onCreatePost` `game.unspawnNotes`
+		@return the rebuilt, time-sorted chart note list
 	**/
-	public function flushUnspawn():Void {
-		for (p in unspawnProxies)
-			p.flush();
+	public function rebuildChartFromUnspawn(unspawn:Array<Note>):Array<NoteData> {
+		var out:Array<NoteData> = [];
+		if (unspawn == null)
+			return out;
+		for (n in unspawn) {
+			if (n == null)
+				continue;
+			var d:NoteData = Std.isOfType(n, UnspawnNoteProxy) ? cast(n, UnspawnNoteProxy).flush() : dataFromRawNote(n);
+			if (d != null)
+				out.push(d);
+		}
+		out.sort(function(a:NoteData, b:NoteData):Int return Std.int(a.time - b.time));
+		return out;
+	}
+
+	/** Builds a fresh `NoteData` from a raw legacy `Note` a script created and inserted into the queue. **/
+	function dataFromRawNote(n:Note):NoteData {
+		var d:NoteData = new NoteData();
+		d.time = n.strumTime;
+		d.column = n.noteData;
+		d.mustPress = n.mustPress;
+		d.length = n.sustainLength;
+		d.type = n.noteType;
+		d.animSuffix = n.animSuffix;
+		d.gfNote = n.gfNote;
+		d.noAnimation = n.noAnimation;
+		d.noMissAnimation = n.noMissAnimation;
+		d.ignore = n.ignoreNote;
+		d.hitHealth = n.hitHealth;
+		d.missHealth = n.missHealth;
+		if (n.texture != null && n.texture.length > 0)
+			d.texture = n.texture;
+		if (n.extraData != null)
+			for (k => v in n.extraData)
+				d.extraData.set(k, v);
+		d.scrollPos = d.time;
+		d.endScrollPos = d.time + d.length;
+		return d;
 	}
 
 	/**
@@ -196,7 +271,8 @@ class NoteCompatLayer {
 		}
 	}
 
-	/** Mirrors each strum adapter's position/alpha from its live receptor. Call each frame. **/
+	/** Mirrors each strum adapter's geometry/state from its live receptor so scripts reading
+		`playerStrums.members[i]` (`x`/`y`/`width`/`downScroll`/…) see the real receptor. Call each frame. **/
 	public function syncStrums():Void {
 		for (i in 0...strumAdapters.length) {
 			var s:StrumNote = strumAdapters[i];
@@ -206,6 +282,11 @@ class NoteCompatLayer {
 			s.x = rec.x;
 			s.y = rec.y;
 			s.alpha = rec.alpha;
+			s.angle = rec.angle;
+			s.width = rec.width;
+			s.height = rec.height;
+			s.downScroll = rec.downScroll;
+			s.direction = rec.direction;
 		}
 	}
 

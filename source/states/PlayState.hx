@@ -687,10 +687,11 @@ class PlayState extends MusicBeatState {
 		stagesFunc(function(stage:BaseStage) stage.createPost());
 		callOnScripts('onCreatePost');
 
-		// compatibilityMode: bake any per-note props an onCreatePost script set on game.unspawnNotes back
-		// onto the NoteData, so they're live when buildNoteFields spawns the notes.
-		if (noteCompat != null)
-			noteCompat.flushUnspawn();
+		// compatibilityMode: re-derive the typed chart from the final game.unspawnNotes, so a load-time
+		// script that retuned it (flipped mustPress, reordered, replaced it -- e.g. the double-chart mod)
+		// is reflected when buildNoteFields spawns the notes.
+		if (noteCompat != null && _compatChart != null)
+			_compatChart.notes = noteCompat.rebuildChartFromUnspawn(unspawnNotes);
 
 		var splash:NoteSplash = new NoteSplash();
 		grpNoteSplashes.add(splash);
@@ -2629,6 +2630,19 @@ class PlayState extends MusicBeatState {
 	}
 
 	/**
+		Accepts either a real `ActiveNote` (the runtime/internal callers) or a legacy note object a
+		compatibilityMode script passed to `goodNoteHit`/`noteMiss`, and returns the matching `ActiveNote`
+		(or `null` if it isn't currently active). Lets old `game.goodNoteHit(note)` calls reach the v2 path.
+		@param n the note argument
+		@return the resolved active note, or `null`
+	**/
+	inline function asActiveNote(n:Dynamic):ActiveNote {
+		if (Std.isOfType(n, ActiveNote))
+			return cast n;
+		return (noteCompat != null) ? noteCompat.resolveActive(n) : null;
+	}
+
+	/**
 		Fires the compiled stage note hooks (`BaseStage.goodNoteHit`/`opponentNoteHit`/`noteMiss`, which
 		take a legacy `Note`) with the compat adapter. Only runs under `compatibilityMode` -- in v2 play
 		these hooks stay skipped, since the stage API predates the `NoteSprite` the v2 path carries.
@@ -3116,8 +3130,11 @@ class PlayState extends MusicBeatState {
 			opponentField.freeHead(note); // sustain: drop the head, keep the trail scrolling (matches legacy)
 	}
 
-	// NoteSystem V2
-	function goodNoteHit(note:ActiveNote):Void {
+	// NoteSystem V2 -- `noteArg` is an ActiveNote internally, or a legacy note object in compatibilityMode.
+	function goodNoteHit(noteArg:Dynamic):Void {
+		var note:ActiveNote = asActiveNote(noteArg);
+		if (note == null)
+			return;
 		var data:NoteData = note.data;
 		if (data.hit)
 			return;
@@ -3182,8 +3199,11 @@ class PlayState extends MusicBeatState {
 			playerField.freeHead(note);
 	}
 
-	// NoteSystem V2
-	function noteMiss(note:ActiveNote):Void {
+	// NoteSystem V2 -- `noteArg` is an ActiveNote internally, or a legacy note object in compatibilityMode.
+	function noteMiss(noteArg:Dynamic):Void {
+		var note:ActiveNote = asActiveNote(noteArg);
+		if (note == null)
+			return;
 		var data:NoteData = note.data;
 		if (data.missed)
 			return;
