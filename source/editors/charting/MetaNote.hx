@@ -1,6 +1,7 @@
 package editors.charting;
 
 import objects.Note;
+import backend.NoteSkinConfig;
 import shaders.RGBPalette;
 import flixel.util.FlxDestroyUtil;
 
@@ -126,6 +127,9 @@ class MetaNote extends Note {
 		if (rgbShader != null)
 			rgbShader.enabled = false;
 
+		// loadGraphic replaces any note frames, so the note frame-cache is now invalid -- force the next
+		// note bind on this pooled drawable to rebuild.
+		_frameCol = -999;
 		loadGraphic(Paths.image('editors/eventIcon'));
 		setGraphicSize(ChartingState.GRID_SIZE);
 		updateHitbox();
@@ -139,10 +143,35 @@ class MetaNote extends Note {
 		refreshEventText();
 	}
 
+	// Identity of the frames `reloadNote` last built onto this drawable: the column plus everything
+	// `reloadNote`/`reloadFolderNote` reads (active skin, pixel stage, texture override, keycount).
+	// `_frameCol == -999` means it currently holds non-note frames (an event icon) and must rebuild.
+	var _frameCol:Int = -999;
+	var _frameSkin:String = null;
+	var _framePix:Bool = false;
+	var _frameTex:String = null;
+	var _frameKey:Int = -1;
+
 	public function refreshNoteData(data:ChartNote):Void {
 		noteData = data.noteData;
 		mustPress = data.mustPress;
-		reloadNote();
+
+		// reloadNote rebuilds the per-(column, skin, pixel, texture, keycount) atlas frames. A pooled
+		// drawable often already holds exactly those, so skip the rebuild when the identity is unchanged;
+		// the column animation + hitbox below are re-applied cheaply regardless, and the '<col>Scroll'
+		// animation still exists from the prior same-identity build.
+		var skin:String = NoteSkinConfig.activeSkin();
+		var pix:Bool = PlayState.isPixelStage;
+		var tex:String = (PlayState.SONG != null) ? PlayState.SONG.arrowSkin : null;
+		var kc:Int = Mania.current;
+		if (noteData != _frameCol || skin != _frameSkin || pix != _framePix || tex != _frameTex || kc != _frameKey) {
+			reloadNote();
+			_frameCol = noteData;
+			_frameSkin = skin;
+			_framePix = pix;
+			_frameTex = tex;
+			_frameKey = kc;
+		}
 
 		if (Note.globalRgbShaders.contains(rgbShader.parent))
 			rgbShader = new RGBShaderReference(this, Note.initializeGlobalRGBShader(noteData));
@@ -246,11 +275,19 @@ class MetaNote extends Note {
 	}
 
 	/** Detaches from the data and returns the drawable to the pool (killed, ready for `recycle`). **/
+	/**
+		The editor's per-group free-list this drawable returns to on `unbind`, so `realizeNote` can pop a
+		dead sprite in O(1) instead of scanning the group. Set when the sprite is created.
+	**/
+	public var freeList:Array<MetaNote> = null;
+
 	public function unbind():Void {
 		if (data != null) {
 			if (data.sprite == this)
 				data.sprite = null;
 			data = null;
+			if (freeList != null)
+				freeList.push(this);
 		}
 		if (eventText != null)
 			eventText.visible = false;

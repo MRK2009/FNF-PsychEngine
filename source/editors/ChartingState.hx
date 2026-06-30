@@ -158,6 +158,10 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 
 	var behindRenderedNotes:FlxTypedGroup<MetaNote> = new FlxTypedGroup<MetaNote>();
 	var curRenderedNotes:FlxTypedGroup<MetaNote> = new FlxTypedGroup<MetaNote>();
+	// Stacks of unbound (dead) drawables per group, so realizeNote pops one in O(1) instead of the
+	// O(pool) getFirstAvailable scan. Populated by MetaNote.unbind; dropped with the pool in reskinNotePool.
+	var freeCur:Array<MetaNote> = [];
+	var freeBehind:Array<MetaNote> = [];
 	public static var SECTION_WINDOW:Int = 4;
 	var realizePass:Int = 0;
 	// Entries currently being dragged. Pure data, like `notes`/`events`; their drawables (if in the
@@ -1435,7 +1439,7 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 					}
 
 					if (vortexPlaying) {
-						var strumNote:StrumNote = strumLineNotes.members[note.songData[1]];
+						var strumNote:StrumNote = strumLineNotes.members[note.chartNoteData];
 						if (strumNote != null) {
 							strumNote.playAnim('confirm', true);
 							strumNote.resetAnim = Math.max(Conductor.stepCrochet * 1.25, note.sustainLength) / 1000 / playbackRate;
@@ -2166,7 +2170,13 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 	// Recycles a pooled drawable from `group`, binds it to `data`, and stamps its note-type label /
 	// position. This is where graphics actually get built -- only for entries inside the window.
 	function realizeNote(data:ChartNote, group:FlxTypedGroup<MetaNote>):MetaNote {
-		var spr:MetaNote = group.recycle(MetaNote);
+		var free:Array<MetaNote> = (group == curRenderedNotes) ? freeCur : freeBehind;
+		var spr:MetaNote = (free.length > 0) ? free.pop() : null;
+		if (spr == null) {
+			spr = new MetaNote();
+			spr.freeList = free;
+			group.add(spr);
+		}
 		spr.bind(data);
 		if (!data.isEvent) {
 			var idx:Int = (data.noteType != null) ? noteTypes.indexOf(data.noteType) : 0;
@@ -2201,6 +2211,8 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 				spr.destroy();
 		curRenderedNotes.clear();
 		behindRenderedNotes.clear();
+		freeCur.resize(0);
+		freeBehind.resize(0);
 		softReloadNotes();
 	}
 
@@ -2437,22 +2449,36 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 		var firstNote:Bool = false;
 		var firstEvent:Bool = false;
 
-		for (num => note in notes) {
-			if (note == null || note.strumTime < startT || note.strumTime >= endT)
+		// notes/events are kept sorted by time (PlayState.sortByTime), so jump straight to the window's
+		// lower bound and stop at its end instead of scanning the whole chart every reload.
+		var ni:Int = lowerBound(notes, startT);
+		var nLen:Int = notes.length;
+		while (ni < nLen) {
+			var note:ChartNote = notes[ni];
+			ni++;
+			if (note == null)
 				continue;
+			if (note.strumTime >= endT)
+				break;
 			if (!firstNote && note.strumTime >= curStartT) {
-				sectionFirstNoteID = num;
+				sectionFirstNoteID = ni - 1;
 				firstNote = true;
 			}
 			keepRealized(note, curStartT, curEndT, prevStartT, nextEndT, songPos, curCrochet);
 		}
 
 		if (SHOW_EVENT_COLUMN) {
-			for (num => event in events) {
-				if (event == null || event.strumTime < startT || event.strumTime >= endT)
+			var ei:Int = lowerBound(events, startT);
+			var eLen:Int = events.length;
+			while (ei < eLen) {
+				var event:ChartNote = events[ei];
+				ei++;
+				if (event == null)
 					continue;
+				if (event.strumTime >= endT)
+					break;
 				if (!firstEvent && event.strumTime >= curStartT) {
-					sectionFirstEventID = num;
+					sectionFirstEventID = ei - 1;
 					firstEvent = true;
 				}
 				keepRealized(event, curStartT, curEndT, prevStartT, nextEndT, songPos, curCrochet);
@@ -2510,6 +2536,24 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 				spr.unbind();
 	}
 
+	/**
+		First index in a time-sorted `ChartNote` array whose `strumTime` is `>= t` (binary search).
+		Assumes the array holds no null holes, which `notes`/`events` never do in practice.
+		@return the lower-bound index, or `arr.length` when every entry is earlier than `t`
+	**/
+	static function lowerBound(arr:Array<ChartNote>, t:Float):Int {
+		var lo:Int = 0;
+		var hi:Int = arr.length;
+		while (lo < hi) {
+			var mid:Int = (lo + hi) >> 1;
+			if (arr[mid].strumTime < t)
+				lo = mid + 1;
+			else
+				hi = mid;
+		}
+		return lo;
+	}
+
 	function getMinNoteTime(sec:Int) {
 		var minTime:Float = Math.NEGATIVE_INFINITY;
 		if (sec > 0)
@@ -2524,9 +2568,9 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 		return maxTime;
 	}
 
-	function positionNoteXByData(note:ChartNote, ?data:Null<Int> = null) {
-		if (data == null)
-			data = note.songData[1];
+	function positionNoteXByData(note:ChartNote, data:Int = -1) {
+		if (data < 0)
+			data = note.chartNoteData;
 
 		// Map the note's raw column (encoded against its own section's key count)
 		// onto the currently displayed grid. For the current section the two key
@@ -2606,12 +2650,26 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 	// Recompute every note/event Y for the current orientation. Needed when toggling
 	// downscroll, since note Y is absolute world-space and only set at creation/move time.
 	function repositionAllNotesY() {
-		for (note in notes)
-			if (note != null)
-				positionNoteYOnTime(note, sectionIndexAtTime(note.strumTime));
-		for (event in events)
-			if (event != null)
-				positionNoteYOnTime(event, sectionIndexAtTime(event.strumTime));
+		// Both arrays are time-sorted, so a single forward-only section cursor replaces the per-note
+		// `sectionIndexAtTime` scan (O(n) instead of O(n^2)). The cursor matches sectionIndexAtTime:
+		// the largest section whose start time is <= the entry's strumTime.
+		var lastSec:Int = cachedSectionTimes.length - 1;
+		var sec:Int = 0;
+		for (note in notes) {
+			if (note == null)
+				continue;
+			while (sec < lastSec && cachedSectionTimes[sec + 1] <= note.strumTime)
+				sec++;
+			positionNoteYOnTime(note, sec);
+		}
+		sec = 0;
+		for (event in events) {
+			if (event == null)
+				continue;
+			while (sec < lastSec && cachedSectionTimes[sec + 1] <= event.strumTime)
+				sec++;
+			positionNoteYOnTime(event, sec);
+		}
 	}
 
 	function positionNoteYOnTime(note:ChartNote, section:Int) {
@@ -2998,15 +3056,19 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 		return (sec < PlayState.SONG.notes.length) ? PlayState.SONG.notes[sec] : null;
 	}
 
-	// Index of the section that contains `time` (largest section whose start <= time).
+	// Index of the section that contains `time` (largest section whose start <= time). Binary search
+	// over the sorted section-start times -- called per note by getQuantColor/refreshNoteColors.
 	inline function sectionIndexAtTime(time:Float):Int {
-		var sec:Int = 0;
-		for (i in 1...cachedSectionTimes.length) {
-			if (cachedSectionTimes[i] > time)
-				break;
-			sec = i;
+		var lo:Int = 0;
+		var hi:Int = cachedSectionTimes.length;
+		while (lo < hi) {
+			var mid:Int = (lo + hi) >> 1;
+			if (cachedSectionTimes[mid] <= time)
+				lo = mid + 1;
+			else
+				hi = mid;
 		}
-		return sec;
+		return lo > 0 ? lo - 1 : 0;
 	}
 
 	// ===== Quantized note colors (Options > Quant Note Colors) =====
@@ -3014,12 +3076,7 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 		if (cachedSectionTimes == null || cachedSectionTimes.length == 0)
 			return 0xFF888888;
 		// Locate the note's section and its beat (quarter) length.
-		var sec:Int = 0;
-		for (i in 1...cachedSectionTimes.length) {
-			if (cachedSectionTimes[i] > strumTime)
-				break;
-			sec = i;
-		}
+		var sec:Int = sectionIndexAtTime(strumTime);
 		var secStart:Float = (sec < cachedSectionTimes.length) ? cachedSectionTimes[sec] : 0;
 		var crochet:Float = (sec < cachedSectionCrochets.length && cachedSectionCrochets[sec] > 0) ? cachedSectionCrochets[sec] : Conductor.crochet;
 
