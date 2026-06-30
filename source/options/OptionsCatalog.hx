@@ -57,7 +57,7 @@ class OptionsCatalog {
 		list.push(Group(phrase('System'), systemRows()));
 
 		list.push(Launcher(phrase('Controls'), 'Rebind keyboard / controller controls.', 'controls'));
-		list.push(Launcher(phrase('Note Colors'), 'Customize the RGB colors of your notes.', 'noteColors'));
+		list.push(Group(phrase('Note Colors'), noteColorsRows()));
 		list.push(Launcher(phrase('Gameplay Changers'), 'Per-session modifiers (scroll speed, playback rate, etc.).', 'gameplayChangers'));
 
 		#if TRANSLATIONS_ALLOWED
@@ -69,6 +69,42 @@ class OptionsCatalog {
 		#end
 
 		return list;
+	}
+
+	/**
+	 * Creates the rows for the Note Colors category: the colour editor launcher plus the
+	 * per-keycount / single-colour toggles and the skin-gated "link ... to note colour" toggles.
+	 * @return An array of option rows for note-colour settings.
+	 */
+	static function noteColorsRows():Array<OptionRow> {
+		var rows:Array<OptionRow> = [];
+		rows.push(Action('Edit Colors...', 'Open the colour picker to set per-lane note colours.', 'noteColors'));
+		rows.push(Setting(new Option('Per-keycount Colours',
+			"If checked, each keycount can have its own lane colours.\nIf unchecked, every keycount uses the shared base palette.", 'noteColorPerKeycount',
+			BOOL)));
+		rows.push(Setting(new Option('One Colour for All Notes', 'If checked, every note in every keycount uses a single colour.', 'noteColorOneColor', BOOL)));
+
+		var cfg:backend.NoteSkinConfig.NoteSkinData = null;
+		var skin:String = backend.NoteSkinConfig.activeSkin();
+		if (skin != null)
+			cfg = backend.NoteSkinConfig.forCurrentKeys(skin);
+
+		linkRow(rows, cfg, 'splash', 'Link Splash Colour', "Note splashes take the note's colour\n(otherwise they keep the skin's own colour).", 'linkSplashColor');
+		linkRow(rows, cfg, 'holds', 'Link Hold Colour', "Hold/sustain pieces take the note's colour.", 'linkSustainColor');
+		linkRow(rows, cfg, 'pressed', 'Link Pressed Colour', "The pressed strum animation takes the note's colour.", 'linkPressedColor');
+		linkRow(rows, cfg, 'confirm', 'Link Confirm Colour', "The confirm strum animation takes the note's colour.", 'linkConfirmColor');
+		linkRow(rows, cfg, 'strums', 'Link Strum Colour', "The idle strum takes the note's colour.", 'linkStrumColor');
+		return rows;
+	}
+
+	/**
+		Adds a "link ... to note colour" toggle only when the active skin can colour that element
+		(folder skins via `colorableFor`; classic skins only wire the splash link for now).
+	**/
+	static function linkRow(rows:Array<OptionRow>, cfg:backend.NoteSkinConfig.NoteSkinData, element:String, name:String, desc:String, variable:String):Void {
+		var supported:Bool = (cfg != null) ? backend.NoteSkinConfig.colorableFor(cfg, element) : (element == 'splash');
+		if (supported)
+			rows.push(Setting(new Option(name, desc, variable, BOOL)));
 	}
 
 	/**
