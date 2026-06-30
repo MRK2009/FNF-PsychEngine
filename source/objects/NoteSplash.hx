@@ -292,6 +292,8 @@ class NoteSplash extends FlxSprite {
 		if (note != null)
 			noteData = note.noteData;
 
+		var paletteCol:Int = noteData;
+
 		// Always map the column to one of the 4 cardinal splash colours (`% 4`); pick a random variant
 		// only when the atlas ships more than one. (Plain `% 4` also keeps multikey columns in range.)
 		var variant:Int = (randomize && maxAnims > 1) ? FlxG.random.int(0, maxAnims - 1) : 0;
@@ -301,7 +303,7 @@ class NoteSplash extends FlxSprite {
 		var anim:String = playDefaultAnim();
 
 		var tempShader:RGBPalette = null;
-		if (config.allowRGB) {
+		if (config.allowRGB && ClientPrefs.data.linkSplashColor) {
 			Note.initializeGlobalRGBShader(noteData % colArray.length);
 			if (inEditor
 				|| (note == null || note.noteSplashData.useRGBShader)
@@ -364,25 +366,28 @@ class NoteSplash extends FlxSprite {
 					tempShader.copyValues(Note.globalRgbShaders[noteData % colArray.length]);
 			}
 		}
+
+		if (tempShader != null && note == null && !inEditor && Mania.current != Mania.DEFAULT) {
+			var mc:Array<Array<FlxColor>> = Mania.getColors(Mania.current);
+			if (paletteCol >= 0 && paletteCol < mc.length && mc[paletteCol] != null && mc[paletteCol].length >= 3) {
+				tempShader.r = mc[paletteCol][0];
+				tempShader.g = mc[paletteCol][1];
+				tempShader.b = mc[paletteCol][2];
+			}
+		}
 		rgbShader.copyValues(tempShader);
 		if (!config.allowPixel)
 			rgbShader.pixelAmount = 1;
 		else if (PlayState.isPixelStage)
-			rgbShader.pixelAmount = 6;
+			rgbShader.pixelAmount = PlayState.daPixelZoom;
 
 		var conf:NoteSplashAnim = config.animations.get(anim);
 		var offsets:Array<Float> = (conf != null && conf.offsets != null) ? conf.offsets : [0, 0];
-		if (folderCentered) {
-			// Folder splashes are centred on the lane in followArrow(); the config offsets nudge that
-			// centre via the position (not `offset`, which would cancel against the centring math).
-			offset.set(0, 0);
-			splashNudgeX = offsets[0];
-			splashNudgeY = offsets[1];
-		} else {
-			offset.set(10, 10);
-			offset.x += offsets[0];
-			offset.y += offsets[1];
-		}
+		// All splashes are centred on the receptor in followArrow(); the config offsets nudge that centre
+		// via the position (not `offset`, which would fight the centring math).
+		offset.set(0, 0);
+		splashNudgeX = offsets[0];
+		splashNudgeY = offsets[1];
 
 		animation.finishCallback = function(name:String) {
 			kill();
@@ -416,19 +421,11 @@ class NoteSplash extends FlxSprite {
 		if (animation.curAnim != null)
 			animation.curAnim.frameRate = FlxG.random.int(minFps, maxFps);
 
-		// Multikey: scale the splash down to match the smaller notes and nudge it
-		// into place. 4K keeps the config scale/offsets untouched.
+		// Multikey: scale the splash down to match the smaller notes. 4K keeps the config scale untouched;
+		// followArrow() re-centres on the receptor afterwards, so no per-keycount offset nudge is needed.
 		if (!inEditor && Mania.current != Mania.DEFAULT) {
 			var ratio:Float = Mania.noteSizes[Mania.current - 1] / 0.7;
 			scale.set(config.scale * ratio, config.scale * ratio);
-			// Folder splashes re-centre in followArrow() (frame size * scale), so they don't need the
-			// legacy centerOffsets + Mania.splashOffsets nudge.
-			if (!folderCentered) {
-				centerOffsets();
-				var mOff:Array<Float> = Mania.splashOffsets[Mania.current - 1];
-				offset.x += mOff[0];
-				offset.y += mOff[1];
-			}
 		}
 
 		followArrow();
@@ -441,19 +438,14 @@ class NoteSplash extends FlxSprite {
 	function followArrow():Void {
 		if (babyArrow == null)
 			return;
-		if (folderCentered) {
-			var laneCx:Float = babyArrow.x + Note.swagWidth / 2;
-			var laneCy:Float = babyArrow.y + Note.swagWidth / 2;
-			if (copyX)
-				x = laneCx - frameWidth * scale.x / 2 + splashNudgeX;
-			if (copyY)
-				y = laneCy - frameHeight * scale.y / 2 + splashNudgeY;
-		} else {
-			if (copyX)
-				x = babyArrow.x - Note.swagWidth * 0.95;
-			if (copyY)
-				y = babyArrow.y - Note.swagWidth;
-		}
+		// Centre the splash graphic on the receptor's on-screen graphic centre, accounting for the
+		// receptor's own offset + scale, so the burst sits exactly on the strum for every skin/keycount.
+		var recCx:Float = babyArrow.x - babyArrow.offset.x + babyArrow.frameWidth * babyArrow.scale.x / 2;
+		var recCy:Float = babyArrow.y - babyArrow.offset.y + babyArrow.frameHeight * babyArrow.scale.y / 2;
+		if (copyX)
+			x = recCx - frameWidth * scale.x / 2 + splashNudgeX;
+		if (copyY)
+			y = recCy - frameHeight * scale.y / 2 + splashNudgeY;
 	}
 
 	public function playDefaultAnim() {
