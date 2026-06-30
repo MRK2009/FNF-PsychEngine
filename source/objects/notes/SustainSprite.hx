@@ -5,7 +5,7 @@ import flixel.math.FlxRect;
 import backend.animation.PsychAnimationController;
 import backend.noteskin.NoteSkinService;
 import backend.noteskin.NoteVisual;
-import objects.Note;
+import objects.notes.NoteDefaults;
 import shaders.RGBPalette.RGBShaderReference;
 
 /**
@@ -36,10 +36,10 @@ final class SustainSprite extends FlxSprite {
 	public var copyAlpha:Bool = true;
 	public var pixel:Bool = false;
 
-	/** Convenience pass-through to `data.time` for trivial scripts. **/
+	/** LEGACY-API name: convenience pass-through to `data.time` (the v2 field) for old scripts. **/
 	public var strumTime(get, never):Float;
 
-	/** Convenience pass-through to `data.column` for trivial scripts. **/
+	/** LEGACY-API name: convenience pass-through to `data.column` (the v2 field) for old scripts. **/
 	public var noteData(get, never):Int;
 
 	/** Always `true`; this drawable is the hold trail. **/
@@ -81,13 +81,13 @@ final class SustainSprite extends FlxSprite {
 
 		var rgbOff:Bool = (PlayState.SONG != null && PlayState.SONG.disableNoteRGB);
 		if (rgbShader == null)
-			rgbShader = new RGBShaderReference(this, Note.initializeGlobalRGBShader(column));
+			rgbShader = new RGBShaderReference(this, NoteDefaults.initializeGlobalRGBShader(column));
 		else
-			rgbShader.reset(this, Note.initializeGlobalRGBShader(column));
+			rgbShader.reset(this, NoteDefaults.initializeGlobalRGBShader(column));
 		if (tailRGB == null)
-			tailRGB = new RGBShaderReference(tail, Note.initializeGlobalRGBShader(column));
+			tailRGB = new RGBShaderReference(tail, NoteDefaults.initializeGlobalRGBShader(column));
 		else
-			tailRGB.reset(tail, Note.initializeGlobalRGBShader(column));
+			tailRGB.reset(tail, NoteDefaults.initializeGlobalRGBShader(column));
 
 		var v:NoteVisual = NoteSkinService.current().applySustain(this, rgbShader, tail, tailRGB, column, keyCount);
 		offsetX = v.offsetX;
@@ -165,7 +165,7 @@ final class SustainSprite extends FlxSprite {
 			}
 		}
 
-		var perp:Float = offsetX + (centerOnStrum ? Note.swagWidth / 2 : width / 2);
+		var perp:Float = offsetX + (centerOnStrum ? Mania.swagWidth / 2 : width / 2);
 		var bodyA:Float = (nearA + farA + sign * tailLen) / 2;
 		var bcx:Float = strum.x + uX * bodyA + uY * perp;
 		var bcy:Float = strum.y + uY * bodyA - uX * perp;
@@ -174,7 +174,7 @@ final class SustainSprite extends FlxSprite {
 		if (copyY)
 			y = bcy - (frameHeight * scale.y) / 2;
 
-		var tperp:Float = offsetX + (centerOnStrum ? Note.swagWidth / 2 : tail.width / 2);
+		var tperp:Float = offsetX + (centerOnStrum ? Mania.swagWidth / 2 : tail.width / 2);
 		var tailA:Float = farA + sign * (tailLen / 2);
 		var tcx:Float = strum.x + uX * tailA + uY * tperp;
 		var tcy:Float = strum.y + uY * tailA - uX * tperp;

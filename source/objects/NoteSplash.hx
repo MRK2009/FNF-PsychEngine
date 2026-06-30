@@ -2,6 +2,7 @@ package objects;
 
 import backend.animation.PsychAnimationController;
 import shaders.RGBPalette;
+import objects.notes.NoteDefaults;
 import flixel.system.FlxAssets.FlxShader;
 
 typedef RGB = {
@@ -304,7 +305,7 @@ class NoteSplash extends FlxSprite {
 
 		var tempShader:RGBPalette = null;
 		if (config.allowRGB && ClientPrefs.data.linkSplashColor) {
-			Note.initializeGlobalRGBShader(noteData % colArray.length);
+			NoteDefaults.initializeGlobalRGBShader(noteData % colArray.length);
 			if (inEditor
 				|| (note == null || note.noteSplashData.useRGBShader)
 				&& (PlayState.SONG == null || !PlayState.SONG.disableNoteRGB)) {
@@ -352,7 +353,7 @@ class NoteSplash extends FlxSprite {
 								tempShader.b = color;
 						}
 					} else
-						tempShader.copyValues(Note.globalRgbShaders[noteData % colArray.length]);
+						tempShader.copyValues(NoteDefaults.globalRgbShaders[noteData % colArray.length]);
 
 					if (note != null) {
 						if (note.noteSplashData.r != -1)
@@ -363,7 +364,7 @@ class NoteSplash extends FlxSprite {
 							tempShader.b = note.noteSplashData.b;
 					}
 				} else
-					tempShader.copyValues(Note.globalRgbShaders[noteData % colArray.length]);
+					tempShader.copyValues(NoteDefaults.globalRgbShaders[noteData % colArray.length]);
 			}
 		}
 

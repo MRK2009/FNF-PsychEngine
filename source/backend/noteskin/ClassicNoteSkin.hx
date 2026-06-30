@@ -3,7 +3,7 @@ package backend.noteskin;
 import flixel.FlxSprite;
 import flixel.graphics.frames.FlxAtlasFrames;
 import shaders.RGBPalette.RGBShaderReference;
-import objects.Note;
+import objects.notes.NoteDefaults;
 
 using StringTools;
 
@@ -28,8 +28,8 @@ class ClassicNoteSkin implements INoteSkin {
 	**/
 	function resolveSkin():String {
 		var skin:String = (PlayState.SONG != null && PlayState.SONG.arrowSkin != null
-			&& PlayState.SONG.arrowSkin.length > 1) ? PlayState.SONG.arrowSkin : Note.defaultNoteSkin;
-		var postfix:String = Note.getNoteSkinPostfix();
+			&& PlayState.SONG.arrowSkin.length > 1) ? PlayState.SONG.arrowSkin : NoteDefaults.defaultNoteSkin;
+		var postfix:String = NoteDefaults.getNoteSkinPostfix();
 		var custom:String = skin + postfix;
 		var path:String = PlayState.isPixelStage ? 'pixelUI/' : '';
 		if (Paths.fileExists('images/' + path + custom + '.png', IMAGE))
@@ -41,7 +41,7 @@ class ClassicNoteSkin implements INoteSkin {
 	public function applyNote(spr:FlxSprite, rgb:RGBShaderReference, column:Int, keyCount:Int, animName:String):NoteVisual {
 		var v:NoteVisual = new NoteVisual();
 		var skin:String = resolveSkin();
-		var nd:Int = column % Note.colArray.length;
+		var nd:Int = column % Mania.colArray.length;
 		var kc:Int = Mania.clamp(keyCount);
 
 		if (PlayState.isPixelStage) {
@@ -59,7 +59,7 @@ class ClassicNoteSkin implements INoteSkin {
 				atlas.addAtlas(Paths.getSparrowAtlas(Mania.ATLAS));
 			spr.frames = atlas;
 			spr.antialiasing = ClientPrefs.data.antialiasing;
-			spr.animation.addByPrefix('note', Note.colArray[nd] + '0');
+			spr.animation.addByPrefix('note', Mania.colArray[nd] + '0');
 			spr.setGraphicSize(Std.int(spr.width * Mania.noteSizes[kc - 1]));
 		}
 
@@ -74,6 +74,52 @@ class ClassicNoteSkin implements INoteSkin {
 	}
 
 	/**
+		Overrides a note head's graphic with an explicit sheet (the v2 equivalent of the legacy
+		`Note.reloadNote(texture)` / per-note-type texture). Same column-indexed anim build as `applyNote`,
+		but the sheet name is given rather than resolved from the skin. Silently no-ops if the sheet is
+		missing, leaving the note on its skin graphic.
+		@param spr the note-head sprite to re-skin
+		@param column the 0-based lane (selects the colour anim)
+		@param keyCount the active column count (for note sizing)
+		@param texture the sparrow/pixel sheet name (no extension)
+	**/
+	public function applyNoteTexture(spr:FlxSprite, column:Int, keyCount:Int, texture:String):Void {
+		if (texture == null || texture.length < 1)
+			return;
+		var nd:Int = column % Mania.colArray.length;
+		var kc:Int = Mania.clamp(keyCount);
+
+		if (PlayState.isPixelStage) {
+			if (!Paths.fileExists('images/pixelUI/' + texture + '.png', IMAGE))
+				return;
+			var graphic = Paths.image('pixelUI/' + texture);
+			if (graphic == null)
+				return;
+			spr.loadGraphic(graphic, true, Math.floor(graphic.width / 4), Math.floor(graphic.height / 5));
+			spr.animation.add('note', [nd + 4], 24, false);
+			spr.setGraphicSize(Std.int(spr.width * PlayState.daPixelZoom));
+			spr.antialiasing = false;
+		} else {
+			if (!Paths.fileExists('images/' + texture + '.png', IMAGE))
+				return;
+			var atlas:FlxAtlasFrames = Paths.getSparrowAtlas(texture);
+			if (atlas == null)
+				return;
+			if (Mania.current != Mania.DEFAULT)
+				atlas.addAtlas(Paths.getSparrowAtlas(Mania.ATLAS));
+			spr.frames = atlas;
+			spr.antialiasing = ClientPrefs.data.antialiasing;
+			spr.animation.addByPrefix('note', Mania.colArray[nd] + '0');
+			spr.setGraphicSize(Std.int(spr.width * Mania.noteSizes[kc - 1]));
+		}
+
+		spr.updateHitbox();
+		spr.centerOffsets();
+		spr.centerOrigin();
+		spr.animation.play('note', true);
+	}
+
+	/**
 		Builds the hold body + tail. On a pixel stage both come from the `<skin>ENDS` sheet (4 columns x
 		2 rows: top row = hold piece, bottom row = end cap, indexed by direction); otherwise from the
 		classic sparrow `hold piece` / `hold end` prefixes.
@@ -82,7 +128,7 @@ class ClassicNoteSkin implements INoteSkin {
 			keyCount:Int):NoteVisual {
 		var v:NoteVisual = new NoteVisual();
 		var skin:String = resolveSkin();
-		var nd:Int = column % Note.colArray.length;
+		var nd:Int = column % Mania.colArray.length;
 		var kc:Int = Mania.clamp(keyCount);
 
 		if (PlayState.isPixelStage) {
@@ -107,8 +153,8 @@ class ClassicNoteSkin implements INoteSkin {
 			}
 			body.frames = bodyAtlas;
 			tail.frames = tailAtlas;
-			body.animation.addByPrefix('hold', Note.colArray[nd] + ' hold piece', 24, true);
-			tail.animation.addByPrefix('end', Note.colArray[nd] + ' hold end', 24, true);
+			body.animation.addByPrefix('hold', Mania.colArray[nd] + ' hold piece', 24, true);
+			tail.animation.addByPrefix('end', Mania.colArray[nd] + ' hold end', 24, true);
 			body.antialiasing = tail.antialiasing = ClientPrefs.data.antialiasing;
 			var sz:Float = Mania.noteSizes[kc - 1];
 			body.setGraphicSize(Std.int(body.width * sz));
@@ -161,7 +207,7 @@ class ClassicNoteSkin implements INoteSkin {
 			}
 			v.pixel = true;
 		} else if (Mania.current != Mania.DEFAULT) {
-			var atlas:FlxAtlasFrames = Paths.getSparrowAtlas(Note.defaultNoteSkin);
+			var atlas:FlxAtlasFrames = Paths.getSparrowAtlas(NoteDefaults.defaultNoteSkin);
 			atlas.addAtlas(Paths.getSparrowAtlas(Mania.ATLAS));
 			spr.frames = atlas;
 			spr.antialiasing = ClientPrefs.data.antialiasing;
@@ -171,7 +217,7 @@ class ClassicNoteSkin implements INoteSkin {
 			spr.animation.addByPrefix('confirm', anim + ' confirm', 24, false);
 			spr.setGraphicSize(Std.int(spr.width * Mania.noteSizes[kc - 1]));
 		} else {
-			spr.frames = Paths.getSparrowAtlas(Note.defaultNoteSkin);
+			spr.frames = Paths.getSparrowAtlas(NoteDefaults.defaultNoteSkin);
 			spr.antialiasing = ClientPrefs.data.antialiasing;
 			spr.setGraphicSize(Std.int(spr.width * 0.7));
 			switch (Std.int(Math.abs(nd)) % 4) {

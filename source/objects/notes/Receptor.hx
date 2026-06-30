@@ -4,7 +4,7 @@ import flixel.FlxSprite;
 import backend.animation.PsychAnimationController;
 import backend.noteskin.NoteSkinService;
 import backend.noteskin.NoteVisual;
-import objects.Note;
+import objects.notes.NoteDefaults;
 import shaders.RGBPalette.RGBShaderReference;
 
 /**
@@ -68,7 +68,7 @@ final class Receptor extends FlxSprite {
 		this.keyCount = (keyCount != null) ? keyCount : Mania.current;
 		this.ID = column;
 
-		rgbShader = new RGBShaderReference(this, Note.initializeGlobalRGBShader(column));
+		rgbShader = new RGBShaderReference(this, NoteDefaults.initializeGlobalRGBShader(column));
 		rgbShader.enabled = false;
 		if (PlayState.SONG != null && PlayState.SONG.disableNoteRGB)
 			useRGBShader = false;
@@ -114,7 +114,7 @@ final class Receptor extends FlxSprite {
 	public function playerPosition():Void {
 		final kc:Int = Mania.current;
 		if (kc == Mania.DEFAULT) {
-			x += Note.swagWidth * column;
+			x += Mania.swagWidth * column;
 			x += 50;
 			x += ((FlxG.width / 2) * player);
 			x += skinOffsetX;
@@ -122,7 +122,7 @@ final class Receptor extends FlxSprite {
 			return;
 		}
 
-		final step:Float = Note.swagWidth + Mania.STRUM_GAP;
+		final step:Float = Mania.swagWidth + Mania.STRUM_GAP;
 		final center4K:Float = 160 * Mania.noteSizes[Mania.DEFAULT - 1] * (Mania.DEFAULT - 1) / 2;
 
 		x += step * column;
@@ -181,7 +181,7 @@ final class Receptor extends FlxSprite {
 			centerOffsets();
 			centerOrigin();
 			if (laneCenter)
-				offset.x = (frameWidth - Note.swagWidth) / 2;
+				offset.x = (frameWidth - Mania.swagWidth) / 2;
 		}
 
 		if (colorPerAnim) {

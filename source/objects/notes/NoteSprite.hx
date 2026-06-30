@@ -4,8 +4,8 @@ import flixel.FlxSprite;
 import backend.animation.PsychAnimationController;
 import backend.noteskin.NoteSkinService;
 import backend.noteskin.NoteVisual;
-import objects.Note;
-import objects.Note.NoteSplashData;
+import objects.notes.NoteDefaults;
+import objects.notes.NoteDefaults.NoteSplashData;
 import shaders.RGBPalette.RGBShaderReference;
 
 /**
@@ -34,10 +34,10 @@ final class NoteSprite extends FlxSprite {
 
 	public var noteSplashData:NoteSplashData;
 
-	/** Convenience pass-through to `data.time` for trivial scripts. **/
+	/** LEGACY-API name: convenience pass-through to `data.time` (the v2 field) for old scripts. **/
 	public var strumTime(get, never):Float;
 
-	/** Convenience pass-through to `data.column` for trivial scripts. **/
+	/** LEGACY-API name: convenience pass-through to `data.column` (the v2 field) for old scripts. **/
 	public var noteData(get, never):Int;
 
 	/** Always `false`; a head is a tap, the trail is a separate `SustainSprite`. **/
@@ -108,19 +108,32 @@ final class NoteSprite extends FlxSprite {
 		clipRect = null;
 
 		if (rgbShader == null)
-			rgbShader = new RGBShaderReference(this, Note.initializeGlobalRGBShader(column));
+			rgbShader = new RGBShaderReference(this, NoteDefaults.initializeGlobalRGBShader(column));
 		else
-			rgbShader.reset(this, Note.initializeGlobalRGBShader(column));
+			rgbShader.reset(this, NoteDefaults.initializeGlobalRGBShader(column));
 		rgbShader.enabled = !(PlayState.SONG != null && PlayState.SONG.disableNoteRGB);
 
 		fillSplashData(noteSplashData);
 
-		var v:NoteVisual = NoteSkinService.current().applyNote(this, rgbShader, column, keyCount, null);
-		offsetX = v.offsetX;
-		offsetY = v.offsetY;
-		centerOnStrum = v.centerOnStrum;
-		pixel = v.pixel;
-		scaleFactor = v.scaleFactor;
+		if (data.texture != null && data.texture.length > 0) {
+			// Per-note custom graphic (note type or compat script): build straight from the classic skin
+			// path with the standard classic layout, skipping the active skin's applyNote. Otherwise a
+			// folder skin's centerOnStrum / offsets would stay applied on top of a classic custom sheet
+			// and mis-place the note. Mirrors the legacy path (custom textures always used the classic build).
+			NoteSkinService.classic().applyNoteTexture(this, column, keyCount, data.texture);
+			offsetX = 0;
+			offsetY = 0;
+			centerOnStrum = false;
+			pixel = PlayState.isPixelStage;
+			scaleFactor = scale.x;
+		} else {
+			var v:NoteVisual = NoteSkinService.current().applyNote(this, rgbShader, column, keyCount, null);
+			offsetX = v.offsetX;
+			offsetY = v.offsetY;
+			centerOnStrum = v.centerOnStrum;
+			pixel = v.pixel;
+			scaleFactor = v.scaleFactor;
+		}
 	}
 
 	/**
@@ -146,7 +159,7 @@ final class NoteSprite extends FlxSprite {
 			alpha = strum.alpha * multAlpha;
 
 		var along:Float = offsetY + distance + height / 2;
-		var perp:Float = offsetX + (centerOnStrum ? Note.swagWidth / 2 : width / 2);
+		var perp:Float = offsetX + (centerOnStrum ? Mania.swagWidth / 2 : width / 2);
 		var cx:Float = strum.x + uX * along + uY * perp;
 		var cy:Float = strum.y + uY * along - uX * perp;
 		if (copyX)

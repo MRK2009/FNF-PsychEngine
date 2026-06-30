@@ -43,6 +43,14 @@ final class NoteData {
 	public var animSuffix:String = '';
 	public var gfNote:Bool = false;
 
+	/**
+		Optional per-note custom graphic (a sparrow/pixel sheet name like `BULLETNOTE_assets`), overriding
+		the active skin for this note's head. Set by a note type (`NoteTypesConfig` `texture` property) or,
+		in `compatibilityMode`, by an old `setPropertyFromGroup('unspawnNotes', i, 'texture', ...)` script.
+		`null`/empty means "use the active skin".
+	**/
+	public var texture:String = null;
+
 	public var spawned:Bool = false;
 
 	/** Equivalent to the legacy `Note.wasGoodHit`. **/
@@ -212,7 +220,7 @@ final class NoteData {
 				note.animSuffix = (section.altAnim == true && !note.mustPress) ? '-alt' : '';
 				note.gfNote = (section.gfSection == true && note.mustPress == section.mustHitSection);
 
-				var typeName:String = !Std.isOfType(songNotes[3], String) ? Note.defaultNoteTypes[songNotes[3]] : songNotes[3];
+				var typeName:String = !Std.isOfType(songNotes[3], String) ? NoteDefaults.defaultNoteTypes[songNotes[3]] : songNotes[3];
 				note.applyType(typeName);
 
 				var key:String = Std.string(Math.round(note.time)) + '|' + note.column + '|' + (note.mustPress ? 1 : 0) + '|' + note.type;
