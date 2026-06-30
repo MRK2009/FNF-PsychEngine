@@ -279,6 +279,11 @@ class PlayState extends MusicBeatState {
 	// for an O(scripts) reflective set when the value hasn't actually changed.
 	private var _lastSentDecStep:Float = Math.NEGATIVE_INFINITY;
 	private var _lastSentDecBeat:Float = Math.NEGATIVE_INFINITY;
+	private var _lastSentBotplay:Null<Bool> = null;
+
+	// Reused arg array for the every-frame onUpdate/onUpdatePost callbacks so the dispatch doesn't
+	// allocate a fresh [elapsed] each frame. Read-only as far as scripts are concerned.
+	private var _updateArgs:Array<Dynamic> = [0.0];
 
 	// Less laggy controls
 	private var keysArray:Array<String>;
@@ -1581,7 +1586,8 @@ class PlayState extends MusicBeatState {
 			}
 		} else
 			FlxG.camera.followLerp = 0;
-		callOnScripts('onUpdate', [elapsed]);
+		_updateArgs[0] = elapsed;
+		callOnScripts('onUpdate', _updateArgs);
 
 		super.update(elapsed);
 
@@ -1693,8 +1699,12 @@ class PlayState extends MusicBeatState {
 		}
 		#end
 
-		setOnScripts('botPlay', cpuControlled);
-		callOnScripts('onUpdatePost', [elapsed]);
+		if (_lastSentBotplay != cpuControlled) {
+			_lastSentBotplay = cpuControlled;
+			setOnScripts('botPlay', cpuControlled);
+		}
+		_updateArgs[0] = elapsed;
+		callOnScripts('onUpdatePost', _updateArgs);
 	}
 
 	// Health icon updaters
