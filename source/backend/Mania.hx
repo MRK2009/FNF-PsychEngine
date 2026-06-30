@@ -173,10 +173,29 @@ class Mania {
 		return [for (i in 0...count) bindName(count, i)];
 	}
 
-	// Per-column RGB triples for a keycount. The four cardinal arrows pull from
-	// the player's configured palette (defaults to ClientPrefs.data.arrowRGB);
-	// extra columns use fixed colours matching multikey.hx.
+	// Per-column RGB triples for a keycount: a user's per-keycount override (Note Colors menu) if set,
+	// else the shared composition. The four cardinal arrows pull from the player's configured palette
+	// (defaults to ClientPrefs.data.arrowRGB); the extra columns from the configurable extra slots.
 	public static function getColors(count:Int, ?base:Array<Array<FlxColor>>):Array<Array<FlxColor>> {
+		count = clamp(count);
+		if (ClientPrefs.data.noteColorOneColor) {
+			var one:Array<FlxColor> = ClientPrefs.data.noteColorOneValue;
+			return [for (i in 0...count) one];
+		}
+		if (ClientPrefs.data.noteColorPerKeycount) {
+			var overrides:Array<Array<Array<FlxColor>>> = PlayState.isPixelStage ? ClientPrefs.data.arrowRGBByKeyPixel : ClientPrefs.data.arrowRGBByKey;
+			if (overrides != null && count - 1 < overrides.length) {
+				var ov:Array<Array<FlxColor>> = overrides[count - 1];
+				if (ov != null && ov.length == count)
+					return ov;
+			}
+		}
+		return composeShared(count, base);
+	}
+
+	// The shared per-keycount palette built from the cardinal + extra colour slots (no per-keycount
+	// override applied). Both the gameplay fallback and the Note Colors menu read from here.
+	public static function composeShared(count:Int, ?base:Array<Array<FlxColor>>):Array<Array<FlxColor>> {
 		count = clamp(count);
 		if (base == null)
 			base = ClientPrefs.data.arrowRGB;
@@ -185,11 +204,12 @@ class Mania {
 		var DOWN:Array<FlxColor> = base[1];
 		var UP:Array<FlxColor> = base[2];
 		var RIGHT:Array<FlxColor> = base[3];
-		var SQUARE:Array<FlxColor> = [0xFFCCCCCC, 0xFFFFFFFF, 0xFF3E3E3E];
-		var LEFT2:Array<FlxColor> = [0xFFFFFF00, 0xFFFFFFFF, 0xFF993300];
-		var DOWN2:Array<FlxColor> = [0xFF8B4AFF, 0xFFFFFFFF, 0xFF3B177D];
-		var UP2:Array<FlxColor> = [0xFFFF0000, 0xFFFFFFFF, 0xFF660000];
-		var RIGHT2:Array<FlxColor> = [0xFF0033FF, 0xFFFFFFFF, 0xFF000066];
+		var extra:Array<Array<FlxColor>> = PlayState.isPixelStage ? ClientPrefs.data.arrowRGBExtraPixel : ClientPrefs.data.arrowRGBExtra;
+		var SQUARE:Array<FlxColor> = extra[0];
+		var LEFT2:Array<FlxColor> = extra[1];
+		var DOWN2:Array<FlxColor> = extra[2];
+		var UP2:Array<FlxColor> = extra[3];
+		var RIGHT2:Array<FlxColor> = extra[4];
 
 		return switch (count) {
 			case 1: [SQUARE];
