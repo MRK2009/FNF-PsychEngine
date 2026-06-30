@@ -47,6 +47,7 @@ class OptionsState extends MusicBeatState {
 	var sidebar:Array<Sidebar> = [];
 	var curCat:Int = 0;
 	var catScroll:Int = 0;
+	var onSidebar:Bool = true;
 
 	var curRows:Array<OptionRow> = [];
 	var curRow:Int = 0;
@@ -205,6 +206,7 @@ class OptionsState extends MusicBeatState {
 		buildPopup();
 
 		selectCategory(0, false);
+		updateHint();
 		super.create();
 
 		#if mobile
@@ -224,6 +226,13 @@ class OptionsState extends MusicBeatState {
 			FlxG.sound.music.volume += 0.5 * elapsed;
 
 		if (quitting) {
+			super.update(elapsed);
+			return;
+		}
+
+		// A specialized editor (Note Colors, Controls, ...) is open: only update it, never the options
+		// behind it -- otherwise its clicks/keys leak through to the hidden rows and sidebar.
+		if (subState != null) {
 			super.update(elapsed);
 			return;
 		}
@@ -267,6 +276,20 @@ class OptionsState extends MusicBeatState {
 		else if (FlxG.keys.justPressed.Q)
 			cycleCategory(-1);
 
+		// Sidebar depth: arrows move between categories; ENTER / right enters the category; BACK quits.
+		if (onSidebar) {
+			if (controls.UI_UP_P)
+				cycleCategory(-1);
+			if (controls.UI_DOWN_P)
+				cycleCategory(1);
+			if ((controls.ACCEPT && nextAccept <= 0) || controls.UI_RIGHT_P)
+				enterCategory();
+			if (controls.BACK)
+				exitState();
+			return;
+		}
+
+		// Option depth: arrows move/edit rows; BACK deselects back to the category sidebar.
 		if (controls.UI_UP_P)
 			moveRow(-1);
 		if (controls.UI_DOWN_P)
@@ -282,7 +305,45 @@ class OptionsState extends MusicBeatState {
 			resetFocused(o);
 
 		if (controls.BACK)
-			exitState();
+			backToSidebar();
+	}
+
+	/**
+	 * Enters the selected category from the sidebar: launches a launcher, or focuses the first row of an
+	 * inline group so the arrows start editing its settings.
+	 */
+	function enterCategory():Void {
+		switch (sidebar[curCat]) {
+			case Launcher(_, _, which):
+				launch(which);
+			case Group(_, rows):
+				if (rows.length == 0)
+					return;
+				onSidebar = false;
+				refreshSidebar();
+				selectRow(0);
+				updatePreviewVisibility();
+				updateHint();
+		}
+	}
+
+	/**
+	 * Leaves the current category's settings and returns focus to the category sidebar (deselects the row).
+	 */
+	function backToSidebar():Void {
+		onSidebar = true;
+		FlxG.sound.play(Paths.sound('cancelMenu'), 0.6);
+		refreshSidebar();
+		layoutRows();
+		updatePreviewVisibility();
+		updateHint();
+	}
+
+	/** Bottom hint line, reflecting whether the user is browsing categories or editing a category's rows. **/
+	function updateHint():Void {
+		if (hintText == null)
+			return;
+		hintText.text = onSidebar ? 'ARROWS Navigate Categories   ENTER Open   / Search   ESC Exit' : 'ARROWS Navigate Settings   ENTER / Left-Right Change   RESET Default   ESC Back';
 	}
 
 	/**
@@ -438,10 +499,12 @@ class OptionsState extends MusicBeatState {
 			if (cat < 0 || !FlxG.mouse.overlaps(sbBgs[i]))
 				continue;
 			if (FlxG.mouse.justPressed) {
-				if (cat != curCat)
+				if (cat != curCat) {
+					onSidebar = true;
 					selectCategory(cat, true);
-				else
-					openIfLauncher();
+					updateHint();
+				} else
+					enterCategory();
 			}
 		}
 
@@ -450,6 +513,11 @@ class OptionsState extends MusicBeatState {
 			var idx:Int = rowSlotIndex[i];
 			if (idx < 0 || !FlxG.mouse.overlaps(rowBgs[i]))
 				continue;
+			if ((moved || FlxG.mouse.justPressed) && onSidebar) {
+				onSidebar = false;
+				refreshSidebar();
+				updateHint();
+			}
 			if (idx != curRow && (moved || FlxG.mouse.justPressed))
 				selectRow(idx);
 			if (!FlxG.mouse.justPressed)
@@ -564,7 +632,7 @@ class OptionsState extends MusicBeatState {
 			sbSlotCat[i] = cat;
 
 			var selected:Bool = (cat == curCat && !searching);
-			sbBgs[i].alpha = selected ? 0.85 : 0;
+			sbBgs[i].alpha = selected ? (onSidebar ? 0.85 : 0.4) : 0;
 
 			var t:FlxText = sbTexts[i];
 			t.text = categoryName(sidebar[cat]);
@@ -650,7 +718,7 @@ class OptionsState extends MusicBeatState {
 			}
 			rowSlotIndex[i] = idx;
 			var rowY:Float = OPTIONS_TOP_Y + i * OPTIONS_ROW_HEIGHT;
-			var selected:Bool = (idx == curRow);
+			var selected:Bool = (idx == curRow) && !onSidebar;
 			rowBgs[i].alpha = selected ? 0.85 : 0;
 
 			var nm:FlxText = rowNames[i];
@@ -948,7 +1016,7 @@ class OptionsState extends MusicBeatState {
 	 */
 	function updatePreviewVisibility():Void {
 		var o:Option = focusedOption();
-		var show:Bool = (o != null && (o.variable == 'noteSkin' || o.variable == 'splashSkin' || o.variable == 'splashAlpha'));
+		var show:Bool = (!onSidebar && o != null && (o.variable == 'noteSkin' || o.variable == 'splashSkin' || o.variable == 'splashAlpha'));
 
 		if (show == previewActive)
 			return;
@@ -1077,6 +1145,7 @@ class OptionsState extends MusicBeatState {
 	 */
 	function beginSearch():Void {
 		searching = true;
+		onSidebar = false;
 		searchText.text = 'SEARCH: ' + query + '_';
 		FlxG.sound.play(Paths.sound('scrollMenu'), 0.6);
 		applySearch();
