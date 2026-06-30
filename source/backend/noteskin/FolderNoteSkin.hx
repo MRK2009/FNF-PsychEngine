@@ -116,8 +116,8 @@ class FolderNoteSkin implements INoteSkin {
 		var fBody:Float = NoteSkinConfig.applyAnims(body, [{name: 'hold', keys: holdFrames, fps: laneFps, loop: true}]);
 		var fTail:Float = NoteSkinConfig.applyAnims(tail, [{name: 'end', keys: endFrames, fps: laneFps, loop: true}]);
 
-		var holdsColorable:Bool = NoteSkinConfig.colorableFor(cfg, 'holds');
-		var endsColorable:Bool = NoteSkinConfig.colorableFor(cfg, 'ends');
+		var holdsColorable:Bool = NoteSkinConfig.linkedColorable(cfg, 'holds');
+		var endsColorable:Bool = NoteSkinConfig.linkedColorable(cfg, 'ends');
 		if (bodyRGB != null)
 			bodyRGB.enabled = holdsColorable;
 		if (tailRGB != null)
@@ -191,9 +191,9 @@ class FolderNoteSkin implements INoteSkin {
 		]);
 
 		v.colorPerAnim = true;
-		v.staticColorable = NoteSkinConfig.colorableFor(cfg, 'strums');
-		v.pressedColorable = NoteSkinConfig.colorableFor(cfg, 'pressed');
-		v.confirmColorable = NoteSkinConfig.colorableFor(cfg, 'confirm');
+		v.staticColorable = NoteSkinConfig.linkedColorable(cfg, 'strums');
+		v.pressedColorable = NoteSkinConfig.linkedColorable(cfg, 'pressed');
+		v.confirmColorable = NoteSkinConfig.linkedColorable(cfg, 'confirm');
 		spr.antialiasing = (cfg.pixel == true
 			|| NoteSkinConfig.pixelMode) ? false : NoteSkinConfig.boolForColumn(cfg.antialiasing, c, ClientPrefs.data.antialiasing);
 

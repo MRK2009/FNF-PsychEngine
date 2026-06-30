@@ -385,7 +385,7 @@ class NoteSkinConfig {
 		return {
 			source: source,
 			scale: numForColumn(cfg.splashScale, 0, 1) * factor,
-			allowRGB: colorableFor(cfg, 'splash'),
+			allowRGB: linkedColorable(cfg, 'splash'),
 			allowPixel: false, // folder skins ship their own pixel art; no extra shader blocking
 			pixel: pixelForSkin(cfg), // but still drop antialiasing so that art stays crisp
 			fps: fps,
@@ -487,6 +487,25 @@ class NoteSkinConfig {
 		return v == true;
 	}
 
+	/**
+		Whether `element` should be tinted with the note's colour in gameplay: the skin must support
+		colouring it (`colorableFor`) AND the player's matching "Link ... to note colour" option is on.
+		`notes` (and anything not user-linkable) follows `colorableFor` directly.
+		@param element one of `splash` / `holds` / `ends` / `pressed` / `confirm` / `strums` / `notes`
+	**/
+	public static function linkedColorable(cfg:NoteSkinData, element:String):Bool {
+		if (!colorableFor(cfg, element))
+			return false;
+		return switch (element) {
+			case 'splash': ClientPrefs.data.linkSplashColor;
+			case 'holds' | 'ends': ClientPrefs.data.linkSustainColor;
+			case 'pressed': ClientPrefs.data.linkPressedColor;
+			case 'confirm': ClientPrefs.data.linkConfirmColor;
+			case 'strums': ClientPrefs.data.linkStrumColor;
+			default: true;
+		}
+	}
+
 	public static function animatedFor(cfg:NoteSkinData, element:String):Bool {
 		var a:Dynamic = cfg.animated;
 		if (a == null)
@@ -581,6 +600,8 @@ class NoteSkinConfig {
 		}
 		if (dir == 'square') {
 			var sq:Dynamic = Reflect.field(field, 'square');
+			if (sq == null)
+				sq = Reflect.field(field, 'center');
 			return sq == null ? null : {key: Std.string(sq), angle: 0};
 		}
 		var arrow:Dynamic = Reflect.field(field, 'arrow');
