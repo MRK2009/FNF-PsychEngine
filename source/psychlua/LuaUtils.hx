@@ -206,8 +206,14 @@ class LuaUtils {
 		}
 		if (allowMaps && isMap(leArray))
 			leArray.set(variable, value);
-		else
-			Reflect.setProperty(leArray, variable, value);
+		else {
+			// Lenient: old/compat scripts often poke note/strum properties that were renamed or removed
+			// (e.g. `noteSplashHue`). Don't let a failed set throw and abort the rest of the caller's
+			// loop -- swallow it so the remaining items still get processed.
+			try {
+				Reflect.setProperty(leArray, variable, value);
+			} catch (e:Dynamic) {}
+		}
 		return value;
 	}
 

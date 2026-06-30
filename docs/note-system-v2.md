@@ -38,36 +38,59 @@ and `keysCheck` (input + hold-release). Judgement (`goodNoteHit`/`opponentNoteHi
 `popUpScore`/…) operates on `NoteData`/`ActiveNote`. Lua callbacks keep their names (index passed as
 `-1`; HScript callbacks get the `NoteSprite`).
 
-## Compatibility & the converter (TODO)
+## Compatibility & the converter (Phase 2 — implemented, awaiting play-test)
 
-The legacy script API (`game.notes`, `game.unspawnNotes`, `game.playerStrums`, `goodNoteHit(note)`,
-etc.) is **not** served by the runtime anymore. A **converter** (read pack.json `compatibilityMode`
-via `Mods.noteCompatibilityMode()`) will redirect old scripts:
+`compatibilityMode` (pack.json, read via `Mods.noteCompatibilityMode()`) is now served by
+**`legacy.NoteCompatLayer`**, an adapter-over-v2 mirror. It is constructed by `PlayState` **only**
+when the active pack opts in, so non-compat play is byte-for-byte unaffected.
 
-- `game.notes` / `unspawnNotes` reads → a view/adapter over `playerField.active` + `oppField.active`
-  (LegacyNote adapters wrapping `NoteSprite`/`NoteData`).
-- `game.playerStrums` / `opponentStrums` → adapters over `v2PlayerRecs` / `v2OppRecs`.
-- `goodNoteHit(note)` / `noteMiss(note)` / `invalidateNote(note)` calls → resolve the matching
-  `ActiveNote`, then call the v2 `goodNoteHit`/`noteMiss`/`field.remove`.
-- Callback object identity (`onSpawnNote`/`goodNoteHit` HScript args) already passes a `NoteSprite`.
+- `game.notes` → one inert `LegacyNote` adapter per active v2 note, re-synced each frame from
+  `playerField.active` + `opponentField.active` (`syncNotes`), with screen position mirrored from the
+  live drawable.
+- `game.playerStrums` / `opponentStrums` / `strumLineNotes` → one inert `LegacyStrumNote` adapter per
+  receptor, built once and position-mirrored each frame (`syncStrums`).
+- `game.unspawnNotes` → one **write-through** `legacy.UnspawnNoteProxy` per chart note. To make this
+  work the chart is **pre-decoded in `generateSong`** (compat-only) so the list exists before
+  `onCreatePost`; after `onCreatePost` the proxies are `flush`ed back onto the `NoteData`, and
+  `buildNoteFields` reuses that same decode. So old load-time loops like
+  `setPropertyFromGroup('unspawnNotes', i, 'texture'/'missHealth'/..., v)` take effect when the note
+  spawns. (Mutated props: `texture`, `missHealth`, `hitHealth`, `ignoreNote`.)
+- Callback identity → `PlayState.cbArg(note)` hands HScript note callbacks (and, via `fireStageNote`,
+  the compiled stage `goodNoteHit`/`opponentNoteHit`/`noteMiss` hooks) a `LegacyNote` adapter in
+  compat mode; in v2 play it returns the `NoteSprite` unchanged.
 
-**Known limitation:** the up-front `unspawnNotes` semantics (the whole chart pre-spawned) cannot be
-fully reproduced — v2 has no up-front spawn. Scripts that iterate the entire chart via `unspawnNotes`
-must move to reading `playerField.notes` (the `NoteData` list).
+The `game.notes` / strum adapters are never drawn/updated (`visible = active = false`) — pure data
+carriers, safe in the scene-added `notes` group.
 
-These are currently **empty stubs** in `PlayState` (`notes`/`unspawnNotes`/`playerStrums`/
-`opponentStrums`/`strumLineNotes`) kept only so stages/Lua/PauseSubState still compile; the converter
-will give them real contents.
+**Per-note custom textures (v2 primitive, all modes):** `NoteData.texture` overrides the active skin
+for a note's head; `NoteSprite.apply` loads it via `ClassicNoteSkin.applyNoteTexture`. Set it from a
+note type (`NoteTypesConfig` `texture` property) or, in compat, via the `unspawnNotes` write-through.
+*Sustain* custom textures are not yet wired (head only).
+
+**Known limitations (alias-impossible — handled by the Script Converter):** script *writes* to an
+adapter's visual props (`note.x`/`alpha`/strum position) do not reflect back onto the v2 drawables.
+The
+**`legacy.ScriptConverter`** is a non-destructive scanner that flags these patterns (and pre-v2 field
+names like `.strumTime`→`.time`) and writes annotated `*.converted.<ext>` copies + a `compat-report.txt`
+— it never edits originals. Wire `ScriptConverter.convertFolder(dir)` to a debug-menu entry to run it.
 
 ## Known gaps (v2)
 
 - EditorPlayState/ChartingState still use the legacy `Note`/`StrumNote` classes for their previews.
 - Holds grant health only on the head-hit (no per-frame tick like the legacy per-piece model).
-- Stage `goodNoteHit`/etc. note hooks (which take a legacy `Note`) are skipped under v2.
-- Custom note-splash colors fall back to defaults (the splash is spawned without a `Note`).
-- The note classes now live in `legacy.LegacyNote` / `legacy.LegacyStrumNote`; `objects.Note` /
-  `objects.StrumNote` are thin `typedef` aliases so the ~27 consumers (editors, stages, Lua bridges)
-  keep compiling. **Remaining nuance:** the shared statics (`colArray`/`swagWidth`/
-  `initializeGlobalRGBShader`/`defaultNoteSkin`/`getNoteSkinPostfix`/`defaultNoteTypes`/
-  `NoteSplashData`) still live on `LegacyNote`, so the v2 drawables read them through the alias.
+  **Still open** — deferred from Phase 2 as a gameplay-feel change that needs tuning, not adapter work.
+- Stage `goodNoteHit`/etc. note hooks — **now fired in compat mode** via `PlayState.fireStageNote`
+  (skipped in non-compat v2 play, since the hooks take a legacy `Note`).
+- Custom note-splash colors fall back to defaults. **Still open** — deferred from Phase 2; threading
+  per-note splash RGB through `spawnNoteSplash` is a `NoteSplash`-API change, not adapter work.
+- Shared statics (`defaultNoteTypes`/`defaultNoteSkin`/`getNoteSkinPostfix`/`initializeGlobalRGBShader`/
+  `globalRgbShaders`/`SUSTAIN_SIZE`/`NoteSplashData`/`EventNote`) now live on the neutral
+  **`objects.notes.NoteDefaults`**; `swagWidth`/`colArray` read from their owner `Mania`. The v2
+  drawables/skin/splash reference these directly, so **v2 no longer has a transitive `legacy`
+  dependency**. `LegacyNote` (hence `objects.Note`) forwards to `NoteDefaults`, so editor/Lua `Note.*`
+  is unchanged. (Fixed in passing: `defaultNoteTypes[3]` was the rename-mangled `'Hurt LegacyNote'`,
+  which broke v2's `'Hurt Note'` switch for integer-typed hurt notes — restored to `'Hurt Note'`, with
+  `LegacyNote.set_noteType` updated in lockstep.)
+- The note classes live in `legacy.LegacyNote` / `legacy.LegacyStrumNote`; `objects.Note` /
+  `objects.StrumNote` are thin `typedef` aliases so the ~27 consumers keep compiling.
   Extracting them to a neutral home (so v2 has no transitive legacy dependency) is a later cleanup.

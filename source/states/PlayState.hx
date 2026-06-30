@@ -163,6 +163,9 @@ class PlayState extends MusicBeatState {
 	public var gf:Character = null;
 	public var boyfriend:Character = null;
 
+	// LEGACY-ONLY (compatibilityMode): the v2 gameplay runtime is `playerField`/`opponentField`
+	// (`NoteData`/`NoteSprite`). `notes` + `unspawnNotes` are the pre-v2 script API, populated by
+	// `legacy.NoteCompatLayer` only when `Mods.noteCompatibilityMode()` is on; empty otherwise.
 	public var notes:FlxTypedGroup<Note>;
 	public var unspawnNotes:Array<Note> = [];
 	public var eventNotes:Array<EventNote> = [];
@@ -171,6 +174,9 @@ class PlayState extends MusicBeatState {
 
 	private static var prevCamFollow:FlxObject;
 
+	// LEGACY-ONLY (compatibilityMode): the v2 strums are `playerReceptors`/`opponentReceptors`
+	// (`objects.notes.Receptor`). These `StrumNote` groups are the pre-v2 script API, filled with
+	// inert mirror adapters by `legacy.NoteCompatLayer` only under `Mods.noteCompatibilityMode()`.
 	public var strumLineNotes:FlxTypedGroup<StrumNote> = new FlxTypedGroup<StrumNote>();
 	public var opponentStrums:FlxTypedGroup<StrumNote> = new FlxTypedGroup<StrumNote>();
 	public var playerStrums:FlxTypedGroup<StrumNote> = new FlxTypedGroup<StrumNote>();
@@ -680,6 +686,11 @@ class PlayState extends MusicBeatState {
 
 		stagesFunc(function(stage:BaseStage) stage.createPost());
 		callOnScripts('onCreatePost');
+
+		// compatibilityMode: bake any per-note props an onCreatePost script set on game.unspawnNotes back
+		// onto the NoteData, so they're live when buildNoteFields spawns the notes.
+		if (noteCompat != null)
+			noteCompat.flushUnspawn();
 
 		var splash:NoteSplash = new NoteSplash();
 		grpNoteSplashes.add(splash);
@@ -1334,6 +1345,15 @@ class PlayState extends MusicBeatState {
 		for (event in songData.events) // Event Notes
 			for (i in 0...event[1].length)
 				makeEvent(event, i);
+
+		// compatibilityMode: stand up the legacy-API mirror now (before onCreatePost) and pre-decode the
+		// chart so old `unspawnNotes` load-time scripts have a note list to mutate. buildNoteFields reuses
+		// this same decode, so those mutations are live when the notes actually spawn.
+		if (Mods.noteCompatibilityMode()) {
+			noteCompat = new legacy.NoteCompatLayer(notes);
+			_compatChart = NoteData.generate(SONG, false);
+			noteCompat.populateUnspawn(_compatChart.notes, unspawnNotes);
+		}
 
 		generatedMusic = true;
 	}
@@ -2589,13 +2609,56 @@ class PlayState extends MusicBeatState {
 	public var noteFields:Array<NoteField> = [];
 	public var playerReceptors:Array<Receptor> = [];
 	public var opponentReceptors:Array<Receptor> = [];
+
+	/** Non-null only under `Mods.noteCompatibilityMode()`; mirrors v2 onto the legacy script API. **/
+	public var noteCompat:legacy.NoteCompatLayer = null;
+
+	/** Compat-mode chart decode done early (in `generateSong`) and reused by `buildNoteFields`. **/
+	var _compatChart:NoteChart = null;
+
+	/**
+		The object handed to a note's HScript callbacks / stage hooks. In `compatibilityMode` it's a
+		`LegacyNote` adapter (so old scripts get the pre-v2 shape); otherwise the v2 drawable, unchanged.
+		@param note the active note being spawned/judged
+		@param sustain pass `true` to hand the sustain drawable rather than the head (non-compat only)
+	**/
+	inline function cbArg(note:ActiveNote, sustain:Bool = false):Dynamic {
+		if (noteCompat != null)
+			return noteCompat.callbackNote(note);
+		return sustain ? note.sustain : note.head;
+	}
+
+	/**
+		Fires the compiled stage note hooks (`BaseStage.goodNoteHit`/`opponentNoteHit`/`noteMiss`, which
+		take a legacy `Note`) with the compat adapter. Only runs under `compatibilityMode` -- in v2 play
+		these hooks stay skipped, since the stage API predates the `NoteSprite` the v2 path carries.
+		@param which `0` = goodNoteHit, `1` = opponentNoteHit, anything else = noteMiss
+		@param note the active note being judged
+	**/
+	inline function fireStageNote(which:Int, note:ActiveNote):Void {
+		if (noteCompat != null) {
+			var ln:Note = noteCompat.callbackNote(note);
+			for (st in stages) {
+				switch (which) {
+					case 0:
+						st.goodNoteHit(ln);
+					case 1:
+						st.opponentNoteHit(ln);
+					default:
+						st.noteMiss(ln);
+				}
+			}
+		}
+	}
+
 	public var receptorGroup:flixel.group.FlxGroup.FlxTypedGroup<Receptor>;
 
 	inline function notStopped(r:Dynamic):Bool
 		return r != LuaUtils.Function_Stop && r != LuaUtils.Function_StopHScript && r != LuaUtils.Function_StopAll;
 
 	function buildNoteFields():Void {
-		var chart:NoteChart = NoteData.generate(SONG, false);
+		// Reuse the compat early-decode (carrying any onCreatePost mutations) when present.
+		var chart:NoteChart = (_compatChart != null) ? _compatChart : NoteData.generate(SONG, false);
 		keyCountChanges = chart.keyCountChanges;
 		nextKeyChange = 0;
 
@@ -2651,6 +2714,10 @@ class PlayState extends MusicBeatState {
 			setOnScripts('defaultOpponentStrumX' + i, opponentReceptors[i].x);
 			setOnScripts('defaultOpponentStrumY' + i, opponentReceptors[i].y);
 		}
+
+		// noteCompat (if any) was created in generateSong; now that receptors exist, build the strum mirror.
+		if (noteCompat != null)
+			noteCompat.buildStrums(playerReceptors, opponentReceptors, strumLineNotes, playerStrums, opponentStrums);
 	}
 
 	function buildReceptors(player:Int):Array<Receptor> {
@@ -2710,7 +2777,7 @@ class PlayState extends MusicBeatState {
 		spawnNote = note;
 		callOnLuas('onSpawnNote', [-1, note.data.column, note.data.type, note.data.isSustain(), note.data.time, note.data.mustPress]);
 		spawnNote = null;
-		callOnHScript('onSpawnNote', [note.head]);
+		callOnHScript('onSpawnNote', [cbArg(note)]);
 	}
 
 	/** Rebuilds the SV timeline from `svPoints` and re-precomputes every note's scroll position. **/
@@ -2832,6 +2899,12 @@ class PlayState extends MusicBeatState {
 				&& !endingSong
 				&& songPos - data.time > noteKillOffset)
 				noteMiss(note);
+		}
+
+		// compatibilityMode only: mirror the live v2 state onto the legacy game.notes / strum groups.
+		if (noteCompat != null) {
+			noteCompat.syncNotes(noteFields);
+			noteCompat.syncStrums();
 		}
 	}
 
@@ -3013,7 +3086,7 @@ class PlayState extends MusicBeatState {
 		var data:NoteData = note.data;
 		var result:Dynamic = callOnLuas('opponentNoteHitPre', [-1, data.column, data.type, data.isSustain()]);
 		if (notStopped(result))
-			result = callOnHScript('opponentNoteHitPre', [note.head]);
+			result = callOnHScript('opponentNoteHitPre', [cbArg(note)]);
 		if (result == LuaUtils.Function_Stop)
 			return;
 
@@ -3034,7 +3107,8 @@ class PlayState extends MusicBeatState {
 
 		result = callOnLuas('opponentNoteHit', [-1, data.column, data.type, data.isSustain()]);
 		if (notStopped(result))
-			callOnHScript('opponentNoteHit', [note.head]);
+			callOnHScript('opponentNoteHit', [cbArg(note)]);
+		fireStageNote(1, note);
 
 		if (!data.isSustain())
 			opponentField.remove(note);
@@ -3056,7 +3130,7 @@ class PlayState extends MusicBeatState {
 
 		var result:Dynamic = callOnLuas('goodNoteHitPre', [-1, leData, leType, isSus]);
 		if (notStopped(result))
-			result = callOnHScript('goodNoteHitPre', [note.head]);
+			result = callOnHScript('goodNoteHitPre', [cbArg(note)]);
 		if (result == LuaUtils.Function_Stop)
 			return;
 
@@ -3099,7 +3173,8 @@ class PlayState extends MusicBeatState {
 
 		result = callOnLuas('goodNoteHit', [-1, leData, leType, isSus]);
 		if (notStopped(result))
-			callOnHScript('goodNoteHit', [note.head]);
+			callOnHScript('goodNoteHit', [cbArg(note)]);
+		fireStageNote(0, note);
 
 		if (!isSus)
 			playerField.remove(note);
@@ -3117,7 +3192,8 @@ class PlayState extends MusicBeatState {
 		noteMissCommon(data.column, data);
 		var result:Dynamic = callOnLuas('noteMiss', [-1, data.column, data.type, data.isSustain()]);
 		if (notStopped(result))
-			callOnHScript('noteMiss', [note.head]);
+			callOnHScript('noteMiss', [cbArg(note)]);
+		fireStageNote(2, note);
 
 		playerField.remove(note);
 	}
@@ -3133,7 +3209,7 @@ class PlayState extends MusicBeatState {
 		noteMissCommon(data.column, data);
 		var result:Dynamic = callOnLuas('noteMiss', [-1, data.column, data.type, true]);
 		if (notStopped(result))
-			callOnHScript('noteMiss', [note.sustain]);
+			callOnHScript('noteMiss', [cbArg(note, true)]);
 
 		playerField.remove(note);
 	}
@@ -3360,6 +3436,10 @@ class PlayState extends MusicBeatState {
 	}
 
 	override function destroy() {
+		if (noteCompat != null) {
+			noteCompat.clear();
+			noteCompat = null;
+		}
 		if (psychlua.CustomSubstate.instance != null) {
 			closeSubState();
 			resetSubState();
