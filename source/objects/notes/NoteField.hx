@@ -28,7 +28,7 @@ final class ActiveNote {
 	they leave.
 
 	Replaces the legacy up-front-spawn + per-note `followStrumNote` loop. Judgement still lives in
-	`PlayState`; the field exposes `activeForColumn` for input and the `free`/`freeHead`/`remove` helpers
+	`PlayState`; the field exposes `pickHit` for input and the `free`/`freeHead`/`remove` helpers
 	so `PlayState` can release a note when it's hit.
 **/
 final class NoteField {
@@ -160,18 +160,42 @@ final class NoteField {
 		}
 	}
 
+	/** The best / second-best hittable note from the last `pickHit` call (no per-call allocation). **/
+	public var hitBest:ActiveNote = null;
+
+	public var hitSecond:ActiveNote = null;
+
 	/**
-		Collects the hittable, not-yet-judged active notes in a column.
-		@param col the column to query
-		@return the matching entries, earliest hit time first
+		Finds the two top-ranked hittable notes in a column in a single pass, writing them to
+		`hitBest` / `hitSecond`. Replaces the old `activeForColumn` alloc-array-then-sort (and the
+		caller's extra `filter` + `sort`) on every key press. Ranking matches the legacy input order:
+		non-`lowPriority` first, then earliest `time`.
+		@param col the column the pressed key maps to
+		@param blocked whether this column's input is currently blocked (yields no hit)
 	**/
-	public function activeForColumn(col:Int):Array<ActiveNote> {
-		var out:Array<ActiveNote> = [];
-		for (note in active)
-			if (note.data.column == col && !note.data.hit && !note.data.missed && (note.head == null || note.head.exists))
-				out.push(note);
-		out.sort(function(x:ActiveNote, y:ActiveNote):Int return Std.int(x.data.time - y.data.time));
-		return out;
+	public function pickHit(col:Int, blocked:Bool):Void {
+		hitBest = null;
+		hitSecond = null;
+		if (blocked)
+			return;
+		for (note in active) {
+			final d:NoteData = note.data;
+			if (d.column != col || d.hit || d.missed || d.tooLate || d.blockHit || !d.canBeHit)
+				continue;
+			if (note.head != null && !note.head.exists)
+				continue;
+			if (hitBest == null || ranksBefore(d, hitBest.data)) {
+				hitSecond = hitBest;
+				hitBest = note;
+			} else if (hitSecond == null || ranksBefore(d, hitSecond.data))
+				hitSecond = note;
+		}
+	}
+
+	static inline function ranksBefore(a:NoteData, b:NoteData):Bool {
+		if (a.lowPriority != b.lowPriority)
+			return !a.lowPriority;
+		return a.time < b.time;
 	}
 
 	/** Drops all active notes and resets the spawn cursor (e.g. on song restart). **/

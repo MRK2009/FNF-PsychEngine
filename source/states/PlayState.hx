@@ -2919,27 +2919,15 @@ class PlayState extends MusicBeatState {
 		if (Conductor.songPosition >= 0)
 			Conductor.songPosition = FlxG.sound.music.time + Conductor.offset;
 
-		var hits:Array<ActiveNote> = playerField.activeForColumn(key).filter(function(note:ActiveNote):Bool {
-			return strumsBlocked[key] != true && note.data.canBeHit && !note.data.tooLate && !note.data.hit && !note.data.blockHit;
-		});
-		hits.sort(function(x:ActiveNote, y:ActiveNote):Int {
-			if (x.data.lowPriority && !y.data.lowPriority)
-				return 1;
-			else if (!x.data.lowPriority && y.data.lowPriority)
-				return -1;
-			return FlxSort.byValues(FlxSort.ASCENDING, x.data.time, y.data.time);
-		});
-
-		if (hits.length != 0) {
-			var funny:ActiveNote = hits[0];
-			if (hits.length > 1) {
-				var dbl:ActiveNote = hits[1];
-				if (dbl.data.column == funny.data.column) {
-					if (Math.abs(dbl.data.time - funny.data.time) < 1.0)
-						playerField.remove(dbl);
-					else if (dbl.data.time < funny.data.time)
-						funny = dbl;
-				}
+		playerField.pickHit(key, strumsBlocked[key] == true);
+		var funny:ActiveNote = playerField.hitBest;
+		if (funny != null) {
+			var dbl:ActiveNote = playerField.hitSecond;
+			if (dbl != null) {
+				if (Math.abs(dbl.data.time - funny.data.time) < 1.0)
+					playerField.remove(dbl);
+				else if (dbl.data.time < funny.data.time)
+					funny = dbl;
 			}
 			goodNoteHit(funny);
 		} else {
