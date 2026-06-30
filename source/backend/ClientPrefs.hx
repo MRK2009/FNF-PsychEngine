@@ -40,6 +40,39 @@ import states.TitleState;
 		[0xFFFF884E, 0xFFFFFAF5, 0xFF6C0000]
 	];
 
+	public var arrowRGBExtra:Array<Array<FlxColor>> = [
+		[0xFFCCCCCC, 0xFFFFFFFF, 0xFF3E3E3E],
+		[0xFFFFFF00, 0xFFFFFFFF, 0xFF993300],
+		[0xFF8B4AFF, 0xFFFFFFFF, 0xFF3B177D],
+		[0xFFFF0000, 0xFFFFFFFF, 0xFF660000],
+		[0xFF0033FF, 0xFFFFFFFF, 0xFF000066]
+	];
+	public var arrowRGBExtraPixel:Array<Array<FlxColor>> = [
+		[0xFFCCCCCC, 0xFFFFFFFF, 0xFF3E3E3E],
+		[0xFFFFFF00, 0xFFFFFFFF, 0xFF993300],
+		[0xFF8B4AFF, 0xFFFFFFFF, 0xFF3B177D],
+		[0xFFFF0000, 0xFFFFFFFF, 0xFF660000],
+		[0xFF0033FF, 0xFFFFFFFF, 0xFF000066]
+	];
+	public var arrowRGBByKey:Array<Array<Array<FlxColor>>> = [[], [], [], [], [], [], [], [], []];
+	public var arrowRGBByKeyPixel:Array<Array<Array<FlxColor>>> = [[], [], [], [], [], [], [], [], []];
+	public var noteColorPerKeycount:Bool = true;
+	public var noteColorOneColor:Bool = false;
+	public var noteColorOneValue:Array<FlxColor> = [0xFFFFFFFF, 0xFFFFFFFF, 0xFF555555];
+	public var linkSplashColor:Bool = true;
+	public var linkSustainColor:Bool = true;
+	public var linkPressedColor:Bool = true;
+	public var linkConfirmColor:Bool = true;
+	public var linkStrumColor:Bool = false;
+
+	// Independent per-asset colours, used when that asset's link is OFF. Keyed by element name
+	// ('holds'/'splash'/'pressed'/'confirm'/'strums'); each entry mirrors the note colour shape
+	// (shared per-lane triples, plus per-keycount overrides). Empty/missing entries fall back to notes.
+	public var assetRGB:Map<String, Array<Array<FlxColor>>> = new Map();
+	public var assetRGBByKey:Map<String, Array<Array<Array<FlxColor>>>> = new Map();
+	public var assetRGBPixel:Map<String, Array<Array<FlxColor>>> = new Map();
+	public var assetRGBByKeyPixel:Map<String, Array<Array<Array<FlxColor>>>> = new Map();
+
 	public var ghostTapping:Bool = true;
 	public var timeBarType:String = 'Time Left';
 	public var scoreZoom:Bool = true;
