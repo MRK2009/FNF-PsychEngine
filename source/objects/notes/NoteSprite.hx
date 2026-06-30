@@ -60,17 +60,32 @@ final class NoteSprite extends FlxSprite {
 	}
 
 	static function makeSplashData():NoteSplashData {
-		return {
+		var d:NoteSplashData = {
 			disabled: false,
-			texture: (PlayState.SONG != null) ? PlayState.SONG.splashSkin : 'noteSplashes/noteSplashes',
-			antialiasing: !PlayState.isPixelStage,
+			texture: 'noteSplashes/noteSplashes',
+			antialiasing: true,
 			useGlobalShader: false,
-			useRGBShader: (PlayState.SONG != null) ? !(PlayState.SONG.disableNoteRGB == true) : true,
+			useRGBShader: true,
 			r: -1,
 			g: -1,
 			b: -1,
-			a: ClientPrefs.data.splashAlpha
+			a: 1
 		};
+		fillSplashData(d);
+		return d;
+	}
+
+	/** Refreshes the splash-data fields in place (reused across recycles instead of reallocating). **/
+	static function fillSplashData(d:NoteSplashData):Void {
+		d.disabled = false;
+		d.texture = (PlayState.SONG != null) ? PlayState.SONG.splashSkin : 'noteSplashes/noteSplashes';
+		d.antialiasing = !PlayState.isPixelStage;
+		d.useGlobalShader = false;
+		d.useRGBShader = (PlayState.SONG != null) ? !(PlayState.SONG.disableNoteRGB == true) : true;
+		d.r = -1;
+		d.g = -1;
+		d.b = -1;
+		d.a = ClientPrefs.data.splashAlpha;
 	}
 
 	/**
@@ -92,10 +107,13 @@ final class NoteSprite extends FlxSprite {
 		centerOnStrum = false;
 		clipRect = null;
 
-		rgbShader = new RGBShaderReference(this, Note.initializeGlobalRGBShader(column));
+		if (rgbShader == null)
+			rgbShader = new RGBShaderReference(this, Note.initializeGlobalRGBShader(column));
+		else
+			rgbShader.reset(this, Note.initializeGlobalRGBShader(column));
 		rgbShader.enabled = !(PlayState.SONG != null && PlayState.SONG.disableNoteRGB);
 
-		noteSplashData = makeSplashData();
+		fillSplashData(noteSplashData);
 
 		var v:NoteVisual = NoteSkinService.current().applyNote(this, rgbShader, column, keyCount, null);
 		offsetX = v.offsetX;

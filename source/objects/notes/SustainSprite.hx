@@ -80,8 +80,14 @@ final class SustainSprite extends FlxSprite {
 		tail.clipRect = null;
 
 		var rgbOff:Bool = (PlayState.SONG != null && PlayState.SONG.disableNoteRGB);
-		rgbShader = new RGBShaderReference(this, Note.initializeGlobalRGBShader(column));
-		tailRGB = new RGBShaderReference(tail, Note.initializeGlobalRGBShader(column));
+		if (rgbShader == null)
+			rgbShader = new RGBShaderReference(this, Note.initializeGlobalRGBShader(column));
+		else
+			rgbShader.reset(this, Note.initializeGlobalRGBShader(column));
+		if (tailRGB == null)
+			tailRGB = new RGBShaderReference(tail, Note.initializeGlobalRGBShader(column));
+		else
+			tailRGB.reset(tail, Note.initializeGlobalRGBShader(column));
 
 		var v:NoteVisual = NoteSkinService.current().applySustain(this, rgbShader, tail, tailRGB, column, keyCount);
 		offsetX = v.offsetX;

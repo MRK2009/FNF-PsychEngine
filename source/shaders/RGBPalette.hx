@@ -68,9 +68,22 @@ class RGBShaderReference {
 	private var _original:RGBPalette;
 
 	public function new(owner:FlxSprite, ref:RGBPalette) {
+		reset(owner, ref);
+	}
+
+	/**
+		Re-points this reference at a new owner/palette without allocating a new reference. Lets a
+		pooled sprite (recycled onto a possibly different column) reuse its `RGBShaderReference`
+		instead of building a fresh one each spawn. Restores the shared-palette / clone state so a
+		previous per-note color clone doesn't leak into the recycled note.
+		@param owner the sprite this reference drives
+		@param ref the (usually global) palette to point at
+	**/
+	public function reset(owner:FlxSprite, ref:RGBPalette):Void {
 		parent = ref;
 		_owner = owner;
 		_original = ref;
+		allowNew = true;
 		owner.shader = ref.shader;
 
 		@:bypassAccessor
