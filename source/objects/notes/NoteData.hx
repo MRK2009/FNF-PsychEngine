@@ -1,7 +1,7 @@
 package objects.notes;
 
-import backend.Song.SwagSong;
-import backend.Song.SwagSection;
+import backend.SongChart;
+import backend.SongChart.StrumLineData;
 import objects.notes.ScrollVelocity.ScrollPoint;
 
 using StringTools;
@@ -33,7 +33,10 @@ final class NoteData {
 	/** 0-based lane within the active key count. **/
 	public var column:Int = 0;
 
-	/** True for the player side. **/
+	/** Absolute strumline index this note belongs to (into `SongChart.strumLines`). **/
+	public var strumLine:Int = 0;
+
+	/** True for the player side (derived from the note's strumline `isPlayer`). **/
 	public var mustPress:Bool = false;
 
 	/** Sustain length in ms; `0` for a tap. **/
@@ -161,89 +164,57 @@ final class NoteData {
 		return time + length;
 
 	/**
-		Decodes a chart into the flat, time-sorted note list plus its lane-change list.
+		Maps a native `SongChart` into the flat, time-sorted runtime note list.
 
-		Mirrors the legacy `PlayState.generateSong` column/key-count decode but produces data only:
-		no sprites, no per-step sustain expansion, no x-offsets (those belong to the drawable/field).
-		Exact-duplicate notes in the same slot (time/column/side/type) are dropped as ghost notes.
-		@param song the chart to decode
+		Format-agnostic: the per-section decode (mustHitSection, key counts, sustain quantisation) now
+		lives in `SongChart.fromLegacy` / the psych_v2 reader, so this just builds `NoteData` from the
+		absolute `SongNote`s (applying the user note offset, deriving `mustPress` from the note's
+		strumline, resolving the note type). Exact-duplicate notes in the same slot
+		(time/column/strumLine/type) are dropped as ghost notes.
+		@param chart the native chart to decode
 		@param inEditor when `true`, the user's note offset is not applied
-		@return the time-sorted notes plus any mid-song key-count changes
+		@return the time-sorted notes plus the chart's key-count changes and scroll points
 	**/
-	public static function generate(song:SwagSong, inEditor:Bool = false):NoteChart {
+	public static function generate(chart:SongChart, inEditor:Bool = false):NoteChart {
 		var out:Array<NoteData> = [];
-		var keyCountChanges:Array<KeyCountChange> = [];
 		var scrollPoints:Array<ScrollPoint> = [];
-		if (song == null || song.notes == null)
-			return {notes: out, keyCountChanges: keyCountChanges, scrollPoints: scrollPoints};
+		if (chart == null)
+			return {notes: out, keyCountChanges: [], scrollPoints: scrollPoints};
 
 		var noteOffset:Float = inEditor ? 0 : ClientPrefs.data.noteOffset;
-		var daBpm:Float = song.bpm;
-		var curKeyCount:Int = Mania.resolveKeyCount(song.keyCount);
-		var sectionStartTime:Float = 0;
-		var secIndex:Int = 0;
+		var strumLines:Array<StrumLineData> = chart.strumLines;
 		var seen:Map<String, Bool> = new Map();
 
-		for (section in song.notes) {
-			if (section.changeBPM == true && section.bpm != null && daBpm != section.bpm)
-				daBpm = section.bpm;
+		for (sn in chart.noteList) {
+			var note:NoteData = new NoteData();
+			note.time = sn.time + noteOffset;
+			note.strumLine = sn.strumLine;
+			note.column = sn.column;
+			note.mustPress = (sn.strumLine >= 0 && sn.strumLine < strumLines.length) ? strumLines[sn.strumLine].isPlayer : false;
 
-			// Step length (16th) for this section's BPM. Sustains are quantised to whole steps (as the
-			// legacy engine did via floor(susLength / stepCrochet)) so the tail caps the LAST step
-			// rather than the raw length, whose fractional remainder rendered ~a step too long.
-			var stepMs:Float = (60 / daBpm * 1000) / 4;
+			note.length = sn.length;
+			note.scrollPos = note.time;
+			note.endScrollPos = note.time + sn.length;
 
-			if (section.changeKeyCount == true && section.keyCount != null) {
-				var newCount:Int = Mania.clamp(section.keyCount);
-				if (newCount != curKeyCount) {
-					curKeyCount = newCount;
-					keyCountChanges.push({time: sectionStartTime, count: curKeyCount});
-				}
-			}
+			note.animSuffix = sn.altAnim ? '-alt' : '';
+			note.gfNote = sn.gfNote;
+			note.applyType(sn.type);
 
-			// Per-section SV: aligned to note times (which carry noteOffset; sectionStartTime doesn't).
-			if (section.changeScrollVelocity == true && section.scrollVelocity != null)
-				scrollPoints.push(new ScrollPoint(sectionStartTime + noteOffset, section.scrollVelocity));
+			var key:String = Std.string(Math.round(note.time)) + '|' + note.column + '|' + note.strumLine + '|' + note.type;
+			if (seen.exists(key))
+				continue;
+			seen.set(key, true);
 
-			for (raw in section.sectionNotes) {
-				var songNotes:Array<Dynamic> = raw;
-				var note:NoteData = new NoteData();
-				note.time = songNotes[0] + noteOffset;
-				note.column = Std.int(songNotes[1] % curKeyCount);
-				note.mustPress = (songNotes[1] < curKeyCount);
-
-				var holdLength:Float = songNotes[2];
-				if (Math.isNaN(holdLength))
-					holdLength = 0;
-				if (holdLength > 0 && stepMs > 0)
-					holdLength = Math.floor(holdLength / stepMs + 0.0001) * stepMs; // epsilon: don't chop a step on float drift
-				note.length = holdLength;
-				note.scrollPos = note.time;
-				note.endScrollPos = note.time + holdLength;
-
-				note.animSuffix = (section.altAnim == true && !note.mustPress) ? '-alt' : '';
-				note.gfNote = (section.gfSection == true && note.mustPress == section.mustHitSection);
-
-				var typeName:String = !Std.isOfType(songNotes[3], String) ? NoteDefaults.defaultNoteTypes[songNotes[3]] : songNotes[3];
-				note.applyType(typeName);
-
-				var key:String = Std.string(Math.round(note.time)) + '|' + note.column + '|' + (note.mustPress ? 1 : 0) + '|' + note.type;
-				if (seen.exists(key))
-					continue;
-				seen.set(key, true);
-
-				out.push(note);
-			}
-
-			var beats:Float = Conductor.getSectionBeats(song, secIndex);
-			var denom:Int = Conductor.getSectionDenominator(song, secIndex);
-			sectionStartTime += (beats * Conductor.stepsPerBeat(denom)) * ((60 / daBpm * 1000) / 4);
-			secIndex++;
+			out.push(note);
 		}
 
 		out.sort(function(a:NoteData, b:NoteData):Int return Std.int(a.time - b.time));
-		keyCountChanges.sort(function(a:KeyCountChange, b:KeyCountChange):Int return Std.int(a.time - b.time));
-		return {notes: out, keyCountChanges: keyCountChanges, scrollPoints: scrollPoints};
+
+		// The chart's SV points are stored raw; apply the note offset so they align with note times.
+		for (p in chart.scrollPoints)
+			scrollPoints.push(new ScrollPoint(p.time + noteOffset, p.vel));
+
+		return {notes: out, keyCountChanges: chart.keyCountChanges, scrollPoints: scrollPoints};
 	}
 
 	/**
