@@ -18,7 +18,23 @@ final class NoteSprite extends FlxSprite {
 	public var column:Int = 0;
 	public var keyCount:Int = 4;
 
+	/** This note's hold trail, if it has one (set by `NoteField` when it spawns). Lets a script reach the
+		sustain from the head (e.g. `note.sustain.texture = ...`); `null` for a tap. **/
+	public var sustain:SustainSprite = null;
+
 	public var rgbShader:RGBShaderReference;
+
+	/** Toggles this note's head RGB palette shader (the v2 per-note RGB on/off for scripts). **/
+	public var rgbEnabled(get, set):Bool;
+
+	inline function get_rgbEnabled():Bool
+		return rgbShader != null && rgbShader.enabled;
+
+	inline function set_rgbEnabled(value:Bool):Bool {
+		if (rgbShader != null)
+			rgbShader.enabled = value;
+		return value;
+	}
 
 	public var offsetX:Float = 0;
 	public var offsetY:Float = 0;
@@ -31,6 +47,13 @@ final class NoteSprite extends FlxSprite {
 	public var copyAlpha:Bool = true;
 	public var pixel:Bool = false;
 	public var scaleFactor:Float = 1;
+
+	/**
+		Per-note head graphic override (a sparrow/pixel sheet name). Assigning re-skins this note's head
+		immediately with the standard classic build, so a script can give a note its own look at spawn
+		(`onSpawnNote`) -- the v2 equivalent of the old `Note.texture`. `null`/empty leaves the active skin.
+	**/
+	public var texture(default, set):String = null;
 
 	public var noteSplashData:NoteSplashData;
 
@@ -51,6 +74,26 @@ final class NoteSprite extends FlxSprite {
 
 	inline function get_isSustainNote():Bool
 		return false;
+
+	/**
+		Re-skins the head from an explicit sheet (or leaves the current skin when cleared). Uses the same
+		classic build + centered-on-strum layout as an `applyType`/`data.texture` note, so a runtime set
+		lands identically to the load-time path.
+		@param value the sheet name, or `null`/empty to keep the active skin
+		@return the assigned value
+	**/
+	function set_texture(value:String):String {
+		texture = value;
+		if (value != null && value.length > 0) {
+			NoteSkinService.classic().applyNoteTexture(this, column, keyCount, value);
+			offsetX = 0;
+			offsetY = 0;
+			centerOnStrum = false;
+			pixel = PlayState.isPixelStage;
+			scaleFactor = scale.x;
+		}
+		return value;
+	}
 
 	public function new() {
 		super();
@@ -111,22 +154,18 @@ final class NoteSprite extends FlxSprite {
 			rgbShader = new RGBShaderReference(this, NoteDefaults.initializeGlobalRGBShader(column));
 		else
 			rgbShader.reset(this, NoteDefaults.initializeGlobalRGBShader(column));
-		rgbShader.enabled = !(PlayState.SONG != null && PlayState.SONG.disableNoteRGB);
+		rgbShader.enabled = !(data.disableRGB || (PlayState.SONG != null && PlayState.SONG.disableNoteRGB));
 
 		fillSplashData(noteSplashData);
 
 		if (data.texture != null && data.texture.length > 0) {
-			// Per-note custom graphic (note type or compat script): build straight from the classic skin
-			// path with the standard classic layout, skipping the active skin's applyNote. Otherwise a
-			// folder skin's centerOnStrum / offsets would stay applied on top of a classic custom sheet
-			// and mis-place the note. Mirrors the legacy path (custom textures always used the classic build).
-			NoteSkinService.classic().applyNoteTexture(this, column, keyCount, data.texture);
-			offsetX = 0;
-			offsetY = 0;
-			centerOnStrum = false;
-			pixel = PlayState.isPixelStage;
-			scaleFactor = scale.x;
+			// Per-note custom graphic (note type / data.texture): route through the `texture` setter, which
+			// does the classic build with the standard centered-on-strum layout -- skipping the active
+			// skin's applyNote (otherwise a folder skin's centerOnStrum/offsets would be left on top of a
+			// classic sheet and mis-place the note). A script can re-set `head.texture` later the same way.
+			texture = data.texture;
 		} else {
+			@:bypassAccessor texture = null;
 			var v:NoteVisual = NoteSkinService.current().applyNote(this, rgbShader, column, keyCount, null);
 			offsetX = v.offsetX;
 			offsetY = v.offsetY;
@@ -174,6 +213,7 @@ final class NoteSprite extends FlxSprite {
 		visible = false;
 		active = false;
 		data = null;
+		sustain = null;
 		clipRect = null;
 	}
 }

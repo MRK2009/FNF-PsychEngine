@@ -45,11 +45,15 @@ final class NoteData {
 
 	/**
 		Optional per-note custom graphic (a sparrow/pixel sheet name like `BULLETNOTE_assets`), overriding
-		the active skin for this note's head. Set by a note type (`NoteTypesConfig` `texture` property) or,
-		in `compatibilityMode`, by an old `setPropertyFromGroup('unspawnNotes', i, 'texture', ...)` script.
-		`null`/empty means "use the active skin".
+		the active skin for this note's head AND its hold body/tail. Set by a note type (`NoteTypesConfig`
+		`texture` property) or, in `compatibilityMode`, by an old `setPropertyFromGroup('unspawnNotes', i,
+		'texture', ...)` script. `null`/empty means "use the active skin".
 	**/
 	public var texture:String = null;
+
+	/** When `true`, this note's RGB palette shader is off (head + hold) -- e.g. a custom-textured note
+		that ships its own colours. Set via a note type or a script; overridable at runtime on the drawable. **/
+	public var disableRGB:Bool = false;
 
 	public var spawned:Bool = false;
 

@@ -701,6 +701,60 @@ class FunkinLua {
 		Lua_helper.add_callback(lua, "noteTweenDirection", function(tag:String, note:Int, value:Dynamic, duration:Float, ?ease:String = 'linear') {
 			return noteTweenFunction(tag, note, {direction: value}, duration, ease);
 		});
+
+		// --- v2 custom-note skinning ---
+		// These act on the note currently being spawned (`spawnNote`), so call them from `onSpawnNote`.
+		// Skins the WHOLE note (head + hold body + tail) from one sparrow atlas.
+		Lua_helper.add_callback(lua, "setNoteTexture", function(texture:String) {
+			var an = PlayState.instance.spawnNote;
+			if (an == null)
+				return false;
+			if (an.head != null)
+				an.head.texture = texture;
+			if (an.sustain != null)
+				an.sustain.texture = texture;
+			return true;
+		});
+		// Skins ONE part independently: part = 'head' | 'hold' | 'tail'. `asImage` false = sparrow atlas
+		// (frames like the skin), true = a single static image -- so parts can be mixed like a folder skin.
+		Lua_helper.add_callback(lua, "setNoteTexturePart", function(part:String, source:String, ?asImage:Bool = false) {
+			var an = PlayState.instance.spawnNote;
+			if (an == null)
+				return false;
+			var col:Int = an.data.column;
+			var kc:Int = (an.head != null) ? an.head.keyCount : ((an.sustain != null) ? an.sustain.keyCount : 4);
+			var skin = backend.noteskin.NoteSkinService.classic();
+			switch (part.toLowerCase()) {
+				case 'head':
+					if (an.head != null) {
+						skin.applyElement(an.head, col, kc, 'note', source, asImage);
+						an.head.centerOnStrum = false;
+					}
+				case 'hold' | 'body':
+					if (an.sustain != null) {
+						skin.applyElement(an.sustain, col, kc, 'hold', source, asImage);
+						an.sustain.centerOnStrum = true;
+					}
+				case 'tail' | 'end':
+					if (an.sustain != null && an.sustain.tail != null)
+						skin.applyElement(an.sustain.tail, col, kc, 'end', source, asImage);
+				default:
+					return false;
+			}
+			return true;
+		});
+		// Colorable shortcut: toggle the RGB palette shader. part = 'all' (default) | 'head' | 'hold'.
+		Lua_helper.add_callback(lua, "setNoteColorable", function(colorable:Bool, ?part:String = 'all') {
+			var an = PlayState.instance.spawnNote;
+			if (an == null)
+				return false;
+			var p:String = part.toLowerCase();
+			if ((p == 'all' || p == 'head') && an.head != null)
+				an.head.rgbEnabled = colorable;
+			if ((p == 'all' || p == 'hold' || p == 'body' || p == 'tail' || p == 'end') && an.sustain != null)
+				an.sustain.rgbEnabled = colorable;
+			return true;
+		});
 		Lua_helper.add_callback(lua, "mouseClicked", function(?button:String = 'left') {
 			var click:Bool = FlxG.mouse.justPressed;
 			switch (button.trim().toLowerCase()) {

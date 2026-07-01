@@ -171,6 +171,117 @@ class ClassicNoteSkin implements INoteSkin {
 		return v;
 	}
 
+	/**
+		Overrides a hold's body + tail graphics with an explicit sheet (the sustain counterpart of
+		`applyNoteTexture`). Same column-indexed `hold piece` / `hold end` build as `applySustain`, but the
+		sheet is given rather than resolved. Silently no-ops if the sheet is missing.
+		@param body the hold-body sprite
+		@param tail the hold-end sprite
+		@param column the 0-based lane
+		@param keyCount the active column count (for sizing)
+		@param texture the sparrow/pixel sheet name (pixel uses `<texture>ENDS`)
+	**/
+	public function applySustainTexture(body:FlxSprite, tail:FlxSprite, column:Int, keyCount:Int, texture:String):Void {
+		if (texture == null || texture.length < 1)
+			return;
+		var nd:Int = column % Mania.colArray.length;
+		var kc:Int = Mania.clamp(keyCount);
+
+		if (PlayState.isPixelStage) {
+			if (!Paths.fileExists('images/pixelUI/' + texture + 'ENDS.png', IMAGE))
+				return;
+			var ends = Paths.image('pixelUI/' + texture + 'ENDS');
+			if (ends == null)
+				return;
+			body.loadGraphic(ends, true, Math.floor(ends.width / 4), Math.floor(ends.height / 2));
+			tail.loadGraphic(ends, true, Math.floor(ends.width / 4), Math.floor(ends.height / 2));
+			body.animation.add('hold', [nd], 24, true);
+			tail.animation.add('end', [nd + 4], 24, true);
+			var zoom:Float = PlayState.daPixelZoom;
+			body.setGraphicSize(Std.int(body.width * zoom));
+			tail.setGraphicSize(Std.int(tail.width * zoom));
+			body.antialiasing = tail.antialiasing = false;
+		} else {
+			if (!Paths.fileExists('images/' + texture + '.png', IMAGE))
+				return;
+			var bodyAtlas:FlxAtlasFrames = Paths.getSparrowAtlas(texture);
+			var tailAtlas:FlxAtlasFrames = Paths.getSparrowAtlas(texture);
+			if (bodyAtlas == null || tailAtlas == null)
+				return;
+			if (Mania.current != Mania.DEFAULT) {
+				bodyAtlas.addAtlas(Paths.getSparrowAtlas(Mania.ATLAS));
+				tailAtlas.addAtlas(Paths.getSparrowAtlas(Mania.ATLAS));
+			}
+			body.frames = bodyAtlas;
+			tail.frames = tailAtlas;
+			body.animation.addByPrefix('hold', Mania.colArray[nd] + ' hold piece', 24, true);
+			tail.animation.addByPrefix('end', Mania.colArray[nd] + ' hold end', 24, true);
+			body.antialiasing = tail.antialiasing = ClientPrefs.data.antialiasing;
+			var sz:Float = Mania.noteSizes[kc - 1];
+			body.setGraphicSize(Std.int(body.width * sz));
+			tail.setGraphicSize(Std.int(tail.width * sz));
+		}
+
+		body.animation.play('hold', true);
+		tail.animation.play('end', true);
+		body.updateHitbox();
+		tail.updateHitbox();
+	}
+
+	/**
+		Skins ONE element sprite -- a note head, a hold body, or a hold-end tail -- from `source`: either a
+		sparrow atlas (column-indexed frames, like the skin) or a single static image (loaded whole, one
+		frame). This is the granular primitive behind the runtime note-skinning Lua callbacks, so a script
+		can set each part independently and mix atlas + image parts (like a folder skin).
+		@param spr the element sprite
+		@param column the 0-based lane (selects the colour frames)
+		@param keyCount the active column count (sizing)
+		@param role `note` (head), `hold` (body), or `end` (tail) -- picks the frame prefix + anim name
+		@param source the sheet/image name (no extension)
+		@param asImage `true` to load a single static image; `false` for a sparrow atlas
+	**/
+	public function applyElement(spr:FlxSprite, column:Int, keyCount:Int, role:String, source:String, asImage:Bool):Void {
+		if (spr == null || source == null || source.length < 1)
+			return;
+		var nd:Int = column % Mania.colArray.length;
+		var kc:Int = Mania.clamp(keyCount);
+		var anim:String = (role == 'hold') ? 'hold' : (role == 'end' ? 'end' : 'note');
+		var loop:Bool = (role != 'note');
+
+		if (asImage) {
+			if (!Paths.fileExists('images/$source.png', IMAGE))
+				return;
+			var g = Paths.image(source);
+			if (g == null)
+				return;
+			spr.loadGraphic(g);
+			spr.animation.add(anim, [0], 24, loop);
+		} else {
+			if (!Paths.fileExists('images/$source.png', IMAGE))
+				return;
+			var atlas:FlxAtlasFrames = Paths.getSparrowAtlas(source);
+			if (atlas == null)
+				return;
+			if (Mania.current != Mania.DEFAULT)
+				atlas.addAtlas(Paths.getSparrowAtlas(Mania.ATLAS));
+			spr.frames = atlas;
+			var prefix:String = switch (role) {
+				case 'hold': Mania.colArray[nd] + ' hold piece';
+				case 'end': Mania.colArray[nd] + ' hold end';
+				default: Mania.colArray[nd] + '0';
+			};
+			spr.animation.addByPrefix(anim, prefix, 24, loop);
+		}
+
+		spr.antialiasing = PlayState.isPixelStage ? false : ClientPrefs.data.antialiasing;
+		var sz:Float = PlayState.isPixelStage ? PlayState.daPixelZoom : Mania.noteSizes[kc - 1];
+		spr.setGraphicSize(Std.int(spr.width * sz));
+		spr.updateHitbox();
+		spr.centerOffsets();
+		spr.centerOrigin();
+		spr.animation.play(anim, true);
+	}
+
 	/** Builds the receptor static/pressed/confirm look (pixel, multikey, or classic 4K branch). **/
 	public function applyReceptor(spr:FlxSprite, rgb:RGBShaderReference, column:Int, keyCount:Int, lastAnim:String):NoteVisual {
 		var v:NoteVisual = new NoteVisual();

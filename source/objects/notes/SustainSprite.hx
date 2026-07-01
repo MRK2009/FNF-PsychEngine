@@ -25,6 +25,35 @@ final class SustainSprite extends FlxSprite {
 	public var rgbShader:RGBShaderReference;
 	public var tailRGB:RGBShaderReference;
 
+	/**
+		Per-note hold graphic override (a sparrow/pixel sheet name). Assigning re-skins this hold's body +
+		tail immediately, so a custom note can carry its own trail graphic. `null`/empty leaves the skin.
+	**/
+	public var texture(default, set):String = null;
+
+	/** Toggles this hold's RGB palette shader (body + tail together). **/
+	public var rgbEnabled(get, set):Bool;
+
+	inline function get_rgbEnabled():Bool
+		return rgbShader != null && rgbShader.enabled;
+
+	inline function set_rgbEnabled(value:Bool):Bool {
+		if (rgbShader != null)
+			rgbShader.enabled = value;
+		if (tailRGB != null)
+			tailRGB.enabled = value;
+		return value;
+	}
+
+	function set_texture(value:String):String {
+		texture = value;
+		if (value != null && value.length > 0) {
+			NoteSkinService.classic().applySustainTexture(this, tail, column, keyCount, value);
+			centerOnStrum = true;
+		}
+		return value;
+	}
+
 	public var offsetX:Float = 0;
 	public var offsetY:Float = 0;
 	public var centerOnStrum:Bool = true;
@@ -79,7 +108,7 @@ final class SustainSprite extends FlxSprite {
 		clipRect = null;
 		tail.clipRect = null;
 
-		var rgbOff:Bool = (PlayState.SONG != null && PlayState.SONG.disableNoteRGB);
+		var rgbOff:Bool = data.disableRGB || (PlayState.SONG != null && PlayState.SONG.disableNoteRGB);
 		if (rgbShader == null)
 			rgbShader = new RGBShaderReference(this, NoteDefaults.initializeGlobalRGBShader(column));
 		else
@@ -89,11 +118,21 @@ final class SustainSprite extends FlxSprite {
 		else
 			tailRGB.reset(tail, NoteDefaults.initializeGlobalRGBShader(column));
 
-		var v:NoteVisual = NoteSkinService.current().applySustain(this, rgbShader, tail, tailRGB, column, keyCount);
-		offsetX = v.offsetX;
-		offsetY = v.offsetY;
-		centerOnStrum = v.centerOnStrum;
-		pixel = v.pixel;
+		if (data.texture != null && data.texture.length > 0) {
+			// Per-note custom hold graphic (matches the head's data.texture); route through the setter.
+			@:bypassAccessor texture = null;
+			texture = data.texture;
+			offsetX = 0;
+			offsetY = 0;
+			pixel = PlayState.isPixelStage;
+		} else {
+			@:bypassAccessor texture = null;
+			var v:NoteVisual = NoteSkinService.current().applySustain(this, rgbShader, tail, tailRGB, column, keyCount);
+			offsetX = v.offsetX;
+			offsetY = v.offsetY;
+			centerOnStrum = v.centerOnStrum;
+			pixel = v.pixel;
+		}
 		if (rgbOff) {
 			rgbShader.enabled = false;
 			tailRGB.enabled = false;

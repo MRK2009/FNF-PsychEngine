@@ -119,6 +119,7 @@ final class NoteField {
 			sus = sustainGroup.recycle(SustainSprite);
 			sus.apply(data, keyCount);
 		}
+		head.sustain = sus; // let scripts reach the trail from the head (note.sustain)
 		data.spawned = true;
 		var note:ActiveNote = new ActiveNote(data, head, sus);
 		active.push(note);
