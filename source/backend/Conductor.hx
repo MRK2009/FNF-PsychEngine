@@ -103,28 +103,62 @@ class Conductor {
 		return Math.floor(getStepRounded(time) / 4);
 	}
 
-	public static function mapBPMChanges(song:SwagSong) {
+	/**
+		Builds the BPM-change map from the native `SongChart.sections` (which already carry the resolved
+		running `bpm`, `changeBPM` flag, `beats` and `denominator` -- baked once at load). HXCPP-friendly:
+		typed locals, cached section list, no per-section SwagSong `Reflect`/fallback resolution.
+		@param chart the native chart
+	**/
+	public static function mapBPMChanges(chart:SongChart) {
 		bpmChangeMap = [];
+		if (chart == null || chart.sections == null)
+			return;
 
-		var curBPM:Float = song.bpm;
+		final secs:Array<backend.SongChart.ChartSection> = chart.sections;
+		final len:Int = secs.length;
+		var curBPM:Float = chart.bpm;
 		var totalSteps:Int = 0;
 		var totalPos:Float = 0;
-		for (i in 0...song.notes.length) {
-			if (song.notes[i].changeBPM && song.notes[i].bpm != curBPM) {
-				curBPM = song.notes[i].bpm;
-				var event:BPMChangeEvent = {
+		for (i in 0...len) {
+			final sec:backend.SongChart.ChartSection = secs[i];
+			if (sec.changeBPM && sec.bpm != curBPM) {
+				curBPM = sec.bpm;
+				bpmChangeMap.push({
 					stepTime: totalSteps,
 					songTime: totalPos,
 					bpm: curBPM,
 					stepCrochet: calculateCrochet(curBPM) / 4
-				};
-				bpmChangeMap.push(event);
+				});
 			}
 
-			var deltaSteps:Int = Math.round(getSectionBeats(song, i) * stepsPerBeat(getSectionDenominator(song, i)));
+			final deltaSteps:Int = Math.round(sec.beats * stepsPerBeat(sec.denominator));
 			totalSteps += deltaSteps;
 			totalPos += ((60 / curBPM) * 1000 / 4) * deltaSteps;
 		}
+	}
+
+	/**
+		Native fast-path section denominator: reads the baked `SongChart.sections[section].denominator`
+		(the base/time-sig fallback was resolved once at load), so the per-beat callers in
+		`MusicBeatState`/`MusicBeatSubstate` avoid the SwagSong section walk. Out of range / no chart -> base.
+		@param chart the native chart (`PlayState.SONG`)
+		@param section the section index
+		@return the section's time-signature denominator
+	**/
+	public static inline function sectionDenominator(chart:SongChart, section:Int):Int {
+		return (chart != null && chart.sections != null && section >= 0 && section < chart.sections.length) ? chart.sections[section].denominator : baseDenominator(chart);
+	}
+
+	public static inline function sectionBeats(chart:SongChart, section:Int):Float {
+		return (chart != null && chart.sections != null && section >= 0 && section < chart.sections.length) ? chart.sections[section].beats : baseNumerator(chart);
+	}
+
+	static inline function baseDenominator(chart:SongChart):Int {
+		return (chart != null && chart.timeSignature != null && chart.timeSignature.length > 1 && isValidDenominator(chart.timeSignature[1])) ? chart.timeSignature[1] : 4;
+	}
+
+	static inline function baseNumerator(chart:SongChart):Float {
+		return (chart != null && chart.timeSignature != null && chart.timeSignature.length > 0 && chart.timeSignature[0] > 0) ? chart.timeSignature[0] : 4;
 	}
 
 	// The song's base time signature [numerator, denominator]; defaults to 4/4 when

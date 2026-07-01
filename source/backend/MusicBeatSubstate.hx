@@ -162,14 +162,14 @@ class MusicBeatSubstate extends FlxSubState {
 		if (stepsToDo < 1) {
 			sectionStartStep = 0;
 			beatsBeforeSection = 0;
-			stepsPerBeatCur = Conductor.stepsPerBeat(Conductor.getSectionDenominator(PlayState.SONG, curSection));
+			stepsPerBeatCur = Conductor.stepsPerBeat(Conductor.sectionDenominator(PlayState.SONG, curSection));
 			stepsToDo = sectionStartStep + Math.round(getBeatsOnSection() * stepsPerBeatCur);
 		}
 		while (curStep >= stepsToDo) {
 			beatsBeforeSection += (stepsPerBeatCur > 0) ? Math.ceil((stepsToDo - sectionStartStep) / stepsPerBeatCur) : 0;
 			sectionStartStep = stepsToDo;
 			curSection++;
-			stepsPerBeatCur = Conductor.stepsPerBeat(Conductor.getSectionDenominator(PlayState.SONG, curSection));
+			stepsPerBeatCur = Conductor.stepsPerBeat(Conductor.sectionDenominator(PlayState.SONG, curSection));
 			stepsToDo += Math.round(getBeatsOnSection() * stepsPerBeatCur);
 			sectionHit();
 		}
@@ -184,10 +184,10 @@ class MusicBeatSubstate extends FlxSubState {
 		stepsToDo = 0;
 		sectionStartStep = 0;
 		beatsBeforeSection = 0;
-		stepsPerBeatCur = Conductor.stepsPerBeat(Conductor.getSectionDenominator(PlayState.SONG, 0));
+		stepsPerBeatCur = Conductor.stepsPerBeat(Conductor.sectionDenominator(PlayState.SONG, 0));
 		for (i in 0...PlayState.SONG.notes.length) {
 			if (PlayState.SONG.notes[i] != null) {
-				var spb:Int = Conductor.stepsPerBeat(Conductor.getSectionDenominator(PlayState.SONG, curSection));
+				var spb:Int = Conductor.stepsPerBeat(Conductor.sectionDenominator(PlayState.SONG, curSection));
 				var secSteps:Int = Math.round(getBeatsOnSection() * spb);
 				if (stepsToDo + secSteps > curStep) {
 					sectionStartStep = stepsToDo;
