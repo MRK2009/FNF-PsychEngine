@@ -9,6 +9,8 @@ import backend.UISkinConfig.UIPlacement;
 import backend.StageData;
 import backend.WeekData;
 import backend.Song;
+import backend.SongChart;
+import backend.SongChart.StrumLineData;
 import backend.Rating;
 import flixel.FlxBasic;
 import flixel.FlxObject;
@@ -141,7 +143,7 @@ class PlayState extends MusicBeatState {
 	static function get_isPixelStage():Bool
 		return stageUI == "pixel" || stageUI.endsWith("-pixel");
 
-	public static var SONG:SwagSong = null;
+	public static var SONG:SongChart = null;
 	public static var isStoryMode:Bool = false;
 
 	// When a song is launched from a mod's scripted state (e.g. a custom main
@@ -1332,15 +1334,14 @@ class PlayState extends MusicBeatState {
 						makeEvent(event, i);
 		} catch (e:Dynamic) {}
 
-		// NoteSystem V2
+		// NoteSystem V2: precache note types from the native note list (types already resolved to strings).
 		keyCountChanges = [];
 		nextKeyChange = 0;
-		for (section in PlayState.SONG.notes)
-			for (songNotes in section.sectionNotes) {
-				var nt:String = !Std.isOfType(songNotes[3], String) ? Note.defaultNoteTypes[songNotes[3]] : songNotes[3];
-				if (nt != null && !noteTypes.contains(nt))
-					noteTypes.push(nt);
-			}
+		for (n in PlayState.SONG.noteList) {
+			var nt:String = n.type;
+			if (nt != null && nt.length > 0 && !noteTypes.contains(nt))
+				noteTypes.push(nt);
+		}
 
 		applyKeyCountGlobals(totalColumns);
 		for (event in songData.events) // Event Notes
@@ -1460,19 +1461,31 @@ class PlayState extends MusicBeatState {
 		var prevSkip:Bool = skipArrowStartTween;
 		skipArrowStartTween = true; // no intro tween mid-song
 
-		opponentReceptors = buildReceptors(0);
-		playerReceptors = buildReceptors(1);
+		// Rebuild receptors for every visible line at the new column count.
+		var visibleLines:Array<StrumLine> = [];
+		for (line in strumLines)
+			if (line.field != null)
+				visibleLines.push(line);
+		var centers:Array<Float> = layoutStrumLines(visibleLines);
+		var firstOpp:StrumLine = null;
+		var firstPlayer:StrumLine = null;
+		for (i in 0...visibleLines.length) {
+			var line:StrumLine = visibleLines[i];
+			line.keyCount = count;
+			line.receptors = buildReceptors(line.isPlayer, count, centers[i]);
+			line.field.receptors = line.receptors;
+			line.field.keyCount = count;
+			if (line.isPlayer) {
+				if (firstPlayer == null)
+					firstPlayer = line;
+			} else if (firstOpp == null)
+				firstOpp = line;
+		}
 
 		skipArrowStartTween = prevSkip;
 
-		if (opponentField != null) {
-			opponentField.receptors = opponentReceptors;
-			opponentField.keyCount = totalColumns;
-		}
-		if (playerField != null) {
-			playerField.receptors = playerReceptors;
-			playerField.keyCount = totalColumns;
-		}
+		opponentReceptors = (firstOpp != null) ? firstOpp.receptors : opponentReceptors;
+		playerReceptors = (firstPlayer != null) ? firstPlayer.receptors : playerReceptors;
 
 		setOnScripts('keyCount', totalColumns);
 		setOnScripts('mania', totalColumns - 1);
@@ -2177,21 +2190,36 @@ class PlayState extends MusicBeatState {
 		if (sec < 0)
 			sec = 0;
 
-		if (SONG.notes[sec] == null)
-			return;
-
-		if (gf != null && SONG.notes[sec].gfSection) {
-			moveCameraToGirlfriend();
-			callOnScripts('onMoveCamera', ['gf']);
+		// Native path: focus the section's cameraTarget strumline. Fall back to the legacy section flags
+		// when there's no native section data (e.g. SONG not built yet).
+		if (SONG == null || SONG.sections == null || sec >= SONG.sections.length || SONG.sections[sec] == null) {
+			if (SONG == null || SONG.notes[sec] == null)
+				return;
+			if (gf != null && SONG.notes[sec].gfSection) {
+				moveCameraToGirlfriend();
+				callOnScripts('onMoveCamera', ['gf']);
+				return;
+			}
+			var isDad:Bool = (SONG.notes[sec].mustHitSection != true);
+			moveCamera(isDad);
+			callOnScripts('onMoveCamera', [isDad ? 'dad' : 'boyfriend']);
 			return;
 		}
 
-		var isDad:Bool = (SONG.notes[sec].mustHitSection != true);
-		moveCamera(isDad);
-		if (isDad)
-			callOnScripts('onMoveCamera', ['dad']);
-		else
+		var target:Int = SONG.sections[sec].cameraTarget;
+		var line:StrumLine = (target >= 0 && target < strumLines.length) ? strumLines[target] : null;
+		var char:Character = (line != null) ? line.cameraCharacter() : null;
+
+		if (gf != null && char == gf) {
+			moveCameraToGirlfriend();
+			callOnScripts('onMoveCamera', ['gf']);
+		} else if (line != null && line.isPlayer) {
+			moveCamera(false);
 			callOnScripts('onMoveCamera', ['boyfriend']);
+		} else {
+			moveCamera(true);
+			callOnScripts('onMoveCamera', ['dad']);
+		}
 	}
 
 	public function moveCameraToGirlfriend() {
@@ -2605,6 +2633,10 @@ class PlayState extends MusicBeatState {
 	/** The SV control points the timeline was built from (per-section + events + runtime additions). **/
 	public var svPoints:Array<ScrollPoint> = [];
 
+	/** The active strumlines (one per chart strumline; ≤3 are rendered). `opponentField`/`playerField`
+		+ their receptors are aliases into the first opponent/player line for scripts + the judgement path. **/
+	public var strumLines:Array<StrumLine> = [];
+
 	public var playerField:NoteField;
 	public var opponentField:NoteField;
 	public var noteFields:Array<NoteField> = [];
@@ -2689,30 +2721,60 @@ class PlayState extends MusicBeatState {
 		NoteData.applyScrollVelocity(chart.notes, scrollVelocity);
 
 		receptorGroup = new flixel.group.FlxGroup.FlxTypedGroup<Receptor>();
-		opponentReceptors = buildReceptors(0);
-		playerReceptors = buildReceptors(1);
 
-		var plr:Array<NoteData> = [];
-		var opp:Array<NoteData> = [];
-		for (n in chart.notes) {
-			if (n.mustPress)
-				plr.push(n);
-			else
-				opp.push(n);
+		// Build a StrumLine per chart strumline (characters resolved so hidden lines can still serve as
+		// camera targets); instantiate receptors/field only for the visible ones (≤3 rendered).
+		strumLines = [];
+		var visibleLines:Array<StrumLine> = [];
+		for (sd in SONG.strumLines) {
+			var line:StrumLine = new StrumLine(sd.index, sd.id, sd.isPlayer, sd.keyCount, sd.visible);
+			line.type = sd.type;
+			line.vocalsSuffix = sd.vocalsSuffix;
+			line.downScroll = ClientPrefs.data.downScroll;
+			line.cpuControlled = sd.isPlayer ? cpuControlled : true;
+			line.characters = [for (name in sd.characters) resolveStrumCharacter(name)];
+			strumLines.push(line);
+			if (sd.visible && visibleLines.length < 3)
+				visibleLines.push(line);
 		}
 
-		opponentField = new NoteField(opp, opponentReceptors, totalColumns, ClientPrefs.data.downScroll);
-		playerField = new NoteField(plr, playerReceptors, totalColumns, ClientPrefs.data.downScroll);
-		opponentField.onSpawn = onNoteSpawned;
-		playerField.onSpawn = onNoteSpawned;
-		noteFields = [opponentField, playerField];
+		// Auto-spread the visible lines across the play area (2-line case == the classic 25%/75%).
+		var centers:Array<Float> = layoutStrumLines(visibleLines);
+		for (i in 0...visibleLines.length)
+			visibleLines[i].receptors = buildReceptors(visibleLines[i].isPlayer, visibleLines[i].keyCount, centers[i]);
 
-		// Render order, back -> front: receptors, then sustains, then note heads.
+		// Distribute notes into each line's field by absolute strumLine index.
+		var perLine:Array<Array<NoteData>> = [for (_ in SONG.strumLines) []];
+		for (n in chart.notes)
+			if (n.strumLine >= 0 && n.strumLine < perLine.length)
+				perLine[n.strumLine].push(n);
+
+		noteFields = [];
+		var firstOpp:StrumLine = null;
+		var firstPlayer:StrumLine = null;
+		for (line in visibleLines) {
+			line.field = new NoteField(perLine[line.index], line.receptors, line.keyCount, ClientPrefs.data.downScroll);
+			line.field.onSpawn = onNoteSpawned;
+			noteFields.push(line.field);
+			if (line.isPlayer) {
+				if (firstPlayer == null)
+					firstPlayer = line;
+			} else if (firstOpp == null)
+				firstOpp = line;
+		}
+
+		// Legacy-compatible aliases: scripts, the compat layer, splashes and the judgement path read these.
+		opponentField = (firstOpp != null) ? firstOpp.field : null;
+		playerField = (firstPlayer != null) ? firstPlayer.field : null;
+		opponentReceptors = (firstOpp != null) ? firstOpp.receptors : [];
+		playerReceptors = (firstPlayer != null) ? firstPlayer.receptors : [];
+
+		// Render order, back -> front: receptors, then all sustains, then all note heads.
 		noteGroup.add(receptorGroup);
-		noteGroup.add(opponentField.sustainGroup);
-		noteGroup.add(playerField.sustainGroup);
-		noteGroup.add(opponentField.headGroup);
-		noteGroup.add(playerField.headGroup);
+		for (line in visibleLines)
+			noteGroup.add(line.field.sustainGroup);
+		for (line in visibleLines)
+			noteGroup.add(line.field.headGroup);
 
 		// Keep note splashes drawn above the notes (the splash group was added during create()).
 		if (grpNoteSplashes != null && noteGroup.members.contains(grpNoteSplashes)) {
@@ -2734,19 +2796,20 @@ class PlayState extends MusicBeatState {
 			noteCompat.buildStrums(playerReceptors, opponentReceptors, strumLineNotes, playerStrums, opponentStrums);
 	}
 
-	function buildReceptors(player:Int):Array<Receptor> {
+	function buildReceptors(isPlayer:Bool, keyCount:Int, targetCenter:Float):Array<Receptor> {
 		var out:Array<Receptor> = [];
 		var strumLineX:Float = ClientPrefs.data.middleScroll ? STRUM_X_MIDDLESCROLL : STRUM_X;
 		var strumLineY:Float = ClientPrefs.data.downScroll ? (FlxG.height - 150) : 50;
-		for (i in 0...totalColumns) {
+		var player:Int = isPlayer ? 1 : 0;
+		for (i in 0...keyCount) {
 			var targetAlpha:Float = 1;
-			if (player < 1) {
+			if (!isPlayer) {
 				if (!ClientPrefs.data.opponentStrums)
 					targetAlpha = 0;
 				else if (ClientPrefs.data.middleScroll)
 					targetAlpha = 0.35;
 			}
-			var r:Receptor = new Receptor(strumLineX, strumLineY, i, player, totalColumns);
+			var r:Receptor = new Receptor(strumLineX, strumLineY, i, player, keyCount);
 			r.downScroll = ClientPrefs.data.downScroll;
 			if (!isStoryMode && !skipArrowStartTween) {
 				r.alpha = 0;
@@ -2754,9 +2817,9 @@ class PlayState extends MusicBeatState {
 			} else
 				r.alpha = targetAlpha;
 
-			if (player == 0 && ClientPrefs.data.middleScroll) {
+			if (!isPlayer && ClientPrefs.data.middleScroll) {
 				r.x += 310;
-				if (i > Math.floor(totalColumns / 2) - 1)
+				if (i > Math.floor(keyCount / 2) - 1)
 					r.x += FlxG.width / 2 + 25;
 			}
 			out.push(r);
@@ -2764,12 +2827,6 @@ class PlayState extends MusicBeatState {
 			r.playerPosition();
 		}
 
-		var targetCenter:Float = -1;
-		if (ClientPrefs.data.middleScroll) {
-			if (player == 1)
-				targetCenter = FlxG.width / 2;
-		} else
-			targetCenter = (player == 1) ? FlxG.width * 0.75 : FlxG.width * 0.25;
 		if (targetCenter >= 0 && out.length > 0) {
 			var first:Float = out[0].x;
 			var last:Float = out[out.length - 1].x;
@@ -2778,6 +2835,43 @@ class PlayState extends MusicBeatState {
 				r.x += delta;
 		}
 		return out;
+	}
+
+	/**
+		Auto-spread the visible strumlines across the play area. Two lines reproduce the classic
+		opponent-25% / player-75% split; N lines spread evenly. Under middlescroll the player line
+		centers and the others keep their shoved-aside position (`-1` == don't recenter).
+		@param lines the visible strumlines, in render order
+		@return the target center X per line (`-1` = leave in place)
+	**/
+	function layoutStrumLines(lines:Array<StrumLine>):Array<Float> {
+		var centers:Array<Float> = [];
+		var n:Int = lines.length;
+		if (ClientPrefs.data.middleScroll) {
+			for (line in lines)
+				centers.push(line.isPlayer ? FlxG.width / 2 : -1);
+		} else {
+			for (i in 0...n)
+				centers.push(FlxG.width * ((i + 0.5) / n));
+		}
+		return centers;
+	}
+
+	/** The strumline a note belongs to (or `null` if its index is out of range). **/
+	inline function lineOf(data:NoteData):StrumLine
+		return (data.strumLine >= 0 && data.strumLine < strumLines.length) ? strumLines[data.strumLine] : null;
+
+	/** Resolves a strumline character name to one of PlayState's live characters (bf/dad/gf). **/
+	function resolveStrumCharacter(name:String):Character {
+		if (name == null)
+			return null;
+		if (dad != null && (name == SONG.player2 || dad.curCharacter == name))
+			return dad;
+		if (boyfriend != null && (name == SONG.player1 || boyfriend.curCharacter == name))
+			return boyfriend;
+		if (gf != null && (name == SONG.gfVersion || gf.curCharacter == name))
+			return gf;
+		return null;
 	}
 
 	/**
@@ -2797,10 +2891,9 @@ class PlayState extends MusicBeatState {
 	/** Rebuilds the SV timeline from `svPoints` and re-precomputes every note's scroll position. **/
 	public function recomputeScrollVelocity():Void {
 		scrollVelocity.build(svPoints);
-		if (playerField != null)
-			NoteData.applyScrollVelocity(playerField.notes, scrollVelocity);
-		if (opponentField != null)
-			NoteData.applyScrollVelocity(opponentField.notes, scrollVelocity);
+		for (f in noteFields)
+			if (f != null)
+				NoteData.applyScrollVelocity(f.notes, scrollVelocity);
 	}
 
 	/**
@@ -2842,23 +2935,29 @@ class PlayState extends MusicBeatState {
 		if (!startedCountdown || inCutscene)
 			return;
 
-		// opponent: auto-hit at the note's time (backwards: opponentNoteHit can splice active)
-		var oi:Int = opponentField.active.length;
-		while (--oi >= 0) {
-			var note:ActiveNote = opponentField.active[oi];
-			var data:NoteData = note.data;
-			if (!data.hit && data.time <= songPos) {
-				data.canBeHit = false;
-				data.hit = true;
-				if (!data.hitByOpponent && !data.ignore)
-					opponentNoteHit(note);
-			} else if (data.hit && data.isSustain()) {
-				if (songPos >= data.endTime())
-					opponentField.remove(note); // opponent hold finished -- reclaim now
-				else {
-					var hc:Character = data.gfNote ? gf : dad; // keep the opponent singing through the hold
-					if (hc != null)
-						hc.holdTimer = 0;
+		// Non-player lines auto-hit at each note's time (opponent, extra opponents, a notes-carrying gf line).
+		// Backwards over active since opponentNoteHit can splice it.
+		for (line in strumLines) {
+			if (line.field == null || line.isPlayer)
+				continue;
+			var arr:Array<ActiveNote> = line.field.active;
+			var oi:Int = arr.length;
+			while (--oi >= 0) {
+				var note:ActiveNote = arr[oi];
+				var data:NoteData = note.data;
+				if (!data.hit && data.time <= songPos) {
+					data.canBeHit = false;
+					data.hit = true;
+					if (!data.hitByOpponent && !data.ignore)
+						opponentNoteHit(note);
+				} else if (data.hit && data.isSustain()) {
+					if (songPos >= data.endTime())
+						line.field.remove(note); // hold finished -- reclaim now
+					else {
+						var hc:Character = data.gfNote ? gf : line.cameraCharacter(); // keep the line's char singing
+						if (hc != null)
+							hc.holdTimer = 0;
+					}
 				}
 			}
 		}
@@ -3064,8 +3163,8 @@ class PlayState extends MusicBeatState {
 	}
 
 	// NoteSystem V2
-	function strumPlayAnim(isDad:Bool, id:Int, time:Float):Void {
-		var spr:Receptor = isDad ? ((id < opponentReceptors.length) ? opponentReceptors[id] : null) : ((id < playerReceptors.length) ? playerReceptors[id] : null);
+	function strumPlayAnim(recs:Array<Receptor>, id:Int, time:Float):Void {
+		var spr:Receptor = (recs != null && id >= 0 && id < recs.length) ? recs[id] : null;
 		if (spr != null) {
 			spr.playAnim('confirm', true);
 			spr.resetAnim = time;
@@ -3098,6 +3197,8 @@ class PlayState extends MusicBeatState {
 	// NoteSystem V2
 	function opponentNoteHit(note:ActiveNote):Void {
 		var data:NoteData = note.data;
+		var line:StrumLine = lineOf(data);
+		var singer:Character = data.gfNote ? gf : ((line != null) ? line.cameraCharacter() : dad);
 		var result:Dynamic = callOnLuas('opponentNoteHitPre', [-1, data.column, data.type, data.isSustain()]);
 		if (notStopped(result))
 			result = callOnHScript('opponentNoteHitPre', [cbArg(note)]);
@@ -3107,16 +3208,16 @@ class PlayState extends MusicBeatState {
 		if (songName != 'tutorial')
 			camZooming = true;
 
-		if (data.type == 'Hey!' && dad.hasAnimation('hey')) {
-			dad.playAnim('hey', true);
-			dad.specialAnim = true;
-			dad.heyTimer = 0.6;
+		if (data.type == 'Hey!' && singer != null && singer.hasAnimation('hey')) {
+			singer.playAnim('hey', true);
+			singer.specialAnim = true;
+			singer.heyTimer = 0.6;
 		} else if (!data.noAnimation)
-			singChar(data.gfNote ? gf : dad, data, null);
+			singChar(singer, data, null);
 
 		if (opponentVocals.length <= 0)
 			vocals.volume = 1;
-		strumPlayAnim(true, data.column, Conductor.stepCrochet * 1.25 / 1000 / playbackRate);
+		strumPlayAnim((line != null) ? line.receptors : opponentReceptors, data.column, Conductor.stepCrochet * 1.25 / 1000 / playbackRate);
 		data.hitByOpponent = true;
 
 		result = callOnLuas('opponentNoteHit', [-1, data.column, data.type, data.isSustain()]);
@@ -3124,10 +3225,11 @@ class PlayState extends MusicBeatState {
 			callOnHScript('opponentNoteHit', [cbArg(note)]);
 		fireStageNote(1, note);
 
+		var f:NoteField = (line != null && line.field != null) ? line.field : opponentField;
 		if (!data.isSustain())
-			opponentField.remove(note);
+			f.remove(note);
 		else
-			opponentField.freeHead(note); // sustain: drop the head, keep the trail scrolling (matches legacy)
+			f.freeHead(note); // sustain: drop the head, keep the trail scrolling (matches legacy)
 	}
 
 	// NoteSystem V2 -- `noteArg` is an ActiveNote internally, or a legacy note object in compatibilityMode.
@@ -3165,7 +3267,7 @@ class PlayState extends MusicBeatState {
 				if (spr != null)
 					spr.playAnim('confirm', true);
 			} else
-				strumPlayAnim(false, data.column, Conductor.stepCrochet * 1.25 / 1000 / playbackRate);
+				strumPlayAnim(playerReceptors, data.column, Conductor.stepCrochet * 1.25 / 1000 / playbackRate);
 			vocals.volume = 1;
 
 			if (!isSus) {
