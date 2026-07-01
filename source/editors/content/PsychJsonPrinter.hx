@@ -10,18 +10,42 @@ import haxe.format.JsonPrinter;
 class PsychJsonPrinter extends JsonPrinter {
 	var _ignoreTab:Array<String> = [];
 
-	public static function print(o:Dynamic, ?ignoreTab:Array<String>):String {
+	// Optional deterministic field order: hxcpp's Reflect.fields() on a Dynamic returns hash order, not
+	// declaration order, so without this every serialized object's keys come out scrambled. Keys listed
+	// here sort to the front in the given order; unlisted keys follow in their original order.
+	var _keyOrderMap:Map<String, Int> = null;
+
+	public static function print(o:Dynamic, ?ignoreTab:Array<String>, ?keyOrder:Array<String>):String {
 		var printer = new PsychJsonPrinter(null, '\t');
 		if (ignoreTab != null)
 			printer._ignoreTab = ignoreTab;
+		if (keyOrder != null) {
+			printer._keyOrderMap = new Map<String, Int>();
+			for (i in 0...keyOrder.length)
+				printer._keyOrderMap.set(keyOrder[i], i);
+		}
 		printer.write("", o);
 		return printer.buf.toString();
+	}
+
+	// Reorders an object's fields by the preferred key order (stable for unlisted keys).
+	function orderFields(fields:Array<String>):Array<String> {
+		if (_keyOrderMap == null || fields.length < 2)
+			return fields;
+		var big:Int = 0x3FFFFFFF;
+		var decorated:Array<{k:String, i:Int, o:Int}> = [];
+		for (idx in 0...fields.length) {
+			var k:String = fields[idx];
+			decorated.push({k: k, i: _keyOrderMap.exists(k) ? _keyOrderMap.get(k) : big, o: idx});
+		}
+		decorated.sort(function(a, b):Int return (a.i != b.i) ? a.i - b.i : a.o - b.o);
+		return [for (d in decorated) d.k];
 	}
 
 	var _singleLineCheckNext:Bool = false;
 
 	override function fieldsString(v:Dynamic, fields:Array<String>) {
-		fieldsStringEx(v, fields);
+		fieldsStringEx(v, orderFields(fields));
 	}
 
 	function fieldsStringEx(v:Dynamic, fields:Array<String>, ?mapCheck:Bool = false) {

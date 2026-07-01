@@ -21,6 +21,7 @@ import editors.content.*;
 import editors.charting.*;
 import editors.charting.tabs.*;
 import backend.Song;
+import backend.SongChart;
 import backend.StageData;
 import backend.Highscore;
 import backend.Difficulty;
@@ -709,7 +710,7 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 					chartName = chartName.substring(chartName.lastIndexOf('/') + 1, chartName.lastIndexOf('.'));
 				}
 				chartName += DateTools.format(Date.now(), '_%Y-%m-%d_%H-%M-%S');
-				var songCopy:SwagSong = Reflect.copy(PlayState.SONG);
+				var songCopy:SwagSong = PlayState.SONG.toLegacySwag();
 				Reflect.setField(songCopy, '__original_path', Song.chartPath);
 				var dataToSave:String = haxe.Json.stringify(songCopy);
 				// trace(chartName, dataToSave);
@@ -1929,7 +1930,8 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 	var cachedSectionBPMs:Array<Float>;
 
 	function loadChart(song:SwagSong) {
-		PlayState.SONG = song;
+		// SONG is the native SongChart now: use a parsed one directly, else bridge a raw SwagSong up.
+		PlayState.SONG = Std.isOfType(song, SongChart) ? cast song : SongChart.fromLegacy(song);
 		StageData.loadDirectory(PlayState.SONG);
 		Conductor.bpm = PlayState.SONG.bpm;
 		if (charPreview.showChars)
@@ -3110,10 +3112,9 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 	}
 
 	function updateChartData() {
-		// Multikey: the chart's base key count is its own value (set by the Song-tab
-		// stepper), NOT the editor's current-section grid width, which now varies as
-		// you navigate sections. Only fill it in for brand-new/blank charts.
-		if (PlayState.SONG.keyCount == null)
+		// Multikey: the chart's base key count is its own value (set by the Song-tab stepper), NOT the
+		// editor's current-section grid width. `SONG.keyCount` is always a valid Int on the native model.
+		if (PlayState.SONG.keyCount < 1)
 			PlayState.SONG.keyCount = Mania.DEFAULT;
 
 		for (secNum => section in PlayState.SONG.notes)
@@ -3150,7 +3151,8 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 
 	function saveChart(canQuickSave:Bool = true) {
 		updateChartData();
-		var chartData:String = PsychJsonPrinter.print(PlayState.SONG, ['sectionNotes', 'events']);
+		// SONG is the native superset; serialize only the clean legacy view (no native fields leak in).
+		var chartData:String = PsychJsonPrinter.print(PlayState.SONG.toLegacySwag(), ['sectionNotes', 'events']);
 		if (canQuickSave && Song.chartPath != null) {
 			File.saveContent(Song.chartPath, chartData);
 			showOutput('Chart saved successfully to: ${Song.chartPath}');
@@ -3165,6 +3167,28 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 				showOutput('Chart saved successfully to: $newPath');
 			}, null, function() showOutput('Error on saving chart!', true));
 		}
+	}
+
+	/**
+		Saves the current chart in the strumline-native **psych_v2** format. The editor still edits the
+		legacy `SwagSong`, so the strumline model is derived from it via `SongChart.fromLegacy` (opponent +
+		player, plus a gf line if the chart uses gf sections) and serialized with each strumline/note/
+		section/event on its own line. Notes/camera round-trip; custom strumlines aren't editable yet, so
+		re-saving a v2 chart with extra strumlines collapses it to the legacy 2-side (+gf) shape.
+	**/
+	public function saveChartV2() {
+		updateChartData();
+		var chart:SongChart = SongChart.fromLegacy(PlayState.SONG);
+		var chartData:String = PsychJsonPrinter.print(Song.buildPsychV2(PlayState.SONG, chart), Song.PSYCH_V2_INLINE, Song.PSYCH_V2_KEY_ORDER);
+		var chartName:String = Paths.formatToSongPath(PlayState.SONG.song) + '.json';
+		if (Song.chartPath != null)
+			chartName = Song.chartPath.substr(Song.chartPath.lastIndexOf('/')).trim();
+		fileDialog.save(chartName, chartData, function() {
+			var newPath:String = fileDialog.path;
+			Song.chartPath = newPath.replace('\\', '/');
+			reloadNotesDropdowns();
+			showOutput('psych_v2 chart saved successfully to: $newPath');
+		}, null, function() showOutput('Error on saving chart!', true));
 	}
 
 	inline function getCurChartSection() {

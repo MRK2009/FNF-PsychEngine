@@ -262,6 +262,18 @@ class FileTab {
 		btn.text.alignment = LEFT;
 		tab_group.add(btn);
 
+		btnY += 20;
+		var btn:PsychUIButton = new PsychUIButton(btnX, btnY, '  Save as psych_v2...', function() {
+			if (!s.fileDialog.completed)
+				return;
+			s.upperBox.isMinimized = true;
+			s.upperBox.bg.visible = false;
+
+			s.saveChartV2();
+		}, btnWid);
+		btn.text.alignment = LEFT;
+		tab_group.add(btn);
+
 		if (ChartingState.SHOW_EVENT_COLUMN) {
 			btnY += 20;
 			var btn:PsychUIButton = new PsychUIButton(btnX, btnY, '  Save Events...', function() {
