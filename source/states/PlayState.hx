@@ -1824,7 +1824,7 @@ class PlayState extends MusicBeatState {
 		DiscordClient.resetClientID();
 		#end
 
-		MusicBeatState.switchState(new legacy.editors.ChartingState());
+		MusicBeatState.switchState(new editors.ChartingState());
 	}
 
 	function openCharacterEditor() {
@@ -2636,6 +2636,12 @@ class PlayState extends MusicBeatState {
 		+ their receptors are aliases into the first opponent/player line for scripts + the judgement path. **/
 	public var strumLines:Array<StrumLine> = [];
 
+	// Non-rendered strumlines (gf + extras) still "play" their notes: characters sing on time.
+	var silentLines:Array<StrumLine> = [];
+	var silentNotes:Array<Array<NoteData>> = [];
+	var silentCursor:Array<Int> = [];
+	var silentHoldEnd:Array<Float> = [];
+
 	public var playerField:NoteField;
 	public var opponentField:NoteField;
 	public var noteFields:Array<NoteField> = [];
@@ -2723,17 +2729,20 @@ class PlayState extends MusicBeatState {
 
 		// Build a StrumLine per chart strumline (characters resolved so hidden lines can still serve as
 		// camera targets); instantiate receptors/field only for the visible ones (≤3 rendered).
+		// ADDITIONAL lines (gf + extras) never render for now -- they run silently (characters sing,
+		// camera targets work) until the extra-strumline rendering pass lands.
 		strumLines = [];
 		var visibleLines:Array<StrumLine> = [];
 		for (sd in SONG.strumLines) {
-			var line:StrumLine = new StrumLine(sd.index, sd.id, sd.isPlayer, sd.keyCount, sd.visible);
+			var renderable:Bool = sd.visible && sd.type != backend.SongChart.StrumLineType.ADDITIONAL;
+			var line:StrumLine = new StrumLine(sd.index, sd.id, sd.isPlayer, sd.keyCount, renderable);
 			line.type = sd.type;
 			line.vocalsSuffix = sd.vocalsSuffix;
 			line.downScroll = ClientPrefs.data.downScroll;
 			line.cpuControlled = sd.isPlayer ? cpuControlled : true;
 			line.characters = [for (name in sd.characters) resolveStrumCharacter(name)];
 			strumLines.push(line);
-			if (sd.visible && visibleLines.length < 3)
+			if (renderable && visibleLines.length < 3)
 				visibleLines.push(line);
 		}
 
@@ -2747,6 +2756,20 @@ class PlayState extends MusicBeatState {
 		for (n in chart.notes)
 			if (n.strumLine >= 0 && n.strumLine < perLine.length)
 				perLine[n.strumLine].push(n);
+
+		// Field-less lines with notes drive their characters silently (the new "gf section" path).
+		silentLines = [];
+		silentNotes = [];
+		silentCursor = [];
+		silentHoldEnd = [];
+		for (line in strumLines) {
+			if (visibleLines.contains(line) || perLine[line.index].length == 0)
+				continue;
+			silentLines.push(line);
+			silentNotes.push(perLine[line.index]);
+			silentCursor.push(0);
+			silentHoldEnd.push(-1);
+		}
 
 		noteFields = [];
 		var firstOpp:StrumLine = null;
@@ -2933,6 +2956,8 @@ class PlayState extends MusicBeatState {
 		}
 		if (!startedCountdown || inCutscene)
 			return;
+
+		updateSilentLines(songPos);
 
 		// Non-player lines auto-hit at each note's time (opponent, extra opponents, a notes-carrying gf line).
 		// Backwards over active since opponentNoteHit can splice it.
@@ -3194,6 +3219,36 @@ class PlayState extends MusicBeatState {
 	}
 
 	// NoteSystem V2
+	/**
+		Advances the non-rendered strumlines: when a note's time passes, the line's character
+		sings it (sustains keep the hold alive) — no drawables, no judgement. This is what makes
+		the hidden gf line (and future extra lines) act like the old "GF Section".
+	**/
+	function updateSilentLines(songPos:Float):Void {
+		var li:Int = silentLines.length;
+		while (--li >= 0) {
+			var line:StrumLine = silentLines[li];
+			var notes:Array<NoteData> = silentNotes[li];
+			var cursor:Int = silentCursor[li];
+			var singer:Character = line.cameraCharacter();
+			while (cursor < notes.length && notes[cursor].time <= songPos) {
+				var data:NoteData = notes[cursor];
+				cursor++;
+				// skip long-stale notes (song skip/seek) instead of burst-singing them
+				if (data.ignore || songPos - data.time > 1000)
+					continue;
+				var who:Character = data.gfNote ? gf : singer;
+				if (who != null && !data.noAnimation)
+					singChar(who, data, null);
+				if (data.isSustain() && data.endTime() > silentHoldEnd[li])
+					silentHoldEnd[li] = data.endTime();
+			}
+			silentCursor[li] = cursor;
+			if (singer != null && songPos < silentHoldEnd[li])
+				singer.holdTimer = 0;
+		}
+	}
+
 	function opponentNoteHit(note:ActiveNote):Void {
 		var data:NoteData = note.data;
 		var line:StrumLine = lineOf(data);

@@ -1,7 +1,5 @@
 package editors;
 
-import legacy.editors.ChartingState;
-
 import backend.WeekData;
 import objects.Character;
 import states.MainMenuState;
@@ -10,6 +8,7 @@ import states.FreeplayState;
 class MasterEditorMenu extends MusicBeatState {
 	var options:Array<String> = [
 		'Chart Editor',
+		'Legacy Chart Editor',
 		'Character Editor',
 		'Stage Editor',
 		'Week Editor',
@@ -102,7 +101,9 @@ class MasterEditorMenu extends MusicBeatState {
 		if (controls.ACCEPT) {
 			switch (options[curSelected]) {
 				case 'Chart Editor':
-					LoadingState.loadAndSwitchState(new ChartingState(), false);
+					LoadingState.loadAndSwitchState(new editors.ChartingState(), false);
+				case 'Legacy Chart Editor':
+					LoadingState.loadAndSwitchState(new legacy.editors.ChartingState(), false);
 				case 'Character Editor':
 					LoadingState.loadAndSwitchState(new CharacterEditorState(Character.DEFAULT_CHARACTER, false));
 				case 'Stage Editor':
