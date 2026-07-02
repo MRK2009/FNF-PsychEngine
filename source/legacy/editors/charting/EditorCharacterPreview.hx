@@ -1,11 +1,11 @@
-package editors.charting;
+package legacy.editors.charting;
 
 import objects.Character;
 import backend.Song.SwagSection;
 import flixel.math.FlxPoint;
 import flixel.util.FlxSpriteUtil;
 import editors.content.Prompt;
-import editors.ChartingState;
+import legacy.editors.ChartingState;
 
 /**
 	The chart editor's bottom-left character preview (Options > Characters).
@@ -15,7 +15,7 @@ import editors.ChartingState;
 	events. Owns all character/drag/visibility state; reaches the editor (cameras, save, sub-states,
 	scene `add`/`remove`) through `editor`.
 **/
-@:access(editors.ChartingState)
+@:access(legacy.editors.ChartingState)
 class EditorCharacterPreview {
 	var editor:ChartingState;
 

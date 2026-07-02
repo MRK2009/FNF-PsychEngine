@@ -1,8 +1,8 @@
-package editors.charting.tabs;
+package legacy.editors.charting.tabs;
 
 import haxe.Json;
 import backend.Song;
-import editors.ChartingState;
+import legacy.editors.ChartingState;
 
 /**
 	Builds the "Meta" tab of the chart editor's main box: edits the per-song `data/<song>/metadata.json`
@@ -11,7 +11,7 @@ import editors.ChartingState;
 	from osu! converts) are preserved. Owns load/parse/rebuild/save of the working metadata. Reaches editor
 	state/widgets via `@:access`.
 **/
-@:access(editors.ChartingState)
+@:access(legacy.editors.ChartingState)
 class MetaTab {
 	/**
 		Populates the Meta tab in `s.mainBox`.

@@ -1,17 +1,17 @@
-package editors.charting.tabs;
+package legacy.editors.charting.tabs;
 
 import flixel.util.FlxStringUtil;
 import editors.content.Prompt;
-import editors.ChartingState;
-import editors.ChartingState.ChartingTheme;
-import editors.ChartingState.WaveformTarget;
+import legacy.editors.ChartingState;
+import legacy.editors.ChartingState.ChartingTheme;
+import legacy.editors.ChartingState.WaveformTarget;
 
 /**
 	Builds the "View" toolbar menu of the chart editor: grid/label visibility toggles, stage-event and FPS
 	toggles, downscroll, the vortex editor, and the waveform / go-to / theme / reset-boxes windows. Toggles
 	persist through the editor's save. Reaches editor state/widgets via `@:access`.
 **/
-@:access(editors.ChartingState)
+@:access(legacy.editors.ChartingState)
 class ViewTab {
 	/**
 		Populates the View toolbar menu in `s.upperBox`.

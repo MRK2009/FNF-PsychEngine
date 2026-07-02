@@ -1,13 +1,13 @@
-package editors.charting.tabs;
+package legacy.editors.charting.tabs;
 
-import editors.ChartingState;
+import legacy.editors.ChartingState;
 
 /**
 	Builds the "Note" tab of the chart editor's main box: sustain length, hit-time and note-type controls
 	for the currently selected note(s). Edits mutate selected notes and refresh the field through the
 	editor. Reaches editor state/widgets via `@:access`.
 **/
-@:access(editors.ChartingState)
+@:access(legacy.editors.ChartingState)
 class NoteTab {
 	/**
 		Populates the Note tab in `s.mainBox`.

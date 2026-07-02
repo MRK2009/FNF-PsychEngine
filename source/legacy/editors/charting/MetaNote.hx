@@ -1,4 +1,4 @@
-package editors.charting;
+package legacy.editors.charting;
 
 import objects.Note;
 import backend.NoteSkinConfig;

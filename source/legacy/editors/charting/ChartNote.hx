@@ -1,4 +1,4 @@
-package editors.charting;
+package legacy.editors.charting;
 
 import flixel.util.FlxColor;
 

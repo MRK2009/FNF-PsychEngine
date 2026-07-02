@@ -1,4 +1,4 @@
-package editors;
+package legacy.editors;
 
 import flixel.FlxSubState;
 import flixel.util.FlxSave;
@@ -14,12 +14,12 @@ import flash.geom.Rectangle;
 import haxe.Json;
 import haxe.Exception;
 import haxe.io.Bytes;
-import editors.charting.MetaNote;
-import editors.charting.VSlice;
+import legacy.editors.charting.MetaNote;
+import legacy.editors.charting.VSlice;
 import editors.content.Prompt;
 import editors.content.*;
-import editors.charting.*;
-import editors.charting.tabs.*;
+import legacy.editors.charting.*;
+import legacy.editors.charting.tabs.*;
 import backend.Song;
 import backend.SongChart;
 import backend.StageData;

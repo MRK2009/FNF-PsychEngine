@@ -1,15 +1,15 @@
-package editors.charting.tabs;
+package legacy.editors.charting.tabs;
 
 import editors.content.Prompt;
-import editors.ChartingState;
-import editors.ChartingState.UndoAction;
+import legacy.editors.ChartingState;
+import legacy.editors.ChartingState.UndoAction;
 
 /**
 	Builds the "Edit" toolbar menu of the chart editor: undo/redo, select-all, lock-events, the autosave
 	settings window, and the clear-all-notes/events actions. All edits route through the editor (selection,
 	undo stack, note/event arrays). Reaches editor state/widgets via `@:access`.
 **/
-@:access(editors.ChartingState)
+@:access(legacy.editors.ChartingState)
 class EditTab {
 	/**
 		Populates the Edit toolbar menu in `s.upperBox`.

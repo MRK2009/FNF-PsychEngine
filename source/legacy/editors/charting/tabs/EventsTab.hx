@@ -1,14 +1,14 @@
-package editors.charting.tabs;
+package legacy.editors.charting.tabs;
 
-import editors.ChartingState;
-import editors.ChartingState.UndoAction;
+import legacy.editors.ChartingState;
+import legacy.editors.ChartingState.UndoAction;
 
 /**
 	Builds the "Events" tab of the chart editor's main box: the event dropdown plus the add/remove and
 	prev/next sub-event buttons and the two value inputs. Operates on the currently selected event note(s)
 	through the editor. Reaches editor state/widgets via `@:access`.
 **/
-@:access(editors.ChartingState)
+@:access(legacy.editors.ChartingState)
 class EventsTab {
 	/**
 		Populates the Events tab in `s.mainBox`.

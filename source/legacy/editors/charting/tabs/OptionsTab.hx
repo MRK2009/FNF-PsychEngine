@@ -1,13 +1,13 @@
-package editors.charting.tabs;
+package legacy.editors.charting.tabs;
 
-import editors.ChartingState;
+import legacy.editors.ChartingState;
 
 /**
 	Builds the "Options" toolbar menu of the chart editor: the character-preview window opener, the quant
 	note-color toggle, the metronome sound/accent toggles, and the time-signature / BPM note-adaptation mode
 	cyclers. All settings persist through the editor's save. Reaches editor state/widgets via `@:access`.
 **/
-@:access(editors.ChartingState)
+@:access(legacy.editors.ChartingState)
 class OptionsTab {
 	/**
 		Populates the Options toolbar menu in `s.upperBox`.

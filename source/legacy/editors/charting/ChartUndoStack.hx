@@ -1,8 +1,8 @@
-package editors.charting;
+package legacy.editors.charting;
 
-import editors.ChartingState.UndoStruct;
-import editors.ChartingState.UndoAction;
-import editors.ChartingState;
+import legacy.editors.ChartingState.UndoStruct;
+import legacy.editors.ChartingState.UndoAction;
+import legacy.editors.ChartingState;
 
 /**
 	Bounded undo/redo history for the chart editor.
@@ -12,7 +12,7 @@ import editors.ChartingState;
 	redo simply walks back toward 0. Capped at 15 entries; evicted add/move entries destroy the
 	`ChartNote` drawables they own. All note/selection mutation goes through the editor it holds.
 **/
-@:access(editors.ChartingState)
+@:access(legacy.editors.ChartingState)
 class ChartUndoStack {
 	var editor:ChartingState;
 

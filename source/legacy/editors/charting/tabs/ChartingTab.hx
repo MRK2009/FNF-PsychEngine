@@ -1,13 +1,13 @@
-package editors.charting.tabs;
+package legacy.editors.charting.tabs;
 
-import editors.ChartingState;
+import legacy.editors.ChartingState;
 
 /**
 	Builds the "Charting" tab of the chart editor's main box: editor-only conveniences (playback rate,
 	mouse-snap, hitsound/metronome volumes, per-track inst/vocal volume and mute). None of these affect
 	gameplay. Reaches the editor's widget fields and audio hooks through `@:access`.
 **/
-@:access(editors.ChartingState)
+@:access(legacy.editors.ChartingState)
 class ChartingTab {
 	/**
 		Populates the Charting tab in `s.mainBox`.

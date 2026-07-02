@@ -1,13 +1,13 @@
-package editors.charting.tabs;
+package legacy.editors.charting.tabs;
 
-import editors.ChartingState;
+import legacy.editors.ChartingState;
 
 /**
 	Builds the "Data" tab of the chart editor's main box: song-level metadata not tied to timing — game
 	over character/sounds, the note-RGB toggle, and the note/splash texture overrides. Texture changes
 	rebuild the note pool through the editor. Reaches editor widget fields and hooks via `@:access`.
 **/
-@:access(editors.ChartingState)
+@:access(legacy.editors.ChartingState)
 class DataTab {
 	/**
 		Populates the Data tab in `s.mainBox`.

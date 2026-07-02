@@ -1,9 +1,9 @@
-package editors.charting;
+package legacy.editors.charting;
 
 import lime.media.AudioBuffer;
 import haxe.io.Bytes;
 import flash.geom.Rectangle;
-import editors.ChartingState;
+import legacy.editors.ChartingState;
 
 /**
 	Renders the chart editor's audio waveform overlay for the section currently in view.
@@ -12,7 +12,7 @@ import editors.ChartingState;
 	flags live on `ChartingState` (the View tab toggles them). `redraw` rebuilds the bitmap from the
 	editor's active section and audio source.
 **/
-@:access(editors.ChartingState)
+@:access(legacy.editors.ChartingState)
 class EditorWaveform {
 	var wavData:Array<Array<Array<Float>>> = [[[0], [0]], [[0], [0]]];
 

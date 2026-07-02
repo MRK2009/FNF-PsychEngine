@@ -1,8 +1,8 @@
-package editors.charting.tabs;
+package legacy.editors.charting.tabs;
 
 import backend.StageData;
 import editors.content.Prompt;
-import editors.ChartingState;
+import legacy.editors.ChartingState;
 
 /**
 	Builds the "Song" tab of the chart editor's main box: song name / vocals / audio reload, BPM, scroll
@@ -10,7 +10,7 @@ import editors.ChartingState;
 	`applyBaseTimeSignature`, which propagates the base signature to every section. Reaches editor
 	state/widgets via `@:access`.
 **/
-@:access(editors.ChartingState)
+@:access(legacy.editors.ChartingState)
 class SongTab {
 	/**
 		Populates the Song tab in `s.mainBox`.

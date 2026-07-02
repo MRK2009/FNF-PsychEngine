@@ -27,7 +27,6 @@ import haxe.Json;
 import cutscenes.DialogueBoxPsych;
 import states.StoryMenuState;
 import states.FreeplayState;
-import editors.ChartingState;
 import editors.CharacterEditorState;
 import substates.PauseSubState;
 import substates.GameOverSubstate;
@@ -1825,7 +1824,7 @@ class PlayState extends MusicBeatState {
 		DiscordClient.resetClientID();
 		#end
 
-		MusicBeatState.switchState(new ChartingState());
+		MusicBeatState.switchState(new legacy.editors.ChartingState());
 	}
 
 	function openCharacterEditor() {

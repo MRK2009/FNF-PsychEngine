@@ -1,19 +1,19 @@
-package editors.charting.tabs;
+package legacy.editors.charting.tabs;
 
 import haxe.Json;
 import haxe.Exception;
 import backend.Song;
-import editors.charting.VSlice;
+import legacy.editors.charting.VSlice;
 import editors.content.Prompt;
 import editors.content.PsychJsonPrinter;
-import editors.ChartingState;
+import legacy.editors.ChartingState;
 
 /**
 	Builds the "File" toolbar menu of the chart editor: new/open/autosave/events, save variants, reload,
 	the V-Slice import/export and legacy-format updater, plus preview/playtest/exit. All file I/O and
 	conversion routes through the editor. Reaches editor state/dialogs via `@:access`.
 **/
-@:access(editors.ChartingState)
+@:access(legacy.editors.ChartingState)
 class FileTab {
 	/**
 		Populates the File toolbar menu in `s.upperBox`.

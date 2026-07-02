@@ -1,5 +1,6 @@
 package editors;
-import editors.ChartingState;
+
+import legacy.editors.ChartingState;
 
 import backend.WeekData;
 import objects.Character;
@@ -100,7 +101,7 @@ class MasterEditorMenu extends MusicBeatState {
 
 		if (controls.ACCEPT) {
 			switch (options[curSelected]) {
-				case 'Chart Editor': // felt it would be cool maybe
+				case 'Chart Editor':
 					LoadingState.loadAndSwitchState(new ChartingState(), false);
 				case 'Character Editor':
 					LoadingState.loadAndSwitchState(new CharacterEditorState(Character.DEFAULT_CHARACTER, false));

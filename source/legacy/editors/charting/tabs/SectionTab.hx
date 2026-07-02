@@ -1,7 +1,7 @@
-package editors.charting.tabs;
+package legacy.editors.charting.tabs;
 
-import editors.ChartingState;
-import editors.ChartingState.UndoAction;
+import legacy.editors.ChartingState;
+import legacy.editors.ChartingState.UndoAction;
 
 /**
 	Builds the "Section" tab of the chart editor's main box: per-section flags (must-hit, gf, alt-anim),
@@ -9,7 +9,7 @@ import editors.ChartingState.UndoAction;
 	section operations. The bulk of timing edits route through the editor's note-adapt path. Reaches editor
 	state/widgets via `@:access`.
 **/
-@:access(editors.ChartingState)
+@:access(legacy.editors.ChartingState)
 class SectionTab {
 	/**
 		Populates the Section tab in `s.mainBox`.
