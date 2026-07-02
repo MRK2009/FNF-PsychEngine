@@ -160,7 +160,6 @@ class SongChart {
 		var curKeyCount:Int = baseKeyCount;
 		var sectionStartTime:Float = 0;
 		var secIndex:Int = 0;
-		var gfUsed:Bool = false;
 
 		for (section in song.notes) {
 			if (section.changeBPM == true && section.bpm != null && daBpm != section.bpm)
@@ -208,10 +207,9 @@ class SongChart {
 
 			// gf sections focus the gf strumline; else the must-hit side.
 			var camTarget:Int;
-			if (section.gfSection == true) {
+			if (section.gfSection == true)
 				camTarget = LEGACY_GF;
-				gfUsed = true;
-			} else
+			else
 				camTarget = (section.mustHitSection == true) ? LEGACY_PLAYER : LEGACY_OPPONENT;
 
 			var beats:Float = Conductor.getSectionBeats(song, secIndex);
@@ -230,12 +228,12 @@ class SongChart {
 
 		var oppChar:String = (song.player2 != null) ? song.player2 : 'dad';
 		var plrChar:String = (song.player1 != null) ? song.player1 : 'bf';
+		var gfChar:String = (song.gfVersion != null) ? song.gfVersion : 'gf';
 		chart.strumLines.push({index: LEGACY_OPPONENT, id: 'opponent', type: OPPONENT, isPlayer: false, visible: true, characters: [oppChar], keyCount: baseKeyCount});
 		chart.strumLines.push({index: LEGACY_PLAYER, id: 'player', type: PLAYER, isPlayer: true, visible: true, characters: [plrChar], keyCount: baseKeyCount});
-		if (gfUsed) {
-			var gfChar:String = (song.gfVersion != null) ? song.gfVersion : 'gf';
-			chart.strumLines.push({index: LEGACY_GF, id: 'gf', type: ADDITIONAL, isPlayer: false, visible: false, characters: [gfChar], keyCount: baseKeyCount});
-		}
+		// The gf line always exists (hidden): it's the native replacement for "GF Section" —
+		// notes charted on it make GF sing without relying on gfNote flags or GF note types.
+		chart.strumLines.push({index: LEGACY_GF, id: 'gf', type: ADDITIONAL, isPlayer: false, visible: false, characters: [gfChar], keyCount: baseKeyCount});
 		return chart;
 	}
 
