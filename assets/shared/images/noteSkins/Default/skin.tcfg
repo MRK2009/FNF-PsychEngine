@@ -27,6 +27,7 @@ general:
 	holdAntialiasing: false
 	holdAlpha: 0.5
 	pixelVariant: true
+	hi-res: true
 
 colorable:
 	notes: true
