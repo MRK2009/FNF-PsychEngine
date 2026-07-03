@@ -14,6 +14,15 @@ typedef ModSecurityFinding = {
 	var snippet:String;
 }
 
+// Enabled-pattern snapshot taken once per scan so the hot line loop never has
+// to consult ClientPrefs.data.modSecurityChecks per pattern per line.
+typedef EnabledPatterns = {
+	var luaHigh:Array<{p:EReg, name:String}>;
+	var luaMed:Array<{p:EReg, name:String}>;
+	var hxHigh:Array<{p:EReg, name:String}>;
+	var hxMed:Array<{p:EReg, name:String}>;
+}
+
 typedef ModSecurityRecord = {
 	var hash:String;
 	var allowed:Bool;
@@ -53,7 +62,7 @@ class ModSecurity {
 	// of mods use them for harmless logic, so flagging the bridge call itself
 	// would prompt for trust on nearly every modern mod. Instead, when a Lua
 	// file contains a Haxe-bridge call, we scan its full content against the
-	// HX patterns below (see `scanDir`), so embedded Sys.command / sys.io.File /
+	// HX patterns below (see `scanHashDir`), so embedded Sys.command / sys.io.File /
 	// cpp.Lib.load etc. still get caught by their real, dangerous pattern.
 	static final LUA_PATTERNS_HIGH:Array<{p:EReg, name:String}> = [
 		{p: ~/\bsaveFile\b/,         name: "saveFile"},
@@ -280,8 +289,9 @@ class ModSecurity {
 		final enabled = Mods.parseList().enabled;
 		for (i in 0...enabled.length) {
 			final folder = enabled[i];
-			final findings = scanMod(folder);
-			final hash = computeHash(folder);
+			final res = scanAndHash(folder);
+			final findings = res.findings;
+			final hash = res.hash;
 			final stamp = computeStamp(folder);
 			var rec = records.get(folder);
 			if (rec == null) {
@@ -308,7 +318,8 @@ class ModSecurity {
 		load();
 		var rec = records.get(folder);
 		if (rec == null) {
-			rec = {hash: computeHash(folder), allowed: allowed, findings: scanMod(folder), stamp: computeStamp(folder), decided: true};
+			final res = scanAndHash(folder);
+			rec = {hash: res.hash, allowed: allowed, findings: res.findings, stamp: computeStamp(folder), decided: true};
 			records.set(folder, rec);
 		} else {
 			rec.allowed = allowed;
@@ -343,27 +354,29 @@ class ModSecurity {
 				return !rec.allowed;
 			}
 		}
-		var currentHash = computeHash(folder);
 		if (rec == null) {
-			var findings = scanMod(folder);
-			rec = {hash: currentHash, allowed: (findings.length == 0), findings: findings, stamp: computeStamp(folder)};
+			// Single-pass scan + hash: reads each script file once instead of
+			// twice (was scanMod + computeHash).
+			final res = scanAndHash(folder);
+			final findings = res.findings;
+			rec = {hash: res.hash, allowed: (findings.length == 0), findings: findings, stamp: computeStamp(folder)};
 			records.set(folder, rec);
-			save();
+			requestSave();
 			checkedThisSession.set(folder, true);
 			return !rec.allowed;
 		}
+		final currentHash = computeHash(folder);
 		if (currentHash != rec.hash) {
 			// Scripts changed -- re-scan, revoke trust if anything risky is now
 			// present, and clear the user's prior decision so the prompt re-shows.
-			var findings = scanMod(folder);
+			final findings = scanMod(folder);
 			rec.hash = currentHash;
 			rec.findings = findings;
-			if (findings.length == 0) rec.allowed = true;
-			else rec.allowed = false;
+			rec.allowed = findings.length == 0;
 			rec.decided = false;
 		}
 		rec.stamp = computeStamp(folder);
-		save();
+		requestSave();
 		checkedThisSession.set(folder, true);
 		return !rec.allowed;
 	}
@@ -373,6 +386,7 @@ class ModSecurity {
 		load();
 		var out:Array<String> = [];
 		var enabled = Mods.parseList().enabled;
+		beginBatch();
 		for (i in 0...enabled.length) {
 			var folder = enabled[i];
 			isBlocked(folder); // ensures record exists / is up-to-date
@@ -382,6 +396,7 @@ class ModSecurity {
 			if (rec != null && !rec.decided && rec.findings.length > 0)
 				out.push(folder);
 		}
+		endBatch();
 		return out;
 	}
 
@@ -391,6 +406,7 @@ class ModSecurity {
 		load();
 		var out:Array<String> = [];
 		var enabled = Mods.parseList().enabled;
+		beginBatch();
 		for (i in 0...enabled.length) {
 			var folder = enabled[i];
 			isBlocked(folder); // ensures record exists / is up-to-date
@@ -398,6 +414,7 @@ class ModSecurity {
 			if (rec != null && rec.findings.length > 0)
 				out.push(folder);
 		}
+		endBatch();
 		return out;
 	}
 
@@ -410,22 +427,52 @@ class ModSecurity {
 	}
 
 	public static function scanMod(folder:String):Array<ModSecurityFinding> {
-		var modPath:String = Paths.mods(folder);
-		if (!FileSystem.exists(modPath) || !FileSystem.isDirectory(modPath))
-			return [];
-		var findings:Array<ModSecurityFinding> = [];
-		try scanDir(modPath, modPath, findings) catch (e:Dynamic) trace('ModSecurity scan failed for $folder: $e');
-		return findings;
+		return scanAndHash(folder).findings;
 	}
 
-	static function scanDir(root:String, dir:String, findings:Array<ModSecurityFinding>):Void {
+	// Single-pass scan + content hash. `isBlocked` and `rescanAll` need both the
+	// findings and the change-detection hash for a mod; computing them separately
+	// meant reading every script file from disk twice (once for the MD5, once for
+	// the line scan) and building the giant hash string on its own walk. This walks
+	// the mod tree once, reading each file a single time, feeding its content to
+	// both the scanner and the hash buffer.
+	static function scanAndHash(folder:String):{findings:Array<ModSecurityFinding>, hash:String} {
+		final modPath:String = Paths.mods(folder);
+		if (!FileSystem.exists(modPath) || !FileSystem.isDirectory(modPath))
+			return {findings: [], hash: ''};
+		final findings:Array<ModSecurityFinding> = [];
+		final buf = new StringBuf();
+		// Snapshot the enabled pattern set once per scan instead of calling
+		// isCheckEnabled (a Map lookup) for every pattern on every line of every
+		// file. Enabled state can't change mid-scan.
+		final en:EnabledPatterns = {
+			luaHigh: filterEnabled(LUA_PATTERNS_HIGH),
+			luaMed:  filterEnabled(LUA_PATTERNS_MED),
+			hxHigh:  filterEnabled(HX_PATTERNS_HIGH),
+			hxMed:   filterEnabled(HX_PATTERNS_MED)
+		};
+		try scanHashDir(modPath, modPath, findings, buf, en) catch (e:Dynamic) trace('ModSecurity scan failed for $folder: $e');
+		return {findings: findings, hash: Md5.encode(buf.toString())};
+	}
+
+	static inline function filterEnabled(arr:Array<{p:EReg, name:String}>):Array<{p:EReg, name:String}> {
+		final out:Array<{p:EReg, name:String}> = [];
+		for (i in 0...arr.length)
+			if (isCheckEnabled(arr[i].name)) out.push(arr[i]);
+		return out;
+	}
+
+	static function scanHashDir(root:String, dir:String, findings:Array<ModSecurityFinding>, buf:StringBuf, en:EnabledPatterns):Void {
 		final entries = FileSystem.readDirectory(dir);
+		// Sort for a stable hash: the concatenation order must be deterministic
+		// so an unchanged mod produces the same MD5 across launches.
+		entries.sort(function(a, b) return a < b ? -1 : (a > b ? 1 : 0));
 		final entryCount:Int = entries.length;
 		for (i in 0...entryCount) {
 			final entry = entries[i];
 			final full:String = Path.join([dir, entry]);
 			if (FileSystem.isDirectory(full)) {
-				scanDir(root, full, findings);
+				scanHashDir(root, full, findings, buf, en);
 				continue;
 			}
 			final lower:String = entry.toLowerCase();
@@ -436,11 +483,19 @@ class ModSecurity {
 			var content:String;
 			try content = File.getContent(full) catch (e:Dynamic) continue;
 
+			// Feed the hash buffer with the exact same layout the old computeHash
+			// used (full path + ':' + content + '\n') so previously saved hashes
+			// still match and don't force a spurious rescan.
+			buf.add(full);
+			buf.add(':');
+			buf.add(content);
+			buf.add('\n');
+
 			final rel:String = full.substr(root.length + 1).split('\\').join('/');
 			final lines = content.split('\n');
 			final lineCount:Int = lines.length;
-			final highs = isLua ? LUA_PATTERNS_HIGH : HX_PATTERNS_HIGH;
-			final meds  = isLua ? LUA_PATTERNS_MED  : HX_PATTERNS_MED;
+			final highs = isLua ? en.luaHigh : en.hxHigh;
+			final meds  = isLua ? en.luaMed  : en.hxMed;
 			final highCount:Int = highs.length;
 			final medCount:Int = meds.length;
 
@@ -449,10 +504,10 @@ class ModSecurity {
 			// strings (or any Haxe set up via addHaxeLibrary) get flagged with
 			// their real, concrete pattern instead of a generic "runHaxeCode".
 			final alsoScanHx:Bool = isLua && LUA_HAXE_BRIDGE.match(content);
-			final extraHighs = alsoScanHx ? HX_PATTERNS_HIGH : null;
-			final extraMeds  = alsoScanHx ? HX_PATTERNS_MED  : null;
-			final extraHighCount:Int = alsoScanHx ? HX_PATTERNS_HIGH.length : 0;
-			final extraMedCount:Int  = alsoScanHx ? HX_PATTERNS_MED.length  : 0;
+			final extraHighs = alsoScanHx ? en.hxHigh : null;
+			final extraMeds  = alsoScanHx ? en.hxMed  : null;
+			final extraHighCount:Int = alsoScanHx ? extraHighs.length : 0;
+			final extraMedCount:Int  = alsoScanHx ? extraMeds.length  : 0;
 
 			for (li in 0...lineCount) {
 				final line = lines[li];
@@ -465,26 +520,22 @@ class ModSecurity {
 				}
 				for (pi in 0...highCount) {
 					final pat = highs[pi];
-					if (!isCheckEnabled(pat.name)) continue;
 					if (pat.p.match(line))
 						findings.push({file: rel, line: li + 1, pattern: pat.name, severity: 0, snippet: trimSnippet(line)});
 				}
 				for (pi in 0...medCount) {
 					final pat = meds[pi];
-					if (!isCheckEnabled(pat.name)) continue;
 					if (pat.p.match(line))
 						findings.push({file: rel, line: li + 1, pattern: pat.name, severity: 1, snippet: trimSnippet(line)});
 				}
 				if (alsoScanHx) {
 					for (pi in 0...extraHighCount) {
 						final pat = extraHighs[pi];
-						if (!isCheckEnabled(pat.name)) continue;
 						if (pat.p.match(line))
 							findings.push({file: rel, line: li + 1, pattern: pat.name, severity: 0, snippet: trimSnippet(line)});
 					}
 					for (pi in 0...extraMedCount) {
 						final pat = extraMeds[pi];
-						if (!isCheckEnabled(pat.name)) continue;
 						if (pat.p.match(line))
 							findings.push({file: rel, line: li + 1, pattern: pat.name, severity: 1, snippet: trimSnippet(line)});
 					}
