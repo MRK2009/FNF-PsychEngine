@@ -3324,12 +3324,10 @@ class PlayState extends MusicBeatState {
 				strumPlayAnim(playerReceptors, data.column, Conductor.stepCrochet * 1.25 / 1000 / playbackRate);
 			vocals.volume = 1;
 
-			if (!isSus) {
 				combo++;
 				if (combo > 9999)
 					combo = 9999;
 				popUpScore(data);
-			}
 			var gainHealth:Bool = !(guitarHeroSustains && isSus);
 			if (gainHealth)
 				health += data.hitHealth * healthGain;
