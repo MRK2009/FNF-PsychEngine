@@ -376,6 +376,19 @@ class NoteSplash extends FlxSprite {
 				tempShader.b = mc[paletteCol][2];
 			}
 		}
+
+		// Independent splash colour: the skin allows colouring the splash but its link is OFF, so use the
+		// splash's own per-asset colour (per-keycount aware, note-colour fallback) instead of the note's.
+		if (config.allowRGB && !ClientPrefs.data.linkSplashColor) {
+			var sc:Array<Array<FlxColor>> = Mania.getAssetColors('splash', Mania.current);
+			if (paletteCol >= 0 && paletteCol < sc.length && sc[paletteCol] != null && sc[paletteCol].length >= 3) {
+				if (tempShader == null)
+					tempShader = new RGBPalette();
+				tempShader.r = sc[paletteCol][0];
+				tempShader.g = sc[paletteCol][1];
+				tempShader.b = sc[paletteCol][2];
+			}
+		}
 		rgbShader.copyValues(tempShader);
 		if (!config.allowPixel)
 			rgbShader.pixelAmount = 1;
@@ -439,14 +452,15 @@ class NoteSplash extends FlxSprite {
 	function followArrow():Void {
 		if (babyArrow == null)
 			return;
-		// Centre the splash graphic on the receptor's on-screen graphic centre, accounting for the
-		// receptor's own offset + scale, so the burst sits exactly on the strum for every skin/keycount.
-		var recCx:Float = babyArrow.x - babyArrow.offset.x + babyArrow.frameWidth * babyArrow.scale.x / 2;
-		var recCy:Float = babyArrow.y - babyArrow.offset.y + babyArrow.frameHeight * babyArrow.scale.y / 2;
+		// Centre the splash frame on the receptor's alignment point -- the same reference the note head
+		// uses (strum origin + swagWidth/2 on the perpendicular axis, receptor graphic centre on the
+		// scroll axis). The skin's configured splash offset is intentionally NOT applied here.
+		var recCx:Float = babyArrow.x + Mania.swagWidth / 2;
+		var recCy:Float = babyArrow.y + babyArrow.height / 2;
 		if (copyX)
-			x = recCx - frameWidth * scale.x / 2 + splashNudgeX;
+			x = recCx - frameWidth * scale.x / 2;
 		if (copyY)
-			y = recCy - frameHeight * scale.y / 2 + splashNudgeY;
+			y = recCy - frameHeight * scale.y / 2;
 	}
 
 	public function playDefaultAnim() {
