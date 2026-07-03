@@ -660,6 +660,9 @@ class PlayState extends MusicBeatState {
 			eventNotes.sort(sortByTime);
 		}
 
+		if (debug.bench.BenchmarkRunner.active)
+			debug.bench.BenchmarkRunner.onPlayStateReady(this);
+
 		startCallback();
 		RecalculateRating(false, false);
 
@@ -1267,6 +1270,9 @@ class PlayState extends MusicBeatState {
 		#end
 		setOnScripts('songLength', songLength);
 		callOnScripts('onSongStart');
+
+		if (debug.bench.BenchmarkRunner.active)
+			debug.bench.BenchmarkRunner.onSongStarted(this);
 	}
 
 	private var noteTypes:Array<String> = [];

@@ -17,7 +17,8 @@ class MasterEditorMenu extends MusicBeatState {
 		'Dialogue Portrait Editor',
 		'Note Splash Editor',
 		'Note Skin Editor',
-		'UI Skin Editor'
+		'UI Skin Editor',
+		'Benchmark'
 	];
 	private var grpTexts:FlxTypedGroup<Alphabet>;
 	private var directories:Array<String> = [null];
@@ -122,6 +123,8 @@ class MasterEditorMenu extends MusicBeatState {
 					MusicBeatState.switchState(new NoteSkinEditorState());
 				case 'UI Skin Editor':
 					MusicBeatState.switchState(new UISkinEditorState());
+				case 'Benchmark':
+					MusicBeatState.switchState(new debug.bench.BenchmarkState());
 			}
 			FlxG.sound.music.volume = 0;
 			FreeplayState.destroyFreeplayVocals();
