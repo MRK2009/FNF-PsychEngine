@@ -1,6 +1,7 @@
 package backend.noteskin;
 
 import flixel.FlxSprite;
+import flixel.util.FlxColor;
 import shaders.RGBPalette.RGBShaderReference;
 import backend.NoteSkinConfig;
 import backend.NoteSkinConfig.NoteSkinData;
@@ -116,12 +117,11 @@ class FolderNoteSkin implements INoteSkin {
 		var fBody:Float = NoteSkinConfig.applyAnims(body, [{name: 'hold', keys: holdFrames, fps: laneFps, loop: true}]);
 		var fTail:Float = NoteSkinConfig.applyAnims(tail, [{name: 'end', keys: endFrames, fps: laneFps, loop: true}]);
 
-		var holdsColorable:Bool = NoteSkinConfig.linkedColorable(cfg, 'holds');
-		var endsColorable:Bool = NoteSkinConfig.linkedColorable(cfg, 'ends');
-		if (bodyRGB != null)
-			bodyRGB.enabled = holdsColorable;
-		if (tailRGB != null)
-			tailRGB.enabled = endsColorable;
+		var holdsSupported:Bool = NoteSkinConfig.colorableFor(cfg, 'holds');
+		var endsSupported:Bool = NoteSkinConfig.colorableFor(cfg, 'ends');
+		var linked:Bool = ClientPrefs.data.linkSustainColor;
+		tintElement(bodyRGB, 'holds', holdsSupported, linked, col, kc);
+		tintElement(tailRGB, 'holds', endsSupported, linked, col, kc);
 
 		var aa:Bool = (cfg.pixel == true
 			|| NoteSkinConfig.pixelMode) ? false : NoteSkinConfig.boolForColumn(cfg.antialiasing, col, ClientPrefs.data.antialiasing);
@@ -139,9 +139,37 @@ class FolderNoteSkin implements INoteSkin {
 		v.offsetY = off[1];
 		v.scaleFactor = scaleBase * fBody;
 		v.pixel = (cfg.pixel == true || NoteSkinConfig.pixelMode);
-		v.colorable = holdsColorable;
+		v.colorable = holdsSupported;
 		v.ok = true;
 		return v;
+	}
+
+	/**
+		Enables/tints an element's RGB shader: disabled when the skin can't colour it; otherwise the note
+		colour when its link is ON, or the asset's own independent colour (per-keycount aware) when OFF.
+	**/
+	inline function tintElement(ref:RGBShaderReference, element:String, supported:Bool, linked:Bool, column:Int, keyCount:Int):Void {
+		if (ref == null)
+			return;
+		if (!supported) {
+			ref.enabled = false;
+			return;
+		}
+		ref.enabled = true;
+		if (linked)
+			return;
+		var cols:Array<FlxColor> = tintFor(element, column, keyCount);
+		if (cols != null) {
+			ref.r = cols[0];
+			ref.g = cols[1];
+			ref.b = cols[2];
+		}
+	}
+
+	/** The [r,g,b] triple an asset resolves to at a lane, or null when out of range. **/
+	inline function tintFor(element:String, column:Int, keyCount:Int):Array<FlxColor> {
+		var all:Array<Array<FlxColor>> = Mania.getAssetColors(element, keyCount);
+		return (column >= 0 && column < all.length && all[column] != null && all[column].length >= 3) ? all[column] : null;
 	}
 
 	/** Builds the receptor static/pressed/confirm look; falls back to the classic skin if unresolved. **/
@@ -191,9 +219,10 @@ class FolderNoteSkin implements INoteSkin {
 		]);
 
 		v.colorPerAnim = true;
-		v.staticColorable = NoteSkinConfig.linkedColorable(cfg, 'strums');
-		v.pressedColorable = NoteSkinConfig.linkedColorable(cfg, 'pressed');
-		v.confirmColorable = NoteSkinConfig.linkedColorable(cfg, 'confirm');
+		// Skin support only; the per-anim link/custom colour is resolved in Receptor.playAnim.
+		v.staticColorable = NoteSkinConfig.colorableFor(cfg, 'strums');
+		v.pressedColorable = NoteSkinConfig.colorableFor(cfg, 'pressed');
+		v.confirmColorable = NoteSkinConfig.colorableFor(cfg, 'confirm');
 		spr.antialiasing = (cfg.pixel == true
 			|| NoteSkinConfig.pixelMode) ? false : NoteSkinConfig.boolForColumn(cfg.antialiasing, c, ClientPrefs.data.antialiasing);
 

@@ -385,7 +385,7 @@ class NoteSkinConfig {
 		return {
 			source: source,
 			scale: numForColumn(cfg.splashScale, 0, 1) * factor,
-			allowRGB: linkedColorable(cfg, 'splash'),
+			allowRGB: colorableFor(cfg, 'splash'), // skin support; the link gating happens in NoteSplash
 			allowPixel: false, // folder skins ship their own pixel art; no extra shader blocking
 			pixel: pixelForSkin(cfg), // but still drop antialiasing so that art stays crisp
 			fps: fps,

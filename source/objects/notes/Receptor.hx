@@ -1,10 +1,12 @@
 package objects.notes;
 
 import flixel.FlxSprite;
+import flixel.util.FlxColor;
 import backend.animation.PsychAnimationController;
 import backend.noteskin.NoteSkinService;
 import backend.noteskin.NoteVisual;
 import objects.notes.NoteDefaults;
+import shaders.RGBPalette;
 import shaders.RGBPalette.RGBShaderReference;
 
 /**
@@ -185,17 +187,55 @@ final class Receptor extends FlxSprite {
 		}
 
 		if (colorPerAnim) {
-			var on:Bool = false;
+			var supported:Bool = false;
 			if (useRGBShader && animation.curAnim != null) {
-				on = switch (animation.curAnim.name) {
+				supported = switch (animation.curAnim.name) {
 					case 'static': staticColorable;
 					case 'pressed': pressedColorable;
 					case 'confirm': confirmColorable;
 					default: false;
 				}
 			}
-			rgbShader.enabled = on;
+			rgbShader.enabled = supported;
+			if (supported)
+				tintAnim(animation.curAnim.name);
 		} else if (useRGBShader)
 			rgbShader.enabled = (animation.curAnim != null && animation.curAnim.name != 'static');
+	}
+
+	/**
+		Tints the current receptor anim: the note colour when that element's "Link ..." option is on, or
+		its own independent colour (per-keycount aware, falling back to the note colour) when off.
+	**/
+	function tintAnim(anim:String):Void {
+		var element:String = switch (anim) {
+			case 'static': 'strums';
+			case 'pressed': 'pressed';
+			case 'confirm': 'confirm';
+			default: null;
+		}
+		if (element == null)
+			return;
+		var linked:Bool = switch (element) {
+			case 'strums': ClientPrefs.data.linkStrumColor;
+			case 'pressed': ClientPrefs.data.linkPressedColor;
+			case 'confirm': ClientPrefs.data.linkConfirmColor;
+			default: true;
+		}
+		var c:Array<FlxColor>;
+		if (linked) {
+			var np:RGBPalette = Note.initializeGlobalRGBShader(column);
+			c = [np.r, np.g, np.b];
+		} else {
+			var all:Array<Array<FlxColor>> = Mania.getAssetColors(element, keyCount);
+			if (column < 0 || column >= all.length)
+				return;
+			c = all[column];
+		}
+		if (c != null && c.length >= 3) {
+			rgbShader.r = c[0];
+			rgbShader.g = c[1];
+			rgbShader.b = c[2];
+		}
 	}
 }
