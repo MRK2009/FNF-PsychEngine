@@ -915,10 +915,10 @@ final class EditorNoteField {
 
 		var sus:SustainSprite = live.sustain;
 		if (sus != null) {
-			// trail spans head-cell center to end-time cell center (either scroll direction)
+			// Trail runs from the head-cell centre to the endTime STEP LINE (not the endTime cell centre),
+			// so the tail terminates exactly on the grid instead of half a cell past it.
 			var headMid:Float = rowTop + cell * 0.5;
-			var endY:Float = yOfSteps(stepsOf(note.time + note.length), viewSteps);
-			var endMid:Float = (downscroll ? (endY - cell) : endY) + cell * 0.5;
+			var endMid:Float = yOfSteps(stepsOf(note.time + note.length), viewSteps);
 			var top:Float = (headMid < endMid) ? headMid : endMid;
 			var span:Float = Math.abs(endMid - headMid);
 			var tailH:Float = sus.tail.frameHeight * sus.tail.scale.y;
