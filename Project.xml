@@ -168,6 +168,8 @@
 	<!-- Disable Discord IO Thread -->
 	<haxedef name="DISCORD_DISABLE_IO_THREAD" if="hxdiscord_rpc" />
 	<haxedef name="NO_PRECOMPILED_HEADERS" if="linux" />
+	<!-- Compile the windows target with clang-cl + lld (setup/hxcpp-clang-cl.xml): lime build windows -Dclang -->
+	<haxedef name="HXCPP_CLANG_CL" if="windows clang" />
 	<!-- Silence the flood of NDK warnings from C++ externs on android builds. -->
 	<haxedef name="HXCPP_CFLAGS" value="-Wno-all -w" if="android" />
 
