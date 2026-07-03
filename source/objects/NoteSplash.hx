@@ -397,8 +397,10 @@ class NoteSplash extends FlxSprite {
 
 		var conf:NoteSplashAnim = config.animations.get(anim);
 		var offsets:Array<Float> = (conf != null && conf.offsets != null) ? conf.offsets : [0, 0];
-		// All splashes are centred on the receptor in followArrow(); the config offsets nudge that centre
-		// via the position (not `offset`, which would fight the centring math).
+		// All splashes are centred on the receptor in followArrow(). The config offsets nudge that
+		// centre via the position, folder splashes only (legacy sparrow offsets were hand-tuned for
+		// the old top-left layout and would mis-place a centred splash) -- and not via `offset`,
+		// which would fight the centring math.
 		offset.set(0, 0);
 		splashNudgeX = offsets[0];
 		splashNudgeY = offsets[1];
@@ -435,32 +437,37 @@ class NoteSplash extends FlxSprite {
 		if (animation.curAnim != null)
 			animation.curAnim.frameRate = FlxG.random.int(minFps, maxFps);
 
-		// Multikey: scale the splash down to match the smaller notes. 4K keeps the config scale untouched;
-		// followArrow() re-centres on the receptor afterwards, so no per-keycount offset nudge is needed.
+		// Multikey: scale the splash down to match the smaller notes (4K keeps the config scale
+		// untouched) and shrink the configured nudge with it.
 		if (!inEditor && Mania.current != Mania.DEFAULT) {
-			var ratio:Float = Mania.noteSizes[Mania.current - 1] / 0.7;
+			var ratio:Float = Mania.noteSizes[Mania.current - 1] / Mania.noteSizes[Mania.DEFAULT - 1];
 			scale.set(config.scale * ratio, config.scale * ratio);
+			splashNudgeX *= ratio;
+			splashNudgeY *= ratio;
 		}
 
 		followArrow();
 		spawned = true;
 	}
 
-	// Keeps the spawned splash glued to its receptor. Folder splashes centre on the lane -- the same
-	// `swagWidth`-square reference the notes/receptor use -- so the burst sits exactly on the strum;
-	// legacy sparrow splashes keep their historical hand-tuned offset. Called on spawn and every frame.
+	// Keeps the spawned splash glued to its receptor: centred on the lane, the same
+	// `swagWidth`-square reference the notes/receptor use. The sprite scales around its centred
+	// origin, so the frame's visual centre sits at `x + frameWidth / 2` REGARDLESS of scale -- the
+	// position math must not include a scale term (one would drift the splash whenever scale != 1,
+	// i.e. every non-4K keycount). Called on spawn and every frame.
 	function followArrow():Void {
 		if (babyArrow == null)
 			return;
-		// Centre the splash frame on the receptor's alignment point -- the same reference the note head
-		// uses (strum origin + swagWidth/2 on the perpendicular axis, receptor graphic centre on the
-		// scroll axis). The skin's configured splash offset is intentionally NOT applied here.
 		var recCx:Float = babyArrow.x + Mania.swagWidth / 2;
 		var recCy:Float = babyArrow.y + babyArrow.height / 2;
+		if (folderCentered) {
+			recCx += splashNudgeX;
+			recCy += splashNudgeY;
+		}
 		if (copyX)
-			x = recCx - frameWidth * scale.x / 2;
+			x = recCx - frameWidth / 2;
 		if (copyY)
-			y = recCy - frameHeight * scale.y / 2;
+			y = recCy - frameHeight / 2;
 	}
 
 	public function playDefaultAnim() {

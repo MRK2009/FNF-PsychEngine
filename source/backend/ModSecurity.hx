@@ -150,6 +150,32 @@ class ModSecurity {
 	// and FunkinLua.new both call isBlocked, often dozens of times per state).
 	static var checkedThisSession:Map<String, Bool> = new Map();
 
+	// Save batching. Scanning a full mod list used to flush the whole save file
+	// to disk once per mod inside `isBlocked` (N mods = N flushes). Callers that
+	// loop over many mods (getPendingMods/getReviewableMods/rescanAll) wrap the
+	// loop in beginBatch/endBatch so all the record mutations collapse into a
+	// single flush at the end. Outside a batch, `requestSave` flushes eagerly so
+	// per-script runtime callers keep their old persistence semantics.
+	static var batchDepth:Int = 0;
+	static var batchDirty:Bool = false;
+
+	static inline function beginBatch():Void batchDepth++;
+
+	static function endBatch():Void {
+		if (--batchDepth <= 0) {
+			batchDepth = 0;
+			if (batchDirty) {
+				save();
+				batchDirty = false;
+			}
+		}
+	}
+
+	static inline function requestSave():Void {
+		if (batchDepth > 0) batchDirty = true;
+		else save();
+	}
+
 	/**
 	 * Returns every pattern name the scanner knows about, in display order
 	 * (HIGH first, MED second; Lua then Haxe within each tier; deduplicated).
