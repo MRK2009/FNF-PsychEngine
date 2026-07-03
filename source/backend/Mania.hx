@@ -225,6 +225,46 @@ class Mania {
 		}
 	}
 
+	/**
+		Per-lane colours for one recolourable asset ('holds'/'splash'/'pressed'/'confirm'/'strums') at a
+		keycount. Reads the user's independent per-asset store (a per-keycount override, else the shared
+		9-slot store), falling back to the note colours when the asset has no custom data set. Used in
+		gameplay when that asset's "Link ..." option is OFF.
+	**/
+	public static function getAssetColors(element:String, count:Int):Array<Array<FlxColor>> {
+		count = clamp(count);
+		var byKey:Map<String, Array<Array<Array<FlxColor>>>> = PlayState.isPixelStage ? ClientPrefs.data.assetRGBByKeyPixel : ClientPrefs.data.assetRGBByKey;
+		if (ClientPrefs.data.noteColorPerKeycount && byKey != null && byKey.exists(element)) {
+			var ov:Array<Array<FlxColor>> = byKey.get(element)[count - 1];
+			if (ov != null && ov.length == count)
+				return ov;
+		}
+		var shared:Map<String, Array<Array<FlxColor>>> = PlayState.isPixelStage ? ClientPrefs.data.assetRGBPixel : ClientPrefs.data.assetRGB;
+		if (shared != null && shared.exists(element)) {
+			var sh:Array<Array<FlxColor>> = shared.get(element);
+			if (sh != null && sh.length >= 9)
+				return mapShared9(sh, count);
+		}
+		return getColors(count);
+	}
+
+	// Maps a 9-slot shared colour array [L,D,U,R,square,L2,D2,U2,R2] onto a keycount's lane layout
+	// (same arrangement composeShared uses for the note colours).
+	static function mapShared9(n:Array<Array<FlxColor>>, count:Int):Array<Array<FlxColor>> {
+		return switch (clamp(count)) {
+			case 1: [n[4]];
+			case 2: [n[0], n[3]];
+			case 3: [n[0], n[4], n[3]];
+			case 4: [n[0], n[1], n[2], n[3]];
+			case 5: [n[0], n[1], n[4], n[2], n[3]];
+			case 6: [n[0], n[2], n[3], n[5], n[1], n[8]];
+			case 7: [n[0], n[2], n[3], n[4], n[5], n[1], n[8]];
+			case 8: [n[0], n[1], n[2], n[3], n[5], n[6], n[7], n[8]];
+			case 9: [n[0], n[1], n[2], n[3], n[4], n[5], n[6], n[7], n[8]];
+			default: [n[0], n[1], n[2], n[3]];
+		}
+	}
+
 	// The sparrow atlas used for non-4K notes/strums (4 arrows + a square note).
 	public static inline var ATLAS:String = 'noteSkins/square';
 }
