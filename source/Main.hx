@@ -127,6 +127,7 @@ class Main extends Sprite {
 		#end
 
 		FlxG.fixedTimestep = false;
+		FlxG.signals.postGameReset.add(() -> FlxG.fixedTimestep = false);
 		FlxG.game.focusLostFramerate = 60;
 		FlxG.keys.preventDefaultKeys = [TAB];
 
