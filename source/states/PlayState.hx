@@ -2809,18 +2809,20 @@ class PlayState extends MusicBeatState {
 		opponentReceptors = (firstOpp != null) ? firstOpp.receptors : [];
 		playerReceptors = (firstPlayer != null) ? firstPlayer.receptors : [];
 
-		// Render order, back -> front: receptors, then sustains and heads. Which of the two is on top is
-		// per-skin (`skin.tcfg` `holdsOverHeads`) or the global `sustainsOverNotes` option; default keeps
-		// sustains under the heads.
-		noteGroup.add(receptorGroup);
+		// Note layering, per-skin (`skin.tcfg` `holdsOverHeads`) or the global `sustainsOverNotes` option.
 		if (backend.NoteSkinConfig.holdsOverHeads()) {
+			// Over: sustains drawn on top of the receptors and the heads.
+			noteGroup.add(receptorGroup);
 			for (line in visibleLines)
 				noteGroup.add(line.field.headGroup);
 			for (line in visibleLines)
 				noteGroup.add(line.field.sustainGroup);
 		} else {
+			// Under (default): sustains sit at the very back, behind the receptor (press/confirm) and the
+			// head, so a hold looks like it disappears into the note rather than passing over it.
 			for (line in visibleLines)
 				noteGroup.add(line.field.sustainGroup);
+			noteGroup.add(receptorGroup);
 			for (line in visibleLines)
 				noteGroup.add(line.field.headGroup);
 		}
