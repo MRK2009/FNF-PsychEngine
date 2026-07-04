@@ -54,6 +54,14 @@ final class SustainSprite extends FlxSprite {
 		return value;
 	}
 
+	/**
+		How far a hold's visual end is pulled back toward its head, as a fraction of the note half-width
+		(`Mania.swagWidth / 2`), so the tail cap tucks in short of the next note instead of reaching its
+		centre. `0` restores the exact end-time tip; `1` stops the cap at the next note's leading edge.
+		Clamped per hold so the cap always fits (the body never goes negative).
+	**/
+	public static var endTrimRatio:Float = 1.0;
+
 	public var offsetX:Float = 0;
 	public var offsetY:Float = 0;
 	public var centerOnStrum:Bool = true;
@@ -184,11 +192,21 @@ final class SustainSprite extends FlxSprite {
 
 		var headDist:Float = sign * (0.45 * (scrollNow - data.scrollPos) * rate);
 		var endDist:Float = sign * (0.45 * (scrollNow - data.endScrollPos) * rate);
-		var nearA:Float = offsetY + headDist;
-		var farA:Float = offsetY + endDist;
 
 		var tailLen:Float = tail.height;
 		var totalLen:Float = Math.abs(headDist - endDist);
+
+		var trim:Float = Mania.swagWidth * 0.5 * endTrimRatio;
+		var maxTrim:Float = totalLen - tailLen;
+		if (maxTrim < 0)
+			maxTrim = 0;
+		if (trim > maxTrim)
+			trim = maxTrim;
+		endDist += sign * trim;
+		totalLen -= trim;
+
+		var nearA:Float = offsetY + headDist;
+		var farA:Float = offsetY + endDist;
 		var bodyLen:Float = totalLen - tailLen;
 		if (bodyLen < 0)
 			bodyLen = 0;
