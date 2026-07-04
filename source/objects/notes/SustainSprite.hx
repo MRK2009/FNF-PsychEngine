@@ -62,6 +62,13 @@ final class SustainSprite extends FlxSprite {
 	**/
 	public static var endTrimRatio:Float = 1.0;
 
+	/**
+		Extra pull of a held hold's clip toward the receptor, as a fraction of the note width, so the
+		trail overlaps the receptor slightly instead of leaving a visible gap above it. `0` cuts exactly
+		at the head; larger values tuck the trail further down over the receptor.
+	**/
+	public static var holdClipNudge:Float = 0.25;
+
 	public var offsetX:Float = 0;
 	public var offsetY:Float = 0;
 	public var centerOnStrum:Bool = true;
@@ -239,7 +246,7 @@ final class SustainSprite extends FlxSprite {
 		tail.x = tcx - tail.width / 2;
 		tail.y = tcy - tail.height / 2;
 
-		clip(sign * headDist, bodyLen);
+		clip(sign * headDist - Mania.swagWidth * holdClipNudge, bodyLen);
 	}
 
 	/**
