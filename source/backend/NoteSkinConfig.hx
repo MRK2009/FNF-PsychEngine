@@ -24,6 +24,7 @@ typedef NoteSkinData = {
 	@:optional var antialiasing:Dynamic; // Bool, or a per-lane object (arrow/center/col index)
 	@:optional var holdAntialiasing:Bool;
 	@:optional var holdsOverHeads:Bool; // draw hold trails above the note heads instead of below; overrides the global option
+	@:optional var headOverlap:Float; // fraction of the note width an un-held hold's body extends up under the head (closes the head/body seam); overrides SustainSprite.headOverlap
 	@:optional var holdAlpha:Dynamic; // Float, or per-lane object
 	@:optional var scale:Dynamic; // Float, or per-lane object
 	@:optional var pixelScale:Dynamic; // scale used while rendering pixel art (Float, or per-lane); falls back to `scale`
@@ -297,6 +298,21 @@ class NoteSkinConfig {
 				return cfg.holdsOverHeads;
 		}
 		return ClientPrefs.data.sustainsOverNotes;
+	}
+
+	/**
+		Per-skin override for an un-held hold's head/body seam overlap (`SustainSprite.headOverlap`), set
+		via `headOverlap` in `skin.tcfg`.
+		@return the skin's overlap fraction, or `null` to keep the engine / script default
+	**/
+	public static function headOverlap():Null<Float> {
+		var active:String = activeSkin();
+		if (active != null) {
+			var cfg:NoteSkinData = forCurrentKeys(active);
+			if (cfg != null && cfg.headOverlap != null)
+				return cfg.headOverlap;
+		}
+		return null;
 	}
 
 	// The active folder skin's splash as a legacy *sparrow atlas* name (`<skin>/` + its `splash` key),

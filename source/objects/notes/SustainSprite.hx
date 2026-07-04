@@ -20,6 +20,12 @@ final class SustainSprite extends FlxSprite {
 	public var column:Int = 0;
 	public var keyCount:Int = 4;
 
+	/** Per-skin override of `headOverlap` (from `skin.tcfg`); `null` uses the static default. **/
+	public var skinHeadOverlap:Null<Float> = null;
+
+	/** `false` when the active skin ships no hold-end (tail) frame; the body then fills the tail's span. **/
+	public var hasTail:Bool = true;
+
 	public var tail:FlxSprite;
 
 	public var rgbShader:RGBShaderReference;
@@ -124,6 +130,7 @@ final class SustainSprite extends FlxSprite {
 		this.data = data;
 		this.column = data.column;
 		this.keyCount = keyCount;
+		skinHeadOverlap = backend.NoteSkinConfig.headOverlap();
 
 		exists = visible = active = true;
 		tail.exists = tail.visible = true;
@@ -160,6 +167,11 @@ final class SustainSprite extends FlxSprite {
 			rgbShader.enabled = false;
 			tailRGB.enabled = false;
 		}
+
+		// No hold-end frame in the skin -> the body extends over the tail's span instead of stopping short.
+		var endAnim = tail.animation.getByName('end');
+		hasTail = (endAnim != null && endAnim.numFrames > 0);
+		tail.visible = hasTail;
 
 		alpha = multAlpha = 0.6;
 		tail.alpha = alpha;
@@ -208,7 +220,8 @@ final class SustainSprite extends FlxSprite {
 		var headDist:Float = sign * (0.45 * (scrollNow - data.scrollPos) * rate);
 		var endDist:Float = sign * (0.45 * (scrollNow - data.endScrollPos) * rate);
 
-		var tailLen:Float = tail.height;
+		// Missing hold-end: no tail length is reserved, so the body reaches where the tail would have ended.
+		var tailLen:Float = hasTail ? tail.height : 0;
 		var totalLen:Float = Math.abs(headDist - endDist);
 
 		var trim:Float = Mania.swagWidth * 0.5 * endTrimRatio;
@@ -228,8 +241,9 @@ final class SustainSprite extends FlxSprite {
 
 		// Un-held trail: push the head-side edge up under the note head to close the seam. The far (tail)
 		// edge stays put. Skipped once hit -- the held clip owns the receptor-side edge from then on.
-		if (data != null && !data.hit && headOverlap != 0) {
-			var headOver:Float = Mania.swagWidth * headOverlap;
+		var ho:Float = (skinHeadOverlap != null) ? skinHeadOverlap : headOverlap;
+		if (data != null && !data.hit && ho != 0) {
+			var headOver:Float = Mania.swagWidth * ho;
 			nearA += sign * headOver;
 			bodyLen += headOver;
 		}
