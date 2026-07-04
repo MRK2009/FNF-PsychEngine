@@ -2122,6 +2122,15 @@ class PlayState extends MusicBeatState {
 								gf = newCharacter; // character != null which would already be this.gf
 						}
 
+						// v2 note runtime sings through each strumline's cached Character list; repoint
+						// any line that was singing the swapped-out character to the new one, otherwise
+						// it keeps animating the old (now-hidden) instance and the new one sits idle.
+						if (strumLines != null)
+							for (line in strumLines)
+								for (ci in 0...line.characters.length)
+									if (line.characters[ci] == character)
+										line.characters[ci] = newCharacter;
+
 						icon?.changeIcon(newCharacter.healthIcon);
 						reloadHealthBarColors();
 
