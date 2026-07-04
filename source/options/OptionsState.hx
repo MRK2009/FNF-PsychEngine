@@ -104,7 +104,10 @@ class OptionsState extends MusicBeatState {
 	var changedMusic:Bool = false;
 
 	override function create() {
-		backend.Mods.allowCurrentModAssets = false;
+		// The Note Skins / Splash dropdowns list skins from the current mod, so the live preview must be
+		// able to load that mod's assets; otherwise a mod skin resolves to the (freed) default graphic and
+		// crashes on draw.
+		backend.Mods.allowCurrentModAssets = true;
 		#if DISCORD_ALLOWED
 		DiscordClient.changePresence("Options Menu", null);
 		#end
