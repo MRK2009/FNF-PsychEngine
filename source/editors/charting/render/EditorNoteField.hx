@@ -13,7 +13,6 @@ import flixel.util.FlxColor;
 import objects.notes.NoteData;
 import objects.notes.NoteSprite;
 import objects.notes.Receptor;
-import objects.notes.SustainSprite;
 import ui.UITheme;
 
 /** One realized note: chart data + the pooled drawables currently showing it. **/
@@ -27,8 +26,8 @@ private final class LiveNote {
 	/** The pooled head sprite. **/
 	public var head:NoteSprite;
 
-	/** The pooled sustain sprite (null for taps). **/
-	public var sustain:SustainSprite;
+	/** The pooled sustain line (a simple colored bar, null for taps). **/
+	public var sustain:FlxSprite;
 
 	/** Cached selection state (drives the tint compare). **/
 	public var selected:Bool = false;
@@ -44,9 +43,10 @@ private final class LiveNote {
 
 /**
 	The Flixel notefield inside the shell's center hole: checker grid (1:1 cells, a full 4/4
-	section always fits the height), event lane, visible strumlines, pooled note drawables
-	(`NoteSprite`/`SustainSprite` skinned by `NoteSkinService`), section boundaries with dimmed
-	neighbors and the fixed mid-field playhead - the grid scrolls, the playhead doesn't.
+	section always fits the height), event lane, visible strumlines, pooled note heads
+	(`NoteSprite` skinned by `NoteSkinService`) with simple colored bars for sustains, section
+	boundaries with dimmed neighbors and the fixed mid-field playhead - the grid scrolls, the
+	playhead doesn't.
 
 	Draws on the main camera in plain game coordinates: the opaque UI chrome (menu bar, docks,
 	transport, status) layered above the FlxGame clips the field for free, so no extra camera is
@@ -93,6 +93,11 @@ final class EditorNoteField {
 	var checker:FlxSprite;
 	var waveSprite:FlxSprite;
 	var ghost:FlxSprite;
+	var ghostNote:NoteSprite;
+	var ghostData:NoteData;
+	var ghostLine:Int = -99;
+	var ghostCol:Int = -99;
+	var ghostKc:Int = -1;
 	var dimTop:FlxSprite;
 	var dimBottom:FlxSprite;
 	var playhead:FlxSprite;
@@ -155,7 +160,7 @@ final class EditorNoteField {
 	final eventMarks:Array<FlxSprite> = [];
 
 	final headPool:Array<NoteSprite> = [];
-	final sustainPool:Array<SustainSprite> = [];
+	final sustainPool:Array<FlxSprite> = [];
 	final dataPool:Array<NoteData> = [];
 	final livePool:Array<LiveNote> = [];
 	final active:Array<LiveNote> = [];
@@ -208,6 +213,12 @@ final class EditorNoteField {
 		ghost.alpha = 0.16;
 		ghost.visible = false;
 		group.add(ghost);
+
+		// a faded, correctly-skinned note preview of what a click would place (legacy dummy-arrow feel)
+		ghostData = new NoteData();
+		ghostNote = new NoteSprite();
+		ghostNote.visible = false;
+		group.add(ghostNote);
 
 		// the dim overlays live ABOVE the notes so out-of-section notes dim too (legacy look)
 		dimTop = new FlxSprite();
@@ -314,30 +325,81 @@ final class EditorNoteField {
 		releaseAll();
 	}
 
-	/** Shows the placement ghost over one snap cell (`snapSteps` tall, in steps). **/
-	public function showGhost(lane:Int, time:Float, snapSteps:Float):Void {
+	/**
+		Shows the placement preview under the cursor: a faded, correctly-skinned note in the hovered
+		lane, plus (optionally) a box marking the whole snap region it will land in.
+		@param lane the hovered lane index (0 = event lane)
+		@param time the snapped placement time in ms
+		@param snapSteps the snap region height in steps (only used when `spanRegion`)
+		@param spanRegion `true` marks the full snap region (the "N grids" highlight); off by default
+	**/
+	public function showGhost(lane:Int, time:Float, snapSteps:Float, spanRegion:Bool = false):Void {
 		if (lane < 0 || lane >= laneX.length) {
-			ghost.visible = false;
+			hideGhost();
 			return;
 		}
 		var viewSteps:Float = stepsOf(viewTime);
 		var s:Float = stepsOf(time);
-		var y0:Float = yOfSteps(s, viewSteps);
-		var y1:Float = yOfSteps(s + snapSteps, viewSteps);
-		var top:Float = (y0 < y1) ? y0 : y1;
-		var hgt:Float = Math.abs(y1 - y0);
-		if (hgt < 2)
-			hgt = 2;
-		ghost.visible = true;
-		ghost.setGraphicSize(Std.int(cell), Std.int(hgt));
-		ghost.updateHitbox();
-		ghost.x = laneX[lane];
-		ghost.y = top;
+
+		// optional snap-region box: highlights every grid cell the snap covers
+		if (spanRegion) {
+			var y0:Float = yOfSteps(s, viewSteps);
+			var y1:Float = yOfSteps(s + snapSteps, viewSteps);
+			var top:Float = (y0 < y1) ? y0 : y1;
+			var hgt:Float = Math.abs(y1 - y0);
+			if (hgt < 2)
+				hgt = 2;
+			ghost.visible = true;
+			ghost.setGraphicSize(Std.int(cell), Std.int(hgt));
+			ghost.updateHitbox();
+			ghost.x = laneX[lane];
+			ghost.y = top;
+		} else
+			ghost.visible = false;
+
+		// the note-shaped preview (the event lane places events, not notes, so show nothing there)
+		var line:Int = laneLine[lane];
+		if (line < 0) {
+			ghostNote.visible = false;
+			return;
+		}
+		var col:Int = laneCol[lane];
+		var kc:Int = lineKeyCount(line);
+		if (line != ghostLine || col != ghostCol || kc != ghostKc)
+			skinGhost(line, col, kc);
+		var scl:Float = (ghostNote.frameWidth > 0) ? cell / ghostNote.frameWidth : 1;
+		ghostNote.scale.set(scl, scl);
+		ghostNote.updateHitbox();
+		ghostNote.alpha = 0.4;
+		ghostNote.visible = true;
+		var y:Float = yOfSteps(s, viewSteps);
+		var rowTop:Float = downscroll ? (y - cell) : y;
+		ghostNote.x = laneX[lane] + (cell - ghostNote.width) / 2;
+		ghostNote.y = rowTop + (cell - ghostNote.height) / 2;
 	}
 
-	/** Hides the placement ghost. **/
+	/** (Re)skins the ghost preview for a lane's column/key count. **/
+	function skinGhost(line:Int, col:Int, kc:Int):Void {
+		ghostLine = line;
+		ghostCol = col;
+		ghostKc = kc;
+		ghostData.time = 0;
+		ghostData.column = col;
+		ghostData.strumLine = line;
+		ghostData.length = 0;
+		ghostData.gfNote = false;
+		ghostData.type = '';
+		ghostNote.apply(ghostData, kc);
+		ghostNote.copyX = ghostNote.copyY = ghostNote.copyAngle = ghostNote.copyAlpha = false;
+		ghostNote.angle = 0;
+		ghostNote.color = FlxColor.WHITE;
+	}
+
+	/** Hides the placement preview (note + region box). **/
 	public function hideGhost():Void {
 		ghost.visible = false;
+		if (ghostNote != null)
+			ghostNote.visible = false;
 	}
 
 	/** Shows the box-select rectangle between two game-space corners. **/
@@ -477,6 +539,7 @@ final class EditorNoteField {
 		playhead.y = playheadY() - 1;
 
 		rebuildVortexReceptors();
+		ghostLine = -99; // force the hover preview to re-skin under the new layout/Mania state
 		releaseAll();
 	}
 
@@ -484,7 +547,23 @@ final class EditorNoteField {
 	public function confirmReceptor(lane:Int):Void {
 		var idx:Int = lane - 1;
 		if (idx >= 0 && idx < vortexReceptors.length)
-			vortexReceptors[idx].playAnim('confirm', true);
+			flashReceptor(vortexReceptors[idx]);
+	}
+
+	/** Flashes the vortex receptor for a chart note (called as notes pass the playhead in playback). **/
+	public function confirmForNote(line:Int, column:Int):Void {
+		if (!vortexEnabled)
+			return;
+		var lane:Int = laneIndexOf(line, column);
+		var idx:Int = lane - 1;
+		if (idx >= 0 && idx < vortexReceptors.length)
+			flashReceptor(vortexReceptors[idx]);
+	}
+
+	inline function flashReceptor(r:Receptor):Void {
+		r.playAnim('confirm', true);
+		// return it to the static look shortly after (playAnim alone leaves it stuck on confirm)
+		r.resetAnim = (cellH > 0) ? Math.min(0.35, cellH / 200) : 0.2;
 	}
 
 	/** One skinned receptor per note lane, parked on the playhead row (vortex look). **/
@@ -544,12 +623,16 @@ final class EditorNoteField {
 			var rowH:Int = Std.int((r + 1) * cell) - y0;
 			var i:Int = 0;
 			while (i < laneX.length) {
-				var x0:Int = Std.int(laneX[i] - gridX);
+				// span each cell to the NEXT cell's left edge so fractional cell widths tile with no
+				// 1px transparent seam (which showed the near-black field bg as a vertical line)
+				var lx:Float = laneX[i] - gridX;
+				var x0:Int = Std.int(lx);
+				var x1:Int = Std.int(lx + cell);
 				var isEvent:Bool = (laneLine[i] < 0);
 				var base:Int = ((r + i) & 1 == 0) ? light : dark;
 				if (isEvent)
 					base = ((r & 1) == 0) ? eventTint : dark;
-				bmp.fillRect(new openfl.geom.Rectangle(x0, y0, Std.int(cell), rowH), base);
+				bmp.fillRect(new openfl.geom.Rectangle(x0, y0, x1 - x0, rowH), base);
 				i++;
 			}
 			r++;
@@ -562,6 +645,18 @@ final class EditorNoteField {
 	/** Scrolls the playhead by a signed number of steps (clamped to the chart). **/
 	public function scrollSteps(deltaSteps:Float):Void {
 		setViewTime(timeOfSteps(stepsOf(viewTime) + deltaSteps));
+	}
+
+	/**
+		Moves the playhead by whole snap units, landing on the grid (re-snaps first so a scrub or
+		seek that left it off-grid gets corrected).
+		@param dir signed number of snap units to move
+		@param snapDiv the current snap division (e.g. 16 for 1/16)
+	**/
+	public function scrollBySnap(dir:Float, snapDiv:Int):Void {
+		var t:Float = model.snapTime(viewTime, snapDiv);
+		var unit:Float = model.snapMs(model.sectionAt(t), snapDiv);
+		setViewTime(model.snapTime(t + dir * unit, snapDiv));
 	}
 
 	/**
@@ -672,7 +767,6 @@ final class EditorNoteField {
 		}
 		if (live.sustain != null) {
 			live.sustain.exists = live.sustain.visible = false;
-			live.sustain.tail.exists = live.sustain.tail.visible = false;
 			if (cap > 0 && sustainPool.length >= cap) {
 				group.remove(live.sustain, true);
 				live.sustain.destroy();
@@ -731,25 +825,21 @@ final class EditorNoteField {
 		}
 
 		if (note.length > 0) {
-			var sus:SustainSprite = (sustainPool.length > 0) ? sustainPool.pop() : newSustain();
-			sus.apply(data, kc);
-			sus.copyX = sus.copyY = sus.copyAngle = sus.copyAlpha = false;
-			sus.flipY = false;
-			sus.tail.flipY = false;
-			var ss:Float = (sus.frameWidth > 0) ? (cell * 0.5) / sus.frameWidth : 1;
-			sus.scale.x = ss;
-			sus.tail.scale.x = ss;
-			sus.color = FlxColor.WHITE;
-			sus.tail.color = FlxColor.WHITE;
-			if (quantOn) {
-				var qc2:FlxColor = FlxColor.fromInt(live.quantColor);
-				sus.color = qc2;
-				sus.tail.color = qc2;
-			}
+			// a simple colored bar (like the legacy editor) instead of real skin sustain art
+			var sus:FlxSprite = (sustainPool.length > 0) ? sustainPool.pop() : newSustain();
+			sus.exists = sus.visible = true;
+			sus.color = FlxColor.fromInt(quantOn ? live.quantColor : sustainColorFor(note.column));
 			live.sustain = sus;
 		}
 
 		active.push(live);
+	}
+
+	// Classic per-direction arrow colors for the editor sustain line (indexed by column % 4).
+	static final SUSTAIN_COLORS:Array<Int> = [0xFFC24B99, 0xFF00FFFF, 0xFF12FA05, 0xFFF9393F];
+
+	inline function sustainColorFor(column:Int):Int {
+		return SUSTAIN_COLORS[column % SUSTAIN_COLORS.length];
 	}
 
 	inline function lineKeyCount(line:Int):Int {
@@ -763,8 +853,10 @@ final class EditorNoteField {
 		return head;
 	}
 
-	function newSustain():SustainSprite {
-		var sus:SustainSprite = new SustainSprite();
+	function newSustain():FlxSprite {
+		var sus:FlxSprite = new FlxSprite();
+		sus.makeGraphic(1, 1, FlxColor.WHITE);
+		sus.alpha = 0.55;
 		group.insert(3, sus); // under heads, over the checker/dims
 		return sus;
 	}
@@ -791,7 +883,8 @@ final class EditorNoteField {
 			refreshLayout();
 
 		var viewSteps:Float = stepsOf(viewTime);
-		var padSteps:Float = 2;
+		// realize well outside the visible field so notes are never seen popping in at the edges
+		var padSteps:Float = 6;
 		var stepsTop:Float = viewSteps - (fh * 0.5) / cellH - padSteps;
 		var stepsBottom:Float = viewSteps + (fh * 0.5) / cellH + padSteps;
 		var timeLow:Float = timeOfSteps(stepsTop < 0 ? 0 : stepsTop) - 1;
@@ -889,7 +982,7 @@ final class EditorNoteField {
 		if (lane < 0) {
 			head.visible = false;
 			if (live.sustain != null)
-				live.sustain.visible = live.sustain.tail.visible = false;
+				live.sustain.visible = false;
 			return;
 		}
 		head.visible = true;
@@ -913,34 +1006,23 @@ final class EditorNoteField {
 				showTypeBadge(head, typeIdx);
 		}
 
-		var sus:SustainSprite = live.sustain;
+		var sus:FlxSprite = live.sustain;
 		if (sus != null) {
-			// Trail runs from the head-cell centre to the endTime STEP LINE (not the endTime cell centre),
-			// so the tail terminates exactly on the grid instead of half a cell past it.
+			// simple bar from the head-cell centre to the endTime step line, centred in the lane
 			var headMid:Float = rowTop + cell * 0.5;
 			var endMid:Float = yOfSteps(stepsOf(note.time + note.length), viewSteps);
 			var top:Float = (headMid < endMid) ? headMid : endMid;
 			var span:Float = Math.abs(endMid - headMid);
-			var tailH:Float = sus.tail.frameHeight * sus.tail.scale.y;
-			var bodyLen:Float = span - tailH;
-			if (bodyLen < 0)
-				bodyLen = 0;
+			if (span < 1)
+				span = 1;
+			var barW:Float = cell * 0.22;
+			if (barW < 3)
+				barW = 3;
 			sus.visible = true;
-			sus.tail.visible = true;
-			sus.flipY = downscroll;
-			sus.tail.flipY = downscroll;
-			if (sus.frameHeight > 0)
-				sus.scale.y = bodyLen / sus.frameHeight;
+			sus.scale.set(barW, span);
 			sus.updateHitbox();
-			sus.x = laneX[lane] + (cell - sus.width) / 2;
-			sus.tail.x = laneX[lane] + (cell - sus.tail.width) / 2;
-			if (downscroll) {
-				sus.y = top + tailH;
-				sus.tail.y = top;
-			} else {
-				sus.y = top;
-				sus.tail.y = top + bodyLen;
-			}
+			sus.x = laneX[lane] + (cell - barW) / 2;
+			sus.y = top;
 		}
 	}
 
@@ -1071,14 +1153,26 @@ final class EditorNoteField {
 		var y0:Float = yOfSteps(stepsAt[sec], viewSteps);
 		var secEndSteps:Float = (sec + 1 < stepsAt.length) ? stepsAt[sec + 1] : stepsOf(model.endTime);
 		var y1:Float = yOfSteps(secEndSteps, viewSteps);
-		// consistent width regardless of key count, centered on the grid
-		waveSprite.x = gridX + (gridW - waveWidth()) / 2;
+		// centered across the note lanes (not biased by the event lane), fixed width: it sits in the
+		// gutter between the two fields, it does NOT stretch to span them.
+		waveSprite.x = noteCenterX() - waveWidth() / 2;
 		waveSprite.y = (y0 < y1) ? y0 : y1;
 	}
 
+	/** Left-to-right span of the note lanes only (excludes the event lane). **/
+	inline function noteSpanW():Float {
+		return (laneX.length > 1) ? (laneX[laneX.length - 1] + cell - laneX[1]) : gridW;
+	}
+
+	/** Horizontal centre of the note lanes only (the midpoint between the two fields). **/
+	inline function noteCenterX():Float {
+		return (laneX.length > 1) ? (laneX[1] + laneX[laneX.length - 1] + cell) / 2 : gridX + gridW / 2;
+	}
+
 	inline function waveWidth():Float {
-		var wv:Float = cell * 8;
-		return (wv < gridW) ? wv : gridW;
+		var span:Float = noteSpanW();
+		var wv:Float = cell * 6;
+		return (wv < span) ? wv : span;
 	}
 
 	function redrawWaveform(sec:Int):Void {
