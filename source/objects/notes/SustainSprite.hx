@@ -239,32 +239,25 @@ final class SustainSprite extends FlxSprite {
 		tail.x = tcx - tail.width / 2;
 		tail.y = tcy - tail.height / 2;
 
-		clip(strum, scrollNow);
+		clip(sign * headDist, bodyLen);
 	}
 
 	/**
-		Clips away the consumed portion of the body once the head has been hit. Because the body is
-		`flipY`'d for downscroll, the receptor-side region maps to the same frame slice either way:
-		hide the first `frac` of the frame and keep the rest. `frac` is measured in scroll position so
-		it stays correct through SV (equals the raw time fraction when SV is off).
-		@param strum the receptor this hold scrolls toward (its `downScroll` selects the clip side)
-		@param scrollNow the SV-mapped position of the current song time
+		Clips away the consumed portion of the body once the head has been hit, anchored to the receptor
+		so the cut edge stays put instead of drifting past it as the hold shrinks. The hidden fraction is
+		measured against the ACTUAL body sprite (`consumed / bodyLen`), NOT the full hold span -- the span
+		includes the tail cap and the end-trim, so dividing by it under-clips and the near edge creeps past
+		the receptor. Because the body is `flipY`'d for downscroll, hiding the first `frac` of the frame
+		removes the receptor-side region in both scroll directions.
+		@param consumed how far the head has scrolled past the receptor, in screen px (negative = not yet)
+		@param bodyLen the body's on-screen length, in screen px
 	**/
-	public function clip(strum:Receptor, scrollNow:Float):Void {
-		if (data == null || !data.hit || data.length <= 0) {
+	public function clip(consumed:Float, bodyLen:Float):Void {
+		if (data == null || !data.hit || data.length <= 0 || bodyLen <= 0 || consumed <= 0) {
 			clipRect = null;
 			return;
 		}
-		var span:Float = data.endScrollPos - data.scrollPos;
-		if (span == 0) {
-			clipRect = null;
-			return;
-		}
-		var frac:Float = (scrollNow - data.scrollPos) / span;
-		if (frac <= 0) {
-			clipRect = null;
-			return;
-		}
+		var frac:Float = consumed / bodyLen;
 		if (frac > 1)
 			frac = 1;
 
