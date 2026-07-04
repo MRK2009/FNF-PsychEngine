@@ -74,6 +74,7 @@ import states.TitleState;
 	public var assetRGBByKeyPixel:Map<String, Array<Array<Array<FlxColor>>>> = new Map();
 
 	public var ghostTapping:Bool = true;
+	public var sustainsOverNotes:Bool = false;
 	public var timeBarType:String = 'Time Left';
 	public var scoreZoom:Bool = true;
 	public var noReset:Bool = false;

@@ -122,6 +122,9 @@ class OptionsCatalog {
 		rows.push(Setting(new Option('Sustains as One Note',
 			"If checked, Hold Notes can't be pressed if you miss,\nand count as a single Hit/Miss.\nUncheck this if you prefer the old Input System.",
 			'guitarHeroSustains', BOOL)));
+		rows.push(Setting(new Option('Sustains Over Notes',
+			"If checked, hold trails draw on top of the note heads instead of below them.\nA note skin can override this.",
+			'sustainsOverNotes', BOOL)));
 		rows.push(Setting(new Option('Disable Reset Button', "If checked, pressing Reset won't do anything.", 'noReset', BOOL)));
 
 		var ratingOffset:Option = new Option('Rating Offset',

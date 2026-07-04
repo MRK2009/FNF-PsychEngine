@@ -2809,12 +2809,21 @@ class PlayState extends MusicBeatState {
 		opponentReceptors = (firstOpp != null) ? firstOpp.receptors : [];
 		playerReceptors = (firstPlayer != null) ? firstPlayer.receptors : [];
 
-		// Render order, back -> front: receptors, then all sustains, then all note heads.
+		// Render order, back -> front: receptors, then sustains and heads. Which of the two is on top is
+		// per-skin (`skin.tcfg` `holdsOverHeads`) or the global `sustainsOverNotes` option; default keeps
+		// sustains under the heads.
 		noteGroup.add(receptorGroup);
-		for (line in visibleLines)
-			noteGroup.add(line.field.sustainGroup);
-		for (line in visibleLines)
-			noteGroup.add(line.field.headGroup);
+		if (backend.NoteSkinConfig.holdsOverHeads()) {
+			for (line in visibleLines)
+				noteGroup.add(line.field.headGroup);
+			for (line in visibleLines)
+				noteGroup.add(line.field.sustainGroup);
+		} else {
+			for (line in visibleLines)
+				noteGroup.add(line.field.sustainGroup);
+			for (line in visibleLines)
+				noteGroup.add(line.field.headGroup);
+		}
 
 		// Keep note splashes drawn above the notes (the splash group was added during create()).
 		if (grpNoteSplashes != null && noteGroup.members.contains(grpNoteSplashes)) {

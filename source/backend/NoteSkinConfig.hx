@@ -23,6 +23,7 @@ typedef NoteSkinData = {
 	@:optional var splashOffsets:Dynamic; // per-lane splash offsets
 	@:optional var antialiasing:Dynamic; // Bool, or a per-lane object (arrow/center/col index)
 	@:optional var holdAntialiasing:Bool;
+	@:optional var holdsOverHeads:Bool; // draw hold trails above the note heads instead of below; overrides the global option
 	@:optional var holdAlpha:Dynamic; // Float, or per-lane object
 	@:optional var scale:Dynamic; // Float, or per-lane object
 	@:optional var pixelScale:Dynamic; // scale used while rendering pixel art (Float, or per-lane); falls back to `scale`
@@ -280,6 +281,22 @@ class NoteSkinConfig {
 		}
 		pixelVariantCache = null;
 		return null;
+	}
+
+	/**
+		Whether hold trails should render ABOVE the note heads instead of below them. The active folder
+		skin's `holdsOverHeads` (in `skin.tcfg`) wins when set; otherwise the global
+		`ClientPrefs.data.sustainsOverNotes` option decides.
+		@return `true` to draw sustains over the heads
+	**/
+	public static function holdsOverHeads():Bool {
+		var active:String = activeSkin();
+		if (active != null) {
+			var cfg:NoteSkinData = forCurrentKeys(active);
+			if (cfg != null && cfg.holdsOverHeads != null)
+				return cfg.holdsOverHeads;
+		}
+		return ClientPrefs.data.sustainsOverNotes;
 	}
 
 	// The active folder skin's splash as a legacy *sparrow atlas* name (`<skin>/` + its `splash` key),
