@@ -67,7 +67,15 @@ final class SustainSprite extends FlxSprite {
 		trail overlaps the receptor slightly instead of leaving a visible gap above it. `0` cuts exactly
 		at the head; larger values tuck the trail further down over the receptor.
 	**/
-	public static var holdClipNudge:Float = 0.25;
+	public static var holdClipNudge:Float = 0.5;
+
+	/**
+		Extends an un-held hold's head-side edge up under the note head by this fraction of the note width,
+		closing the seam between the head and the trail while it scrolls. `0` starts the body exactly at the
+		head. Once the hold is hit, the held clip (`holdClipNudge`) governs the receptor-side edge instead,
+		so this only affects the un-held (approaching / opponent-side) trail.
+	**/
+	public static var headOverlap:Float = 0.5;
 
 	public var offsetX:Float = 0;
 	public var offsetY:Float = 0;
@@ -217,6 +225,14 @@ final class SustainSprite extends FlxSprite {
 		var bodyLen:Float = totalLen - tailLen;
 		if (bodyLen < 0)
 			bodyLen = 0;
+
+		// Un-held trail: push the head-side edge up under the note head to close the seam. The far (tail)
+		// edge stays put. Skipped once hit -- the held clip owns the receptor-side edge from then on.
+		if (data != null && !data.hit && headOverlap != 0) {
+			var headOver:Float = Mania.swagWidth * headOverlap;
+			nearA += sign * headOver;
+			bodyLen += headOver;
+		}
 		// bodyLen is constant while scrolling (headDist - endDist reduces to 0.45*rate*(endScrollPos -
 		// scrollPos), independent of scrollNow), so scale.y only really moves on spawn/speed change and
 		// while a held note clips. Only pay updateHitbox when it actually changed (legacy's 0.1px gate);

@@ -3071,6 +3071,9 @@ class PlayState extends MusicBeatState {
 			// A hit hold scrolls until consumed; complete it at end-time (cpu + human completion).
 			// Early-release for a human is handled in keysCheck where the hold state is fresh.
 			if (data.isSustain() && data.hit) {
+				// A human's non-GH sustain is judged per-segment in keysCheck; skip the one-unit path here.
+				if (!cpuControlled && !guitarHeroSustains)
+					continue;
 				var rec:Receptor = (data.column >= 0 && data.column < playerReceptors.length) ? playerReceptors[data.column] : null;
 				if (songPos >= data.endTime()) {
 					// The bot has no key to release, so drop its receptor back to static here.
@@ -3095,12 +3098,18 @@ class PlayState extends MusicBeatState {
 
 			if (!data.hit
 				&& !data.missed
+				&& !data.headMissed
 				&& data.mustPress
 				&& !cpuControlled
 				&& !data.ignore
 				&& !endingSong
-				&& songPos - data.time > noteKillOffset)
-				noteMiss(note);
+				&& songPos - data.time > noteKillOffset) {
+				// Non-GH sustain: a missed head is one miss, but the body stays catchable (old behavior).
+				if (data.isSustain() && !guitarHeroSustains)
+					headMissForSustain(note);
+				else
+					noteMiss(note);
+			}
 		}
 
 		// compatibilityMode only: mirror the live v2 state onto the legacy game.notes / strum groups.
@@ -3168,19 +3177,28 @@ class PlayState extends MusicBeatState {
 			if (!anyHeld || endingSong)
 				playerDance();
 
-			// Hold mechanic: a hit sustain whose key is no longer held drops the rest of the trail.
+			// Sustain holds. GH mode: one unit -- releasing early drops the whole remainder as one miss.
+			// Non-GH: the old segmented model -- each step is judged from the live hold state, and the body
+			// stays catchable even after a missed head.
 			if (playerField != null) {
 				var si:Int = playerField.active.length;
 				while (--si >= 0) {
 					var note:ActiveNote = playerField.active[si];
 					var data:NoteData = note.data;
-					if (!data.isSustain() || !data.hit || data.missed)
+					if (!data.isSustain())
 						continue;
-					if (Conductor.songPosition >= data.endTime())
-						continue; // completion handled in updateFields
 					var held:Bool = (data.column >= 0 && data.column < holdArray.length) ? holdArray[data.column] : false;
-					if (!held)
-						sustainRelease(note);
+					if (guitarHeroSustains) {
+						if (!data.hit || data.missed)
+							continue;
+						if (Conductor.songPosition >= data.endTime())
+							continue; // completion handled in updateFields
+						if (!held)
+							sustainRelease(note);
+					} else if (data.hit || data.headMissed) {
+						// Non-GH: judge each body step from the live hold state (health held, miss dropped).
+						updateSegmentedSustain(note, held);
+					}
 				}
 			}
 		}
@@ -3451,6 +3469,72 @@ class PlayState extends MusicBeatState {
 			callOnHScript('noteMiss', [cbArg(note, true)]);
 
 		playerField.remove(note);
+	}
+
+	// Non-GH sustain: the head was missed but the trail stays catchable. Register the single head miss,
+	// drop just the head sprite, and leave the entry alive so `updateSegmentedSustain` keeps judging the
+	// body from the live hold state (matches the pre-v2 runtime where the head and each piece were
+	// independent notes).
+	function headMissForSustain(note:ActiveNote):Void {
+		var data:NoteData = note.data;
+		data.headMissed = true;
+		noteMissCommon(data.column, data);
+		var result:Dynamic = callOnLuas('noteMiss', [-1, data.column, data.type, false]);
+		if (notStopped(result))
+			callOnHScript('noteMiss', [cbArg(note)]);
+		fireStageNote(2, note);
+		playerField.freeHead(note);
+	}
+
+	// Non-GH sustain per-frame judgement (human only; the bot uses the one-unit path in updateFields).
+	// Walks the step-spaced body segments up to now -- a held segment restores health (no combo/score/
+	// accuracy), a dropped one is a full miss -- keeps the receptor lit + character singing while held,
+	// and reclaims the entry once the tail passes.
+	function updateSegmentedSustain(note:ActiveNote, held:Bool):Void {
+		var data:NoteData = note.data;
+		var songPos:Float = Conductor.songPosition;
+		var end:Float = data.endTime();
+
+		if (data.nextTick < 0)
+			data.nextTick = data.time + Conductor.stepCrochet;
+		while (data.nextTick <= songPos && data.nextTick < end) {
+			if (held)
+				sustainSegmentHit(data);
+			else
+				sustainSegmentMiss(note);
+			data.nextTick += Conductor.stepCrochet;
+		}
+
+		if (held) {
+			var hc:Character = data.gfNote ? gf : boyfriend;
+			if (hc != null)
+				hc.holdTimer = 0;
+			var rec:Receptor = (data.column >= 0 && data.column < playerReceptors.length) ? playerReceptors[data.column] : null;
+			if (rec != null) {
+				if (rec.animation.curAnim == null || rec.animation.curAnim.name != 'confirm')
+					rec.playAnim('confirm', true);
+				rec.resetAnim = 0;
+			}
+			vocals.volume = 1;
+		}
+
+		if (songPos >= end)
+			playerField.remove(note);
+	}
+
+	// A held body segment: health only, no combo/score/accuracy (the old non-GH model).
+	inline function sustainSegmentHit(data:NoteData):Void {
+		health += data.hitHealth * healthGain;
+	}
+
+	// A dropped body segment: a full miss, exactly like a missed sustain piece in the pre-v2 runtime.
+	function sustainSegmentMiss(note:ActiveNote):Void {
+		var data:NoteData = note.data;
+		noteMissCommon(data.column, data);
+		var result:Dynamic = callOnLuas('noteMiss', [-1, data.column, data.type, true]);
+		if (notStopped(result))
+			callOnHScript('noteMiss', [cbArg(note, true)]);
+		fireStageNote(2, note);
 	}
 
 	// NoteSystem V2
