@@ -1332,9 +1332,12 @@ class PlayState extends MusicBeatState {
 		noteGroup.add(notes);
 
 		try {
+			// a standalone data/<song>/events.json, in EITHER the legacy grouped shape
+			// ([time, [[name, v1, v2], ...]]) OR the psych_v2 object shape ({t, name, values}).
+			// eventsFromV2 normalizes both to the grouped shape makeEvent consumes.
 			var eventsChart:SwagSong = Song.getChart('events', songName);
 			if (eventsChart != null)
-				for (event in eventsChart.events) // Event Notes
+				for (event in Song.eventsFromV2(eventsChart.events)) // Event Notes
 					for (i in 0...event[1].length)
 						makeEvent(event, i);
 		} catch (e:Dynamic) {}
