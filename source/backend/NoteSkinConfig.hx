@@ -49,6 +49,15 @@ typedef SkinImage = {
 	factor:Float
 }
 
+// A resolved folder-skin config file: its real on-disk path, the config extension, and the source
+// root that owns it -- `""` for the base game (`assets/shared`) or a mod directory. `root` doubles as
+// the `Paths.pinModRoot` used so the skin's own images resolve from wherever it lives.
+typedef LocatedSkin = {
+	path:String,
+	ext:String,
+	root:String
+}
+
 typedef SkinAnim = {
 	name:String,
 	keys:Array<String>,
@@ -87,6 +96,7 @@ class NoteSkinConfig {
 	static var frameKeysCache:Map<String, Array<String>> = new Map();
 	static var classicDefaultCache:Null<Bool> = null;
 	static var ownerRootCache:Map<String, String> = new Map();
+	static var locateCache:Map<String, LocatedSkin> = new Map();
 
 	public static function reset() {
 		configCache.clear();
@@ -97,6 +107,7 @@ class NoteSkinConfig {
 		frameKeysCache.clear();
 		classicDefaultCache = null;
 		ownerRootCache.clear();
+		locateCache.clear();
 		pixelVariantCache = null;
 		pixelVariantComputed = false;
 	}
@@ -105,14 +116,62 @@ class NoteSkinConfig {
 	// JSON is the secondary fallback.
 	public static final EXTS:Array<String> = ['tcfg', 'json'];
 
-	// First existing images/<name>/skin.<ext>, or null if the folder has no skin config.
-	static function skinFile(name:String):Null<{path:String, ext:String}> {
+	// The mod directories (and the bare `mods/` root, as `""`) to search for a folder skin, in priority
+	// order: the current mod, then global mods, then the bare root, then every other ENABLED mod. This
+	// is what lets a folder skin live in any `mods/<MOD>/images/noteSkins/` -- not only a global/current
+	// mod -- and still be found and resolved.
+	#if (sys && MODS_ALLOWED)
+	static function skinModRoots():Array<String> {
+		var roots:Array<String> = [];
+		if (Mods.allowCurrentModAssets && Mods.currentModDirectory != null && Mods.currentModDirectory.length > 0)
+			roots.push(Mods.currentModDirectory);
+		for (m in Mods.getGlobalMods())
+			if (!roots.contains(m))
+				roots.push(m);
+		roots.push(''); // the always-scanned bare mods/ root
+		for (m in Mods.parseList().enabled)
+			if (!roots.contains(m))
+				roots.push(m);
+		return roots;
+	}
+	#end
+
+	// Resolves `images/<name>/skin.<ext>` to its real on-disk path + owning root, scanning the base game
+	// first (so a mod can't shadow a base skin) then every enabled mod. Cached; cleared by `reset()`.
+	static function locateSkinFile(name:String):Null<LocatedSkin> {
+		if (name == null || name.length < 1)
+			return null;
+		if (locateCache.exists(name))
+			return locateCache.get(name);
+
+		var found:LocatedSkin = null;
+		#if sys
+		var rel:String = 'images/$name/skin.';
 		for (ext in EXTS) {
-			var path:String = 'images/$name/skin.$ext';
-			if (Paths.fileExists(path, TEXT))
-				return {path: path, ext: ext};
+			var base:String = Paths.getSharedPath('$rel$ext');
+			if (sys.FileSystem.exists(base)) {
+				found = {path: base, ext: ext, root: ''};
+				break;
+			}
 		}
-		return null;
+		#if MODS_ALLOWED
+		if (found == null) {
+			for (root in skinModRoots()) {
+				for (ext in EXTS) {
+					var p:String = (root.length > 0) ? Paths.mods('$root/$rel$ext') : Paths.mods('$rel$ext');
+					if (sys.FileSystem.exists(p)) {
+						found = {path: p, ext: ext, root: root};
+						break;
+					}
+				}
+				if (found != null)
+					break;
+			}
+		}
+		#end
+		#end
+		locateCache.set(name, found);
+		return found;
 	}
 
 	public static function isFolderSkin(name:String):Bool {
@@ -120,7 +179,7 @@ class NoteSkinConfig {
 			return false;
 		if (folderCache.exists(name))
 			return folderCache.get(name);
-		var exists:Bool = skinFile(name) != null;
+		var exists:Bool = locateSkinFile(name) != null;
 		folderCache.set(name, exists);
 		return exists;
 	}
@@ -130,9 +189,13 @@ class NoteSkinConfig {
 			return configCache.get(name);
 
 		var data:NoteSkinData = null;
-		var file = skinFile(name);
+		var file:LocatedSkin = locateSkinFile(name);
 		if (file != null) {
-			var raw:String = Paths.getTextFromFile(file.path);
+			#if sys
+			var raw:String = sys.FileSystem.exists(file.path) ? sys.io.File.getContent(file.path) : null;
+			#else
+			var raw:String = Paths.getTextFromFile('images/$name/skin.${file.ext}');
+			#end
 			if (raw != null) {
 				// Both parsers (TcfgParser for .tcfg, tjson for .json) emit the internal
 				// NoteSkinData shape directly, so no remap step is needed here.
@@ -192,11 +255,11 @@ class NoteSkinConfig {
 		#if sys
 		var roots:Array<String> = ['assets/shared/images/noteSkins'];
 		#if MODS_ALLOWED
-		for (mod in Mods.getGlobalMods())
+		roots.push('mods/images/noteSkins'); // bare mods/ root
+		// Every enabled mod contributes its skins so a folder skin in any mods/<MOD>/ is selectable,
+		// not only global/current ones (they resolve via the owner-root pin at apply time).
+		for (mod in Mods.parseList().enabled)
 			roots.push('mods/$mod/images/noteSkins');
-		if (Mods.currentModDirectory != null && Mods.currentModDirectory.length > 0)
-			roots.push('mods/${Mods.currentModDirectory}/images/noteSkins');
-		roots.push('mods/images/noteSkins');
 		#end
 		for (root in roots) {
 			if (!sys.FileSystem.exists(root) || !sys.FileSystem.isDirectory(root))
@@ -304,44 +367,27 @@ class NoteSkinConfig {
 	// The single source that owns a folder skin, base-first so a base skin can't be shadowed by a mod's
 	// same-named folder: "" (base) if `assets/shared` ships it, else the owning mod dir, else "" (base).
 	static function skinOwnerRoot(name:String):String {
-		if (ownerRootCache.exists(name))
-			return ownerRootCache.get(name);
-		var root:String = computeOwnerRoot(name);
-		ownerRootCache.set(name, root);
-		return root;
-	}
-
-	static function computeOwnerRoot(name:String):String {
-		#if sys
-		var rel:String = 'images/$name/skin.';
-		for (ext in EXTS)
-			if (sys.FileSystem.exists('assets/shared/$rel$ext'))
-				return '';
-		#if MODS_ALLOWED
-		if (Mods.currentModDirectory != null && Mods.currentModDirectory.length > 0)
-			for (ext in EXTS)
-				if (sys.FileSystem.exists(Paths.mods('${Mods.currentModDirectory}/$rel$ext')))
-					return Mods.currentModDirectory;
-		for (mod in Mods.getGlobalMods())
-			for (ext in EXTS)
-				if (sys.FileSystem.exists(Paths.mods('$mod/$rel$ext')))
-					return mod;
-		#end
-		#end
-		return '';
+		var loc:LocatedSkin = locateSkinFile(name);
+		return (loc != null) ? loc.root : '';
 	}
 
 	/**
 		The `Paths.pinModRoot` to use while applying the active note skin, or `null` for normal resolution.
-		Only pins when the skin is FORCED and resolves to a folder skin -- forcing a single source (`""` =
-		base-only, a mod dir = that mod) so another mod can't shadow the chosen skin's assets. Classic
-		skins aren't pinned (the chart `arrowSkin` block already covers the override case there).
+
+		- FORCED: pins to the skin's single owner (`""` = base-only, a mod dir = that mod) so another mod
+		  can't shadow the chosen skin's assets.
+		- NOT forced: pins only when the active folder skin lives in a specific MOD, so its own images
+		  resolve from that mod even when it isn't the current/global one. Base-owned skins stay unpinned
+		  so a mod may still override individual base arrows. Classic skins are never pinned.
 	**/
 	public static function activeSkinPinRoot():Null<String> {
-		if (!ClientPrefs.data.forceNoteSkin)
-			return null;
 		var active:String = activeSkin();
-		return (active == null) ? null : skinOwnerRoot(active);
+		if (active == null)
+			return null;
+		var owner:String = skinOwnerRoot(active);
+		if (ClientPrefs.data.forceNoteSkin)
+			return owner;
+		return (owner != null && owner.length > 0) ? owner : null;
 	}
 
 	static var pixelVariantCache:String = null;
