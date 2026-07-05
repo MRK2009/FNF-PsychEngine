@@ -49,9 +49,9 @@ class ScriptRules {
 		// ---- unspawnNotes (compat-only via legacy/UnspawnNoteProxy) --------------------------
 		{re: ~/\bunspawnNotes\b/, kind: COMPAT_ONLY, appliesTo: BOTH, message: 'unspawnNotes (whole pre-spawned chart) exists only under compatibilityMode, via the legacy proxy.', suggestion: 'Native v2: read game.playerField.notes / game.opponentField.notes (NoteData list).'},
 
-		// ---- Read-only mirrors under compatibilityMode --------------------------------------
-		{re: ~/\bnotes\.members\b/, kind: COMPAT_ONLY, appliesTo: BOTH, message: 'game.notes is a read-only mirror under compatibilityMode; writes to these sprites do not move the real v2 drawables.', suggestion: 'Adjust visuals through the v2 fields / note types, not the mirror.'},
-		{re: ~/\bplayerStrums\b|\bopponentStrums\b|\bstrumLineNotes\b/, kind: COMPAT_ONLY, appliesTo: BOTH, message: 'The strum groups are read-only mirrors under compatibilityMode.', suggestion: 'Move/scale the real strums via the v2 receptors (playerReceptors / opponentReceptors).'},
+		// ---- Write-through mirrors under compatibilityMode ----------------------------------
+		{re: ~/\bnotes\.members\b/, kind: COMPAT_ONLY, appliesTo: BOTH, message: 'game.notes is a compatibilityMode mirror; visual writes (x/y/alpha/angle with copyX etc. off, offsetX/offsetY/multAlpha/multSpeed) now propagate to the real v2 drawables, but structural add/remove does not.', suggestion: 'Prefer the v2 fields / note types; native v2 reads game.playerField / opponentField.'},
+		{re: ~/\bplayerStrums\b|\bopponentStrums\b|\bstrumLineNotes\b/, kind: COMPAT_ONLY, appliesTo: BOTH, message: 'The strum groups are compatibilityMode mirrors; x/y/alpha/angle writes now move the real receptors, but other props stay read-only.', suggestion: 'Native v2: move/scale the real strums via playerReceptors / opponentReceptors.'},
 
 		// ---- Note-skin pointers (still work; nudge toward the folder note-skin system) -------
 		{re: ~/\barrowSkin\b/, kind: DEPRECATED, appliesTo: BOTH, message: 'arrowSkin is the classic single-sheet skin field.', suggestion: 'Consider the folder note-skin system (backend.NoteSkinConfig / backend.noteskin.FolderNoteSkin).'},
