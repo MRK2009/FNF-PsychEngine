@@ -177,6 +177,9 @@ class ClassicNoteSkin implements INoteSkin {
 		tail.updateHitbox();
 		v.scaleFactor = body.scale.x;
 		v.colorable = true;
+		// Lane-center the hold like the folder-skin and per-note-texture paths do, so a body/tail frame
+		// narrower (or wider) than the note head still sits on the lane instead of drifting off the head.
+		v.centerOnStrum = true;
 		v.ok = true;
 		return v;
 	}
