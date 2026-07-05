@@ -254,11 +254,17 @@ class OptionsCatalog {
 		var framerate:Option = new Option('Framerate', "Pretty self explanatory, isn't it?", 'framerate', INT);
 		final refreshRate:Int = FlxG.stage.application.window.displayMode.refreshRate;
 		framerate.minValue = 60;
-		framerate.maxValue = 240;
+		framerate.maxValue = ClientPrefs.FRAMERATE_MAX;
 		framerate.defaultValue = Std.int(FlxMath.bound(refreshRate, framerate.minValue, framerate.maxValue));
 		framerate.displayFormat = '%v FPS';
 		framerate.onChange = onChangeFramerate;
 		rows.push(Setting(framerate));
+
+		var uncapFramerate:Option = new Option('Uncap FPS',
+			"Render as fast as your hardware allows. The Framerate cap above is ignored while this is on, but the game's logic still runs at "
+			+ ClientPrefs.FRAMERATE_MAX + " updates/sec. May introduce weird behaviors.", 'uncapFramerate', BOOL);
+		uncapFramerate.onChange = onChangeFramerate;
+		rows.push(Setting(uncapFramerate));
 		#end
 
 		#if !mobile
@@ -442,15 +448,9 @@ class OptionsCatalog {
 		return o;
 	}
 
-	/** Applies the framerate change live, updating draw + update rates in the order that avoids a clamp. **/
+	/** Applies a framerate/uncap change live (draw + update rates, respecting the uncap pin). **/
 	static function onChangeFramerate():Void {
-		if (ClientPrefs.data.framerate > FlxG.drawFramerate) {
-			FlxG.updateFramerate = ClientPrefs.data.framerate;
-			FlxG.drawFramerate = ClientPrefs.data.framerate;
-		} else {
-			FlxG.drawFramerate = ClientPrefs.data.framerate;
-			FlxG.updateFramerate = ClientPrefs.data.framerate;
-		}
+		ClientPrefs.applyFramerate();
 	}
 
 	/**
