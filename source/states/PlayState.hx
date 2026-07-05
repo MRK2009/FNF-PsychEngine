@@ -3044,8 +3044,10 @@ class PlayState extends MusicBeatState {
 						line.field.remove(note); // hold finished -- reclaim now
 					else {
 						var hc:Character = data.gfNote ? gf : line.cameraCharacter(); // keep the line's char singing
-						if (hc != null)
+						if (hc != null) {
 							hc.holdTimer = 0;
+							hc.singHold = true;
+						}
 					}
 				}
 			}
@@ -3084,8 +3086,10 @@ class PlayState extends MusicBeatState {
 					playerField.remove(note);
 				} else {
 					var hc:Character = data.gfNote ? gf : boyfriend; // keep singing through the hold
-					if (hc != null)
+					if (hc != null) {
 						hc.holdTimer = 0;
+						hc.singHold = true;
+					}
 					// Keep the receptor lit for the hold's duration (no-op once it's already confirming).
 					if (rec != null) {
 						if (rec.animation.curAnim == null || rec.animation.curAnim.name != 'confirm')
@@ -3507,8 +3511,10 @@ class PlayState extends MusicBeatState {
 
 		if (held) {
 			var hc:Character = data.gfNote ? gf : boyfriend;
-			if (hc != null)
+			if (hc != null) {
 				hc.holdTimer = 0;
+				hc.singHold = true;
+			}
 			var rec:Receptor = (data.column >= 0 && data.column < playerReceptors.length) ? playerReceptors[data.column] : null;
 			if (rec != null) {
 				if (rec.animation.curAnim == null || rec.animation.curAnim.name != 'confirm')
