@@ -163,6 +163,9 @@ class OptionsCatalog {
 			ClientPrefs.data.noteSkin = ClientPrefs.defaultData.noteSkin;
 		noteSkins.insert(0, ClientPrefs.defaultData.noteSkin);
 		rows.push(Setting(new Option('Note Skins:', 'Select your prefered Note skin.', 'noteSkin', STRING, noteSkins)));
+		rows.push(Setting(new Option('Force Selected Skin',
+			"Locks your chosen note skin: mods can't replace it via chart arrowSkin, per-note textures, or their own same-named assets.\nCustom note types keep their own look.",
+			'forceNoteSkin', BOOL)));
 
 		var uiSkins:Array<String> = Mods.mergeAllTextsNamed('images/uiSkins/list.txt');
 		for (folder in backend.UISkinConfig.list()) {

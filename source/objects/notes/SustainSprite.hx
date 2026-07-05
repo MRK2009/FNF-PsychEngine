@@ -148,7 +148,9 @@ final class SustainSprite extends FlxSprite {
 		else
 			tailRGB.reset(tail, NoteDefaults.initializeGlobalRGBShader(column));
 
-		if (data.texture != null && data.texture.length > 0) {
+		// Force Selected Skin blocks a PLAIN note's hold-texture override; a custom-type note keeps it.
+		var forceSkip:Bool = ClientPrefs.data.forceNoteSkin && (data.type == null || data.type == '');
+		if (!forceSkip && data.texture != null && data.texture.length > 0) {
 			// Per-note custom hold graphic (matches the head's data.texture); route through the setter.
 			@:bypassAccessor texture = null;
 			texture = data.texture;
@@ -157,7 +159,13 @@ final class SustainSprite extends FlxSprite {
 			pixel = PlayState.isPixelStage;
 		} else {
 			@:bypassAccessor texture = null;
+			// Force Selected Skin: pin the active skin's asset resolution to its owner (mods can't shadow it).
+			var prevPin:Null<String> = Paths.pinModRoot;
+			var pin:Null<String> = backend.NoteSkinConfig.activeSkinPinRoot();
+			if (pin != null)
+				Paths.pinModRoot = pin;
 			var v:NoteVisual = NoteSkinService.current().applySustain(this, rgbShader, tail, tailRGB, column, keyCount);
+			Paths.pinModRoot = prevPin;
 			offsetX = v.offsetX;
 			offsetY = v.offsetY;
 			centerOnStrum = v.centerOnStrum;

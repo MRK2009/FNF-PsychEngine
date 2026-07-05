@@ -27,11 +27,21 @@ class ClassicNoteSkin implements INoteSkin {
 		@return the resolved skin image base name
 	**/
 	function resolveSkin():String {
-		var skin:String = (PlayState.SONG != null && PlayState.SONG.arrowSkin != null
-			&& PlayState.SONG.arrowSkin.length > 1) ? PlayState.SONG.arrowSkin : NoteDefaults.defaultNoteSkin;
-		var postfix:String = NoteDefaults.getNoteSkinPostfix();
-		var custom:String = skin + postfix;
 		var path:String = PlayState.isPixelStage ? 'pixelUI/' : '';
+		var skin:String;
+		if (!ClientPrefs.data.forceNoteSkin
+			&& PlayState.SONG != null
+			&& PlayState.SONG.arrowSkin != null
+			&& PlayState.SONG.arrowSkin.length > 1) {
+			skin = PlayState.SONG.arrowSkin;
+		} else {
+			// Default classic base, location-flexible: prefer noteSkins/NOTE_assets, fall back to the
+			// images/-root NOTE_assets that some mods ship instead.
+			skin = NoteDefaults.defaultNoteSkin;
+			if (!Paths.fileExists('images/' + path + skin + '.png', IMAGE) && Paths.fileExists('images/' + path + 'NOTE_assets.png', IMAGE))
+				skin = 'NOTE_assets';
+		}
+		var custom:String = skin + NoteDefaults.getNoteSkinPostfix();
 		if (Paths.fileExists('images/' + path + custom + '.png', IMAGE))
 			skin = custom;
 		return skin;

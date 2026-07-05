@@ -85,6 +85,8 @@ class NoteSkinConfig {
 	static var mergedCache:Map<String, NoteSkinData> = new Map();
 	static var frameExistsCache:Map<String, Bool> = new Map();
 	static var frameKeysCache:Map<String, Array<String>> = new Map();
+	static var classicDefaultCache:Null<Bool> = null;
+	static var ownerRootCache:Map<String, String> = new Map();
 
 	public static function reset() {
 		configCache.clear();
@@ -93,6 +95,8 @@ class NoteSkinConfig {
 		mergedCache.clear();
 		frameExistsCache.clear();
 		frameKeysCache.clear();
+		classicDefaultCache = null;
+		ownerRootCache.clear();
 		pixelVariantCache = null;
 		pixelVariantComputed = false;
 	}
@@ -245,8 +249,9 @@ class NoteSkinConfig {
 	// The selected skin from chart `arrowSkin` / the player's `noteSkin` pref / the default, or null
 	// when none resolve to a folder skin (the classic skin then renders).
 	static function selectSkin():String {
+		// Force Selected Skin: ignore the chart's arrowSkin so a song can't swap the player's choice.
 		var song = PlayState.SONG;
-		if (song != null && song.arrowSkin != null && song.arrowSkin.length > 1)
+		if (!ClientPrefs.data.forceNoteSkin && song != null && song.arrowSkin != null && song.arrowSkin.length > 1)
 			return isFolderSkin(song.arrowSkin) ? song.arrowSkin : null;
 
 		var pref:String = ClientPrefs.data.noteSkin;
@@ -255,7 +260,88 @@ class NoteSkinConfig {
 			return isFolderSkin(p) ? p : null;
 		}
 
+		// Default pref: a mod shipping a classic NOTE_assets sheet renders classic (null) rather than the
+		// base Default folder skin, so a mod's legacy full-sheet skin still applies -- unless the skin is
+		// forced, in which case the base Default is kept (the mod's override is ignored).
+		if (!ClientPrefs.data.forceNoteSkin && modProvidesClassicDefault())
+			return null;
 		return isFolderSkin(DEFAULT) ? DEFAULT : null;
+	}
+
+	// Whether a mod (the current one, when its assets are allowed, or any global mod) ships a classic
+	// default NOTE_assets sheet -- at `images/noteSkins/NOTE_assets.png` OR the `images/`-root
+	// `images/NOTE_assets.png` some mods use, plus the matching `pixelUI/` form on pixel stages. Cached;
+	// cleared by `reset()`.
+	static function modProvidesClassicDefault():Bool {
+		if (classicDefaultCache != null)
+			return classicDefaultCache;
+		var found:Bool = false;
+		#if (sys && MODS_ALLOWED)
+		var path:String = PlayState.isPixelStage ? 'pixelUI/' : '';
+		var names:Array<String> = ['images/${path}noteSkins/NOTE_assets.png', 'images/${path}NOTE_assets.png'];
+		if (Mods.allowCurrentModAssets && Mods.currentModDirectory != null && Mods.currentModDirectory.length > 0)
+			found = modHasAny(Mods.currentModDirectory, names);
+		if (!found)
+			for (mod in Mods.getGlobalMods())
+				if (modHasAny(mod, names)) {
+					found = true;
+					break;
+				}
+		#end
+		classicDefaultCache = found;
+		return found;
+	}
+
+	#if (sys && MODS_ALLOWED)
+	static function modHasAny(mod:String, names:Array<String>):Bool {
+		for (n in names)
+			if (sys.FileSystem.exists(Paths.mods('$mod/$n')))
+				return true;
+		return false;
+	}
+	#end
+
+	// The single source that owns a folder skin, base-first so a base skin can't be shadowed by a mod's
+	// same-named folder: "" (base) if `assets/shared` ships it, else the owning mod dir, else "" (base).
+	static function skinOwnerRoot(name:String):String {
+		if (ownerRootCache.exists(name))
+			return ownerRootCache.get(name);
+		var root:String = computeOwnerRoot(name);
+		ownerRootCache.set(name, root);
+		return root;
+	}
+
+	static function computeOwnerRoot(name:String):String {
+		#if sys
+		var rel:String = 'images/$name/skin.';
+		for (ext in EXTS)
+			if (sys.FileSystem.exists('assets/shared/$rel$ext'))
+				return '';
+		#if MODS_ALLOWED
+		if (Mods.currentModDirectory != null && Mods.currentModDirectory.length > 0)
+			for (ext in EXTS)
+				if (sys.FileSystem.exists(Paths.mods('${Mods.currentModDirectory}/$rel$ext')))
+					return Mods.currentModDirectory;
+		for (mod in Mods.getGlobalMods())
+			for (ext in EXTS)
+				if (sys.FileSystem.exists(Paths.mods('$mod/$rel$ext')))
+					return mod;
+		#end
+		#end
+		return '';
+	}
+
+	/**
+		The `Paths.pinModRoot` to use while applying the active note skin, or `null` for normal resolution.
+		Only pins when the skin is FORCED and resolves to a folder skin -- forcing a single source (`""` =
+		base-only, a mod dir = that mod) so another mod can't shadow the chosen skin's assets. Classic
+		skins aren't pinned (the chart `arrowSkin` block already covers the override case there).
+	**/
+	public static function activeSkinPinRoot():Null<String> {
+		if (!ClientPrefs.data.forceNoteSkin)
+			return null;
+		var active:String = activeSkin();
+		return (active == null) ? null : skinOwnerRoot(active);
 	}
 
 	static var pixelVariantCache:String = null;

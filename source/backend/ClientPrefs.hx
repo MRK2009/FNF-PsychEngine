@@ -17,6 +17,9 @@ import states.TitleState;
 	public var autoPause:Bool = true;
 	public var antialiasing:Bool = true;
 	public var noteSkin:String = 'Default';
+	// Locks the selected note skin: mods can't replace it via chart arrowSkin, per-note textures, or
+	// their own same-named assets. Custom note TYPES still keep their own look.
+	public var forceNoteSkin:Bool = false;
 	public var uiSkin:String = 'Default';
 	public var splashSkin:String = 'From Noteskin';
 	public var splashAlpha:Float = 0.6;
