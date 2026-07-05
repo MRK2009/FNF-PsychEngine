@@ -92,6 +92,9 @@ class ChartingState extends MusicBeatState {
 	/** The section the panels operate on. **/
 	public var editSection(default, null):Int = 0;
 
+	/** How many sections back "Copy From" pulls notes from (1 = the previous section). **/
+	var copyFromBack:Int = 4;
+
 	// 1x = square cells with the full section in view; higher zooms stretch rows for fine editing.
 	static final ZOOM_LABELS:Array<String> = ["0.25x", "0.5x", "1x", "2x", "3x", "4x", "6x", "8x", "12x", "16x", "24x"];
 	static final ZOOM_VALUES:Array<Float> = [0.25, 0.5, 1, 2, 3, 4, 6, 8, 12, 16, 24];
@@ -275,7 +278,7 @@ class ChartingState extends MusicBeatState {
 		noteField.maxTime = audio.loaded ? audio.length : -1;
 		noteField.typeIndexOf = function(t:String):Int return noteTypesList.indexOf(t);
 		noteField.waveEnabled = EditorPrefs.waveform;
-		noteField.waveSource = audio.waveformSound(EditorPrefs.waveTarget);
+		applyWaveConfig();
 		noteField.vortexEnabled = EditorPrefs.vortex;
 		add(noteField.group);
 		add(noteField.overlay);
@@ -1564,7 +1567,7 @@ class ChartingState extends MusicBeatState {
 			applyAudioVolumes();
 			audio.setRate(RATE_VALUES[rateIndex]);
 			noteField.maxTime = audio.loaded ? audio.length : -1;
-			noteField.waveSource = audio.waveformSound(EditorPrefs.waveTarget);
+			applyWaveConfig();
 			UIToast.show(audio.loaded ? 'Audio loaded' : 'No audio found for "${model.chart.song}"');
 			updateTimeLabel();
 		}));
@@ -1927,8 +1930,17 @@ class ChartingState extends MusicBeatState {
 		flow.header(tools);
 		flow.add(buttonPair(colW, "Copy", copySection, "Swap Sides", swapSection));
 		flow.add(buttonPair(colW, "Paste", pasteAtSection, "Duet", duetSection));
-		flow.add(buttonPair(colW, "Copy Last Section", copyLastSection, "Mirror", mirrorSection));
-		var clear:UIButton = new UIButton("Clear This Section", colW, UITheme.px(28), clearSection);
+		flow.add(buttonPair(colW, "Copy Prev", copyLastSection, "Mirror", mirrorSection));
+		var copyFromStep:UIStepper = new UIStepper("Copy From", colW, copyFromBack, 1, function(v:Float):Void {
+			copyFromBack = (v < 1) ? 1 : Std.int(v);
+		});
+		copyFromStep.decimals = 0;
+		copyFromStep.min = 1;
+		copyFromStep.max = 999;
+		copyFromStep.boxWidth = UITheme.px(80);
+		flow.add(copyFromStep);
+		flow.add(new UIButton("Copy From", colW, UITheme.px(26), copyFromNSectionsBack));
+		var clear:UIButton = new UIButton("Clear Section", colW, UITheme.px(28), clearSection);
 		clear.danger = true;
 		flow.add(clear);
 
@@ -2049,6 +2061,17 @@ class ChartingState extends MusicBeatState {
 		undoStack.snapshot(model, 'Copy Last');
 		var added:Int = model.copyFromSection(editSection, -1);
 		UIToast.show('Copied $added notes from the previous section');
+	}
+
+	function copyFromNSectionsBack():Void {
+		var back:Int = (copyFromBack < 1) ? 1 : copyFromBack;
+		if (editSection - back < 0) {
+			UIToast.show('No section $back back to copy from');
+			return;
+		}
+		undoStack.snapshot(model, 'Copy From -$back');
+		var added:Int = model.copyFromSection(editSection, -back);
+		UIToast.show('Copied $added notes from $back section(s) back');
 	}
 
 	/** Applies the saved theme preset + optional custom accent to the live UI. **/
@@ -2500,12 +2523,29 @@ class ChartingState extends MusicBeatState {
 
 		var waveDrop:UIDropdown = new UIDropdown("Waveform Source", colW, function(index:Int, _:String):Void {
 			EditorPrefs.waveTarget = index;
-			noteField.waveSource = audio.waveformSound(index);
+			applyWaveConfig();
 		});
 		waveDrop.boxWidth = UITheme.px(130);
 		waveDrop.setItems(["Instrumental", "Player Vocals", "Opponent Vocals"]);
 		waveDrop.select(clampIndex(EditorPrefs.waveTarget, 3));
 		flow.add(waveDrop);
+		flow.add(new UICheckbox("Per-Strumline Waveform", colW, EditorPrefs.wavePerStrum, function(v:Bool):Void {
+			EditorPrefs.wavePerStrum = v;
+			applyWaveConfig();
+		}));
+	}
+
+	/** Pushes the current waveform prefs onto the note field: either a single centered source, or the
+		opponent + player vocals drawn over their own strumlines when `wavePerStrum` is on. **/
+	function applyWaveConfig():Void {
+		if (noteField == null)
+			return;
+		noteField.wavePerStrum = EditorPrefs.wavePerStrum;
+		if (EditorPrefs.wavePerStrum) {
+			noteField.waveSourceA = audio.waveformSound(2); // opponent vocals over line 0
+			noteField.waveSourceB = audio.waveformSound(1); // player vocals over line 1
+		} else
+			noteField.waveSource = audio.waveformSound(EditorPrefs.waveTarget);
 	}
 
 	/** Enumerates default + `custom_events/*.txt` event definitions (`[name, description]`). **/

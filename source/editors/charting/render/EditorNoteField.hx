@@ -131,6 +131,45 @@ final class EditorNoteField {
 		return v;
 	}
 
+	/** When on, two waveforms are drawn -- `waveSourceA`/`waveSourceB` over the first/second strumline
+		(opponent/player) -- instead of one centered track. **/
+	public var wavePerStrum(default, set):Bool = false;
+
+	function set_wavePerStrum(v:Bool):Bool {
+		if (wavePerStrum != v) {
+			wavePerStrum = v;
+			waveSig = -1;
+		}
+		return v;
+	}
+
+	/** Per-strumline waveform sources (used only when `wavePerStrum` is on): A over line 0, B over line 1. **/
+	public var waveSourceA(default, set):flixel.sound.FlxSound = null;
+
+	public var waveSourceB(default, set):flixel.sound.FlxSound = null;
+
+	function set_waveSourceA(v:flixel.sound.FlxSound):flixel.sound.FlxSound {
+		if (waveSourceA != v) {
+			waveSourceA = v;
+			waveSig = -1;
+		}
+		return v;
+	}
+
+	function set_waveSourceB(v:flixel.sound.FlxSound):flixel.sound.FlxSound {
+		if (waveSourceB != v) {
+			waveSourceB = v;
+			waveSig = -1;
+		}
+		return v;
+	}
+
+	var waveSprite2:FlxSprite;
+	var waveCxA:Float = 0;
+	var waveCxB:Float = 0;
+	var _spanCx:Float = 0;
+	var _spanW:Float = 0;
+
 	/** Shows skinned receptors on the playhead row (the vortex editor look). **/
 	public var vortexEnabled(default, set):Bool = false;
 
@@ -207,6 +246,11 @@ final class EditorNoteField {
 		waveSprite.alpha = 0.55;
 		waveSprite.visible = false;
 		group.add(waveSprite);
+
+		waveSprite2 = new FlxSprite();
+		waveSprite2.alpha = 0.55;
+		waveSprite2.visible = false;
+		group.add(waveSprite2);
 
 		ghost = new FlxSprite();
 		ghost.makeGraphic(1, 1, FlxColor.WHITE);
@@ -1137,26 +1181,85 @@ final class EditorNoteField {
 	}
 
 	function updateWaveform(viewSteps:Float):Void {
-		if (!waveEnabled || waveSource == null || stepsAt.length == 0) {
+		var haveSrc:Bool = wavePerStrum ? (waveSourceA != null || waveSourceB != null) : (waveSource != null);
+		if (!waveEnabled || !haveSrc || stepsAt.length == 0) {
 			waveSprite.visible = false;
+			waveSprite2.visible = false;
 			waveSig = -1;
 			return;
 		}
 		var sec:Int = model.sectionAt(viewTime);
+		if (wavePerStrum) {
+			// two tracks, each over its own strumline: opponent (line 0) + player (line 1).
+			var sig:Float = sec * 1000000.0 + cellH * 100 + gridW * 3 + cell + (downscroll ? 0.5 : 0) + 3.0;
+			if (sig != waveSig) {
+				waveSig = sig;
+				redrawPerStrum(sec);
+			}
+			positionWave(waveSprite, waveCxA, sec, viewSteps);
+			positionWave(waveSprite2, waveCxB, sec, viewSteps);
+			return;
+		}
+
+		waveSprite2.visible = false;
 		var sig:Float = sec * 1000000.0 + cellH * 100 + waveWidth() + (downscroll ? 0.5 : 0);
 		if (sig != waveSig) {
 			waveSig = sig;
-			redrawWaveform(sec);
+			// centered across the note lanes (not biased by the event lane), fixed width: it sits in the
+			// gutter between the two fields, it does NOT stretch to span them.
+			paintWave(waveSprite, waveSource, sec, Std.int(waveWidth()));
 		}
-		if (!waveSprite.visible)
+		positionWave(waveSprite, noteCenterX(), sec, viewSteps);
+	}
+
+	/** Positions a (already painted, visible) wave sprite centered at `cx` over the current section. **/
+	inline function positionWave(spr:FlxSprite, cx:Float, sec:Int, viewSteps:Float):Void {
+		if (!spr.visible)
 			return;
 		var y0:Float = yOfSteps(stepsAt[sec], viewSteps);
 		var secEndSteps:Float = (sec + 1 < stepsAt.length) ? stepsAt[sec + 1] : stepsOf(model.endTime);
 		var y1:Float = yOfSteps(secEndSteps, viewSteps);
-		// centered across the note lanes (not biased by the event lane), fixed width: it sits in the
-		// gutter between the two fields, it does NOT stretch to span them.
-		waveSprite.x = noteCenterX() - waveWidth() / 2;
-		waveSprite.y = (y0 < y1) ? y0 : y1;
+		spr.x = cx - spr.width / 2;
+		spr.y = (y0 < y1) ? y0 : y1;
+	}
+
+	/** Repaints both per-strumline waveforms: `waveSourceA` over line 0, `waveSourceB` over line 1. **/
+	function redrawPerStrum(sec:Int):Void {
+		if (waveSourceA != null && spanForLine(0)) {
+			waveCxA = _spanCx;
+			paintWave(waveSprite, waveSourceA, sec, Std.int(_spanW));
+		} else
+			waveSprite.visible = false;
+		if (waveSourceB != null && spanForLine(1)) {
+			waveCxB = _spanCx;
+			paintWave(waveSprite2, waveSourceB, sec, Std.int(_spanW));
+		} else
+			waveSprite2.visible = false;
+	}
+
+	/** Centre-x (`_spanCx`) + capped width (`_spanW`) of strumline `lineIdx`'s lanes; false if it has none. **/
+	function spanForLine(lineIdx:Int):Bool {
+		var first:Int = -1;
+		var last:Int = -1;
+		var i:Int = 0;
+		var n:Int = laneLine.length;
+		while (i < n) {
+			if (laneLine[i] == lineIdx) {
+				if (first < 0)
+					first = i;
+				last = i;
+			}
+			i++;
+		}
+		if (first < 0 || first >= laneX.length || last >= laneX.length)
+			return false;
+		var left:Float = laneX[first];
+		var right:Float = laneX[last] + cell;
+		_spanCx = (left + right) / 2;
+		var span:Float = right - left;
+		var cap:Float = cell * 6;
+		_spanW = (cap < span) ? cap : span;
+		return true;
 	}
 
 	/** Left-to-right span of the note lanes only (excludes the event lane). **/
@@ -1175,30 +1278,30 @@ final class EditorNoteField {
 		return (wv < span) ? wv : span;
 	}
 
-	function redrawWaveform(sec:Int):Void {
+	/** Paints one section of `source`'s waveform into `spr`, `w` px wide. Sets `spr.visible`. **/
+	function paintWave(spr:FlxSprite, source:flixel.sound.FlxSound, sec:Int, w:Int):Void {
 		#if (lime_cffi && !macro)
 		var startMs:Float = model.sectionStart(sec);
 		var endMs:Float = model.sectionEnd(sec);
 		var secEndSteps:Float = (sec + 1 < stepsAt.length) ? stepsAt[sec + 1] : stepsOf(model.endTime);
 		var pxH:Float = (secEndSteps - stepsAt[sec]) * cellH;
 		var bmpH:Int = Std.int(Math.min(pxH, 2048));
-		var w:Int = Std.int(waveWidth());
-		if (bmpH < 2 || w < 2 || endMs <= startMs) {
-			waveSprite.visible = false;
+		if (source == null || bmpH < 2 || w < 2 || endMs <= startMs) {
+			spr.visible = false;
 			return;
 		}
 
-		var snd:openfl.media.Sound = @:privateAccess waveSource._sound;
+		var snd:openfl.media.Sound = @:privateAccess source._sound;
 		var buffer:lime.media.AudioBuffer = (snd != null) ? @:privateAccess snd.__buffer : null;
 		if (buffer == null) {
-			waveSprite.visible = false;
+			spr.visible = false;
 			return;
 		}
 
-		if (waveSprite.pixels == null || waveSprite.pixels.width != w || waveSprite.pixels.height != bmpH)
-			waveSprite.makeGraphic(w, bmpH, 0x00FFFFFF, true);
+		if (spr.pixels == null || spr.pixels.width != w || spr.pixels.height != bmpH)
+			spr.makeGraphic(w, bmpH, 0x00FFFFFF, true);
 		else
-			waveSprite.pixels.fillRect(new openfl.geom.Rectangle(0, 0, w, bmpH), 0x00FFFFFF);
+			spr.pixels.fillRect(new openfl.geom.Rectangle(0, 0, w, bmpH), 0x00FFFFFF);
 
 		waveScratch[0][0].resize(0);
 		waveScratch[0][1].resize(0);
@@ -1212,7 +1315,7 @@ final class EditorNoteField {
 		var rightLength:Int = (data[1][0].length > data[1][1].length) ? data[1][0].length : data[1][1].length;
 		var length:Int = (leftLength > rightLength) ? leftLength : rightLength;
 
-		var pixels = waveSprite.pixels;
+		var pixels = spr.pixels;
 		pixels.lock();
 		var index:Int = 0;
 		while (index < length && index < bmpH) {
@@ -1224,14 +1327,14 @@ final class EditorNoteField {
 			index++;
 		}
 		pixels.unlock();
-		waveSprite.dirty = true;
-		waveSprite.visible = true;
-		waveSprite.scale.x = 1;
-		waveSprite.scale.y = pxH / bmpH;
-		waveSprite.updateHitbox();
-		waveSprite.flipY = downscroll;
+		spr.dirty = true;
+		spr.visible = true;
+		spr.scale.x = 1;
+		spr.scale.y = pxH / bmpH;
+		spr.updateHitbox();
+		spr.flipY = downscroll;
 		#else
-		waveSprite.visible = false;
+		spr.visible = false;
 		#end
 	}
 

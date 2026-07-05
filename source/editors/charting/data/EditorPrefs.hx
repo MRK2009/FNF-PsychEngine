@@ -71,6 +71,9 @@ final class EditorPrefs {
 	/** Waveform source: 0 = inst, 1 = player vocals, 2 = opponent vocals. **/
 	public static var waveTarget:Int = 0;
 
+	/** When true, ignore `waveTarget` and draw opponent + player vocals over their own strumlines. **/
+	public static var wavePerStrum:Bool = false;
+
 	/** Highlight the whole snap region under the cursor (the multi-cell marker); off by default. **/
 	public static var snapRegionGhost:Bool = false;
 
@@ -131,6 +134,8 @@ final class EditorPrefs {
 			notePoolCap = d.notePoolCap;
 		if (d.waveTarget != null)
 			waveTarget = d.waveTarget;
+		if (d.wavePerStrum != null)
+			wavePerStrum = d.wavePerStrum;
 		if (d.snapRegionGhost != null)
 			snapRegionGhost = d.snapRegionGhost;
 		if (d.bpmAdapt != null)
@@ -163,6 +168,7 @@ final class EditorPrefs {
 			metroAccent: metroAccent,
 			notePoolCap: notePoolCap,
 			waveTarget: waveTarget,
+			wavePerStrum: wavePerStrum,
 			snapRegionGhost: snapRegionGhost,
 			bpmAdapt: bpmAdapt,
 			timeSigAdapt: timeSigAdapt,
