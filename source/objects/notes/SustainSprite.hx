@@ -61,27 +61,31 @@ final class SustainSprite extends FlxSprite {
 	}
 
 	/**
-		How far a hold's visual end is pulled back toward its head, as a fraction of the note half-width
-		(`Mania.swagWidth / 2`), so the tail cap tucks in short of the next note instead of reaching its
-		centre. `0` restores the exact end-time tip; `1` stops the cap at the next note's leading edge.
-		Clamped per hold so the cap always fits (the body never goes negative).
+		How far a hold's visible tip is pulled back toward its head from the end-note centre, as a fraction
+		of the note half-width. `0` (default) ends the trail exactly at the end-note centre: the cap sits AT
+		that point and extends back toward the head, so it can't overlap a note on the next step AND the trail
+		consumes cleanly right up to the release (a positive trim shortens the visual trail, which then
+		finishes a little before you actually let go). Increase only if a skin wants the cap tucked in further.
 	**/
-	public static var endTrimRatio:Float = 1.0;
+	public static var endTrimRatio:Float = 0;
 
 	/**
-		Extra pull of a held hold's clip toward the receptor, as a fraction of the note width, so the
-		trail overlaps the receptor slightly instead of leaving a visible gap above it. `0` cuts exactly
-		at the head; larger values tuck the trail further down over the receptor.
+		Extra trail left past the receptor when a held hold is clipped, as a fraction of the note width.
+		`0` (default) cuts the trail exactly at the receptor centre, so the receptor's near half hides the
+		cut edge at any receptor scale. A positive value leaves more trail poking toward/over the receptor,
+		but keep it below the receptor's scaled half-width or the trail pokes past a scaled-down receptor
+		(what made held holds stick out under/over the strum on `scale: 0.7` skins).
 	**/
-	public static var holdClipNudge:Float = 0.5;
+	public static var holdClipNudge:Float = 0;
 
 	/**
-		Extends an un-held hold's head-side edge up under the note head by this fraction of the note width,
-		closing the seam between the head and the trail while it scrolls. `0` starts the body exactly at the
-		head. Once the hold is hit, the held clip (`holdClipNudge`) governs the receptor-side edge instead,
-		so this only affects the un-held (approaching / opponent-side) trail.
+		Extra tuck of an un-held hold's head-side edge PAST the note centre, under the head, as a fraction of
+		the note width. `0` (default) connects the trail at the head centre -- the head's near half hides the
+		seam at any note scale. A positive value tucks further, but keep it below the head's scaled half-width
+		or the trail pokes past a scaled-down head (e.g. `scale: 0.7` skins). Un-held trail only; once hit, the
+		held clip (`holdClipNudge`) owns the receptor-side edge.
 	**/
-	public static var headOverlap:Float = 0.5;
+	public static var headOverlap:Float = 0;
 
 	public var offsetX:Float = 0;
 	public var offsetY:Float = 0;
@@ -215,8 +219,11 @@ final class SustainSprite extends FlxSprite {
 		flipY = strum.downScroll;
 		tail.flipY = strum.downScroll;
 
-		var sign:Float = strum.downScroll ? 1 : -1;
+		// `neg` matches the note head's distance negation, so head and trail share one convention in
+		// BOTH scroll directions (the old code only got downscroll right).
+		var neg:Float = strum.downScroll ? 1 : -1;
 		var rate:Float = songSpeed * multSpeed;
+		var half:Float = Mania.swagWidth * 0.5;
 
 		var uX:Float = strum.axisX;
 		var uY:Float = strum.axisY;
@@ -228,40 +235,40 @@ final class SustainSprite extends FlxSprite {
 			tail.alpha = alpha;
 		}
 
-		var headDist:Float = sign * (0.45 * (scrollNow - data.scrollPos) * rate);
-		var endDist:Float = sign * (0.45 * (scrollNow - data.endScrollPos) * rate);
+		// Note-centre position along the scroll axis for the head and the hold end, using the SAME
+		// mapping as the note head (a note's centre sits half a note-width past its raw scroll point).
+		var headCenter:Float = offsetY + neg * (0.45 * (scrollNow - data.scrollPos) * rate) + half;
+		var endCenter:Float = offsetY + neg * (0.45 * (scrollNow - data.endScrollPos) * rate) + half;
+
+		// Direction from the head toward the end along the axis (mirror-safe for up/down scroll).
+		var dir:Float = (endCenter >= headCenter) ? 1 : -1;
+
+		// Visible tip at the end-note centre (endTrimRatio 0). The cap extends from here back toward the head,
+		// so it never reaches past the end into a note on the next step, and the trail consumes fully to the
+		// release. Applied whether held or not so the length never jumps when you press. The cap is also HIDDEN
+		// near the receptor at completion (below) so it can't poke past it in the final frames.
+		var endTrim:Float = half * endTrimRatio;
+		var tipAlong:Float = endCenter - dir * endTrim;
+
+		// Head-side edge sits at the head note's CENTRE, so the head's near half always hides the seam at any
+		// note scale (a scaled-down head doesn't cover a full-note-width over-tuck, which used to make the
+		// trail poke past the head -- most visibly on upscroll). A skin/`headOverlap` can still tuck further.
+		var startAlong:Float = headCenter;
+		if (!data.hit) {
+			var ho:Float = (skinHeadOverlap != null) ? skinHeadOverlap : headOverlap;
+			if (ho != 0)
+				startAlong -= dir * (Mania.swagWidth * ho);
+		}
 
 		// Missing hold-end: no tail length is reserved, so the body reaches where the tail would have ended.
 		var tailLen:Float = hasTail ? tail.height : 0;
-		var totalLen:Float = Math.abs(headDist - endDist);
-
-		var trim:Float = Mania.swagWidth * 0.5 * endTrimRatio;
-		var maxTrim:Float = totalLen - tailLen;
-		if (maxTrim < 0)
-			maxTrim = 0;
-		if (trim > maxTrim)
-			trim = maxTrim;
-		endDist += sign * trim;
-		totalLen -= trim;
-
-		var nearA:Float = offsetY + headDist;
-		var farA:Float = offsetY + endDist;
-		var bodyLen:Float = totalLen - tailLen;
+		var fullLen:Float = Math.abs(tipAlong - startAlong);
+		var bodyLen:Float = fullLen - tailLen;
 		if (bodyLen < 0)
 			bodyLen = 0;
 
-		// Un-held trail: push the head-side edge up under the note head to close the seam. The far (tail)
-		// edge stays put. Skipped once hit -- the held clip owns the receptor-side edge from then on.
-		var ho:Float = (skinHeadOverlap != null) ? skinHeadOverlap : headOverlap;
-		if (data != null && !data.hit && ho != 0) {
-			var headOver:Float = Mania.swagWidth * ho;
-			nearA += sign * headOver;
-			bodyLen += headOver;
-		}
-		// bodyLen is constant while scrolling (headDist - endDist reduces to 0.45*rate*(endScrollPos -
-		// scrollPos), independent of scrollNow), so scale.y only really moves on spawn/speed change and
-		// while a held note clips. Only pay updateHitbox when it actually changed (legacy's 0.1px gate);
-		// width/height stay valid on the skipped frames since scale.x/frameWidth don't change.
+		// bodyLen is constant while scrolling, so scale.y only really moves on spawn/speed change and
+		// while a held note clips. Only pay updateHitbox when it actually changed (legacy's 0.1px gate).
 		if (frameHeight > 0) {
 			var newScaleY:Float = bodyLen / frameHeight;
 			if (Math.abs((newScaleY - scale.y) * frameHeight) > 0.1) {
@@ -270,24 +277,37 @@ final class SustainSprite extends FlxSprite {
 			}
 		}
 
-		var perp:Float = offsetX + (centerOnStrum ? Mania.swagWidth / 2 : width / 2);
-		var bodyA:Float = (nearA + farA + sign * tailLen) / 2;
-		var bcx:Float = strum.x + uX * bodyA + uY * perp;
-		var bcy:Float = strum.y + uY * bodyA - uX * perp;
+		var perp:Float = offsetX + (centerOnStrum ? half : width / 2);
+		// Body occupies [startAlong .. tip - tail]; the tail cap occupies the final tailLen up to the tip.
+		var bodyCenter:Float = (startAlong + (tipAlong - dir * tailLen)) * 0.5;
+		var bcx:Float = strum.x + uX * bodyCenter + uY * perp;
+		var bcy:Float = strum.y + uY * bodyCenter - uX * perp;
 		if (copyX)
 			x = bcx - width / 2;
 		if (copyY)
 			y = bcy - (frameHeight * scale.y) / 2;
 
-		var tperp:Float = offsetX + (centerOnStrum ? Mania.swagWidth / 2 : tail.width / 2);
-		var tailA:Float = farA + sign * (tailLen / 2);
-		var tcx:Float = strum.x + uX * tailA + uY * tperp;
-		var tcy:Float = strum.y + uY * tailA - uX * tperp;
+		var tperp:Float = offsetX + (centerOnStrum ? half : tail.width / 2);
+		var tailCenter:Float = tipAlong - dir * (tailLen * 0.5);
+		var tcx:Float = strum.x + uX * tailCenter + uY * tperp;
+		var tcy:Float = strum.y + uY * tailCenter - uX * tperp;
 		tail.angle = copyAngle ? strum.axisAngle : tail.angle;
 		tail.x = tcx - tail.width / 2;
 		tail.y = tcy - tail.height / 2;
 
-		clip(sign * headDist - Mania.swagWidth * holdClipNudge, bodyLen);
+		// Held: hide the tail cap once its receptor-facing edge reaches the receptor centre, so the cap can't
+		// scroll past/under the receptor in the last frames before the note is reclaimed (the receptor covers
+		// the flat end). `receptorAlong` is where the head sat when it was hit.
+		tail.visible = hasTail;
+		if (data.hit && hasTail) {
+			var receptorAlong:Float = offsetY + half;
+			var receptorFacingEdge:Float = tipAlong - dir * tailLen;
+			if ((receptorFacingEdge - receptorAlong) * dir < 0)
+				tail.visible = false;
+		}
+
+		// Held: hide the portion already scrolled past the receptor (raw scroll progress, dir-independent).
+		clip(0.45 * (scrollNow - data.scrollPos) * rate - Mania.swagWidth * holdClipNudge, bodyLen);
 	}
 
 	/**
