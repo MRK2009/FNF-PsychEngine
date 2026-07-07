@@ -82,6 +82,11 @@ final class NoteData {
 	/** Non-GH segmented sustain: time of the next body segment to judge (`-1` until the head resolves). **/
 	public var nextTick:Float = -1;
 
+	/** Time of the next per-step sustain re-sing (`-1` until the head is hit). Legacy sustains were N
+		note-pieces one step apart, each re-firing the character sing on hit -- this reproduces that
+		per-step "jitter" over the single v2 sustain. **/
+	public var nextSingTick:Float = -1;
+
 	public var rating:String = 'unknown';
 	public var ratingMod:Float = 0;
 	public var ratingDisabled:Bool = false;

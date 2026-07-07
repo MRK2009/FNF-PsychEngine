@@ -3052,13 +3052,8 @@ class PlayState extends MusicBeatState {
 				} else if (data.hit && data.isSustain()) {
 					if (songPos >= data.endTime())
 						line.field.remove(note); // hold finished -- reclaim now
-					else {
-						var hc:Character = data.gfNote ? gf : line.cameraCharacter(); // keep the line's char singing
-						if (hc != null) {
-							hc.holdTimer = 0;
-							hc.singHold = true;
-						}
-					}
+					else
+						resingHold(data.gfNote ? gf : line.cameraCharacter(), data, songPos); // keep the line's char singing (per-step)
 				}
 			}
 		}
@@ -3095,11 +3090,7 @@ class PlayState extends MusicBeatState {
 					}
 					playerField.remove(note);
 				} else {
-					var hc:Character = data.gfNote ? gf : boyfriend; // keep singing through the hold
-					if (hc != null) {
-						hc.holdTimer = 0;
-						hc.singHold = true;
-					}
+					resingHold(data.gfNote ? gf : boyfriend, data, songPos); // keep singing through the hold (per-step)
 					// Keep the receptor lit for the hold's duration (no-op once it's already confirming).
 					if (rec != null) {
 						if (rec.animation.curAnim == null || rec.animation.curAnim.name != 'confirm')
@@ -3315,6 +3306,38 @@ class PlayState extends MusicBeatState {
 		}
 	}
 
+	/**
+		Keeps a character singing through a held sustain the pre-v2 way: legacy sustains were N note-pieces
+		one step apart, and every piece re-fired the sing anim (`playAnim(..., true)`) as it was hit, which
+		restarted it each step -- that's the classic hold "jitter". This re-fires `singChar` on each step the
+		hold crosses (`singChar` still skips the replay for characters with a dedicated `-hold`/`-loop` anim).
+		@param char the character holding the note
+		@param data the held sustain
+		@param songPos the current song position in ms
+	**/
+	function resingHold(char:Character, data:NoteData, songPos:Float):Void {
+		if (char == null)
+			return;
+		char.holdTimer = 0; // hold the current sing pose (don't dance out) whether or not it jitters
+
+		// Per-character switch: only re-fire the sing each step (the legacy "jitter") when the character
+		// has loopSingOnHold on; otherwise the head's sing pose simply holds/freezes.
+		if (!char.loopSingOnHold || data.noAnimation)
+			return;
+
+		if (data.nextSingTick < 0)
+			data.nextSingTick = data.time + Conductor.stepCrochet;
+
+		var resing:Bool = false;
+		var end:Float = data.endTime();
+		while (data.nextSingTick <= songPos && data.nextSingTick < end) {
+			resing = true;
+			data.nextSingTick += Conductor.stepCrochet;
+		}
+		if (resing)
+			singChar(char, data, null);
+	}
+
 	// NoteSystem V2
 	/**
 		Advances the non-rendered strumlines: when a note's time passes, the line's character
@@ -3520,11 +3543,7 @@ class PlayState extends MusicBeatState {
 		}
 
 		if (held) {
-			var hc:Character = data.gfNote ? gf : boyfriend;
-			if (hc != null) {
-				hc.holdTimer = 0;
-				hc.singHold = true;
-			}
+			resingHold(data.gfNote ? gf : boyfriend, data, songPos); // re-sing per step (legacy hold jitter)
 			var rec:Receptor = (data.column >= 0 && data.column < playerReceptors.length) ? playerReceptors[data.column] : null;
 			if (rec != null) {
 				if (rec.animation.curAnim == null || rec.animation.curAnim.name != 'confirm')
