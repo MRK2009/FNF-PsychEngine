@@ -2167,6 +2167,16 @@ class PlayState extends MusicBeatState {
 									if (line.characters[ci] == character)
 										line.characters[ci] = newCharacter;
 
+						// Notes are processed (updateFields) BEFORE events this frame, so a note on the same
+						// step the swap happens already made the OLD character sing. Carry that live sing/special
+						// state onto the new character so it doesn't sit idle on the swap step.
+						var carryAnim:String = character.getAnimationName();
+						if (carryAnim != null && (carryAnim.startsWith('sing') || character.specialAnim)) {
+							newCharacter.playAnim(carryAnim, true);
+							newCharacter.holdTimer = character.holdTimer;
+							newCharacter.specialAnim = character.specialAnim;
+						}
+
 						icon?.changeIcon(newCharacter.healthIcon);
 						reloadHealthBarColors();
 
