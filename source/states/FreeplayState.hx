@@ -875,8 +875,12 @@ class FreeplayState extends MusicBeatState {
 			var star:FlxSprite = new FlxSprite();
 			if (!ClientPrefs.data.lowQuality) {
 				star.frames = Paths.getSparrowAtlas('starMarkerAnimated');
-				star.animation.addByPrefix('active', 'active', 24, true);
+				// Non-looping: the star only animates once when a favorite is toggled on (see
+				// toggleFavorite), then rests on its last frame. Start finished so already-favorited
+				// songs show the static star instead of looping forever.
+				star.animation.addByPrefix('active', 'active', 24, false);
 				star.animation.play('active');
+				star.animation.finish();
 			} else
 				star.loadGraphic(Paths.image('starMarker'));
 			star.antialiasing = ClientPrefs.data.antialiasing;
@@ -945,10 +949,11 @@ class FreeplayState extends MusicBeatState {
 			return;
 		var sel:SongMetadata = songs[curSelected];
 		var k:String = favKey(sel);
-		if (favorites.indexOf(k) >= 0)
-			favorites.remove(k);
-		else
+		var added:Bool = favorites.indexOf(k) < 0;
+		if (added)
 			favorites.push(k);
+		else
+			favorites.remove(k);
 		FlxG.save.data.freeplayFavorites = favorites;
 		FlxG.save.flush();
 		FlxG.sound.play(Paths.sound('scrollMenu'), 0.5);
@@ -957,6 +962,13 @@ class FreeplayState extends MusicBeatState {
 			applyFilters();
 			rebuildSongList();
 			restoreSelection(sel);
+		}
+
+		// Play the star's reveal animation once, only when favoriting ON; it stays static otherwise.
+		if (added && curSelected >= 0 && curSelected < starArray.length) {
+			var star:FlxSprite = starArray[curSelected];
+			if (star != null && star.frames != null && star.animation.getByName('active') != null)
+				star.animation.play('active', true);
 		}
 		// star markers refresh every frame in updateTexts via isFavorite()
 	}
