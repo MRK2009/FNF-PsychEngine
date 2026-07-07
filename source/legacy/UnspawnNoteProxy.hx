@@ -71,6 +71,20 @@ class UnspawnNoteProxy extends Note {
 		d.ignore = ignoreNote;
 		d.hitHealth = hitHealth;
 		d.missHealth = missHealth;
+		// Remaining gameplay/visual props a pre-v2 load-time script may set on the note, so it behaves
+		// identically once the v2 field spawns it.
+		d.blockHit = blockHit;
+		d.lowPriority = lowPriority;
+		d.hitCausesMiss = hitCausesMiss;
+		d.ratingDisabled = ratingDisabled;
+		d.hitsoundDisabled = hitsoundDisabled;
+		d.hitsoundForce = hitsoundForce;
+		d.earlyHitMult = earlyHitMult;
+		d.lateHitMult = lateHitMult;
+		d.multAlpha = multAlpha;
+		d.multSpeed = multSpeed;
+		if (noteSplashData != null)
+			d.splashDisabled = noteSplashData.disabled;
 		if (texture != null && texture.length > 0)
 			d.texture = texture;
 		if (extraData != null)

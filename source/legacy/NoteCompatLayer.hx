@@ -25,10 +25,12 @@ import flixel.group.FlxGroup.FlxTypedGroup;
 	The adapters are NEVER drawn or updated (`visible = active = false`); the real v2 drawables render.
 	They are pure data carriers, so they are safe to keep in the scene-added `notes` group.
 
-	Known limitations (the alias-impossible cases the Script Converter handles): script WRITES to an
-	adapter's visual props (`note.x` / `alpha` / strum position ...) do NOT reflect back onto the v2
-	drawables, and the whole-chart `unspawnNotes` pre-spawn semantics are not reproduced (`unspawnNotes`
-	stays empty here).
+	`unspawnNotes` IS reproduced: `populateUnspawn` fills it with one write-through `UnspawnNoteProxy`
+	per chart note, and `rebuildChartFromUnspawn` folds any load-time edits (prop sets, mustPress flips,
+	reorders/replacements) back into the typed chart before the field spawns. Script writes to a LIVE
+	`game.notes` adapter's follow/visual props are pushed onto the real v2 drawables each frame
+	(`pushNote`). The residual alias-impossible case (which the Script Converter flags) is MID-SONG note
+	add/remove against the pooled runtime.
 
 	Everything is gated by the owner (`PlayState` only constructs this when `Mods.noteCompatibilityMode()`
 	is true), so non-compat play never touches any of it.
@@ -145,6 +147,24 @@ class NoteCompatLayer {
 		a.tooLate = d.tooLate;
 		a.ignoreNote = d.ignore;
 		a.lowPriority = d.lowPriority;
+		// Keep the read-side of the mirror as complete as flush() so scripts that read these off
+		// `game.notes` / callback notes see the live gameplay state.
+		a.hitByOpponent = d.hitByOpponent;
+		a.blockHit = d.blockHit;
+		a.hitCausesMiss = d.hitCausesMiss;
+		a.ratingDisabled = d.ratingDisabled;
+		a.hitsoundDisabled = d.hitsoundDisabled;
+		a.hitsoundForce = d.hitsoundForce;
+		a.earlyHitMult = d.earlyHitMult;
+		a.lateHitMult = d.lateHitMult;
+		a.hitHealth = d.hitHealth;
+		a.missHealth = d.missHealth;
+		a.animSuffix = d.animSuffix;
+		a.gfNote = d.gfNote;
+		a.noAnimation = d.noAnimation;
+		a.noMissAnimation = d.noMissAnimation;
+		a.rating = d.rating;
+		a.ratingMod = d.ratingMod;
 
 		var spr:FlxSprite = (note.head != null && note.head.exists) ? cast note.head : ((note.sustain != null
 			&& note.sustain.exists) ? cast note.sustain : null);
@@ -301,6 +321,18 @@ class NoteCompatLayer {
 		d.ignore = n.ignoreNote;
 		d.hitHealth = n.hitHealth;
 		d.missHealth = n.missHealth;
+		d.blockHit = n.blockHit;
+		d.lowPriority = n.lowPriority;
+		d.hitCausesMiss = n.hitCausesMiss;
+		d.ratingDisabled = n.ratingDisabled;
+		d.hitsoundDisabled = n.hitsoundDisabled;
+		d.hitsoundForce = n.hitsoundForce;
+		d.earlyHitMult = n.earlyHitMult;
+		d.lateHitMult = n.lateHitMult;
+		d.multAlpha = n.multAlpha;
+		d.multSpeed = n.multSpeed;
+		if (n.noteSplashData != null)
+			d.splashDisabled = n.noteSplashData.disabled;
 		if (n.texture != null && n.texture.length > 0)
 			d.texture = n.texture;
 		if (n.extraData != null)
