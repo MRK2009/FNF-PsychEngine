@@ -143,8 +143,8 @@ final class NoteSprite extends FlxSprite {
 
 		exists = visible = active = true;
 		alpha = 1;
-		multAlpha = 1;
-		multSpeed = 1;
+		multAlpha = data.multAlpha; // load-time / compat unspawn override (default 1)
+		multSpeed = data.multSpeed;
 		copyX = copyY = copyAngle = copyAlpha = true;
 		offsetX = offsetY = 0;
 		centerOnStrum = false;

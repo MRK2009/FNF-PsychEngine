@@ -181,7 +181,10 @@ final class SustainSprite extends FlxSprite {
 		hasTail = (endAnim != null && endAnim.numFrames > 0);
 		tail.visible = hasTail;
 
-		alpha = multAlpha = 0.6;
+		// Holds default to a dimmer 0.6; a load-time/compat script override on the note replaces it.
+		multAlpha = (data.multAlpha != 1) ? data.multAlpha : 0.6;
+		multSpeed = data.multSpeed;
+		alpha = multAlpha;
 		tail.alpha = alpha;
 	}
 

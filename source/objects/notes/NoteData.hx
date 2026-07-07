@@ -98,6 +98,16 @@ final class NoteData {
 	public var earlyHitMult:Float = 1;
 	public var lateHitMult:Float = 1;
 
+	/**
+		Per-note visual overrides applied by the drawables on spawn (`NoteSprite`/`SustainSprite.apply`).
+		Default `1` = untouched. These let a load-time script that sets `multAlpha`/`multSpeed` on a note
+		(directly or via `compatibilityMode`'s `unspawnNotes`) have it survive onto the pooled drawable,
+		matching the pre-v2 runtime where the unspawn note WAS the drawable.
+	**/
+	public var multAlpha:Float = 1;
+
+	public var multSpeed:Float = 1;
+
 	/** Scroll lifetime window in ms; filled by the field from the current scroll speed. **/
 	public var lifetimeStart:Float = 0;
 
