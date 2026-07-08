@@ -6,13 +6,28 @@ import openfl.net.FileReference;
 import openfl.events.Event;
 import openfl.events.IOErrorEvent;
 import openfl.utils.Assets;
+import openfl.display.Sprite;
 import objects.Character;
 import objects.HealthIcon;
 import objects.Bar;
 import editors.content.Prompt;
 import editors.content.PsychJsonPrinter;
+import smidr.UIRoot;
+import smidr.UITheme;
+import smidr.UIFonts;
+import smidr.UILocale;
+import smidr.input.UIFocus;
+import smidr.widgets.UIButton;
+import smidr.widgets.UICheckbox;
+import smidr.widgets.UIDropdown;
+import smidr.widgets.UIPanel;
+import smidr.widgets.UIScrollPane;
+import smidr.widgets.UISlider;
+import smidr.widgets.UIStepper;
+import smidr.widgets.UITabs;
+import smidr.widgets.UITextInput;
 
-class CharacterEditorState extends MusicBeatState implements PsychUIEventHandler.PsychUIEvent {
+class CharacterEditorState extends MusicBeatState {
 	var character:Character;
 	var ghost:FlxSprite;
 	var animateGhost:FlxAnimate;
@@ -43,8 +58,7 @@ class CharacterEditorState extends MusicBeatState implements PsychUIEventHandler
 	private var camEditor:FlxCamera;
 	private var camHUD:FlxCamera;
 
-	var UI_box:PsychUIBox;
-	var UI_characterbox:PsychUIBox;
+	var uiRoot:UIRoot;
 
 	var unsavedProgress:Bool = false;
 
@@ -250,33 +264,124 @@ class CharacterEditorState extends MusicBeatState implements PsychUIEventHandler
 			updateHealthBar();
 	}
 
+	// ================================ UI (SmidrUI) ================================
+
+	static inline var BOX1_W:Int = 260;
+	static inline var BOX2_W:Int = 360;
+	static inline var PAD:Int = 10;
+
+	var settingsTabs:UITabs;
+	var characterTabs:UITabs;
+	var tabPanes1:Array<Sprite> = [];
+	var tabPanes2:Array<UIScrollPane> = [];
+
+	/** Layers the UI root above the game view but below the FPS counter. **/
+	function attachRoot():Void {
+		var fps = Main.fpsVar;
+		if (fps != null && fps.parent != null)
+			uiRoot.attach(fps.parent, fps.parent.getChildIndex(fps));
+		else
+			uiRoot.attach(FlxG.stage);
+	}
+
+	function onGameResized(_:Int, _:Int):Void
+		syncViewport();
+
+	function syncViewport():Void {
+		var sm = FlxG.scaleMode;
+		uiRoot.setViewport(sm.offset.x, sm.offset.y, sm.scale.x, sm.scale.y);
+	}
+
 	function makeUIMenu() {
-		UI_box = new PsychUIBox(FlxG.width - 275, 25, 250, 120, ['Ghost', 'Settings']);
-		UI_box.scrollFactor.set();
-		UI_box.cameras = [camHUD];
+		UILocale.translate = function(k:String, f:String):String return Language.getPhrase(k, f);
+		UIFonts.register('assets/fonts/vcr.ttf');
 
-		UI_characterbox = new PsychUIBox(UI_box.x - 100, UI_box.y + UI_box.height + 10, 350, 320, ['Animations', 'Character']);
-		UI_characterbox.scrollFactor.set();
-		UI_characterbox.cameras = [camHUD];
-		add(UI_characterbox);
-		add(UI_box);
+		uiRoot = new UIRoot();
+		attachRoot();
+		syncViewport();
+		FlxG.signals.gameResized.add(onGameResized);
 
-		addGhostUI();
-		addSettingsUI();
-		addAnimationsUI();
-		addCharacterUI();
+		// Top box: Ghost / Settings.
+		var box1X:Float = FlxG.width - BOX1_W - 15;
+		var box1Y:Float = 25;
 
-		UI_box.selectedName = 'Settings';
-		UI_characterbox.selectedName = 'Character';
+		settingsTabs = new UITabs(BOX1_W, [{label: 'Ghost'}, {label: 'Settings'}], function(i:Int):Void {
+			for (n in 0...tabPanes1.length)
+				tabPanes1[n].visible = (n == i);
+		});
+
+		var pane1Y:Float = box1Y + settingsTabs.h + 8;
+		var pane1H:Float = 100;
+		var box1H:Float = settingsTabs.h + 8 + pane1H + PAD;
+
+		var panel1:UIPanel = new UIPanel(BOX1_W, box1H, UITheme.panel);
+		panel1.x = box1X;
+		panel1.y = box1Y;
+		uiRoot.content.addChild(panel1);
+
+		settingsTabs.x = box1X;
+		settingsTabs.y = box1Y;
+		uiRoot.content.addChild(settingsTabs);
+
+		tabPanes1 = [];
+		for (i in 0...2) {
+			var pane:Sprite = new Sprite();
+			pane.x = box1X + PAD;
+			pane.y = pane1Y;
+			pane.visible = false;
+			uiRoot.content.addChild(pane);
+			tabPanes1.push(pane);
+		}
+
+		// Bottom box: Animations / Character (scrollable tab contents).
+		var box2X:Float = FlxG.width - BOX2_W - 15;
+		var box2Y:Float = box1Y + box1H + 10;
+
+		characterTabs = new UITabs(BOX2_W, [{label: 'Animations'}, {label: 'Character'}], function(i:Int):Void {
+			for (n in 0...tabPanes2.length)
+				tabPanes2[n].visible = (n == i);
+		});
+
+		var pane2Y:Float = box2Y + characterTabs.h + 8;
+		var pane2H:Float = 330;
+		var box2H:Float = characterTabs.h + 8 + pane2H + PAD;
+
+		var panel2:UIPanel = new UIPanel(BOX2_W, box2H, UITheme.panel);
+		panel2.x = box2X;
+		panel2.y = box2Y;
+		uiRoot.content.addChild(panel2);
+
+		characterTabs.x = box2X;
+		characterTabs.y = box2Y;
+		uiRoot.content.addChild(characterTabs);
+
+		tabPanes2 = [];
+		for (i in 0...2) {
+			var pane:UIScrollPane = new UIScrollPane(BOX2_W - PAD * 2, pane2H);
+			pane.x = box2X + PAD;
+			pane.y = pane2Y;
+			pane.visible = false;
+			uiRoot.content.addChild(pane);
+			tabPanes2.push(pane);
+		}
+
+		addGhostUI(tabPanes1[0]);
+		addSettingsUI(tabPanes1[1]);
+		addAnimationsUI(tabPanes2[0]);
+		addCharacterUI(tabPanes2[1]);
+
+		settingsTabs.select(1);
+		tabPanes1[1].visible = true;
+		characterTabs.select(1);
+		tabPanes2[1].visible = true;
 	}
 
 	var ghostAlpha:Float = 0.6;
 
-	function addGhostUI() {
-		var tab_group = UI_box.getTab('Ghost').menu;
+	function addGhostUI(pane:Sprite) {
+		var rowW:Float = BOX1_W - PAD * 2;
 
-		// var hideGhostButton:PsychUIButton = null;
-		var makeGhostButton:PsychUIButton = new PsychUIButton(25, 15, "Make Ghost", function() {
+		var makeGhostButton:UIButton = new UIButton("Make Ghost", 110, 26, function() {
 			var anim = anims[curAnim];
 			if (!character.isAnimationNull()) {
 				var myAnim = anims[curAnim];
@@ -351,23 +456,13 @@ class CharacterEditorState extends MusicBeatState implements PsychUIEventHandler
 					if (otherSpr != null)
 						otherSpr.visible = false;
 				}
-				/*hideGhostButton.active = true;
-					hideGhostButton.alpha = 1; */
 				trace('created ghost image');
 			}
 		});
+		pane.addChild(makeGhostButton);
 
-		/*hideGhostButton = new PsychUIButton(20 + makeGhostButton.width, makeGhostButton.y, "Hide Ghost", function() {
-				ghost.visible = false;
-				hideGhostButton.active = false;
-				hideGhostButton.alpha = 0.6;
-			});
-			hideGhostButton.active = false;
-			hideGhostButton.alpha = 0.6; */
-
-		var highlightGhost:PsychUICheckBox = new PsychUICheckBox(20 + makeGhostButton.x + makeGhostButton.width, makeGhostButton.y, "Highlight Ghost", 100);
-		highlightGhost.onClick = function() {
-			var value = highlightGhost.checked ? 125 : 0;
+		var highlightGhost:UICheckbox = new UICheckbox("Highlight Ghost", rowW - 120, false, function(checked:Bool) {
+			var value = checked ? 125 : 0;
 			ghost.colorTransform.redOffset = value;
 			ghost.colorTransform.greenOffset = value;
 			ghost.colorTransform.blueOffset = value;
@@ -376,46 +471,74 @@ class CharacterEditorState extends MusicBeatState implements PsychUIEventHandler
 				animateGhost.colorTransform.greenOffset = value;
 				animateGhost.colorTransform.blueOffset = value;
 			}
-		};
+		});
+		highlightGhost.x = 120;
+		pane.addChild(highlightGhost);
 
-		var ghostAlphaSlider:PsychUISlider = new PsychUISlider(15, makeGhostButton.y + 25, function(v:Float) {
+		var ghostAlphaSlider:UISlider = new UISlider('Opacity:', rowW, 0, 1, ghostAlpha, function(v:Float) {
 			ghostAlpha = v;
 			ghost.alpha = ghostAlpha;
 			if (animateGhost != null)
 				animateGhost.alpha = ghostAlpha;
-		}, ghostAlpha, 0, 1);
-		ghostAlphaSlider.label = 'Opacity:';
-
-		tab_group.add(makeGhostButton);
-		// tab_group.add(hideGhostButton);
-		tab_group.add(highlightGhost);
-		tab_group.add(ghostAlphaSlider);
+		});
+		ghostAlphaSlider.y = 36;
+		pane.addChild(ghostAlphaSlider);
 	}
 
-	var check_player:PsychUICheckBox;
-	var charDropDown:PsychUIDropDownMenu;
+	var check_player:UICheckbox;
+	var charDropDown:UIDropdown;
 
-	function addSettingsUI() {
-		var tab_group = UI_box.getTab('Settings').menu;
+	function addSettingsUI(pane:Sprite) {
+		var rowW:Float = BOX1_W - PAD * 2;
 
-		check_player = new PsychUICheckBox(10, 60, "Playable Character", 100);
-		check_player.checked = character.isPlayer;
-		check_player.onClick = function() {
+		charDropDown = new UIDropdown('Character:', rowW, function(index:Int, intended:String) {
+			if (intended == null || intended.length < 1 || intended == _char)
+				return;
+
+			var characterPath:String = 'characters/$intended.json';
+			var path:String = Paths.getPath(characterPath, TEXT, null, true);
+			#if MODS_ALLOWED
+			if (FileSystem.exists(path))
+			#else
+			if (Assets.exists(path))
+			#end
+			{
+				_char = intended;
+				check_player.checked = character.isPlayer;
+				addCharacter();
+				reloadCharacterOptions();
+				reloadCharacterDropDown();
+				updatePointerPos();
+			}
+		else {
+			reloadCharacterDropDown();
+			FlxG.sound.play(Paths.sound('cancelMenu'));
+		}
+		});
+		pane.addChild(charDropDown);
+		reloadCharacterDropDown();
+
+		check_player = new UICheckbox("Playable Character", rowW, character.isPlayer, function(checked:Bool) {
 			character.isPlayer = !character.isPlayer;
 			character.flipX = !character.flipX;
 			reapplyCurrentOffset();
 			updateCharacterPositions();
 			updatePointerPos(false);
-		};
+			unsavedProgress = true;
+		});
+		check_player.y = 32;
+		pane.addChild(check_player);
 
-		var reloadCharacter:PsychUIButton = new PsychUIButton(140, 20, "Reload Char", function() {
+		var reloadCharacter:UIButton = new UIButton("Reload Char", 115, 26, function() {
 			addCharacter(true);
 			updatePointerPos();
 			reloadCharacterOptions();
 			reloadCharacterDropDown();
 		});
+		reloadCharacter.y = 64;
+		pane.addChild(reloadCharacter);
 
-		var templateCharacter:PsychUIButton = new PsychUIButton(140, 50, "Load Template", function() {
+		var templateCharacter:UIButton = new UIButton("Load Template", 115, 26, function() {
 			final _template:CharacterFile = {
 				animations: [
 					newAnim('idle', 'BF idle dance'),
@@ -447,61 +570,26 @@ class CharacterEditorState extends MusicBeatState implements PsychUIEventHandler
 			reloadCharacterDropDown();
 			updateHealthBar();
 		});
-		templateCharacter.normalStyle.bgColor = FlxColor.RED;
-		templateCharacter.normalStyle.textColor = FlxColor.WHITE;
-
-		charDropDown = new PsychUIDropDownMenu(10, 30, [''], function(index:Int, intended:String) {
-			if (intended == null || intended.length < 1)
-				return;
-
-			var characterPath:String = 'characters/$intended.json';
-			var path:String = Paths.getPath(characterPath, TEXT, null, true);
-			#if MODS_ALLOWED
-			if (FileSystem.exists(path))
-			#else
-			if (Assets.exists(path))
-			#end
-			{
-				_char = intended;
-				check_player.checked = character.isPlayer;
-				addCharacter();
-				reloadCharacterOptions();
-				reloadCharacterDropDown();
-				updatePointerPos();
-			}
-		else {
-			reloadCharacterDropDown();
-			FlxG.sound.play(Paths.sound('cancelMenu'));
-		}
-		});
-		reloadCharacterDropDown();
-		charDropDown.selectedLabel = _char;
-
-		tab_group.add(new FlxText(charDropDown.x, charDropDown.y - 18, 80, 'Character:'));
-		tab_group.add(check_player);
-		tab_group.add(reloadCharacter);
-		tab_group.add(templateCharacter);
-		tab_group.add(charDropDown);
+		templateCharacter.danger = true;
+		templateCharacter.x = 125;
+		templateCharacter.y = 64;
+		pane.addChild(templateCharacter);
 	}
 
-	var animationDropDown:PsychUIDropDownMenu;
-	var animationInputText:PsychUIInputText;
-	var animationNameInputText:PsychUIInputText;
-	var animationIndicesInputText:PsychUIInputText;
-	var animationFramerate:PsychUINumericStepper;
-	var animationLoopCheckBox:PsychUICheckBox;
+	var animationDropDown:UIDropdown;
+	var animationInputText:UITextInput;
+	var animationNameInputText:UITextInput;
+	var animationIndicesInputText:UITextInput;
+	var animationFramerate:UIStepper;
+	var animationLoopCheckBox:UICheckbox;
 
-	function addAnimationsUI() {
-		var tab_group = UI_characterbox.getTab('Animations').menu;
+	function addAnimationsUI(pane:UIScrollPane) {
+		var rowW:Float = pane.w - PAD - 12;
 
-		animationInputText = new PsychUIInputText(15, 85, 80, '', 8);
-		animationNameInputText = new PsychUIInputText(animationInputText.x, animationInputText.y + 35, 150, '', 8);
-		animationIndicesInputText = new PsychUIInputText(animationNameInputText.x, animationNameInputText.y + 40, 250, '', 8);
-		animationFramerate = new PsychUINumericStepper(animationInputText.x + 170, animationInputText.y, 1, 24, 0, 240, 0);
-		animationLoopCheckBox = new PsychUICheckBox(animationNameInputText.x + 170, animationNameInputText.y - 1, "Should it Loop?", 100);
-
-		animationDropDown = new PsychUIDropDownMenu(15, animationInputText.y - 55, [''], function(selectedAnimation:Int, pressed:String) {
+		animationDropDown = new UIDropdown('Animations:', rowW, function(selectedAnimation:Int, pressed:String) {
 			var anim:AnimArray = character.animationsArray[selectedAnimation];
+			if (anim == null)
+				return;
 			animationInputText.text = anim.anim;
 			animationNameInputText.text = anim.name;
 			animationLoopCheckBox.checked = anim.loop;
@@ -510,8 +598,31 @@ class CharacterEditorState extends MusicBeatState implements PsychUIEventHandler
 			var indicesStr:String = anim.indices.toString();
 			animationIndicesInputText.text = indicesStr.substr(1, indicesStr.length - 2);
 		});
+		pane.content.addChild(animationDropDown);
 
-		var addUpdateButton:PsychUIButton = new PsychUIButton(70, animationIndicesInputText.y + 60, "Add/Update", function() {
+		animationInputText = new UITextInput('Animation name:', rowW, '');
+		animationInputText.y = 32;
+		pane.content.addChild(animationInputText);
+
+		animationNameInputText = new UITextInput('Symbol Name/Tag:', rowW, '');
+		animationNameInputText.y = 64;
+		pane.content.addChild(animationNameInputText);
+
+		animationFramerate = new UIStepper('Framerate:', rowW, 24, 1);
+		animationFramerate.min = 0;
+		animationFramerate.max = 240;
+		animationFramerate.y = 96;
+		pane.content.addChild(animationFramerate);
+
+		animationLoopCheckBox = new UICheckbox("Should it Loop?", rowW);
+		animationLoopCheckBox.y = 128;
+		pane.content.addChild(animationLoopCheckBox);
+
+		animationIndicesInputText = new UITextInput('ADVANCED - Indices:', rowW, '');
+		animationIndicesInputText.y = 160;
+		pane.content.addChild(animationIndicesInputText);
+
+		var addUpdateButton:UIButton = new UIButton("Add/Update", 150, 28, function() {
 			var indicesText:String = animationIndicesInputText.text.trim();
 			var indices:Array<Int> = [];
 			if (indicesText.length > 0) {
@@ -562,10 +673,13 @@ class CharacterEditorState extends MusicBeatState implements PsychUIEventHandler
 			reloadAnimList();
 			@:arrayAccess curAnim = Std.int(Math.max(0, character.animationsArray.indexOf(addedAnim)));
 			character.playAnim(addedAnim.anim, true);
+			unsavedProgress = true;
 			trace('Added/Updated animation: ' + animationInputText.text);
-		});
+		}, true);
+		addUpdateButton.y = 196;
+		pane.content.addChild(addUpdateButton);
 
-		var removeButton:PsychUIButton = new PsychUIButton(180, animationIndicesInputText.y + 60, "Remove", function() {
+		var removeButton:UIButton = new UIButton("Remove", 120, 28, function() {
 			for (anim in character.animationsArray)
 				if (animationInputText.text == anim.anim) {
 					var resetAnim:Bool = false;
@@ -585,53 +699,52 @@ class CharacterEditorState extends MusicBeatState implements PsychUIEventHandler
 						character.playAnim(anims[curAnim].anim, true);
 					}
 					reloadAnimList();
+					unsavedProgress = true;
 					trace('Removed animation: ' + animationInputText.text);
 					break;
 				}
 		});
+		removeButton.danger = true;
+		removeButton.x = 160;
+		removeButton.y = 196;
+		pane.content.addChild(removeButton);
+
+		pane.refreshContent(236);
+
 		reloadAnimList();
-		animationDropDown.selectedLabel = anims[0] != null ? anims[0].anim : '';
-
-		tab_group.add(new FlxText(animationDropDown.x, animationDropDown.y - 18, 100, 'Animations:'));
-		tab_group.add(new FlxText(animationInputText.x, animationInputText.y - 18, 100, 'Animation name:'));
-		tab_group.add(new FlxText(animationFramerate.x, animationFramerate.y - 18, 100, 'Framerate:'));
-		tab_group.add(new FlxText(animationNameInputText.x, animationNameInputText.y - 18, 150, 'Animation Symbol Name/Tag:'));
-		tab_group.add(new FlxText(animationIndicesInputText.x, animationIndicesInputText.y - 18, 170, 'ADVANCED - Animation Indices:'));
-
-		tab_group.add(animationInputText);
-		tab_group.add(animationNameInputText);
-		tab_group.add(animationIndicesInputText);
-		tab_group.add(animationFramerate);
-		tab_group.add(animationLoopCheckBox);
-		tab_group.add(addUpdateButton);
-		tab_group.add(removeButton);
-		tab_group.add(animationDropDown);
+		animationDropDown.select(0);
 	}
 
-	var imageInputText:PsychUIInputText;
-	var healthIconInputText:PsychUIInputText;
-	var vocalsInputText:PsychUIInputText;
+	var imageInputText:UITextInput;
+	var healthIconInputText:UITextInput;
+	var vocalsInputText:UITextInput;
 
-	var singDurationStepper:PsychUINumericStepper;
-	var scaleStepper:PsychUINumericStepper;
-	var positionXStepper:PsychUINumericStepper;
-	var positionYStepper:PsychUINumericStepper;
-	var positionCameraXStepper:PsychUINumericStepper;
-	var positionCameraYStepper:PsychUINumericStepper;
+	var singDurationStepper:UIStepper;
+	var scaleStepper:UIStepper;
+	var positionXStepper:UIStepper;
+	var positionYStepper:UIStepper;
+	var positionCameraXStepper:UIStepper;
+	var positionCameraYStepper:UIStepper;
 
-	var flipXCheckBox:PsychUICheckBox;
-	var noAntialiasingCheckBox:PsychUICheckBox;
-	var swfModeCheckBox:PsychUICheckBox;
+	var flipXCheckBox:UICheckbox;
+	var noAntialiasingCheckBox:UICheckbox;
+	var swfModeCheckBox:UICheckbox;
 
-	var healthColorStepperR:PsychUINumericStepper;
-	var healthColorStepperG:PsychUINumericStepper;
-	var healthColorStepperB:PsychUINumericStepper;
+	var healthColorStepperR:UIStepper;
+	var healthColorStepperG:UIStepper;
+	var healthColorStepperB:UIStepper;
 
-	function addCharacterUI() {
-		var tab_group = UI_characterbox.getTab('Character').menu;
+	function addCharacterUI(pane:UIScrollPane) {
+		var rowW:Float = pane.w - PAD - 12;
+		var halfW:Float = (rowW - 10) / 2;
 
-		imageInputText = new PsychUIInputText(15, 30, 200, character.imageFile, 8);
-		var reloadImage:PsychUIButton = new PsychUIButton(imageInputText.x + 210, imageInputText.y - 3, "Reload Image", function() {
+		imageInputText = new UITextInput('Image file name:', rowW, character.imageFile, function(v:String) {
+			character.imageFile = v;
+			unsavedProgress = true;
+		});
+		pane.content.addChild(imageInputText);
+
+		var reloadImage:UIButton = new UIButton("Reload Image", halfW, 26, function() {
 			var lastAnim = character.getAnimationName();
 			character.imageFile = imageInputText.text;
 			reloadCharacterImage();
@@ -639,60 +752,89 @@ class CharacterEditorState extends MusicBeatState implements PsychUIEventHandler
 				character.playAnim(lastAnim, true);
 			}
 		});
+		reloadImage.y = 32;
+		pane.content.addChild(reloadImage);
 
-		var decideIconColor:PsychUIButton = new PsychUIButton(reloadImage.x, reloadImage.y + 30, "Get Icon Color", function() {
+		var decideIconColor:UIButton = new UIButton("Get Icon Color", halfW, 26, function() {
 			var coolColor:FlxColor = FlxColor.fromInt(CoolUtil.dominantColor(healthIcon));
 			character.healthColorArray[0] = coolColor.red;
 			character.healthColorArray[1] = coolColor.green;
 			character.healthColorArray[2] = coolColor.blue;
 			updateHealthBar();
+			unsavedProgress = true;
 		});
+		decideIconColor.x = halfW + 10;
+		decideIconColor.y = 32;
+		pane.content.addChild(decideIconColor);
 
-		healthIconInputText = new PsychUIInputText(15, imageInputText.y + 35, 75, healthIcon.getCharacter(), 8);
+		healthIconInputText = new UITextInput('Health icon name:', rowW, healthIcon.getCharacter(), function(v:String) {
+			var lastIcon = healthIcon.getCharacter();
+			healthIcon.changeIcon(v, false);
+			character.healthIcon = v;
+			if (lastIcon != healthIcon.getCharacter())
+				updatePresence();
+			unsavedProgress = true;
+		});
+		healthIconInputText.y = 66;
+		pane.content.addChild(healthIconInputText);
 
-		vocalsInputText = new PsychUIInputText(15, healthIconInputText.y + 35, 75, character.vocalsFile != null ? character.vocalsFile : '', 8);
+		vocalsInputText = new UITextInput('Vocals File Postfix:', rowW, character.vocalsFile != null ? character.vocalsFile : '', function(v:String) {
+			character.vocalsFile = v;
+			unsavedProgress = true;
+		});
+		vocalsInputText.y = 98;
+		pane.content.addChild(vocalsInputText);
 
-		singDurationStepper = new PsychUINumericStepper(15, vocalsInputText.y + 45, 0.1, 4, 0, 999, 1);
+		singDurationStepper = new UIStepper('Sing Anim length:', rowW, character.singDuration, 0.1, function(v:Float) {
+			character.singDuration = v;
+			unsavedProgress = true;
+		});
+		singDurationStepper.min = 0;
+		singDurationStepper.max = 999;
+		singDurationStepper.decimals = 1;
+		singDurationStepper.y = 130;
+		pane.content.addChild(singDurationStepper);
 
-		scaleStepper = new PsychUINumericStepper(15, singDurationStepper.y + 40, 0.1, 1, 0.05, 10, 2);
+		scaleStepper = new UIStepper('Scale:', rowW, character.jsonScale, 0.1, function(v:Float) {
+			reloadCharacterImage();
+			character.jsonScale = v;
+			character.scale.set(character.jsonScale, character.jsonScale);
+			character.updateHitbox();
+			reapplyCurrentOffset(); // width changed -> refresh flipped offset
+			updatePointerPos(false);
+			unsavedProgress = true;
+		});
+		scaleStepper.min = 0.05;
+		scaleStepper.max = 10;
+		scaleStepper.decimals = 2;
+		scaleStepper.y = 162;
+		pane.content.addChild(scaleStepper);
 
-		flipXCheckBox = new PsychUICheckBox(singDurationStepper.x + 80, singDurationStepper.y, "Flip X", 50);
-		flipXCheckBox.checked = character.flipX;
-		if (character.isPlayer)
-			flipXCheckBox.checked = !flipXCheckBox.checked;
-		flipXCheckBox.onClick = function() {
+		flipXCheckBox = new UICheckbox("Flip X", halfW, character.originalFlipX, function(checked:Bool) {
 			character.originalFlipX = !character.originalFlipX;
 			character.flipX = (character.originalFlipX != character.isPlayer);
 			reapplyCurrentOffset();
-		};
+			unsavedProgress = true;
+		});
+		flipXCheckBox.y = 194;
+		pane.content.addChild(flipXCheckBox);
 
-		noAntialiasingCheckBox = new PsychUICheckBox(flipXCheckBox.x, flipXCheckBox.y + 40, "No Antialiasing", 80);
-		noAntialiasingCheckBox.checked = character.noAntialiasing;
-		noAntialiasingCheckBox.onClick = function() {
+		noAntialiasingCheckBox = new UICheckbox("No Antialiasing", halfW, character.noAntialiasing, function(checked:Bool) {
 			character.antialiasing = false;
-			if (!noAntialiasingCheckBox.checked && ClientPrefs.data.antialiasing) {
+			if (!checked && ClientPrefs.data.antialiasing) {
 				character.antialiasing = true;
 			}
-			character.noAntialiasing = noAntialiasingCheckBox.checked;
-		};
-
-		positionXStepper = new PsychUINumericStepper(flipXCheckBox.x + 110, flipXCheckBox.y, 10, character.positionArray[0], -9000, 9000, 0);
-		positionYStepper = new PsychUINumericStepper(positionXStepper.x + 70, positionXStepper.y, 10, character.positionArray[1], -9000, 9000, 0);
-
-		positionCameraXStepper = new PsychUINumericStepper(positionXStepper.x, positionXStepper.y + 40, 10, character.cameraPosition[0], -9000, 9000, 0);
-		positionCameraYStepper = new PsychUINumericStepper(positionYStepper.x, positionYStepper.y + 40, 10, character.cameraPosition[1], -9000, 9000, 0);
-
-		var saveCharacterButton:PsychUIButton = new PsychUIButton(reloadImage.x, noAntialiasingCheckBox.y + 40, "Save Character", function() {
-			saveCharacter();
+			character.noAntialiasing = checked;
+			unsavedProgress = true;
 		});
+		noAntialiasingCheckBox.x = halfW + 10;
+		noAntialiasingCheckBox.y = 194;
+		pane.content.addChild(noAntialiasingCheckBox);
 
-		healthColorStepperR = new PsychUINumericStepper(singDurationStepper.x, saveCharacterButton.y, 20, character.healthColorArray[0], 0, 255, 0);
 		// SWF Mode: only meaningful for Animate atlas characters; reload the atlas
 		// so the change (movieclip timelines baked vs. static) takes effect live.
-		swfModeCheckBox = new PsychUICheckBox(15, saveCharacterButton.y + 35, "SWF Mode (Animate)", 110);
-		swfModeCheckBox.checked = character.swfMode;
-		swfModeCheckBox.onClick = function() {
-			character.swfMode = swfModeCheckBox.checked;
+		swfModeCheckBox = new UICheckbox("SWF Mode (Animate)", rowW, character.swfMode, function(checked:Bool) {
+			character.swfMode = checked;
 			if (character.isAnimateAtlas) {
 				var lastAnim:String = character.getAnimationName();
 				// swfMode is baked at parse time, so the cached atlas must be
@@ -711,100 +853,95 @@ class CharacterEditorState extends MusicBeatState implements PsychUIEventHandler
 					character.playAnim(lastAnim, true);
 			}
 			unsavedProgress = true;
-		};
-		healthColorStepperG = new PsychUINumericStepper(singDurationStepper.x + 65, saveCharacterButton.y, 20, character.healthColorArray[1], 0, 255, 0);
-		healthColorStepperB = new PsychUINumericStepper(singDurationStepper.x + 130, saveCharacterButton.y, 20, character.healthColorArray[2], 0, 255, 0);
+		});
+		swfModeCheckBox.y = 226;
+		pane.content.addChild(swfModeCheckBox);
 
-		tab_group.add(new FlxText(15, imageInputText.y - 18, 100, 'Image file name:'));
-		tab_group.add(new FlxText(15, healthIconInputText.y - 18, 100, 'Health icon name:'));
-		tab_group.add(new FlxText(15, vocalsInputText.y - 18, 100, 'Vocals File Postfix:'));
-		tab_group.add(new FlxText(15, singDurationStepper.y - 18, 120, 'Sing Animation length:'));
-		tab_group.add(new FlxText(15, scaleStepper.y - 18, 100, 'Scale:'));
-		tab_group.add(new FlxText(positionXStepper.x, positionXStepper.y - 18, 100, 'Character X/Y:'));
-		tab_group.add(new FlxText(positionCameraXStepper.x, positionCameraXStepper.y - 18, 100, 'Camera X/Y:'));
-		tab_group.add(new FlxText(healthColorStepperR.x, healthColorStepperR.y - 18, 100, 'Health Bar R/G/B:'));
-		tab_group.add(imageInputText);
-		tab_group.add(reloadImage);
-		tab_group.add(decideIconColor);
-		tab_group.add(healthIconInputText);
-		tab_group.add(vocalsInputText);
-		tab_group.add(singDurationStepper);
-		tab_group.add(scaleStepper);
-		tab_group.add(flipXCheckBox);
-		tab_group.add(noAntialiasingCheckBox);
-		tab_group.add(swfModeCheckBox);
-		tab_group.add(positionXStepper);
-		tab_group.add(positionYStepper);
-		tab_group.add(positionCameraXStepper);
-		tab_group.add(positionCameraYStepper);
-		tab_group.add(healthColorStepperR);
-		tab_group.add(healthColorStepperG);
-		tab_group.add(healthColorStepperB);
-		tab_group.add(saveCharacterButton);
-	}
-
-	public function UIEvent(id:String, sender:Dynamic) {
-		// trace(id, sender);
-		if (id == PsychUICheckBox.CLICK_EVENT)
+		positionXStepper = new UIStepper('Char X:', halfW, character.positionArray[0], 10, function(v:Float) {
+			character.positionArray[0] = v;
+			updateCharacterPositions();
 			unsavedProgress = true;
+		});
+		positionXStepper.min = -9000;
+		positionXStepper.max = 9000;
+		positionXStepper.y = 258;
+		pane.content.addChild(positionXStepper);
 
-		if (id == PsychUIInputText.CHANGE_EVENT) {
-			if (sender == healthIconInputText) {
-				var lastIcon = healthIcon.getCharacter();
-				healthIcon.changeIcon(healthIconInputText.text, false);
-				character.healthIcon = healthIconInputText.text;
-				if (lastIcon != healthIcon.getCharacter())
-					updatePresence();
-				unsavedProgress = true;
-			} else if (sender == vocalsInputText) {
-				character.vocalsFile = vocalsInputText.text;
-				unsavedProgress = true;
-			} else if (sender == imageInputText) {
-				character.imageFile = imageInputText.text;
-				unsavedProgress = true;
-			}
-		} else if (id == PsychUINumericStepper.CHANGE_EVENT) {
-			if (sender == scaleStepper) {
-				reloadCharacterImage();
-				character.jsonScale = sender.value;
-				character.scale.set(character.jsonScale, character.jsonScale);
-				character.updateHitbox();
-				reapplyCurrentOffset(); // width changed -> refresh flipped offset
-				updatePointerPos(false);
-				unsavedProgress = true;
-			} else if (sender == positionXStepper) {
-				character.positionArray[0] = positionXStepper.value;
-				updateCharacterPositions();
-				unsavedProgress = true;
-			} else if (sender == positionYStepper) {
-				character.positionArray[1] = positionYStepper.value;
-				updateCharacterPositions();
-				unsavedProgress = true;
-			} else if (sender == singDurationStepper) {
-				character.singDuration = singDurationStepper.value;
-				unsavedProgress = true;
-			} else if (sender == positionCameraXStepper) {
-				character.cameraPosition[0] = positionCameraXStepper.value;
-				updatePointerPos();
-				unsavedProgress = true;
-			} else if (sender == positionCameraYStepper) {
-				character.cameraPosition[1] = positionCameraYStepper.value;
-				updatePointerPos();
-				unsavedProgress = true;
-			} else if (sender == healthColorStepperR) {
-				character.healthColorArray[0] = Math.round(healthColorStepperR.value);
-				updateHealthBar();
-				unsavedProgress = true;
-			} else if (sender == healthColorStepperG) {
-				character.healthColorArray[1] = Math.round(healthColorStepperG.value);
-				updateHealthBar();
-				unsavedProgress = true;
-			} else if (sender == healthColorStepperB) {
-				character.healthColorArray[2] = Math.round(healthColorStepperB.value);
-				updateHealthBar();
-				unsavedProgress = true;
-			}
-		}
+		positionYStepper = new UIStepper('Y:', halfW, character.positionArray[1], 10, function(v:Float) {
+			character.positionArray[1] = v;
+			updateCharacterPositions();
+			unsavedProgress = true;
+		});
+		positionYStepper.min = -9000;
+		positionYStepper.max = 9000;
+		positionYStepper.x = halfW + 10;
+		positionYStepper.y = 258;
+		pane.content.addChild(positionYStepper);
+
+		positionCameraXStepper = new UIStepper('Camera X:', halfW, character.cameraPosition[0], 10, function(v:Float) {
+			character.cameraPosition[0] = v;
+			updatePointerPos();
+			unsavedProgress = true;
+		});
+		positionCameraXStepper.min = -9000;
+		positionCameraXStepper.max = 9000;
+		positionCameraXStepper.y = 290;
+		pane.content.addChild(positionCameraXStepper);
+
+		positionCameraYStepper = new UIStepper('Y:', halfW, character.cameraPosition[1], 10, function(v:Float) {
+			character.cameraPosition[1] = v;
+			updatePointerPos();
+			unsavedProgress = true;
+		});
+		positionCameraYStepper.min = -9000;
+		positionCameraYStepper.max = 9000;
+		positionCameraYStepper.x = halfW + 10;
+		positionCameraYStepper.y = 290;
+		pane.content.addChild(positionCameraYStepper);
+
+		var thirdW:Float = (rowW - 20) / 3;
+		healthColorStepperR = new UIStepper('R:', thirdW, character.healthColorArray[0], 20, function(v:Float) {
+			character.healthColorArray[0] = Math.round(v);
+			updateHealthBar();
+			unsavedProgress = true;
+		});
+		healthColorStepperR.min = 0;
+		healthColorStepperR.max = 255;
+		healthColorStepperR.boxWidth = 52;
+		healthColorStepperR.y = 322;
+		pane.content.addChild(healthColorStepperR);
+
+		healthColorStepperG = new UIStepper('G:', thirdW, character.healthColorArray[1], 20, function(v:Float) {
+			character.healthColorArray[1] = Math.round(v);
+			updateHealthBar();
+			unsavedProgress = true;
+		});
+		healthColorStepperG.min = 0;
+		healthColorStepperG.max = 255;
+		healthColorStepperG.boxWidth = 52;
+		healthColorStepperG.x = thirdW + 10;
+		healthColorStepperG.y = 322;
+		pane.content.addChild(healthColorStepperG);
+
+		healthColorStepperB = new UIStepper('B:', thirdW, character.healthColorArray[2], 20, function(v:Float) {
+			character.healthColorArray[2] = Math.round(v);
+			updateHealthBar();
+			unsavedProgress = true;
+		});
+		healthColorStepperB.min = 0;
+		healthColorStepperB.max = 255;
+		healthColorStepperB.boxWidth = 52;
+		healthColorStepperB.x = (thirdW + 10) * 2;
+		healthColorStepperB.y = 322;
+		pane.content.addChild(healthColorStepperB);
+
+		var saveCharacterButton:UIButton = new UIButton("Save Character", rowW, 32, function() {
+			saveCharacter();
+		}, true);
+		saveCharacterButton.y = 358;
+		pane.content.addChild(saveCharacterButton);
+
+		pane.refreshContent(402);
 	}
 
 	function reloadCharacterImage() {
@@ -846,7 +983,7 @@ class CharacterEditorState extends MusicBeatState implements PsychUIEventHandler
 	}
 
 	function reloadCharacterOptions() {
-		if (UI_characterbox == null)
+		if (imageInputText == null)
 			return;
 
 		check_player.checked = character.isPlayer;
@@ -876,11 +1013,14 @@ class CharacterEditorState extends MusicBeatState implements PsychUIEventHandler
 	override function update(elapsed:Float) {
 		super.update(elapsed);
 
-		if (PsychUIInputText.focusOn != null) {
+		if (UIFocus.focused != null) {
 			ClientPrefs.toggleVolumeKeys(false);
 			return;
 		}
 		ClientPrefs.toggleVolumeKeys(true);
+
+		if (UIRoot.overlayOpen)
+			return;
 
 		var shiftMult:Float = 1;
 		var ctrlMult:Float = 1;
@@ -1131,9 +1271,11 @@ class CharacterEditorState extends MusicBeatState implements PsychUIEventHandler
 	}
 
 	inline function updateHealthBar() {
-		healthColorStepperR.value = character.healthColorArray[0];
-		healthColorStepperG.value = character.healthColorArray[1];
-		healthColorStepperB.value = character.healthColorArray[2];
+		if (healthColorStepperR != null) {
+			healthColorStepperR.value = character.healthColorArray[0];
+			healthColorStepperG.value = character.healthColorArray[1];
+			healthColorStepperB.value = character.healthColorArray[2];
+		}
 		healthBar.leftBar.color = healthBar.rightBar.color = FlxColor.fromRGB(character.healthColorArray[0], character.healthColorArray[1],
 			character.healthColorArray[2]);
 		healthIcon.changeIcon(character.healthIcon, false);
@@ -1251,8 +1393,8 @@ class CharacterEditorState extends MusicBeatState implements PsychUIEventHandler
 
 		if (characterList.length < 1)
 			characterList.push('');
-		charDropDown.list = characterList;
-		charDropDown.selectedLabel = _char;
+		charDropDown.setItems(characterList);
+		charDropDown.select(Std.int(Math.max(0, characterList.indexOf(_char))));
 	}
 
 	function reloadAnimationDropDown() {
@@ -1262,7 +1404,7 @@ class CharacterEditorState extends MusicBeatState implements PsychUIEventHandler
 		if (animList.length < 1)
 			animList.push('NO ANIMATIONS'); // Prevents crash
 
-		animationDropDown.list = animList;
+		animationDropDown.setItems(animList);
 	}
 
 	// save
@@ -1334,5 +1476,15 @@ class CharacterEditorState extends MusicBeatState implements PsychUIEventHandler
 			_file.addEventListener(IOErrorEvent.IO_ERROR, onSaveError);
 			_file.save(data, '$_char.json');
 		}
+	}
+
+	override function destroy() {
+		FlxG.signals.gameResized.remove(onGameResized);
+		ClientPrefs.toggleVolumeKeys(true);
+		if (uiRoot != null) {
+			uiRoot.dispose();
+			uiRoot = null;
+		}
+		super.destroy();
 	}
 }
