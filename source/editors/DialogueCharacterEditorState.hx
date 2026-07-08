@@ -163,8 +163,13 @@ class DialogueCharacterEditorState extends MusicBeatState {
 		UILocale.translate = function(k:String, f:String):String return Language.getPhrase(k, f);
 		UIFonts.register('assets/fonts/vcr.ttf');
 
-		uiRoot = FlxSmidr.init();
+		// Stage-attached with viewport auto-sync: the UI tracks window resizes/fullscreen (FlxG.game
+		// is only offset by the scale mode, never scaled, so above-game attachment would not scale).
+		uiRoot = FlxSmidr.init(false);
 		FlxSmidr.autoBlockMouse = true;
+		var fpsCounter = Main.fpsVar;
+		if (fpsCounter != null && fpsCounter.parent == FlxG.stage)
+			FlxG.stage.setChildIndex(uiRoot, FlxG.stage.getChildIndex(fpsCounter));
 
 		// Dialogue position selector (was a radio group box).
 		var typeW:Float = 400;
