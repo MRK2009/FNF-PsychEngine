@@ -41,7 +41,6 @@ class OsuConverterState extends MusicBeatState {
 	var sbCheck:PsychUICheckBox;
 	var hsCheck:PsychUICheckBox;
 	var svCheck:PsychUICheckBox;
-	var svScriptDrop:PsychUIDropDownMenu;
 	var quantizeCheck:PsychUICheckBox;
 	var stdKeyDrop:PsychUIDropDownMenu;
 	var stdKeysLabel:FlxText;
@@ -263,12 +262,9 @@ class OsuConverterState extends MusicBeatState {
 		svCheck = new PsychUICheckBox(10, 224, 'Mimic SV (osu! scroll behavior)', 220);
 		tab.add(svCheck);
 
-		label(tab, 10, 254, 'SV script:');
-		svScriptDrop = new PsychUIDropDownMenu(140, 250, OsuConvertDefaults.SV_SCRIPTS.copy(), function(index, name) {}, 120);
-		svScriptDrop.selectedLabel = 'Lua';
-		tab.add(svScriptDrop);
+		// SV now uses the engine's native Scroll Velocity events -- no bundled script, so no script choice.
 
-		quantizeCheck = new PsychUICheckBox(10, 282, 'Quantize notes (auto-snap timing)', 260);
+		quantizeCheck = new PsychUICheckBox(10, 258, 'Quantize notes (auto-snap timing)', 260);
 		tab.add(quantizeCheck);
 
 		label(tab, 10, 312, 'osu!std -> mania:');
@@ -475,7 +471,6 @@ class OsuConverterState extends MusicBeatState {
 		opts.convertStoryboard = sbCheck.checked;
 		opts.convertHitsounds = hsCheck.checked;
 		opts.mimicSV = svCheck.checked;
-		opts.svScript = OsuConvertDefaults.svScriptValue(svScriptDrop.selectedLabel);
 		opts.quantize = quantizeCheck.checked;
 		opts.stdTargetKeys = stdKeys.copy();
 

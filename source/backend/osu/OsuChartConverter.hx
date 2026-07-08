@@ -30,8 +30,9 @@ class OsuChartConverter {
 	 */
 	static inline var QUANT_PREFER_COARSE:Float = 0.0001;
 
-	/** Event name carrying the normalized SV multiplier; handled by the bundled SV script. */
-	public static inline var SV_EVENT:String = 'Osu SV';
+	/** Event name carrying the normalized SV multiplier. Uses the engine's NATIVE Scroll Velocity event
+		(`objects.notes.ScrollVelocity`), so no bundled script is needed -- PlayState reads these directly. */
+	public static inline var SV_EVENT:String = 'Scroll Velocity';
 
 	/** Characters and stage to set in the chart **/
 	public static inline var BLANK_ART:String = 'osuBlank';
@@ -67,8 +68,8 @@ class OsuChartConverter {
 	 * @param map The parsed osu!mania beatmap. Must be a mania map with 1-9 keys.
 	 * @param displayName Song title to store on the resulting `SwagSong`.
 	 * @param stageName Stage to assign to the converted song.
-	 * @param mimicSV When true, slider-velocity changes are emitted as "Osu SV" events
-	 *        (handled by the bundled SV script), normalized so the map's most-common SV = 1x.
+	 * @param mimicSV When true, slider-velocity changes are emitted as native "Scroll Velocity" events
+	 *        (handled by the engine's native SV timeline), normalized so the map's most-common SV = 1x.
 	 * @param quantize When true, every note is snapped to the nearest clean beat subdivision
 	 *        of the section grid (chosen per note) so the chart stays easily editable.
 	 * @return The converted song, or `null` if `map` is missing, not mania, or has an
@@ -393,12 +394,12 @@ class OsuChartConverter {
 	}
 
 	/**
-	 * Turns osu! slider-velocity changes into "Osu SV" events for the bundled SV script.
+	 * Turns osu! slider-velocity changes into native "Scroll Velocity" events.
 	 *
 	 * osu's effective SV is the relative multiplier from green (inherited) lines, reset to
 	 * 1.0 by every red (uninherited) line. The SV the map spends the most time at is
 	 * normalized to 1x; one event is emitted whenever the normalized value changes. The
-	 * script (custom_events/Osu SV.hx) integrates these into a scroll-position curve, which
+	 * engine's native Scroll Velocity timeline integrates these into a scroll-position curve, which
 	 * reproduces osu's "spacing changes forward only" behaviour -- unlike "Change Scroll
 	 * Speed", which is a single linear multiplier that teleports notes already on screen.
 	 *

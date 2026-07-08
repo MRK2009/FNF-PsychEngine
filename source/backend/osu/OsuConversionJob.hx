@@ -578,7 +578,12 @@ class OsuConversionJob {
 					}
 				}
 
-				File.saveContent('$packDir/data/$songKey/$fileName', '{"song":' + PsychJsonPrinter.print(song, ['sectionNotes', 'events']) + '}');
+				// Emit the native psych_v2 chart format (strumline model + flat notes + timing sections).
+				// fromLegacy builds the native model from the converted SwagSong; buildPsychV2 serialises it.
+				var chartV2:backend.SongChart = backend.SongChart.fromLegacy(song);
+				var v2Obj:Dynamic = backend.Song.buildPsychV2(song, chartV2);
+				File.saveContent('$packDir/data/$songKey/$fileName',
+					PsychJsonPrinter.print(v2Obj, backend.Song.PSYCH_V2_INLINE, backend.Song.PSYCH_V2_KEY_ORDER));
 
 				var notes:Int = countNotes(song);
 				entries.push({label: diffLabel(map, keys), notes: notes});
