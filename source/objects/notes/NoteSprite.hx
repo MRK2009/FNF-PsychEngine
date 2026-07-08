@@ -44,6 +44,9 @@ final class NoteSprite extends FlxSprite {
 	public var copyX:Bool = true;
 	public var copyY:Bool = true;
 	public var copyAngle:Bool = true;
+
+	/** Extra rotation added on top of the receptor-derived angle while `copyAngle` is on. **/
+	public var offsetAngle:Float = 0;
 	public var copyAlpha:Bool = true;
 	public var pixel:Bool = false;
 	public var scaleFactor:Float = 1;
@@ -146,6 +149,7 @@ final class NoteSprite extends FlxSprite {
 		multAlpha = data.multAlpha; // load-time / compat unspawn override (default 1)
 		multSpeed = data.multSpeed;
 		copyX = copyY = copyAngle = copyAlpha = true;
+		offsetAngle = 0;
 		offsetX = offsetY = 0;
 		centerOnStrum = false;
 		clipRect = null;
@@ -202,7 +206,7 @@ final class NoteSprite extends FlxSprite {
 		var uY:Float = strum.axisY;
 
 		if (copyAngle)
-			angle = strum.axisAngle;
+			angle = strum.axisAngle + offsetAngle;
 		if (copyAlpha)
 			alpha = strum.alpha * multAlpha;
 

@@ -95,6 +95,9 @@ final class SustainSprite extends FlxSprite {
 	public var copyX:Bool = true;
 	public var copyY:Bool = true;
 	public var copyAngle:Bool = true;
+
+	/** Extra rotation added on top of the receptor-derived angle while `copyAngle` is on. **/
+	public var offsetAngle:Float = 0;
 	public var copyAlpha:Bool = true;
 	public var pixel:Bool = false;
 
@@ -139,6 +142,7 @@ final class SustainSprite extends FlxSprite {
 		exists = visible = active = true;
 		tail.exists = tail.visible = true;
 		copyX = copyY = copyAngle = copyAlpha = true;
+		offsetAngle = 0;
 		clipRect = null;
 		tail.clipRect = null;
 
@@ -229,7 +233,7 @@ final class SustainSprite extends FlxSprite {
 		var uY:Float = strum.axisY;
 
 		if (copyAngle)
-			angle = strum.axisAngle;
+			angle = strum.axisAngle + offsetAngle;
 		if (copyAlpha) {
 			alpha = strum.alpha * multAlpha;
 			tail.alpha = alpha;

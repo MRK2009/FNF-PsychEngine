@@ -44,8 +44,13 @@ class LuaUtils {
 				var retVal:Dynamic = MusicBeatState.getVariables().get(splitProps[0]);
 				if (retVal != null)
 					target = retVal;
-			} else
+			} else {
 				target = Reflect.getProperty(instance, splitProps[0]);
+				// plain arrays (playerReceptors etc.) have no `members`; treat `x.members[i]`
+				// like indexing the array itself so group-style script paths keep working
+				if (target == null && splitProps[0] == 'members' && (instance is Array))
+					target = instance;
+			}
 
 			for (i in 1...splitProps.length) {
 				var raw:String = splitProps[i].substr(0, splitProps[i].length - 1);
@@ -85,8 +90,13 @@ class LuaUtils {
 				var retVal:Dynamic = MusicBeatState.getVariables().get(splitProps[0]);
 				if (retVal != null)
 					target = retVal;
-			} else
+			} else {
 				target = Reflect.getProperty(instance, splitProps[0]);
+				// plain arrays (playerReceptors etc.) have no `members`; treat `x.members[i]`
+				// like indexing the array itself so group-style script paths keep working
+				if (target == null && splitProps[0] == 'members' && (instance is Array))
+					target = instance;
+			}
 
 			for (i in 1...splitProps.length) {
 				var raw:String = splitProps[i].substr(0, splitProps[i].length - 1);
@@ -107,6 +117,8 @@ class LuaUtils {
 			if (retVal != null)
 				return retVal;
 		}
+		if (variable == 'members' && (instance is Array))
+			return instance;
 		return Reflect.getProperty(instance, variable);
 	}
 
@@ -231,6 +243,20 @@ class LuaUtils {
 		if (allowMaps && isMap(leArray))
 			return leArray.get(variable);
 		return Reflect.getProperty(leArray, variable);
+	}
+
+	/**
+		Resolves a script group path to a live `NoteField` (`game.playerField`, `opponentField`,
+		or either with a `.notes`/`.active` suffix), so note-group Lua calls can target the
+		field's spawned notes natively. Returns `null` for non-field paths.
+	**/
+	public static function resolveNoteField(group:String):objects.notes.NoteField {
+		var split:Array<String> = group.split('.');
+		var last:String = split[split.length - 1];
+		if (split.length > 1 && (last == 'notes' || last == 'active'))
+			split.pop();
+		var resolved:Dynamic = (split.length > 1) ? getPropertyLoop(split, false) : getObjectDirectly(split[0]);
+		return (resolved is objects.notes.NoteField) ? cast resolved : null;
 	}
 
 	public static function getPropertyLoop(split:Array<String>, ?getProperty:Bool = true, ?allowMaps:Bool = false):Dynamic {

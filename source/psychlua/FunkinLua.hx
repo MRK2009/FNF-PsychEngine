@@ -1313,6 +1313,16 @@ class FunkinLua {
 				return true;
 			}
 
+			// Native note runtime: pointing at a side's field moves that side's spawned note
+			// drawables (heads + sustains) onto the camera.
+			var noteField:objects.notes.NoteField = LuaUtils.resolveNoteField(obj);
+			if (noteField != null) {
+				var cams = [LuaUtils.cameraFromString(camera)];
+				noteField.headGroup.cameras = cams;
+				noteField.sustainGroup.cameras = cams;
+				return true;
+			}
+
 			var split:Array<String> = obj.split('.');
 			var object:FlxBasic = LuaUtils.getObjectDirectly(split[0]);
 			if (split.length > 1) {

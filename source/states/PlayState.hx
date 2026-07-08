@@ -3015,7 +3015,12 @@ class PlayState extends MusicBeatState {
 
 	function onNoteSpawned(note:ActiveNote):Void {
 		spawnNote = note;
-		callOnLuas('onSpawnNote', [-1, note.data.column, note.data.type, note.data.isSustain(), note.data.time, note.data.mustPress]);
+		// Lua id = the note's index in its own field's `active` list (valid inside the callback),
+		// so setPropertyFromGroup('game.<side>Field.notes', id, ...) targets the spawned note.
+		var line:StrumLine = lineOf(note.data);
+		var field:NoteField = (line != null && line.field != null) ? line.field : (note.data.mustPress ? playerField : opponentField);
+		var idx:Int = (field != null) ? field.active.indexOf(note) : -1;
+		callOnLuas('onSpawnNote', [idx, note.data.column, note.data.type, note.data.isSustain(), note.data.time, note.data.mustPress]);
 		spawnNote = null;
 		callOnHScript('onSpawnNote', [cbArg(note)]);
 	}

@@ -91,6 +91,21 @@ class ReflectionFunctions {
 			PlayState.instance.recomputeScrollVelocity();
 		});
 		Lua_helper.add_callback(lua, "getPropertyFromGroup", function(group:String, index:Int, variable:Dynamic, ?allowMaps:Bool = false) {
+			// Native note runtime: field paths index the LIVE spawned notes and read from the
+			// drawable (head, then sustain, then the data) so classic per-note idioms work.
+			var noteField:objects.notes.NoteField = LuaUtils.resolveNoteField(group);
+			if (noteField != null) {
+				var an:objects.notes.NoteField.ActiveNote = (index >= 0 && index < noteField.active.length) ? noteField.active[index] : null;
+				if (an == null) {
+					FunkinLua.luaTrace('getPropertyFromGroup: Note #$index from field: $group isn\'t active!', false, false, FlxColor.RED);
+					return null;
+				}
+				if (variable == 'isSustain' || variable == 'isSustainNote')
+					return an.data.isSustain();
+				var target:Dynamic = (an.head != null && an.head.exists) ? an.head : ((an.sustain != null && an.sustain.exists) ? an.sustain : an.data);
+				return LuaUtils.getGroupStuff(target, variable, allowMaps);
+			}
+
 			var split:Array<String> = group.split('.');
 			var realObject:Dynamic = null;
 			if (split.length > 1)
@@ -123,6 +138,20 @@ class ReflectionFunctions {
 		});
 		Lua_helper.add_callback(lua, "setPropertyFromGroup",
 			function(group:String, index:Int, variable:Dynamic, value:Dynamic, ?allowMaps:Bool = false, ?allowInstances:Bool = false) {
+				// Native note runtime: field paths index the LIVE spawned notes and write to the
+				// drawable (head, then sustain, then the data) so classic per-note idioms work.
+				var noteField:objects.notes.NoteField = LuaUtils.resolveNoteField(group);
+				if (noteField != null) {
+					var an:objects.notes.NoteField.ActiveNote = (index >= 0 && index < noteField.active.length) ? noteField.active[index] : null;
+					if (an == null) {
+						FunkinLua.luaTrace('setPropertyFromGroup: Note #$index from field: $group isn\'t active!', false, false, FlxColor.RED);
+						return value;
+					}
+					var target:Dynamic = (an.head != null && an.head.exists) ? an.head : ((an.sustain != null && an.sustain.exists) ? an.sustain : an.data);
+					LuaUtils.setGroupStuff(target, variable, allowInstances ? parseInstances(value) : value, allowMaps);
+					return value;
+				}
+
 				var split:Array<String> = group.split('.');
 				var realObject:Dynamic = null;
 				if (split.length > 1)
