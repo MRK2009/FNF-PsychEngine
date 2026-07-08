@@ -128,6 +128,7 @@ class MenuCharacterEditorState extends MusicBeatState {
 		});
 		imageInputText.x = boxX + PAD;
 		imageInputText.y = rowY;
+		imageInputText.boxWidth = 115;
 		uiRoot.content.addChild(imageInputText);
 
 		idleInputText = new UITextInput('Idle anim (.XML):', rowW, characterFile.idle_anim, function(v:String) {
@@ -136,6 +137,7 @@ class MenuCharacterEditorState extends MusicBeatState {
 		});
 		idleInputText.x = boxX + PAD;
 		idleInputText.y = rowY + 32;
+		idleInputText.boxWidth = 110;
 		uiRoot.content.addChild(idleInputText);
 
 		confirmInputText = new UITextInput('Start Press anim:', rowW, characterFile.confirm_anim, function(v:String) {
@@ -144,6 +146,7 @@ class MenuCharacterEditorState extends MusicBeatState {
 		});
 		confirmInputText.x = boxX + PAD;
 		confirmInputText.y = rowY + 64;
+		confirmInputText.boxWidth = 110;
 		uiRoot.content.addChild(confirmInputText);
 
 		scaleStepper = new UIStepper('Scale:', rowW, 1, 0.05, function(v:Float) {

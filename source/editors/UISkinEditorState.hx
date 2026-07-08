@@ -267,6 +267,7 @@ class UISkinEditorState extends MusicBeatState {
 		pane.content.addChild(saveRootBtn);
 
 		newNameInput = new UITextInput('New skin name:', rowW - 80, 'skin');
+		newNameInput.boxWidth = 105;
 		newNameInput.y = 70;
 		pane.content.addChild(newNameInput);
 
@@ -416,13 +417,16 @@ class UISkinEditorState extends MusicBeatState {
 		pane.content.addChild(motionElemDrop);
 
 		mDuration = new UIStepper('Duration (s):', halfW, 0.2, 0.05, function(_) applyMotion());
+		mDuration.boxWidth = 70;
 		mDuration.min = 0;
 		mDuration.max = 5;
 		mDuration.decimals = 2;
 		mDuration.y = 32;
 		pane.content.addChild(mDuration);
 
-		mStartDelay = new UIStepper('Delay (0=auto):', halfW, 0, 0.01, function(_) applyMotion());
+		mStartDelay = new UIStepper('Delay:', halfW, 0, 0.01, function(_) applyMotion());
+		mStartDelay.boxWidth = 70;
+		mStartDelay.tooltip = "0 = auto (one beat)";
 		mStartDelay.min = 0;
 		mStartDelay.max = 5;
 		mStartDelay.decimals = 3;

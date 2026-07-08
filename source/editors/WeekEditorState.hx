@@ -251,6 +251,7 @@ class WeekEditorState extends MusicBeatState {
 			reloadBG();
 		});
 		backgroundInputText.y = 64;
+		backgroundInputText.boxWidth = 125;
 		pane.addChild(backgroundInputText);
 
 		displayNameInputText = new UITextInput('Display Name:', rowW, '', function(v:String) {
@@ -261,11 +262,12 @@ class WeekEditorState extends MusicBeatState {
 		displayNameInputText.y = 96;
 		pane.addChild(displayNameInputText);
 
-		weekNameInputText = new UITextInput('Week Name (Reset Menu):', rowW, '', function(v:String) {
+		weekNameInputText = new UITextInput('Week Name:', rowW, '', function(v:String) {
 			weekFile.weekName = v.trim();
 			unsavedProgress = true;
 		});
 		weekNameInputText.y = 128;
+		weekNameInputText.tooltip = 'Shown in the Reset Score menu.';
 		pane.addChild(weekNameInputText);
 
 		weekFileInputText = new UITextInput('Week File:', rowW, '', function(v:String) {
@@ -736,6 +738,7 @@ class WeekEditorFreeplayState extends MusicBeatState {
 		});
 		iconInputText.x = boxX + PAD;
 		iconInputText.y = rowY + 66;
+		iconInputText.boxWidth = 130;
 		uiRoot.content.addChild(iconInputText);
 
 		var hideFreeplayCheckbox:UICheckbox = new UICheckbox("Hide Week from Freeplay?", rowW, weekFile.hideFreeplay, function(checked:Bool) {

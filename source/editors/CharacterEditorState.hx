@@ -439,7 +439,7 @@ class CharacterEditorState extends MusicBeatState {
 		});
 		pane.addChild(makeGhostButton);
 
-		var highlightGhost:UICheckbox = new UICheckbox("Highlight Ghost", rowW - 120, false, function(checked:Bool) {
+		var highlightGhost:UICheckbox = new UICheckbox("Highlight Ghost", rowW, false, function(checked:Bool) {
 			var value = checked ? 125 : 0;
 			ghost.colorTransform.redOffset = value;
 			ghost.colorTransform.greenOffset = value;
@@ -450,7 +450,7 @@ class CharacterEditorState extends MusicBeatState {
 				animateGhost.colorTransform.blueOffset = value;
 			}
 		});
-		highlightGhost.x = 120;
+		highlightGhost.y = 34;
 		pane.addChild(highlightGhost);
 
 		var ghostAlphaSlider:UISlider = new UISlider('Opacity:', rowW, 0, 1, ghostAlpha, function(v:Float) {
@@ -459,7 +459,7 @@ class CharacterEditorState extends MusicBeatState {
 			if (animateGhost != null)
 				animateGhost.alpha = ghostAlpha;
 		});
-		ghostAlphaSlider.y = 36;
+		ghostAlphaSlider.y = 68;
 		pane.addChild(ghostAlphaSlider);
 	}
 
@@ -580,10 +580,12 @@ class CharacterEditorState extends MusicBeatState {
 
 		animationInputText = new UITextInput('Animation name:', rowW, '');
 		animationInputText.y = 32;
+		animationInputText.boxWidth = 190;
 		pane.content.addChild(animationInputText);
 
 		animationNameInputText = new UITextInput('Symbol Name/Tag:', rowW, '');
 		animationNameInputText.y = 64;
+		animationNameInputText.boxWidth = 180;
 		pane.content.addChild(animationNameInputText);
 
 		animationFramerate = new UIStepper('Framerate:', rowW, 24, 1);
@@ -598,6 +600,7 @@ class CharacterEditorState extends MusicBeatState {
 
 		animationIndicesInputText = new UITextInput('ADVANCED - Indices:', rowW, '');
 		animationIndicesInputText.y = 160;
+		animationIndicesInputText.boxWidth = 160;
 		pane.content.addChild(animationIndicesInputText);
 
 		var addUpdateButton:UIButton = new UIButton("Add/Update", 150, 28, function() {
@@ -754,6 +757,7 @@ class CharacterEditorState extends MusicBeatState {
 			unsavedProgress = true;
 		});
 		healthIconInputText.y = 66;
+		healthIconInputText.boxWidth = 180;
 		pane.content.addChild(healthIconInputText);
 
 		vocalsInputText = new UITextInput('Vocals File Postfix:', rowW, character.vocalsFile != null ? character.vocalsFile : '', function(v:String) {
@@ -761,6 +765,7 @@ class CharacterEditorState extends MusicBeatState {
 			unsavedProgress = true;
 		});
 		vocalsInputText.y = 98;
+		vocalsInputText.boxWidth = 160;
 		pane.content.addChild(vocalsInputText);
 
 		singDurationStepper = new UIStepper('Sing Anim length:', rowW, character.singDuration, 0.1, function(v:Float) {

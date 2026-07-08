@@ -157,7 +157,7 @@ class DialogueEditorState extends MusicBeatState {
 		characterInputText.y = rowY;
 		uiRoot.content.addChild(characterInputText);
 
-		speedStepper = new UIStepper('Interval/Speed (ms):', rowW, 0.05, 0.005, function(v:Float) {
+		speedStepper = new UIStepper('Speed (ms):', rowW, 0.05, 0.005, function(v:Float) {
 			dialogueFile.dialogue[curSelected].speed = v;
 			if (Math.isNaN(dialogueFile.dialogue[curSelected].speed)
 				|| dialogueFile.dialogue[curSelected].speed == null
@@ -194,6 +194,7 @@ class DialogueEditorState extends MusicBeatState {
 		});
 		soundInputText.x = boxX + PAD;
 		soundInputText.y = rowY + 96;
+		soundInputText.boxWidth = 115;
 		uiRoot.content.addChild(soundInputText);
 
 		lineInputText = new UITextInput('Text:', rowW, DEFAULT_TEXT, function(v:String) {

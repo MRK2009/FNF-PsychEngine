@@ -153,14 +153,17 @@ class NoteSplashEditorState extends MusicBeatState {
 
 		var name_input:UITextInput = new UITextInput('Animation Name:', rowW, '');
 		curAnimText = name_input;
+		name_input.boxWidth = 140;
 		name_input.y = 32;
 		pane.addChild(name_input);
 
 		var prefix_input:UITextInput = new UITextInput('Animation Prefix:', rowW, '');
+		prefix_input.boxWidth = 125;
 		prefix_input.y = 64;
 		pane.addChild(prefix_input);
 
 		var indices_input:UITextInput = new UITextInput('Indices (OPTIONAL):', rowW, '');
+		indices_input.boxWidth = 105;
 		indices_input.y = 96;
 		pane.addChild(indices_input);
 

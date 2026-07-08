@@ -259,14 +259,17 @@ class DialogueCharacterEditorState extends MusicBeatState {
 
 		animationInputText = new UITextInput('Animation name:', rowW, '');
 		animationInputText.y = 32;
+		animationInputText.boxWidth = 135;
 		pane.addChild(animationInputText);
 
 		loopInputText = new UITextInput('Loop name (.XML):', rowW, '');
 		loopInputText.y = 64;
+		loopInputText.boxWidth = 120;
 		pane.addChild(loopInputText);
 
 		idleInputText = new UITextInput('Idle/Finished (.XML):', rowW, '');
 		idleInputText.y = 96;
+		idleInputText.boxWidth = 100;
 		pane.addChild(idleInputText);
 
 		var addUpdateButton:UIButton = new UIButton("Add/Update", (rowW - 10) / 2, 26, function() {
@@ -378,6 +381,7 @@ class DialogueCharacterEditorState extends MusicBeatState {
 			character.jsonFile.image = v;
 			unsavedProgress = true;
 		});
+		imageInputText.boxWidth = 130;
 		pane.addChild(imageInputText);
 
 		xStepper = new UIStepper('Offset X:', halfW, character.jsonFile.position[0], 10, function(v:Float) {
@@ -385,6 +389,7 @@ class DialogueCharacterEditorState extends MusicBeatState {
 			reloadCharacter();
 			unsavedProgress = true;
 		});
+		xStepper.boxWidth = 56;
 		xStepper.min = -2000;
 		xStepper.max = 2000;
 		xStepper.y = 32;
@@ -395,6 +400,7 @@ class DialogueCharacterEditorState extends MusicBeatState {
 			reloadCharacter();
 			unsavedProgress = true;
 		});
+		yStepper.boxWidth = 56;
 		yStepper.min = -2000;
 		yStepper.max = 2000;
 		yStepper.x = halfW + 10;
@@ -406,6 +412,7 @@ class DialogueCharacterEditorState extends MusicBeatState {
 			reloadCharacter();
 			unsavedProgress = true;
 		});
+		scaleStepper.boxWidth = 56;
 		scaleStepper.min = 0.1;
 		scaleStepper.max = 10;
 		scaleStepper.decimals = 2;

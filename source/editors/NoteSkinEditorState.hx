@@ -331,6 +331,7 @@ class NoteSkinEditorState extends MusicBeatState {
 		pane.content.addChild(saveRootBtn);
 
 		newNameInput = new UITextInput('New skin name:', rowW - 80, 'skin');
+		newNameInput.boxWidth = 105;
 		newNameInput.y = 70;
 		pane.content.addChild(newNameInput);
 
@@ -363,6 +364,7 @@ class NoteSkinEditorState extends MusicBeatState {
 			destroyGroup(grid);
 			buildGrid();
 		});
+		gridStep.boxWidth = 60;
 		gridStep.min = 8;
 		gridStep.max = 200;
 		gridStep.y = 136;
@@ -411,6 +413,7 @@ class NoteSkinEditorState extends MusicBeatState {
 			config.holdAlpha = v;
 			buildPreview();
 		});
+		alphaStep.boxWidth = 60;
 		alphaStep.min = 0;
 		alphaStep.max = 1;
 		alphaStep.decimals = 2;
@@ -421,6 +424,7 @@ class NoteSkinEditorState extends MusicBeatState {
 			config.fps = Std.int(v);
 			buildPreview();
 		});
+		confirmFpsStep.boxWidth = 60;
 		confirmFpsStep.min = 0;
 		confirmFpsStep.max = 60;
 		confirmFpsStep.y = 32;
