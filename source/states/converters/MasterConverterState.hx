@@ -15,6 +15,7 @@ import backend.tools.MediaConverter;
 class MasterConverterState extends MusicBeatState {
 	var options:Array<String> = [
 		'osu! Beatmap Converter',
+		'osu! Skin Converter',
 		'Script Converter',
 		'Chart Converter'
 	];
@@ -109,6 +110,15 @@ class MasterConverterState extends MusicBeatState {
 			FlxG.sound.music.volume = 0;
 			FreeplayState.destroyFreeplayVocals();
 			MusicBeatState.switchState(new ChartConverterState());
+			return;
+		}
+
+		// The osu! Skin Converter just copies images + writes a skin.json, so no external tools either.
+		if (name == 'osu! Skin Converter') {
+			FlxG.sound.play(Paths.sound('confirmMenu'), 0.6);
+			FlxG.sound.music.volume = 0;
+			FreeplayState.destroyFreeplayVocals();
+			MusicBeatState.switchState(new OsuSkinConverterState());
 			return;
 		}
 
