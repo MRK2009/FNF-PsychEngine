@@ -72,7 +72,9 @@ class FolderNoteSkin implements INoteSkin {
 
 		spr.antialiasing = (cfg.pixel == true
 			|| NoteSkinConfig.pixelMode) ? false : NoteSkinConfig.boolForColumn(cfg.antialiasing, col, ClientPrefs.data.antialiasing);
-		spr.scale.set(scaleBase * factor, scaleBase * factor);
+		var fit:Float = NoteSkinConfig.fitScaleFor(cfg, spr.frameWidth, kc);
+		var scaleFinal:Float = (fit > 0) ? fit : scaleBase * factor;
+		spr.scale.set(scaleFinal, scaleFinal);
 		spr.centerOffsets();
 		spr.centerOrigin();
 		spr.updateHitbox();
@@ -81,7 +83,7 @@ class FolderNoteSkin implements INoteSkin {
 		var off:Array<Float> = NoteSkinConfig.offsetFor(cfg.noteOffsets, col);
 		v.offsetX = off[0];
 		v.offsetY = off[1];
-		v.scaleFactor = scaleBase * factor;
+		v.scaleFactor = scaleFinal;
 		v.pixel = (cfg.pixel == true || NoteSkinConfig.pixelMode);
 		spr.animation.play('note', true);
 		v.ok = true;
@@ -128,8 +130,12 @@ class FolderNoteSkin implements INoteSkin {
 		if (cfg.holdAntialiasing != null)
 			aa = cfg.holdAntialiasing;
 		body.antialiasing = tail.antialiasing = aa;
-		body.scale.set(scaleBase * fBody, scaleBase * fBody);
-		tail.scale.set(scaleBase * fTail, scaleBase * fTail);
+		var fitBody:Float = NoteSkinConfig.fitScaleFor(cfg, body.frameWidth, kc);
+		var fitTail:Float = NoteSkinConfig.fitScaleFor(cfg, tail.frameWidth, kc);
+		var bodyScale:Float = (fitBody > 0) ? fitBody : scaleBase * fBody;
+		var tailScale:Float = (fitTail > 0) ? fitTail : scaleBase * fTail;
+		body.scale.set(bodyScale, bodyScale);
+		tail.scale.set(tailScale, tailScale);
 		body.updateHitbox();
 		tail.updateHitbox();
 
@@ -137,7 +143,7 @@ class FolderNoteSkin implements INoteSkin {
 		var off:Array<Float> = NoteSkinConfig.offsetFor(cfg.holdOffsets, col);
 		v.offsetX = off[0];
 		v.offsetY = off[1];
-		v.scaleFactor = scaleBase * fBody;
+		v.scaleFactor = bodyScale;
 		v.pixel = (cfg.pixel == true || NoteSkinConfig.pixelMode);
 		v.colorable = holdsSupported;
 		v.ok = true;
@@ -232,9 +238,11 @@ class FolderNoteSkin implements INoteSkin {
 		v.laneCenter = true;
 
 		var scaleBase:Float = NoteSkinConfig.scaleForColumn(cfg, c) * Mania.noteSizes[kc - 1] / Mania.noteSizes[Mania.DEFAULT - 1];
-		spr.scale.set(scaleBase * factor, scaleBase * factor);
+		var fit:Float = NoteSkinConfig.fitScaleFor(cfg, spr.frameWidth, kc);
+		var scaleFinal:Float = (fit > 0) ? fit : scaleBase * factor;
+		spr.scale.set(scaleFinal, scaleFinal);
 		spr.updateHitbox();
-		v.scaleFactor = scaleBase * factor;
+		v.scaleFactor = scaleFinal;
 		v.pixel = (cfg.pixel == true || NoteSkinConfig.pixelMode);
 
 		if (lastAnim != null && spr.animation.getByName(lastAnim) != null)

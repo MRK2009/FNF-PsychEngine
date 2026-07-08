@@ -28,6 +28,7 @@ typedef NoteSkinData = {
 	@:optional var holdAlpha:Dynamic; // Float, or per-lane object
 	@:optional var scale:Dynamic; // Float, or per-lane object
 	@:optional var pixelScale:Dynamic; // scale used while rendering pixel art (Float, or per-lane); falls back to `scale`
+	@:optional var fitColumnWidth:Dynamic; // osu!mania-style: fit each element's width to the lane column instead of scaling by native pixels. `true` fills the whole column; a number is a fraction (0.9 = small gap). Decouples receptor size from note size.
 	@:optional var fps:Dynamic; // anim fps (Int, or per-lane object)
 	@:optional var hiRes:Bool; // hint: skin ships @2x assets (@2x is auto-detected regardless)
 	@:optional var endOffsets:Dynamic; // sustain-tail offsets (per-lane); falls back to holdOffsets
@@ -626,6 +627,37 @@ class NoteSkinConfig {
 		if (pixelMode && cfg.pixelScale != null)
 			return numForColumn(cfg.pixelScale, col, numForColumn(cfg.scale, col, 0.7));
 		return numForColumn(cfg.scale, col, 0.7);
+	}
+
+	/**
+		osu!mania sizing: when `fitColumnWidth` is set, an element is scaled uniformly so its (unscaled)
+		frame width fills the lane's column width (`160 * noteSizes[keyCount]`) rather than scaling the
+		image's native pixels by `scale`. This is how osu!mania normalises every note/key to the column,
+		so a receptor whose source image is far bigger/smaller than the note still renders the same size.
+		`true` fills the whole column; a number is a fraction of it (e.g. `0.9` leaves a small gap).
+		Combined with the receptor's `laneCenter`, the fitted sprite lands centred in the lane at any scale.
+		@param cfg the skin config
+		@param frameWidth the element sprite's current (unscaled) frame width
+		@param keyCount the active column count
+		@return the uniform scale to apply, or `-1` when fitting is off / not possible
+	**/
+	public static function fitScaleFor(cfg:NoteSkinData, frameWidth:Float, keyCount:Int):Float {
+		if (cfg == null || cfg.fitColumnWidth == null || frameWidth <= 0)
+			return -1;
+		var mult:Float;
+		if (Std.isOfType(cfg.fitColumnWidth, Bool)) {
+			if (cfg.fitColumnWidth != true)
+				return -1;
+			mult = 1;
+		} else {
+			var n:Float = Std.parseFloat(Std.string(cfg.fitColumnWidth));
+			if (Math.isNaN(n) || n <= 0)
+				return -1;
+			mult = n;
+		}
+		var kc:Int = Mania.clamp(keyCount);
+		var colW:Float = 160 * Mania.noteSizes[kc - 1];
+		return (colW * mult) / frameWidth;
 	}
 
 	public static function boolForColumn(field:Dynamic, col:Int, fallback:Bool):Bool {
