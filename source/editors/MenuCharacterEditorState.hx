@@ -73,10 +73,6 @@ class MenuCharacterEditorState extends MusicBeatState {
 		updateCharacters();
 
 		super.create();
-
-		#if mobile
-		addTouchPad('NONE', 'B'); // B exits to the editor menu (see ESCAPE handler)
-		#end
 	}
 
 	/** Layers the UI root above the game view but below the FPS counter. **/

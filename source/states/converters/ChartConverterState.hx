@@ -109,10 +109,6 @@ class ChartConverterState extends MusicBeatState {
 			summaryLabel.text = 'Install a mod under the mods/ folder, then reopen this screen.';
 		}
 		super.create();
-
-		#if mobile
-		addTouchPad('FULL', 'A_B');
-		#end
 	}
 
 	/** Layers the UI root above the game view but below the FPS counter (mirrors ScriptConverterState). **/

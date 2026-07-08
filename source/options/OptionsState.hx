@@ -128,10 +128,6 @@ class OptionsState extends MusicBeatState {
 		buildChrome();
 		selectCategory(0);
 		super.create();
-
-		#if mobile
-		addTouchPad('FULL', 'A_B');
-		#end
 	}
 
 	/** Layers the UI root above the game view but below the FPS counter (mirrors ChartingState). **/

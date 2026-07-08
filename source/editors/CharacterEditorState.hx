@@ -177,10 +177,6 @@ class CharacterEditorState extends MusicBeatState {
 			Paths.clearUnusedMemory();
 
 		super.create();
-
-		#if mobile
-		addTouchPad('NONE', 'B'); // B exits to the editor menu (see ESCAPE handler)
-		#end
 	}
 
 	function addHelpScreen() {
