@@ -1,4 +1,4 @@
-package legacy.editors.charting;
+package editors.charting;
 
 import backend.Song;
 import backend.Difficulty;

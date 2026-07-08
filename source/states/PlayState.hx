@@ -93,7 +93,7 @@ class PlayState extends MusicBeatState {
 	];
 
 	// event variables
-	private var isCameraOnForcedPos:Bool = false;
+	public var isCameraOnForcedPos:Bool = false;
 
 	public var boyfriendMap:Map<String, Character> = new Map<String, Character>();
 	public var dadMap:Map<String, Character> = new Map<String, Character>();
@@ -1649,8 +1649,8 @@ class PlayState extends MusicBeatState {
 	public var paused:Bool = false;
 	public var canReset:Bool = true;
 
-	var startedCountdown:Bool = false;
-	var canPause:Bool = true;
+	public var startedCountdown:Bool = false;
+	public var canPause:Bool = true;
 	var freezeCamera:Bool = false;
 	var allowDebugKeys:Bool = true;
 

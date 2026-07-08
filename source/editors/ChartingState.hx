@@ -1040,7 +1040,7 @@ class ChartingState extends MusicBeatState {
 	/** Exports the chart as V-Slice `-chart.json` + `-metadata.json` into a chosen folder. **/
 	function exportVSlice():Void {
 		@:privateAccess model.chart.notes = model.chart.buildLegacySections();
-		var pack = legacy.editors.charting.VSlice.export(model.chart.toLegacySwag());
+		var pack = editors.charting.VSlice.export(model.chart.toLegacySwag());
 		if (pack == null || pack.chart == null || pack.metadata == null) {
 			UIToast.show('V-Slice export failed');
 			return;
@@ -1067,7 +1067,7 @@ class ChartingState extends MusicBeatState {
 					UIToast.show('No matching -metadata.json next to the chart');
 					return;
 				}
-				var pack = legacy.editors.charting.VSlice.convertToPsych(cast haxe.Json.parse(fileDialog.data),
+				var pack = editors.charting.VSlice.convertToPsych(cast haxe.Json.parse(fileDialog.data),
 					cast haxe.Json.parse(sys.io.File.getContent(metaPath)));
 				if (pack == null || pack.difficulties == null) {
 					UIToast.show('Not a valid V-Slice chart');

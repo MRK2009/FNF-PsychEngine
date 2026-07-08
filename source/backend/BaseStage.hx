@@ -16,8 +16,16 @@ enum Countdown {
 	START;
 }
 
+/**
+	Base class for compiled stages. `game` is a TYPED `PlayState` cached at construction --
+	previously it was `Dynamic` (`cast FlxG.state`), so every stage accessor in the per-frame /
+	per-beat hot paths went through hxcpp reflection. Stages are only ever constructed by
+	`PlayState.create`, so the typed reference is always valid for a live stage.
+**/
 class BaseStage extends FlxBasic {
-	private var game(get, never):Dynamic;
+	var _game:PlayState;
+
+	private var game(get, never):PlayState;
 
 	public var onPlayState(get, never):Bool;
 
@@ -48,11 +56,15 @@ class BaseStage extends FlxBasic {
 
 	public function new() {
 		super();
-		if (game == null) {
+		_game = PlayState.instance;
+		if (_game == null && (FlxG.state is PlayState))
+			_game = cast FlxG.state;
+
+		if (_game == null) {
 			FlxG.log.error('Invalid state for the stage added!');
 			destroy();
 		} else {
-			game.stages.push(this);
+			_game.stages.push(this);
 			create();
 		}
 	}
@@ -205,11 +217,11 @@ class BaseStage extends FlxBasic {
 	inline private function get_members()
 		return game.members;
 
-	inline private function get_game()
-		return cast FlxG.state;
+	inline private function get_game():PlayState
+		return _game;
 
 	inline private function get_onPlayState()
-		return (Std.isOfType(FlxG.state, states.PlayState));
+		return (_game != null && FlxG.state == _game);
 
 	inline private function get_boyfriend():Character
 		return game.boyfriend;

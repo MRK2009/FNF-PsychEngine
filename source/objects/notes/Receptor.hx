@@ -231,7 +231,7 @@ final class Receptor extends FlxSprite {
 		}
 		var c:Array<FlxColor>;
 		if (linked) {
-			var np:RGBPalette = Note.initializeGlobalRGBShader(column);
+			var np:RGBPalette = NoteDefaults.initializeGlobalRGBShader(column);
 			c = [np.r, np.g, np.b];
 		} else {
 			var all:Array<Array<FlxColor>> = Mania.getAssetColors(element, keyCount);

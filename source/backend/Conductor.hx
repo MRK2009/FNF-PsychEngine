@@ -1,7 +1,6 @@
 package backend;
 
 import backend.Song;
-import objects.Note;
 
 typedef BPMChangeEvent = {
 	var stepTime:Int;

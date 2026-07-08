@@ -15,7 +15,7 @@ import haxe.Json;
 import haxe.Exception;
 import haxe.io.Bytes;
 import legacy.editors.charting.MetaNote;
-import legacy.editors.charting.VSlice;
+import editors.charting.VSlice;
 import editors.content.Prompt;
 import editors.content.*;
 import legacy.editors.charting.*;
