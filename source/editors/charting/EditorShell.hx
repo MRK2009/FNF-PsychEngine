@@ -204,7 +204,7 @@ final class EditorShell {
 		rightEdge.y = mainY;
 		c.addChild(rightEdge);
 
-		transportPanel = new UIPanel(viewW, transportH, UITheme.panel);
+		transportPanel = new UIPanel(viewW, transportH, PANEL);
 		transportPanel.y = mainY + mainH;
 		transportPanel.borderTop = true;
 		c.addChild(transportPanel);
@@ -273,7 +273,7 @@ final class EditorShell {
 		timeline.y = transportPanel.y + (transportH - stripH) / 2;
 		c.addChild(timeline);
 
-		statusPanel = new UIPanel(viewW, statusH, UITheme.panel2);
+		statusPanel = new UIPanel(viewW, statusH, PANEL2);
 		statusPanel.y = viewH - statusH;
 		statusPanel.borderTop = true;
 		c.addChild(statusPanel);

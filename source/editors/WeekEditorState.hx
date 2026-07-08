@@ -125,13 +125,8 @@ class WeekEditorState extends MusicBeatState {
 		UILocale.translate = function(k:String, f:String):String return Language.getPhrase(k, f);
 		UIFonts.register('assets/fonts/vcr.ttf');
 
-		// Stage-attached with viewport auto-sync: the UI tracks window resizes/fullscreen (FlxG.game
-		// is only offset by the scale mode, never scaled, so above-game attachment would not scale).
-		uiRoot = FlxSmidr.init(false);
+		uiRoot = FlxSmidr.init();
 		FlxSmidr.autoBlockMouse = true;
-		var fpsCounter = Main.fpsVar;
-		if (fpsCounter != null && fpsCounter.parent == FlxG.stage)
-			FlxG.stage.setChildIndex(uiRoot, FlxG.stage.getChildIndex(fpsCounter));
 
 		boxTabs = new UITabs(BOX_W, [{label: 'Other'}, {label: 'Week'}], function(i:Int):Void {
 			for (n in 0...tabPanes.length)
@@ -143,7 +138,7 @@ class WeekEditorState extends MusicBeatState {
 		var boxX:Float = FlxG.width - BOX_W - 10;
 		var boxY:Float = FlxG.height - boxH - 80;
 
-		var panel:UIPanel = new UIPanel(BOX_W, boxH, UITheme.panel);
+		var panel:UIPanel = new UIPanel(BOX_W, boxH, PANEL);
 		panel.x = boxX;
 		panel.y = boxY;
 		uiRoot.content.addChild(panel);
@@ -656,20 +651,15 @@ class WeekEditorFreeplayState extends MusicBeatState {
 		UILocale.translate = function(k:String, f:String):String return Language.getPhrase(k, f);
 		UIFonts.register('assets/fonts/vcr.ttf');
 
-		// Stage-attached with viewport auto-sync: the UI tracks window resizes/fullscreen (FlxG.game
-		// is only offset by the scale mode, never scaled, so above-game attachment would not scale).
-		uiRoot = FlxSmidr.init(false);
+		uiRoot = FlxSmidr.init();
 		FlxSmidr.autoBlockMouse = true;
-		var fpsCounter = Main.fpsVar;
-		if (fpsCounter != null && fpsCounter.parent == FlxG.stage)
-			FlxG.stage.setChildIndex(uiRoot, FlxG.stage.getChildIndex(fpsCounter));
 
 		var boxH:Float = 196;
 		var boxX:Float = FlxG.width - BOX_W - 110;
 		var boxY:Float = FlxG.height - boxH - 60;
 		var rowW:Float = BOX_W - PAD * 2;
 
-		var panel:UIPanel = new UIPanel(BOX_W, boxH, UITheme.panel);
+		var panel:UIPanel = new UIPanel(BOX_W, boxH, PANEL);
 		panel.x = boxX;
 		panel.y = boxY;
 		uiRoot.content.addChild(panel);

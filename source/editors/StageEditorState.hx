@@ -113,13 +113,8 @@ class StageEditorState extends MusicBeatState {
 		UILocale.translate = function(k:String, f:String):String return Language.getPhrase(k, f);
 		UIFonts.register('assets/fonts/vcr.ttf');
 
-		// Stage-attached with viewport auto-sync: the UI tracks window resizes/fullscreen (FlxG.game
-		// is only offset by the scale mode, never scaled, so above-game attachment would not scale).
-		uiRoot = FlxSmidr.init(false);
+		uiRoot = FlxSmidr.init();
 		FlxSmidr.autoBlockMouse = true;
-		var fpsCounter = Main.fpsVar;
-		if (fpsCounter != null && fpsCounter.parent == FlxG.stage)
-			FlxG.stage.setChildIndex(uiRoot, FlxG.stage.getChildIndex(fpsCounter));
 
 		mainUI = new Sprite();
 		uiRoot.content.addChild(mainUI);
@@ -256,7 +251,7 @@ class StageEditorState extends MusicBeatState {
 		var listY:Float = 40;
 		var listH:Float = 330;
 
-		var listPanel:UIPanel = new UIPanel(LIST_W, listH, UITheme.panel);
+		var listPanel:UIPanel = new UIPanel(LIST_W, listH, PANEL);
 		listPanel.x = listX;
 		listPanel.y = listY;
 		mainUI.addChild(listPanel);
@@ -564,7 +559,7 @@ class StageEditorState extends MusicBeatState {
 		var px:Float = (FlxG.width - w) / 2;
 		var py:Float = (FlxG.height - h) / 2;
 
-		var panel:UIPanel = new UIPanel(w, h, UITheme.panel2);
+		var panel:UIPanel = new UIPanel(w, h, PANEL2);
 		panel.x = px;
 		panel.y = py;
 		createPopupUI.addChild(panel);
@@ -668,7 +663,7 @@ class StageEditorState extends MusicBeatState {
 		var paneH:Float = 400;
 		var boxH:Float = boxTabs.h + 8 + paneH + PAD;
 
-		var panel:UIPanel = new UIPanel(BOX_W, boxH, UITheme.panel);
+		var panel:UIPanel = new UIPanel(BOX_W, boxH, PANEL);
 		panel.x = boxX;
 		panel.y = boxY;
 		mainUI.addChild(panel);
@@ -1256,7 +1251,7 @@ class StageEditorState extends MusicBeatState {
 		var rowW:Float = BOX_W - PAD * 2;
 		var halfW:Float = (rowW - 10) / 2;
 
-		var panel:UIPanel = new UIPanel(BOX_W, stageH, UITheme.panel);
+		var panel:UIPanel = new UIPanel(BOX_W, stageH, PANEL);
 		panel.x = stageX;
 		panel.y = stageY;
 		mainUI.addChild(panel);
@@ -2215,7 +2210,7 @@ class StageEditorAnimationSubstate extends MusicBeatSubstate {
 		var rowW:Float = BOX_W - PAD * 2;
 		var halfW:Float = (rowW - 10) / 2;
 
-		var panel:UIPanel = new UIPanel(BOX_W, boxH, UITheme.panel);
+		var panel:UIPanel = new UIPanel(BOX_W, boxH, PANEL);
 		panel.x = boxX;
 		panel.y = boxY;
 		animUI.addChild(panel);

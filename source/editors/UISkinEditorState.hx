@@ -180,13 +180,8 @@ class UISkinEditorState extends MusicBeatState {
 		UILocale.translate = function(k:String, f:String):String return Language.getPhrase(k, f);
 		UIFonts.register('assets/fonts/vcr.ttf');
 
-		// Stage-attached with viewport auto-sync: the UI tracks window resizes/fullscreen (FlxG.game
-		// is only offset by the scale mode, never scaled, so above-game attachment would not scale).
-		uiRoot = FlxSmidr.init(false);
+		uiRoot = FlxSmidr.init();
 		FlxSmidr.autoBlockMouse = true;
-		var fpsCounter = Main.fpsVar;
-		if (fpsCounter != null && fpsCounter.parent == FlxG.stage)
-			FlxG.stage.setChildIndex(uiRoot, FlxG.stage.getChildIndex(fpsCounter));
 
 		boxX = FlxG.width - BOX_W - 10;
 		var boxY:Float = 20;
@@ -199,7 +194,7 @@ class UISkinEditorState extends MusicBeatState {
 		var paneH:Float = 370;
 		var boxH:Float = boxTabs.h + 8 + paneH + PAD;
 
-		var panel:UIPanel = new UIPanel(BOX_W, boxH, UITheme.panel);
+		var panel:UIPanel = new UIPanel(BOX_W, boxH, PANEL);
 		panel.x = boxX;
 		panel.y = boxY;
 		uiRoot.content.addChild(panel);

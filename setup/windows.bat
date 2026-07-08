@@ -28,7 +28,6 @@ call haxelib install hscript            2.7.0  --quiet --always --skip-dependenc
 call haxelib install hxcpp-debug-server 1.2.4  --quiet --always --skip-dependencies
 call haxelib install hxdiscord_rpc      1.3.0  --quiet --always --skip-dependencies
 call haxelib install hxvlc              2.3.0  --quiet --always --skip-dependencies
-call haxelib install smidr              0.2.1  --quiet --always --skip-dependencies
 call haxelib install tink_core          1.26.0 --quiet --always --skip-dependencies
 call haxelib install tjson              1.4.0  --quiet --always --skip-dependencies
 call haxelib install thx.core           0.44.0 --quiet --always --skip-dependencies
@@ -44,6 +43,7 @@ call :installGit hxluajit         https://github.com/MAJigsaw77/hxluajit
 call :installGit hxluajit-wrapper https://github.com/MAJigsaw77/hxluajit-wrapper
 rem Script interpreter (replaces hscript-iris); pinned to match hmm.json.
 call :installGit hscript-insanity https://github.com/MeguminBOT/hscript-insanity
+call :installGit smidr            https://github.com/MeguminBOT/SmidrUI
 rem CPU/GPU/memory metrics for the FPS counter (HARDWARE_ALLOWED); native C++, not on haxelib.
 call :installGit hxhardware       https://github.com/Vortex2Oblivion/hxhardware
 

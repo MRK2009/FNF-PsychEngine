@@ -276,13 +276,8 @@ class CharacterEditorState extends MusicBeatState {
 		UILocale.translate = function(k:String, f:String):String return Language.getPhrase(k, f);
 		UIFonts.register('assets/fonts/vcr.ttf');
 
-		// Stage-attached with viewport auto-sync: the UI tracks window resizes/fullscreen (FlxG.game
-		// is only offset by the scale mode, never scaled, so above-game attachment would not scale).
-		uiRoot = FlxSmidr.init(false);
+		uiRoot = FlxSmidr.init();
 		FlxSmidr.autoBlockMouse = true;
-		var fpsCounter = Main.fpsVar;
-		if (fpsCounter != null && fpsCounter.parent == FlxG.stage)
-			FlxG.stage.setChildIndex(uiRoot, FlxG.stage.getChildIndex(fpsCounter));
 
 		// Top box: Ghost / Settings.
 		var box1X:Float = FlxG.width - BOX1_W - 15;
@@ -297,7 +292,7 @@ class CharacterEditorState extends MusicBeatState {
 		var pane1H:Float = 100;
 		var box1H:Float = settingsTabs.h + 8 + pane1H + PAD;
 
-		var panel1:UIPanel = new UIPanel(BOX1_W, box1H, UITheme.panel);
+		var panel1:UIPanel = new UIPanel(BOX1_W, box1H, PANEL);
 		panel1.x = box1X;
 		panel1.y = box1Y;
 		uiRoot.content.addChild(panel1);
@@ -329,7 +324,7 @@ class CharacterEditorState extends MusicBeatState {
 		var pane2H:Float = 330;
 		var box2H:Float = characterTabs.h + 8 + pane2H + PAD;
 
-		var panel2:UIPanel = new UIPanel(BOX2_W, box2H, UITheme.panel);
+		var panel2:UIPanel = new UIPanel(BOX2_W, box2H, PANEL);
 		panel2.x = box2X;
 		panel2.y = box2Y;
 		uiRoot.content.addChild(panel2);

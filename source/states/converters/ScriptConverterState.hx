@@ -168,7 +168,7 @@ class ScriptConverterState extends MusicBeatState {
 		uiRoot.content.addChild(filterDrop);
 
 		// Rail panel + scrollable list of mods.
-		var railPanel:UIPanel = new UIPanel(RAIL_W, PANEL_H, UITheme.panel);
+		var railPanel:UIPanel = new UIPanel(RAIL_W, PANEL_H, PANEL);
 		railPanel.x = RAIL_X;
 		railPanel.y = PANEL_Y;
 		uiRoot.content.addChild(railPanel);
@@ -179,7 +179,7 @@ class ScriptConverterState extends MusicBeatState {
 		uiRoot.content.addChild(railPane);
 
 		// Content panel + fixed header band.
-		var contentPanel:UIPanel = new UIPanel(CONTENT_W, PANEL_H, UITheme.panel);
+		var contentPanel:UIPanel = new UIPanel(CONTENT_W, PANEL_H, PANEL);
 		contentPanel.x = CONTENT_X;
 		contentPanel.y = PANEL_Y;
 		uiRoot.content.addChild(contentPanel);

@@ -2204,7 +2204,7 @@ class ChartingState extends MusicBeatState {
 	}
 
 	function buildCharacterCard(flow:DockFlow, colW:Float):Void {
-		var card:UIPanel = new UIPanel(colW, UITheme.px(104), UITheme.card);
+		var card:UIPanel = new UIPanel(colW, UITheme.px(104), CARD);
 		card.corner = UITheme.px(10);
 		card.outline = true;
 		var charChip:UIChip = new UIChip("PLAYER - " + model.chart.player1);
@@ -2736,7 +2736,7 @@ class ChartingState extends MusicBeatState {
 		var charName:String = (line.characters.length > 0) ? line.characters[0] : '?';
 		var tag:String = line.isPlayer ? "PLR" : (line.id == 'gf' ? "GF" : (line.type == 0 ? "OPP" : "ADD"));
 
-		var card:UIPanel = new UIPanel(colW, UITheme.px(46), UITheme.card);
+		var card:UIPanel = new UIPanel(colW, UITheme.px(46), CARD);
 		card.corner = UITheme.px(9);
 		card.outline = true;
 		var nameLabel:UILabel = new UILabel(line.id, 12, 0);

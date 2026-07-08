@@ -85,17 +85,12 @@ class MenuCharacterEditorState extends MusicBeatState {
 		UILocale.translate = function(k:String, f:String):String return Language.getPhrase(k, f);
 		UIFonts.register('assets/fonts/vcr.ttf');
 
-		// Stage-attached with viewport auto-sync: the UI tracks window resizes/fullscreen (FlxG.game
-		// is only offset by the scale mode, never scaled, so above-game attachment would not scale).
-		uiRoot = FlxSmidr.init(false);
+		uiRoot = FlxSmidr.init();
 		FlxSmidr.autoBlockMouse = true;
-		var fpsCounter = Main.fpsVar;
-		if (fpsCounter != null && fpsCounter.parent == FlxG.stage)
-			FlxG.stage.setChildIndex(uiRoot, FlxG.stage.getChildIndex(fpsCounter));
 
 		// Character type selector (was a radio group in a small box).
 		var typeW:Float = 420;
-		var typePanel:UIPanel = new UIPanel(typeW, 44, UITheme.panel);
+		var typePanel:UIPanel = new UIPanel(typeW, 44, PANEL);
 		typePanel.x = 40;
 		typePanel.y = FlxG.height - 230;
 		uiRoot.content.addChild(typePanel);
@@ -116,7 +111,7 @@ class MenuCharacterEditorState extends MusicBeatState {
 		var boxY:Float = FlxG.height - 265;
 		var rowW:Float = boxW - PAD * 2;
 
-		var panel:UIPanel = new UIPanel(boxW, boxH, UITheme.panel);
+		var panel:UIPanel = new UIPanel(boxW, boxH, PANEL);
 		panel.x = boxX;
 		panel.y = boxY;
 		uiRoot.content.addChild(panel);

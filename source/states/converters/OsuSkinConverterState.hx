@@ -52,20 +52,15 @@ class OsuSkinConverterState extends MusicBeatState {
 		UILocale.translate = function(k:String, f:String):String return Language.getPhrase(k, f);
 		UIFonts.register('assets/fonts/vcr.ttf');
 
-		// Stage-attached with viewport auto-sync: the UI tracks window resizes/fullscreen (FlxG.game
-		// is only offset by the scale mode, never scaled, so above-game attachment would not scale).
-		uiRoot = FlxSmidr.init(false);
+		uiRoot = FlxSmidr.init();
 		FlxSmidr.autoBlockMouse = true;
-		var fpsCounter = Main.fpsVar;
-		if (fpsCounter != null && fpsCounter.parent == FlxG.stage)
-			FlxG.stage.setChildIndex(uiRoot, FlxG.stage.getChildIndex(fpsCounter));
 
 		var title:UILabel = new UILabel('osu!Mania SKIN CONVERTER', 22, 0);
 		title.x = 20;
 		title.y = 18;
 		uiRoot.content.addChild(title);
 
-		var panel:UIPanel = new UIPanel(ZONE_W, ZONE_H, UITheme.panel);
+		var panel:UIPanel = new UIPanel(ZONE_W, ZONE_H, PANEL);
 		panel.x = ZONE_X;
 		panel.y = ZONE_Y;
 		uiRoot.content.addChild(panel);

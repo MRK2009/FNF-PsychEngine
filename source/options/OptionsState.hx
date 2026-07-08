@@ -151,12 +151,12 @@ class OptionsState extends MusicBeatState {
 
 	/** Builds the static chrome: panels, title/header/hint labels, category rail and the scroll pane. **/
 	function buildChrome():Void {
-		var railPanel:UIPanel = new UIPanel(RAIL_W, PANEL_H, UITheme.panel);
+		var railPanel:UIPanel = new UIPanel(RAIL_W, PANEL_H, PANEL);
 		railPanel.x = RAIL_X;
 		railPanel.y = PANEL_Y;
 		uiRoot.content.addChild(railPanel);
 
-		var contentPanel:UIPanel = new UIPanel(CONTENT_W, PANEL_H, UITheme.panel);
+		var contentPanel:UIPanel = new UIPanel(CONTENT_W, PANEL_H, PANEL);
 		contentPanel.x = CONTENT_X;
 		contentPanel.y = PANEL_Y;
 		uiRoot.content.addChild(contentPanel);

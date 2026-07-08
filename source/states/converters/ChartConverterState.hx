@@ -164,7 +164,7 @@ class ChartConverterState extends MusicBeatState {
 		uiRoot.content.addChild(backupCheck);
 
 		// Rail panel + scrollable list of scopes.
-		var railPanel:UIPanel = new UIPanel(RAIL_W, PANEL_H, UITheme.panel);
+		var railPanel:UIPanel = new UIPanel(RAIL_W, PANEL_H, PANEL);
 		railPanel.x = RAIL_X;
 		railPanel.y = PANEL_Y;
 		uiRoot.content.addChild(railPanel);
@@ -175,7 +175,7 @@ class ChartConverterState extends MusicBeatState {
 		uiRoot.content.addChild(railPane);
 
 		// Content panel + fixed header band.
-		var contentPanel:UIPanel = new UIPanel(CONTENT_W, PANEL_H, UITheme.panel);
+		var contentPanel:UIPanel = new UIPanel(CONTENT_W, PANEL_H, PANEL);
 		contentPanel.x = CONTENT_X;
 		contentPanel.y = PANEL_Y;
 		uiRoot.content.addChild(contentPanel);

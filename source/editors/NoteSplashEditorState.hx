@@ -89,13 +89,8 @@ class NoteSplashEditorState extends MusicBeatState {
 		UILocale.translate = function(k:String, f:String):String return Language.getPhrase(k, f);
 		UIFonts.register('assets/fonts/vcr.ttf');
 
-		// Stage-attached with viewport auto-sync: the UI tracks window resizes/fullscreen (FlxG.game
-		// is only offset by the scale mode, never scaled, so above-game attachment would not scale).
-		uiRoot = FlxSmidr.init(false);
+		uiRoot = FlxSmidr.init();
 		FlxSmidr.autoBlockMouse = true;
-		var fpsCounter = Main.fpsVar;
-		if (fpsCounter != null && fpsCounter.parent == FlxG.stage)
-			FlxG.stage.setChildIndex(uiRoot, FlxG.stage.getChildIndex(fpsCounter));
 
 		addPropertiesTab();
 		addAnimTab();
@@ -126,7 +121,7 @@ class NoteSplashEditorState extends MusicBeatState {
 
 	/** Builds a titled panel and returns its widget container (positioned inside the panel). **/
 	function makePanel(x:Float, y:Float, w:Float, h:Float, title:String):Sprite {
-		var panel:UIPanel = new UIPanel(w, h, UITheme.panel);
+		var panel:UIPanel = new UIPanel(w, h, PANEL);
 		panel.x = x;
 		panel.y = y;
 		uiRoot.content.addChild(panel);
