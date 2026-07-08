@@ -1017,6 +1017,7 @@ local hitMap = {}
 local cache = {}
 local hitDir = ''
 local enabled = false
+local offset = 0
 
 function onCreatePost()
 	enabled = getModSetting('osu_hitsounds', '"
@@ -1027,7 +1028,7 @@ function onCreatePost()
 			+ opts.packName
 			+ "/sounds/osu_' .. songPath .. '_hit/'
 
-	local offset = ClientPrefs.data.noteOffset
+	offset = ClientPrefs.data.noteOffset
 	local evs = game.eventNotes
 	if evs == nil then return end
 	for i = 1, #evs do
@@ -1057,9 +1058,10 @@ end
 
 function goodNoteHit(id, noteData, noteType, isSustainNote)
 	if not enabled or isSustainNote then return end
-	local note = game.notes.members[id + 1]
+	-- v2: the callback id is always -1; the engine exposes the judged note on game.lastJudgedNote
+	local note = game.lastJudgedNote
 	if note == nil then return end
-	local data = hitMap[math.floor(note.strumTime + 0.5)]
+	local data = hitMap[math.floor((note.time - offset) + 0.5)]
 	if data ~= nil then playHits(data) end
 end
 ";

@@ -50,6 +50,7 @@ class ScriptRules {
 		{re: ~/\bunspawnNotes\b/, kind: COMPAT_ONLY, appliesTo: BOTH, message: 'unspawnNotes (whole pre-spawned chart) exists only under compatibilityMode, via the legacy proxy.', suggestion: 'Native v2: read game.playerField.notes / game.opponentField.notes (NoteData list).'},
 
 		// ---- Write-through mirrors under compatibilityMode ----------------------------------
+		{re: ~/\bnotes\.members\s*\[/, kind: REMOVED, appliesTo: BOTH, message: 'Indexing game.notes.members by the callback id no longer works: v2 note callbacks always pass id = -1 (there is no member index anymore).', suggestion: 'Read game.lastJudgedNote (the judged NoteData: time/type/length/...) inside the hit/miss callbacks instead.'},
 		{re: ~/\bnotes\.members\b/, kind: COMPAT_ONLY, appliesTo: BOTH, message: 'game.notes is a compatibilityMode mirror; visual writes (x/y/alpha/angle with copyX etc. off, offsetX/offsetY/multAlpha/multSpeed) now propagate to the real v2 drawables, but structural add/remove does not.', suggestion: 'Prefer the v2 fields / note types; native v2 reads game.playerField / opponentField.'},
 		{re: ~/\bplayerStrums\b|\bopponentStrums\b|\bstrumLineNotes\b/, kind: COMPAT_ONLY, appliesTo: BOTH, message: 'The strum groups are compatibilityMode mirrors; x/y/alpha/angle writes now move the real receptors, but other props stay read-only.', suggestion: 'Native v2: move/scale the real strums via playerReceptors / opponentReceptors.'},
 
