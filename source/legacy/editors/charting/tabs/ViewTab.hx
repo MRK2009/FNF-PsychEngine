@@ -1,7 +1,7 @@
 package legacy.editors.charting.tabs;
 
 import flixel.util.FlxStringUtil;
-import editors.content.Prompt;
+import legacy.editors.content.Prompt;
 import legacy.editors.ChartingState;
 import legacy.editors.ChartingState.ChartingTheme;
 import legacy.editors.ChartingState.WaveformTarget;

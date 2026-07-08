@@ -1,6 +1,8 @@
 package editors.content;
 
-import flixel.util.FlxDestroyUtil;
+import smidr.UITheme;
+import smidr.widgets.UIButton;
+import smidr.widgets.UIModal;
 
 // Exit confirmation prompt used on all editors, for convenience
 class ExitConfirmationPrompt extends Prompt {
@@ -12,11 +14,15 @@ class ExitConfirmationPrompt extends Prompt {
 			if (finishCallback != null)
 				finishCallback();
 		}, 'Exit');
+		yesDanger = true;
 	}
 }
 
 // A Simple Prompt with "OK" and "Cancel" that covers most case usages
 class Prompt extends BasePrompt {
+	/** Renders the confirm button as the destructive variant (exit/delete prompts). **/
+	public var yesDanger:Bool = false;
+
 	var yesFunction:Void->Void;
 	var noFunction:Void->Void;
 	var _yesTxt:String = 'OK';
@@ -29,27 +35,28 @@ class Prompt extends BasePrompt {
 			this._noTxt = _noTxt;
 		this.yesFunction = yesFunction;
 		this.noFunction = noFunction;
-		super(title, promptCreate);
+		super(420, 170, title, promptCreate);
 	}
 
 	function promptCreate(_) {
-		var btnY = 390;
-		var btn:PsychUIButton = new PsychUIButton(0, btnY, _yesTxt, function() {
+		var bw:Float = 130;
+		var bh:Float = 30;
+		var gap:Float = 24;
+		var btnY:Float = modal.h - UITheme.px(40) - bh - 16;
+
+		var yes:UIButton = new UIButton(_yesTxt, bw, bh, function() {
 			yesFunction();
 			close();
-		});
-		btn.normalStyle.bgColor = FlxColor.RED;
-		btn.normalStyle.textColor = FlxColor.WHITE;
-		btn.screenCenter(X);
-		btn.x -= 100;
-		btn.cameras = cameras;
-		add(btn);
+		}, !yesDanger);
+		yes.danger = yesDanger;
+		yes.x = modal.w / 2 - bw - gap / 2;
+		yes.y = btnY;
+		modal.body.addChild(yes);
 
-		var btn:PsychUIButton = new PsychUIButton(0, btnY, _noTxt, close);
-		btn.screenCenter(X);
-		btn.x += 100;
-		btn.cameras = cameras;
-		add(btn);
+		var no:UIButton = new UIButton(_noTxt, bw, bh, close);
+		no.x = modal.w / 2 + gap / 2;
+		no.y = btnY;
+		modal.body.addChild(no);
 	}
 
 	override function close() {
@@ -59,6 +66,13 @@ class Prompt extends BasePrompt {
 	}
 }
 
+/**
+	Base for editor dialogs on the SmidrUI overlay: a `UIModal` opened on the active root, with
+	the substate providing modality to the flixel state underneath. Builders add widgets to
+	`modal.body` (panel-local coordinates, origin below the title). Escape / backdrop clicks
+	close both the modal and this substate. (The legacy chart editor keeps its own PsychUI
+	version at `legacy.editors.content.Prompt`.)
+**/
 class BasePrompt extends MusicBeatSubstate {
 	var _sizeX:Float = 0;
 	var _sizeY:Float = 0;
@@ -66,6 +80,12 @@ class BasePrompt extends MusicBeatSubstate {
 
 	public var onCreate:BasePrompt->Void;
 	public var onUpdate:BasePrompt->Float->Void;
+
+	/** The dialog panel; builders parent their widgets into `modal.body`. **/
+	public var modal:UIModal;
+
+	var _closed:Bool = false;
+	var _pendingClose:Bool = false;
 
 	public function new(?sizeX:Float = 420, ?sizeY:Float = 160, title:String, ?onCreate:BasePrompt->Void, ?onUpdate:BasePrompt->Float->Void) {
 		this._sizeX = sizeX;
@@ -76,48 +96,58 @@ class BasePrompt extends MusicBeatSubstate {
 		super();
 	}
 
-	public var bg:FlxSprite;
-	public var titleText:FlxText;
-
 	override function create() {
-		cameras = [FlxG.cameras.list[FlxG.cameras.list.length - 1]];
-		bg = new FlxSprite().makeGraphic(1, 1, FlxColor.BLACK);
-		bg.alpha = 0.8;
-		bg.scale.set(_sizeX, _sizeY);
-		bg.updateHitbox();
-		bg.screenCenter();
-		bg.cameras = cameras;
-		add(bg);
+		modal = new UIModal(_title, _sizeX, _sizeY);
+		modal.onClosed = function() {
+			// Escape / backdrop path: the modal is already gone, take the substate with it.
+			modal = null;
+			if (!_closed) {
+				_closed = true;
+				close();
+			}
+		};
+		modal.open();
 
-		titleText = new FlxText(0, bg.y + 30, 400, _title, 16);
-		titleText.screenCenter(X);
-		titleText.alignment = CENTER;
-		titleText.cameras = cameras;
-		add(titleText);
-
-		if (onCreate != null)
+		if (modal.parent == null) {
+			// No SmidrUI root attached in this state: nothing can render the dialog, bail out.
+			modal = null;
+			_pendingClose = true;
+		} else if (onCreate != null)
 			onCreate(this);
 		super.create();
 	}
 
-	var _blockInput:Float = 0.1;
-
 	override function update(elapsed:Float) {
 		super.update(elapsed);
-
-		_blockInput = Math.max(0, _blockInput - elapsed);
-		if (_blockInput <= 0 && FlxG.keys.justPressed.ESCAPE) {
+		if (_pendingClose) {
+			_pendingClose = false;
 			close();
 			return;
 		}
-
 		if (onUpdate != null)
 			onUpdate(this, elapsed);
 	}
 
+	override function close() {
+		if (!_closed) {
+			_closed = true;
+			if (modal != null) {
+				var m:UIModal = modal;
+				modal = null;
+				m.onClosed = null;
+				m.close();
+			}
+		}
+		super.close();
+	}
+
 	override function destroy() {
-		for (member in members)
-			FlxDestroyUtil.destroy(member);
+		if (modal != null) {
+			var m:UIModal = modal;
+			modal = null;
+			m.onClosed = null;
+			m.close();
+		}
 		super.destroy();
 	}
 }

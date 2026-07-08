@@ -1,6 +1,6 @@
 package legacy.editors.charting.tabs;
 
-import editors.content.Prompt;
+import legacy.editors.content.Prompt;
 import legacy.editors.ChartingState;
 import legacy.editors.ChartingState.UndoAction;
 

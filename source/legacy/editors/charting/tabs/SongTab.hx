@@ -1,7 +1,7 @@
 package legacy.editors.charting.tabs;
 
 import backend.StageData;
-import editors.content.Prompt;
+import legacy.editors.content.Prompt;
 import legacy.editors.ChartingState;
 
 /**

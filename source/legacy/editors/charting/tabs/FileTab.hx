@@ -4,7 +4,7 @@ import haxe.Json;
 import haxe.Exception;
 import backend.Song;
 import editors.charting.VSlice;
-import editors.content.Prompt;
+import legacy.editors.content.Prompt;
 import editors.content.PsychJsonPrinter;
 import legacy.editors.ChartingState;
 
