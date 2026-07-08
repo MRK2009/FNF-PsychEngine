@@ -72,9 +72,17 @@ class ScriptScanner {
 		var lines:Array<String> = src.split('\n');
 		var commentLead:String = (kind == LUA) ? '-- ' : '// ';
 		var out:Array<String> = [];
+		var inLong:Bool = false; // inside a Lua [[ ]] long string / --[[ ]] long comment (LUA only)
 
 		for (i in 0...lines.length) {
 			var line:String = lines[i];
+			// State at the START of the line: a line whose flagged token lives inside an open long string
+			// (e.g. the embedded Haxe of a `runHaxeCode([[ ... ]])`) must NOT get a Lua `--` comment
+			// inserted above it -- that lands inside the string and corrupts the embedded code.
+			var startedInside:Bool = inLong;
+			if (kind == LUA)
+				inLong = advanceLongString(line, inLong);
+
 			var hits:Array<ScanIssue> = [];
 			for (rule in rules) {
 				if (rule.re.match(line)) {
@@ -89,10 +97,12 @@ class ScriptScanner {
 				}
 			}
 			if (hits.length > 0) {
+				var annotate:Bool = !startedInside;
 				var indent:String = line.substr(0, line.length - line.ltrim().length);
 				for (h in hits) {
 					issues.push(h);
-					out.push(indent + commentLead + 'COMPAT(' + h.severity + '): ' + annotationText(h));
+					if (annotate)
+						out.push(indent + commentLead + 'COMPAT(' + h.severity + '): ' + annotationText(h));
 				}
 			}
 			out.push(line);
@@ -103,6 +113,46 @@ class ScriptScanner {
 	/** The one-line advice written above a flagged line (message, plus the suggestion when present). **/
 	static inline function annotationText(issue:ScanIssue):String {
 		return (issue.suggestion != null && issue.suggestion.length > 0) ? issue.message + ' ' + issue.suggestion : issue.message;
+	}
+
+	/**
+		Tracks Lua long-bracket regions (`[[ ]]` strings and `--[[ ]]` comments) across a line so the
+		annotator can tell whether a flagged token sits inside embedded text (e.g. a `runHaxeCode` block).
+		A best-effort single-level scan -- it does not model `[=[`/`]=]` levels or brackets that appear
+		inside quoted strings, which Psych scripts effectively never mix with a `runHaxeCode` payload.
+		@param line the source line
+		@param inside whether a long-bracket region was already open at the line's start
+		@return whether a long-bracket region is still open at the line's end
+	**/
+	static function advanceLongString(line:String, inside:Bool):Bool {
+		var i:Int = 0;
+		var len:Int = line.length;
+		while (i < len) {
+			if (inside) {
+				if (line.charCodeAt(i) == ']'.code && i + 1 < len && line.charCodeAt(i + 1) == ']'.code) {
+					inside = false;
+					i += 2;
+					continue;
+				}
+			} else {
+				if (line.charCodeAt(i) == '['.code && i + 1 < len && line.charCodeAt(i + 1) == '['.code) {
+					inside = true;
+					i += 2;
+					continue;
+				}
+				// A `--` starts either a `--[[` long comment (opens a region) or a line comment (rest ignored).
+				if (line.charCodeAt(i) == '-'.code && i + 1 < len && line.charCodeAt(i + 1) == '-'.code) {
+					if (i + 3 < len && line.charCodeAt(i + 2) == '['.code && line.charCodeAt(i + 3) == '['.code) {
+						inside = true;
+						i += 4;
+						continue;
+					}
+					break; // line comment -- nothing after it can open a long string
+				}
+			}
+			i++;
+		}
+		return inside;
 	}
 
 	#if sys
@@ -161,20 +211,37 @@ class ScriptScanner {
 			return 0;
 		var summary:StringBuf = new StringBuf();
 		var written:Int = 0;
+		var totalRenames:Int = 0;
+		var totalResidual:Int = 0;
 		for (file in report.files) {
 			var ext:String = haxe.io.Path.extension(file.fullPath);
+			var kind:Null<ScriptKind> = kindForExt(ext);
+			if (kind == null)
+				continue;
+
+			// Auto-fix the safe renames in place, then annotate ONLY what couldn't be rewritten
+			// (compat-only mirrors, removed APIs, patterns) on the rewritten source.
+			var src:String = File.getContent(file.fullPath);
+			var rewritten:ScriptRewriter.RewriteResult = ScriptRewriter.rewrite(src, kind);
+			var residual:ScanReport = analyze(rewritten.text, kind);
+
 			var outPath:String = file.fullPath.substr(0, file.fullPath.length - (ext.length + 1)) + '.converted.' + ext;
-			File.saveContent(outPath, file.report.annotated);
+			File.saveContent(outPath, residual.annotated);
 			written++;
-			summary.add('${file.relPath}  (${file.report.issues.length} issue(s))\n');
-			for (issue in file.report.issues)
+			totalRenames += rewritten.changes;
+			totalResidual += residual.issues.length;
+
+			summary.add('${file.relPath}  (${rewritten.changes} auto-fixed, ${residual.issues.length} left)\n');
+			for (issue in residual.issues)
 				summary.add('  L${issue.line} [${issue.severity}/${issue.kind.label()}] ${issue.match}: ${annotationText(issue)}\n');
 			summary.add('\n');
 		}
 		File.saveContent(haxe.io.Path.join([report.root, 'script-convert-report.txt']),
-			'Script conversion report\nFiles with issues: ${report.files.length}\nTotal issues: ${report.total}\n\n'
-			+ 'NOTE: Legacy support is removed in v2.0.0. Migrate these scripts, or set\n'
-			+ '"compatibilityMode": true in this pack\'s pack.json to keep it on the legacy layer until then.\n\n'
+			'Script conversion report\nFiles processed: ${report.files.length}\n'
+			+ 'Auto-fixed substitutions: $totalRenames\nIssues left to migrate by hand: $totalResidual\n\n'
+			+ 'The .converted.* copies have the safe renames applied; remaining lines are commented with\n'
+			+ 'COMPAT(...) advice. Legacy support runs when a pack sets "legacyMode": true (or\n'
+			+ '"compatibilityMode": true) in pack.json; the strum groups + note fields work there.\n\n'
 			+ summary.toString());
 		return written;
 	}

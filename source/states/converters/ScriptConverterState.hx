@@ -74,6 +74,9 @@ class ScriptConverterState extends MusicBeatState {
 	/** The most recent scan, or null before the first scan. **/
 	var lastReport:FolderReport = null;
 
+	/** Two-stage guard for the Convert button: the first click arms, the second actually writes. **/
+	var convertArmed:Bool = false;
+
 	override function create():Void {
 		backend.Mods.allowCurrentModAssets = true;
 		persistentUpdate = true;
@@ -148,9 +151,9 @@ class ScriptConverterState extends MusicBeatState {
 		scanBtn.y = 74;
 		uiRoot.content.addChild(scanBtn);
 
-		exportBtn = new UIButton('Export annotated copies', 250, 34, exportNow);
+		exportBtn = new UIButton('Convert scripts', 250, 34, attemptConvert);
 		exportBtn.fontSize = 15;
-		exportBtn.tooltip = 'Write annotated *.converted copies + a report next to the scripts. Your originals are never modified.';
+		exportBtn.tooltip = 'Write converted *.converted copies + a report next to the scripts. Your originals are never modified.';
 		exportBtn.x = CONTENT_X + 132;
 		exportBtn.y = 74;
 		exportBtn.visible = false;
@@ -258,6 +261,7 @@ class ScriptConverterState extends MusicBeatState {
 			railButtons[n].accent = (n == curMod);
 		scrollRailTo(i);
 		lastReport = null;
+		disarmConvert();
 		exportBtn.visible = false;
 		flagBtn.visible = false;
 		bannerLabel.text = '';
@@ -285,6 +289,7 @@ class ScriptConverterState extends MusicBeatState {
 			return;
 		FlxG.sound.play(Paths.sound('confirmMenu'), 0.6);
 		#if sys
+		disarmConvert();
 		var folder:String = modFolders[curMod];
 		lastReport = ScriptScanner.scanFolder(Paths.mods(folder));
 		rebuildResults();
@@ -429,16 +434,37 @@ class ScriptConverterState extends MusicBeatState {
 		}
 	}
 
-	/** Writes the annotated copies + report for the current scan (never touches originals). **/
-	function exportNow():Void {
+	/**
+		Convert button handler. Scanning only detects; conversion is this explicit, opt-in action.
+		The first click arms the button (asks for confirmation) and the second click writes the
+		converted copies -- the originals are never touched.
+	**/
+	function attemptConvert():Void {
 		if (lastReport == null || lastReport.total == 0)
 			return;
 		#if sys
+		if (!convertArmed) {
+			convertArmed = true;
+			exportBtn.label = 'Click again to convert';
+			exportBtn.danger = true;
+			UIToast.show('Attempt conversion? This writes *.converted copies + a report next to your scripts (originals untouched). Click again to confirm.');
+			return;
+		}
+		disarmConvert();
 		var written:Int = ScriptScanner.exportFolder(lastReport);
-		UIToast.show('Wrote ' + written + ' annotated copy(ies) + report to ' + modFolders[curMod] + '.');
+		UIToast.show('Converted ' + written + ' script(s) to *.converted copies + report in ' + modFolders[curMod] + '.');
 		#else
-		UIToast.show('Exporting is only available on desktop.');
+		UIToast.show('Converting is only available on desktop.');
 		#end
+	}
+
+	/** Resets the Convert button to its unarmed state (label + styling). **/
+	function disarmConvert():Void {
+		convertArmed = false;
+		if (exportBtn != null) {
+			exportBtn.label = 'Convert scripts';
+			exportBtn.danger = false;
+		}
 	}
 
 	/** Sets `"compatibilityMode": true` in the selected pack's pack.json (opt onto the legacy layer). **/
