@@ -8,13 +8,27 @@ import haxe.Json;
 import objects.MenuCharacter;
 import editors.content.Prompt;
 import editors.content.PsychJsonPrinter;
+import smidr.UIRoot;
+import smidr.UITheme;
+import smidr.UIFonts;
+import smidr.UILocale;
+import smidr.input.UIFocus;
+import smidr.widgets.UIButton;
+import smidr.widgets.UICheckbox;
+import smidr.widgets.UILabel;
+import smidr.widgets.UIPanel;
+import smidr.widgets.UISegmented;
+import smidr.widgets.UIStepper;
+import smidr.widgets.UITextInput;
 
-class MenuCharacterEditorState extends MusicBeatState implements PsychUIEventHandler.PsychUIEvent {
+class MenuCharacterEditorState extends MusicBeatState {
 	var grpWeekCharacters:FlxTypedGroup<MenuCharacter>;
 	var characterFile:MenuCharacterFile = null;
 	var txtOffsets:FlxText;
 	var defaultCharacters:Array<String> = ['dad', 'bf', 'gf'];
 	var unsavedProgress:Bool = false;
+
+	var uiRoot:UIRoot;
 
 	override function create() {
 		characterFile = {
@@ -65,92 +79,154 @@ class MenuCharacterEditorState extends MusicBeatState implements PsychUIEventHan
 		#end
 	}
 
-	var UI_typebox:PsychUIBox;
-	var UI_mainbox:PsychUIBox;
+	/** Layers the UI root above the game view but below the FPS counter. **/
+	function attachRoot():Void {
+		var fps = Main.fpsVar;
+		if (fps != null && fps.parent != null)
+			uiRoot.attach(fps.parent, fps.parent.getChildIndex(fps));
+		else
+			uiRoot.attach(FlxG.stage);
+	}
+
+	function onGameResized(_:Int, _:Int):Void
+		syncViewport();
+
+	function syncViewport():Void {
+		var sm = FlxG.scaleMode;
+		uiRoot.setViewport(sm.offset.x, sm.offset.y, sm.scale.x, sm.scale.y);
+	}
+
+	static inline var PAD:Int = 10;
+
+	var charType:Int = 0;
+	var typeSegment:UISegmented;
 
 	function addEditorBox() {
-		UI_typebox = new PsychUIBox(100, FlxG.height - 230, 120, 180, ['Character Type']);
-		UI_typebox.scrollFactor.set();
-		addTypeUI();
-		add(UI_typebox);
+		UILocale.translate = function(k:String, f:String):String return Language.getPhrase(k, f);
+		UIFonts.register('assets/fonts/vcr.ttf');
 
-		UI_mainbox = new PsychUIBox(FlxG.width - 340, FlxG.height - 265, 240, 215, ['Character']);
-		UI_mainbox.scrollFactor.set();
-		addCharacterUI();
-		add(UI_mainbox);
+		uiRoot = new UIRoot();
+		attachRoot();
+		syncViewport();
+		FlxG.signals.gameResized.add(onGameResized);
 
-		var loadButton:PsychUIButton = new PsychUIButton(0, 480, "Load Character", function() {
-			loadCharacter();
+		// Character type selector (was a radio group in a small box).
+		var typeW:Float = 420;
+		var typePanel:UIPanel = new UIPanel(typeW, 44, UITheme.panel);
+		typePanel.x = 40;
+		typePanel.y = FlxG.height - 230;
+		uiRoot.content.addChild(typePanel);
+
+		typeSegment = new UISegmented('Character Type:', typeW - PAD * 2, ['Opponent', 'Boyfriend', 'Girlfriend'], function(i:Int) {
+			charType = i;
+			updateCharacters();
 		});
-		loadButton.screenCenter(X);
-		loadButton.x -= 60;
-		add(loadButton);
+		typeSegment.boxWidth = 250;
+		typeSegment.x = typePanel.x + PAD;
+		typeSegment.y = typePanel.y + PAD;
+		uiRoot.content.addChild(typeSegment);
 
-		var saveButton:PsychUIButton = new PsychUIButton(0, 480, "Save Character", function() {
-			saveCharacter();
+		// Character properties box.
+		var boxW:Float = 280;
+		var boxH:Float = 236;
+		var boxX:Float = FlxG.width - boxW - 40;
+		var boxY:Float = FlxG.height - 265;
+		var rowW:Float = boxW - PAD * 2;
+
+		var panel:UIPanel = new UIPanel(boxW, boxH, UITheme.panel);
+		panel.x = boxX;
+		panel.y = boxY;
+		uiRoot.content.addChild(panel);
+
+		var header:UILabel = new UILabel('Character', 14, 0);
+		header.x = boxX + PAD;
+		header.y = boxY + 8;
+		uiRoot.content.addChild(header);
+
+		var rowY:Float = boxY + 32;
+		imageInputText = new UITextInput('Image file name:', rowW, characterFile.image, function(v:String) {
+			characterFile.image = v;
+			unsavedProgress = true;
 		});
-		saveButton.screenCenter(X);
-		saveButton.x += 60;
-		add(saveButton);
-	}
+		imageInputText.x = boxX + PAD;
+		imageInputText.y = rowY;
+		uiRoot.content.addChild(imageInputText);
 
-	var characterTypeRadio:PsychUIRadioGroup;
+		idleInputText = new UITextInput('Idle anim (.XML):', rowW, characterFile.idle_anim, function(v:String) {
+			characterFile.idle_anim = v;
+			unsavedProgress = true;
+		});
+		idleInputText.x = boxX + PAD;
+		idleInputText.y = rowY + 32;
+		uiRoot.content.addChild(idleInputText);
 
-	function addTypeUI() {
-		var tab_group = UI_typebox.getTab('Character Type').menu;
+		confirmInputText = new UITextInput('Start Press anim:', rowW, characterFile.confirm_anim, function(v:String) {
+			characterFile.confirm_anim = v;
+			unsavedProgress = true;
+		});
+		confirmInputText.x = boxX + PAD;
+		confirmInputText.y = rowY + 64;
+		uiRoot.content.addChild(confirmInputText);
 
-		characterTypeRadio = new PsychUIRadioGroup(10, 20, ['Opponent', 'Boyfriend', 'Girlfriend'], 40);
-		characterTypeRadio.checked = 0;
-		characterTypeRadio.onClick = updateCharacters;
-		tab_group.add(characterTypeRadio);
-	}
+		scaleStepper = new UIStepper('Scale:', rowW, 1, 0.05, function(v:Float) {
+			characterFile.scale = v;
+			reloadSelectedCharacter();
+			unsavedProgress = true;
+		});
+		scaleStepper.min = 0.1;
+		scaleStepper.max = 30;
+		scaleStepper.decimals = 2;
+		scaleStepper.x = boxX + PAD;
+		scaleStepper.y = rowY + 96;
+		uiRoot.content.addChild(scaleStepper);
 
-	var imageInputText:PsychUIInputText;
-	var idleInputText:PsychUIInputText;
-	var confirmInputText:PsychUIInputText;
-	var scaleStepper:PsychUINumericStepper;
-	var flipXCheckbox:PsychUICheckBox;
-	var antialiasingCheckbox:PsychUICheckBox;
+		flipXCheckbox = new UICheckbox("Flip X", (rowW - 10) / 2, false, function(checked:Bool) {
+			grpWeekCharacters.members[charType].flipX = checked;
+			characterFile.flipX = checked;
+			unsavedProgress = true;
+		});
+		flipXCheckbox.x = boxX + PAD;
+		flipXCheckbox.y = rowY + 128;
+		uiRoot.content.addChild(flipXCheckbox);
 
-	function addCharacterUI() {
-		var tab_group = UI_mainbox.getTab('Character').menu;
+		antialiasingCheckbox = new UICheckbox("Antialiasing", (rowW - 10) / 2, grpWeekCharacters.members[charType].antialiasing, function(checked:Bool) {
+			grpWeekCharacters.members[charType].antialiasing = checked;
+			characterFile.antialiasing = checked;
+			unsavedProgress = true;
+		});
+		antialiasingCheckbox.x = boxX + PAD + (rowW - 10) / 2 + 10;
+		antialiasingCheckbox.y = rowY + 128;
+		uiRoot.content.addChild(antialiasingCheckbox);
 
-		imageInputText = new PsychUIInputText(10, 20, 80, characterFile.image, 8);
-		idleInputText = new PsychUIInputText(10, imageInputText.y + 35, 100, characterFile.idle_anim, 8);
-		confirmInputText = new PsychUIInputText(10, idleInputText.y + 35, 100, characterFile.confirm_anim, 8);
-
-		flipXCheckbox = new PsychUICheckBox(10, confirmInputText.y + 30, "Flip X", 100);
-		flipXCheckbox.onClick = function() {
-			grpWeekCharacters.members[characterTypeRadio.checked].flipX = flipXCheckbox.checked;
-			characterFile.flipX = flipXCheckbox.checked;
-		};
-
-		antialiasingCheckbox = new PsychUICheckBox(10, flipXCheckbox.y + 30, "Antialiasing", 100);
-		antialiasingCheckbox.checked = grpWeekCharacters.members[characterTypeRadio.checked].antialiasing;
-		antialiasingCheckbox.onClick = function() {
-			grpWeekCharacters.members[characterTypeRadio.checked].antialiasing = antialiasingCheckbox.checked;
-			characterFile.antialiasing = antialiasingCheckbox.checked;
-		};
-
-		var reloadImageButton:PsychUIButton = new PsychUIButton(140, confirmInputText.y + 30, "Reload Char", function() {
+		var reloadImageButton:UIButton = new UIButton("Reload Char", rowW, 26, function() {
 			reloadSelectedCharacter();
 		});
+		reloadImageButton.x = boxX + PAD;
+		reloadImageButton.y = rowY + 162;
+		uiRoot.content.addChild(reloadImageButton);
 
-		scaleStepper = new PsychUINumericStepper(140, imageInputText.y, 0.05, 1, 0.1, 30, 2);
+		// Load / Save row (was two floating PsychUIButtons).
+		var loadButton:UIButton = new UIButton("Load Character", 150, 28, function() {
+			loadCharacter();
+		});
+		loadButton.x = FlxG.width / 2 - 160;
+		loadButton.y = 480;
+		uiRoot.content.addChild(loadButton);
 
-		var confirmDescText = new FlxText(10, confirmInputText.y - 18, 0, 'Start Press animation on the .XML:');
-		tab_group.add(new FlxText(10, imageInputText.y - 18, 0, 'Image file name:'));
-		tab_group.add(new FlxText(10, idleInputText.y - 18, 0, 'Idle animation on the .XML:'));
-		tab_group.add(new FlxText(scaleStepper.x, scaleStepper.y - 18, 0, 'Scale:'));
-		tab_group.add(flipXCheckbox);
-		tab_group.add(antialiasingCheckbox);
-		tab_group.add(reloadImageButton);
-		tab_group.add(confirmDescText);
-		tab_group.add(imageInputText);
-		tab_group.add(idleInputText);
-		tab_group.add(confirmInputText);
-		tab_group.add(scaleStepper);
+		var saveButton:UIButton = new UIButton("Save Character", 150, 28, function() {
+			saveCharacter();
+		}, true);
+		saveButton.x = FlxG.width / 2 + 10;
+		saveButton.y = 480;
+		uiRoot.content.addChild(saveButton);
 	}
+
+	var imageInputText:UITextInput;
+	var idleInputText:UITextInput;
+	var confirmInputText:UITextInput;
+	var scaleStepper:UIStepper;
+	var flipXCheckbox:UICheckbox;
+	var antialiasingCheckbox:UICheckbox;
 
 	function updateCharacters() {
 		for (i in 0...3) {
@@ -163,12 +239,12 @@ class MenuCharacterEditorState extends MusicBeatState implements PsychUIEventHan
 	}
 
 	function reloadSelectedCharacter() {
-		var char:MenuCharacter = grpWeekCharacters.members[characterTypeRadio.checked];
+		var char:MenuCharacter = grpWeekCharacters.members[charType];
 
 		char.alpha = 1;
 		char.frames = Paths.getSparrowAtlas('menucharacters/' + characterFile.image);
 		char.animation.addByPrefix('idle', characterFile.idle_anim, 24);
-		if (characterTypeRadio.checked == 1)
+		if (charType == 1)
 			char.animation.addByPrefix('confirm', characterFile.confirm_anim, 24, false);
 		char.flipX = (characterFile.flipX == true);
 
@@ -183,64 +259,42 @@ class MenuCharacterEditorState extends MusicBeatState implements PsychUIEventHan
 		#end
 	}
 
-	public function UIEvent(id:String, sender:Dynamic) {
-		if (id == PsychUICheckBox.CLICK_EVENT)
-			unsavedProgress = true;
-
-		if (id == PsychUIInputText.CHANGE_EVENT && (sender is PsychUIInputText)) {
-			if (sender == imageInputText) {
-				characterFile.image = imageInputText.text;
-				unsavedProgress = true;
-			} else if (sender == idleInputText) {
-				characterFile.idle_anim = idleInputText.text;
-				unsavedProgress = true;
-			} else if (sender == confirmInputText) {
-				characterFile.confirm_anim = confirmInputText.text;
-				unsavedProgress = true;
-			}
-		} else if (id == PsychUINumericStepper.CHANGE_EVENT && (sender is PsychUINumericStepper)) {
-			if (sender == scaleStepper) {
-				characterFile.scale = scaleStepper.value;
-				reloadSelectedCharacter();
-				unsavedProgress = true;
-			}
-		}
-	}
-
 	override function update(elapsed:Float) {
-		if (PsychUIInputText.focusOn == null) {
+		if (UIFocus.focused == null) {
 			ClientPrefs.toggleVolumeKeys(true);
-			if (FlxG.keys.justPressed.ESCAPE || controls.BACK) {
-				if (!unsavedProgress) {
-					MusicBeatState.switchState(new editors.MasterEditorMenu());
-					FlxG.sound.playMusic(Paths.music('freakyMenu'));
-				} else
-					openSubState(new ExitConfirmationPrompt());
-			}
+			if (!UIRoot.overlayOpen) {
+				if (FlxG.keys.justPressed.ESCAPE || controls.BACK) {
+					if (!unsavedProgress) {
+						MusicBeatState.switchState(new editors.MasterEditorMenu());
+						FlxG.sound.playMusic(Paths.music('freakyMenu'));
+					} else
+						openSubState(new ExitConfirmationPrompt());
+				}
 
-			var shiftMult:Int = 1;
-			if (FlxG.keys.pressed.SHIFT)
-				shiftMult = 10;
+				var shiftMult:Int = 1;
+				if (FlxG.keys.pressed.SHIFT)
+					shiftMult = 10;
 
-			if (FlxG.keys.justPressed.LEFT) {
-				characterFile.position[0] += shiftMult;
-				updateOffset();
-			}
-			if (FlxG.keys.justPressed.RIGHT) {
-				characterFile.position[0] -= shiftMult;
-				updateOffset();
-			}
-			if (FlxG.keys.justPressed.UP) {
-				characterFile.position[1] += shiftMult;
-				updateOffset();
-			}
-			if (FlxG.keys.justPressed.DOWN) {
-				characterFile.position[1] -= shiftMult;
-				updateOffset();
-			}
+				if (FlxG.keys.justPressed.LEFT) {
+					characterFile.position[0] += shiftMult;
+					updateOffset();
+				}
+				if (FlxG.keys.justPressed.RIGHT) {
+					characterFile.position[0] -= shiftMult;
+					updateOffset();
+				}
+				if (FlxG.keys.justPressed.UP) {
+					characterFile.position[1] += shiftMult;
+					updateOffset();
+				}
+				if (FlxG.keys.justPressed.DOWN) {
+					characterFile.position[1] -= shiftMult;
+					updateOffset();
+				}
 
-			if (FlxG.keys.justPressed.SPACE && characterTypeRadio.checked == 1) {
-				grpWeekCharacters.members[characterTypeRadio.checked].animation.play('confirm', true);
+				if (FlxG.keys.justPressed.SPACE && charType == 1) {
+					grpWeekCharacters.members[charType].animation.play('confirm', true);
+				}
 			}
 		} else
 			ClientPrefs.toggleVolumeKeys(false);
@@ -253,7 +307,7 @@ class MenuCharacterEditorState extends MusicBeatState implements PsychUIEventHan
 	}
 
 	function updateOffset() {
-		var char:MenuCharacter = grpWeekCharacters.members[characterTypeRadio.checked];
+		var char:MenuCharacter = grpWeekCharacters.members[charType];
 		char.offset.set(characterFile.position[0], characterFile.position[1]);
 		txtOffsets.text = '' + characterFile.position;
 	}
@@ -291,8 +345,8 @@ class MenuCharacterEditorState extends MusicBeatState implements PsychUIEventHan
 					characterFile = loadedChar;
 					reloadSelectedCharacter();
 					imageInputText.text = characterFile.image;
-					idleInputText.text = characterFile.image;
-					confirmInputText.text = characterFile.image;
+					idleInputText.text = characterFile.idle_anim;
+					confirmInputText.text = characterFile.confirm_anim;
 					scaleStepper.value = characterFile.scale;
 					updateOffset();
 					_file = null;
@@ -369,5 +423,15 @@ class MenuCharacterEditorState extends MusicBeatState implements PsychUIEventHan
 		_file.removeEventListener(IOErrorEvent.IO_ERROR, onSaveError);
 		_file = null;
 		FlxG.log.error("Problem saving file");
+	}
+
+	override function destroy() {
+		FlxG.signals.gameResized.remove(onGameResized);
+		ClientPrefs.toggleVolumeKeys(true);
+		if (uiRoot != null) {
+			uiRoot.dispose();
+			uiRoot = null;
+		}
+		super.destroy();
 	}
 }
