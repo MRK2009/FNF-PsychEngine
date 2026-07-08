@@ -39,6 +39,45 @@ class NoteSplashEditorState extends MusicBeatState {
 
 	var splash:NoteSplash;
 
+	var helpModal:smidr.widgets.UIModal = null;
+
+	/** Opens (or closes, when already open) the F1 keybind reference as a SmidrUI modal. **/
+	function toggleHelpModal():Void {
+		if (helpModal != null) {
+			helpModal.close();
+			return;
+		}
+
+		var modal = editors.content.EditorHelp.open('Note Splash Editor Help', [
+			{
+				title: 'PREVIEW',
+				lines: ['Click on a Strum or press Space to spawn a Splash']
+			},
+			{
+				title: 'OFFSETS',
+				lines: [
+					'Arrow Keys - Move Offset',
+					'Hold Shift - Move Offsets 10x faster',
+					'Ctrl + C - Copy Current Offset',
+					'Ctrl + V - Paste Copied Offset on Current Splash',
+					'Ctrl + R - Reset Current Offset'
+				]
+			},
+			{
+				title: 'NOTE DATAS',
+				lines: [
+					'LEFT: 0   DOWN: 1   UP: 2   RIGHT: 3',
+					'Every 4 subsequent note datas add an extra set of animations'
+				]
+			}
+		]);
+		helpModal = modal;
+		modal.onClosed = function() {
+			if (helpModal == modal)
+				helpModal = null;
+		};
+	}
+
 	var uiRoot:UIRoot;
 
 	static inline var PAD:Int = 10;
@@ -608,11 +647,13 @@ class NoteSplashEditorState extends MusicBeatState {
 				splash();
 		}
 
+		// F1 toggles the help modal even while it is open (the modal also closes on Escape).
+		if (UIFocus.focused == null && FlxG.keys.justPressed.F1)
+			toggleHelpModal();
+
 		if (!blockInput) {
 			if (controls.BACK)
 				MusicBeatState.switchState(new MasterEditorMenu());
-			if (FlxG.keys.justPressed.F1)
-				openSubState(new NoteSplashEditorHelpSubState());
 		}
 
 		if (!FlxSmidr.mouseBlocked && FlxG.mouse.overlaps(strums)) {
@@ -915,59 +956,3 @@ class NoteSplashEditorState extends MusicBeatState {
 	}
 }
 
-class NoteSplashEditorHelpSubState extends MusicBeatSubstate {
-	public function new() {
-		super();
-
-		var bg:FlxSprite = new FlxSprite().makeGraphic(FlxG.width, FlxG.height, FlxColor.BLACK);
-		bg.alpha = 0.6;
-		add(bg);
-
-		var str:Array<String> = [
-			"Click on a Strum or Press Space",
-			"to spawn a Splash",
-			"",
-			"Arrow Keys - Move Offset",
-			"Hold Shift - Move Offsets 10x faster",
-			"",
-			"Ctrl + C - Copy Current Offset",
-			"Ctrl + V - Paste Copied Offset on Current Splash",
-			"Ctrl + R - Reset Current Offset",
-			"",
-			"On every 4 subsequent note datas",
-			"an extra set of animations will be added"
-		];
-
-		var helpTexts:FlxSpriteGroup = new FlxSpriteGroup();
-		for (i => txt in str) {
-			if (txt.length < 1)
-				continue;
-
-			var helpText:FlxText = new FlxText(0, 0, 0, txt, 24);
-			helpText.setFormat(null, 24, FlxColor.WHITE, CENTER, OUTLINE_FAST, FlxColor.BLACK);
-			helpText.borderColor = FlxColor.BLACK;
-			helpText.scrollFactor.set();
-			helpText.borderSize = 1;
-			helpText.screenCenter();
-			add(helpText);
-			helpText.y += ((i - str.length / 2) * 32) + 16;
-			helpTexts.add(helpText);
-		}
-		add(helpTexts);
-
-		var noteDataText:FlxText = new FlxText();
-		noteDataText.setFormat(null, 24, FlxColor.WHITE, RIGHT, OUTLINE_FAST, FlxColor.BLACK);
-		noteDataText.text = "NOTE DATAS:\nLEFT: 0\nDOWN: 1\nUP: 2\nRIGHT: 3";
-		noteDataText.x = FlxG.width - noteDataText.width - 5;
-		noteDataText.y = FlxG.height - noteDataText.height - 5;
-
-		add(noteDataText);
-	}
-
-	override function update(elapsed:Float) {
-		super.update(elapsed);
-
-		if (controls.BACK || FlxG.keys.justPressed.F1)
-			close();
-	}
-}

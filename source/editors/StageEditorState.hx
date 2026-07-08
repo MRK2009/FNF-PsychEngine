@@ -63,8 +63,7 @@ class StageEditorState extends MusicBeatState {
 	var lastLoadedStage:String;
 	var camFollow:FlxObject = new FlxObject(0, 0, 1, 1);
 
-	var helpBg:FlxSprite;
-	var helpTexts:FlxSpriteGroup;
+	var helpModal:smidr.widgets.UIModal = null;
 	var posTxt:FlxText;
 	var outputTxt:FlxText;
 
@@ -126,7 +125,6 @@ class StageEditorState extends MusicBeatState {
 		add(camFollow);
 		updateSpriteList();
 
-		addHelpScreen();
 		FlxG.mouse.visible = true;
 		animationEditor = new StageEditorAnimationSubstate();
 
@@ -145,52 +143,42 @@ class StageEditorState extends MusicBeatState {
 
 	var showSelectionQuad:Bool = true;
 
-	function addHelpScreen() {
+	/** Opens (or closes, when already open) the F1 keybind reference as a SmidrUI modal. **/
+	function toggleHelpModal():Void {
+		if (helpModal != null) {
+			helpModal.close();
+			return;
+		}
+
 		#if FLX_DEBUG
 		var btn = 'F3';
 		#else
 		var btn = 'F2';
 		#end
 
-		var str:Array<String> = [
-			"E/Q - Camera Zoom In/Out",
-			"J/K/L/I - Move Camera",
-			"R - Reset Camera Zoom",
-			"Arrow Keys/Mouse & Right Click - Move Object",
-			"",
-			'$btn - Toggle HUD',
-			"F12 - Toggle Selection Rectangle",
-			"Hold Shift - Move Objects and Camera 4x faster",
-			"Hold Control - Move Objects pixel-by-pixel and Camera 4x slower"
-		];
-
-		helpBg = new FlxSprite().makeGraphic(1, 1, FlxColor.BLACK);
-		helpBg.scale.set(FlxG.width, FlxG.height);
-		helpBg.updateHitbox();
-		helpBg.alpha = 0.6;
-		helpBg.cameras = [camHUD];
-		helpBg.active = helpBg.visible = false;
-		add(helpBg);
-
-		helpTexts = new FlxSpriteGroup();
-		helpTexts.cameras = [camHUD];
-		for (i => txt in str) {
-			if (txt.length < 1)
-				continue;
-
-			var helpText:FlxText = new FlxText(0, 0, 680, txt, 16);
-			helpText.setFormat(null, 16, FlxColor.WHITE, CENTER, OUTLINE_FAST, FlxColor.BLACK);
-			helpText.borderColor = FlxColor.BLACK;
-			helpText.scrollFactor.set();
-			helpText.borderSize = 1;
-			helpText.screenCenter();
-			add(helpText);
-			helpText.y += ((i - str.length / 2) * 32) + 16;
-			helpText.active = false;
-			helpTexts.add(helpText);
-		}
-		helpTexts.active = helpTexts.visible = false;
-		add(helpTexts);
+		var modal = editors.content.EditorHelp.open('Stage Editor Help', [
+			{
+				title: 'CAMERA',
+				lines: ['E/Q - Camera Zoom In/Out', 'J/K/L/I - Move Camera', 'R - Reset Camera Zoom']
+			},
+			{
+				title: 'OBJECTS',
+				lines: [
+					'Arrow Keys/Mouse & Right Click - Move Object',
+					'Hold Shift - Move Objects and Camera 4x faster',
+					'Hold Control - Move Objects pixel-by-pixel and Camera 4x slower'
+				]
+			},
+			{
+				title: 'OTHER',
+				lines: ['$btn - Toggle HUD', 'F12 - Toggle Selection Rectangle']
+			}
+		]);
+		helpModal = modal;
+		modal.onClosed = function() {
+			if (helpModal == modal)
+				helpModal = null;
+		};
 	}
 
 	function updateSpriteList() {
@@ -1492,7 +1480,14 @@ class StageEditorState extends MusicBeatState {
 		outputTime = Math.max(0, outputTime - elapsed);
 		outputTxt.alpha = outputTime;
 
-		if (UIFocus.focused != null || UIRoot.overlayOpen)
+		if (UIFocus.focused != null)
+			return;
+
+		// F1 toggles the help modal even while it is open (the modal also closes on Escape).
+		if (FlxG.keys.justPressed.F1)
+			toggleHelpModal();
+
+		if (UIRoot.overlayOpen)
 			return;
 
 		if (FlxG.keys.justPressed.ESCAPE || controls.BACK) {
@@ -1508,11 +1503,6 @@ class StageEditorState extends MusicBeatState {
 			selectSpriteRow(FlxMath.wrap(spriteListChecked - 1, 0, spriteListLabels.length - 1));
 		} else if (FlxG.keys.justPressed.S) {
 			selectSpriteRow(FlxMath.wrap(spriteListChecked + 1, 0, spriteListLabels.length - 1));
-		}
-
-		if (FlxG.keys.justPressed.F1 || (helpBg.visible && FlxG.keys.justPressed.ESCAPE)) {
-			helpBg.visible = !helpBg.visible;
-			helpTexts.visible = helpBg.visible;
 		}
 
 		#if FLX_DEBUG

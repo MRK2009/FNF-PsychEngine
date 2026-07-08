@@ -187,7 +187,7 @@ class CharacterEditorState extends MusicBeatState {
 			return;
 		}
 
-		var sections:Array<{title:String, lines:Array<String>}> = [
+		var modal:UIModal = editors.content.EditorHelp.open('Character Editor Help', [
 			{
 				title: 'CAMERA',
 				lines: ['E/Q - Camera Zoom In/Out', 'J/K/L/I - Move Camera', 'R - Reset Camera Zoom']
@@ -213,34 +213,12 @@ class CharacterEditorState extends MusicBeatState {
 					'Hold Control - Move camera 4x slower'
 				]
 			}
-		];
-
-		var modal:UIModal = new UIModal('Character Editor Help', 620, 460);
+		]);
 		helpModal = modal;
 		modal.onClosed = function() {
 			if (helpModal == modal)
 				helpModal = null;
 		};
-
-		var y:Float = 6;
-		for (section in sections) {
-			var head:UILabel = new UILabel(section.title, 14, 0);
-			head.colorOverride = UITheme.accent;
-			head.x = 24;
-			head.y = y;
-			modal.body.addChild(head);
-			y += 26;
-			for (line in section.lines) {
-				var lbl:UILabel = new UILabel(line, 12, 1);
-				lbl.x = 36;
-				lbl.y = y;
-				modal.body.addChild(lbl);
-				y += 20;
-			}
-			y += 12;
-		}
-
-		modal.open();
 	}
 
 	function addCharacter(reload:Bool = false) {
