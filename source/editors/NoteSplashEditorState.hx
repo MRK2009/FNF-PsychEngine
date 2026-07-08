@@ -10,6 +10,20 @@ import openfl.events.Event;
 import openfl.events.IOErrorEvent;
 import openfl.net.FileReference;
 import haxe.Json;
+import openfl.display.Sprite;
+import smidr.UIRoot;
+import smidr.flixel.FlxSmidr;
+import smidr.UITheme;
+import smidr.UIFonts;
+import smidr.UILocale;
+import smidr.input.UIFocus;
+import smidr.widgets.UIButton;
+import smidr.widgets.UICheckbox;
+import smidr.widgets.UIDropdown;
+import smidr.widgets.UILabel;
+import smidr.widgets.UIPanel;
+import smidr.widgets.UIStepper;
+import smidr.widgets.UITextInput;
 
 @:access(objects.NoteSplash)
 class NoteSplashEditorState extends MusicBeatState {
@@ -25,9 +39,12 @@ class NoteSplashEditorState extends MusicBeatState {
 
 	var splash:NoteSplash;
 
-	var UI:PsychUIBox;
-	var properUI:PsychUIBox;
-	var shaderUI:PsychUIBox;
+	var uiRoot:UIRoot;
+
+	static inline var PAD:Int = 10;
+	static inline var ANIM_W:Int = 300;
+	static inline var PROP_W:Int = 290;
+	static inline var SHADER_W:Int = 210;
 
 	override function create() {
 		if (imageSkin == null)
@@ -47,33 +64,6 @@ class NoteSplashEditorState extends MusicBeatState {
 		bg.scrollFactor.set();
 		bg.color = 0xFF505050;
 		add(bg);
-
-		UI = new PsychUIBox(0, 0, 0, 0, ["Animation"]);
-		UI.canMove = UI.canMinimize = false;
-		UI.y += 20;
-		UI.x = FlxG.width - 300;
-		UI.resize(290, 240);
-
-		properUI = new PsychUIBox(0, 0, 0, 0, ["Properties"]);
-		properUI.canMove = properUI.canMinimize = false;
-		properUI.resize(280, 210);
-		properUI.y += 20;
-		properUI.x = UI.x - properUI.width - 5;
-		add(properUI);
-		add(UI);
-
-		shaderUI = new PsychUIBox(0, 0, 0, 0, ["Shader"]);
-		shaderUI.canMove = shaderUI.canMinimize = false;
-		shaderUI.resize(160, 180);
-		shaderUI.x = FlxG.width - shaderUI.width - 10;
-		shaderUI.y = UI.y + UI.height + 10;
-		add(shaderUI);
-
-		var tipText:FlxText = new FlxText();
-		tipText.setFormat(null, 24);
-		tipText.text = "Press F1 for Help";
-		tipText.setPosition(properUI.x - properUI.width + 15, UI.y);
-		add(tipText);
 
 		for (i in 0...4) {
 			var babyArrow:StrumNote = new StrumNote(-273, 50, i % 4, 1);
@@ -96,9 +86,21 @@ class NoteSplashEditorState extends MusicBeatState {
 
 		parseRGB();
 
+		UILocale.translate = function(k:String, f:String):String return Language.getPhrase(k, f);
+		UIFonts.register('assets/fonts/vcr.ttf');
+
+		uiRoot = FlxSmidr.init();
+		FlxSmidr.autoBlockMouse = true;
+
 		addPropertiesTab();
 		addAnimTab();
 		addShadersTab();
+
+		var tipText:FlxText = new FlxText();
+		tipText.setFormat(null, 24);
+		tipText.text = "Press F1 for Help";
+		tipText.setPosition(20, 20);
+		add(tipText);
 
 		errorText = new FlxText();
 		errorText.setFormat(null, 16, FlxColor.RED);
@@ -115,49 +117,73 @@ class NoteSplashEditorState extends MusicBeatState {
 		add(curText);
 
 		super.create();
-
-		#if mobile
-		addTouchPad('FULL', 'A_B');
-		#end
 	}
 
-	var animDropDown:PsychUIDropDownMenu;
+	/** Builds a titled panel and returns its widget container (positioned inside the panel). **/
+	function makePanel(x:Float, y:Float, w:Float, h:Float, title:String):Sprite {
+		var panel:UIPanel = new UIPanel(w, h, UITheme.panel);
+		panel.x = x;
+		panel.y = y;
+		uiRoot.content.addChild(panel);
+
+		var header:UILabel = new UILabel(title, 14, 0);
+		header.x = x + PAD;
+		header.y = y + 8;
+		uiRoot.content.addChild(header);
+
+		var pane:Sprite = new Sprite();
+		pane.x = x + PAD;
+		pane.y = y + 30;
+		uiRoot.content.addChild(pane);
+		return pane;
+	}
+
+	var animDropDown:UIDropdown;
+	var animItems:Array<String> = [];
 	var curAnim:String;
-	var addButton:PsychUIButton;
-	var curAnimText = null;
-	var numericStepperData:PsychUINumericStepper;
-	var templateButton:PsychUIButton;
+	var addButton:UIButton;
+	var curAnimText:UITextInput = null;
+	var numericStepperData:UIStepper;
+	var templateButton:UIButton;
 
 	function addAnimTab() {
-		var UI = UI.getTab("Animation").menu;
+		var pane:Sprite = makePanel(FlxG.width - ANIM_W - 10, 20, ANIM_W, 260, 'Animation');
+		var rowW:Float = ANIM_W - PAD * 2;
+		var halfW:Float = (rowW - 10) / 2;
 
-		UI.add(new FlxText(20, 20, 0, "Animation Name:", 8));
-		var name_input:PsychUIInputText = new PsychUIInputText(20, 37.5, 100, "", 8);
-		name_input.name = "name_input";
+		var name_input:UITextInput = new UITextInput('Animation Name:', rowW, '');
 		curAnimText = name_input;
-		UI.add(name_input);
+		name_input.y = 32;
+		pane.addChild(name_input);
 
-		UI.add(new FlxText(name_input.x, name_input.y + 30, 0, "Animation Prefix:", 8));
-		var prefix_input:PsychUIInputText = new PsychUIInputText(20, name_input.y + 47.5, 100, "", 8);
-		UI.add(prefix_input);
+		var prefix_input:UITextInput = new UITextInput('Animation Prefix:', rowW, '');
+		prefix_input.y = 64;
+		pane.addChild(prefix_input);
 
-		UI.add(new FlxText(150, 20, 0, "Note Data:"));
-		numericStepperData = new PsychUINumericStepper(150, 37.5, 1, .0, .0, 999, 0);
-		UI.add(numericStepperData);
+		var indices_input:UITextInput = new UITextInput('Indices (OPTIONAL):', rowW, '');
+		indices_input.y = 96;
+		pane.addChild(indices_input);
 
-		UI.add(new FlxText(150, name_input.y + 30, 0, "Indices (OPTIONAL):"));
-		var indices_input:PsychUIInputText = new PsychUIInputText(150, name_input.y + 47.5, 100, "", 8);
-		UI.add(indices_input);
+		numericStepperData = new UIStepper('Note Data:', rowW, 0, 1);
+		numericStepperData.min = 0;
+		numericStepperData.max = 999;
+		numericStepperData.y = 128;
+		pane.addChild(numericStepperData);
 
-		UI.add(new FlxText(20, 110, 0, "Minimum FPS:"));
-		var minFps:PsychUINumericStepper = new PsychUINumericStepper(20, 127.5, 1, 22, 1, 120);
-		UI.add(minFps);
+		var minFps:UIStepper = new UIStepper('Min FPS:', halfW, 22, 1);
+		minFps.min = 1;
+		minFps.max = 120;
+		minFps.y = 160;
+		pane.addChild(minFps);
 
-		UI.add(new FlxText(150, 110, 0, "Maximum FPS:"));
-		var maxFps:PsychUINumericStepper = new PsychUINumericStepper(150, 127.5, 1, 26, 1, 120);
-		UI.add(maxFps);
+		var maxFps:UIStepper = new UIStepper('Max FPS:', halfW, 26, 1);
+		maxFps.min = 1;
+		maxFps.max = 120;
+		maxFps.x = halfW + 10;
+		maxFps.y = 160;
+		pane.addChild(maxFps);
 
-		animDropDown = new PsychUIDropDownMenu(-155, 57, [""], function(id:Int, name:String) {
+		animDropDown = new UIDropdown('Animations:', rowW, function(id:Int, name:String) {
 			if (config != null && name.length > 0) {
 				var i = config.animations.get(name);
 				if (i != null) {
@@ -175,6 +201,7 @@ class NoteSplashEditorState extends MusicBeatState {
 				}
 			}
 		});
+		pane.addChild(animDropDown);
 
 		function setAnimDropDown() {
 			var anims:Array<String> = [];
@@ -189,8 +216,9 @@ class NoteSplashEditorState extends MusicBeatState {
 			if (curAnim == null && anims[0].length > 0)
 				curAnim = anims[0];
 
-			animDropDown.list = anims;
-			animDropDown.selectedLabel = curAnim;
+			animItems = anims;
+			animDropDown.setItems(anims.copy());
+			animDropDown.select(Std.int(Math.max(0, anims.indexOf(curAnim))));
 		}
 
 		setAnimDropDown();
@@ -208,11 +236,10 @@ class NoteSplashEditorState extends MusicBeatState {
 			maxFps.value = 26;
 			setAnimDropDown();
 			parseRGB();
-			changeShader.selectedLabel = "Red";
-			changeShader.onSelect(0, "Red");
+			selectShaderChannel('Red');
 		}
 
-		addButton = new PsychUIButton(20, 185, "Add/Update", function() {
+		addButton = new UIButton("Add/Update", halfW, 26, function() {
 			var indices:Array<Int> = [];
 			if (indices_input.text.split(',').length > 1) {
 				for (i in indices_input.text.split(',')) {
@@ -239,11 +266,11 @@ class NoteSplashEditorState extends MusicBeatState {
 			curAnim = name_input.text;
 			playStrumAnim(curAnim, cast numericStepperData.value);
 			setAnimDropDown();
-			// if (animDropDown.list)
-		});
-		UI.add(addButton);
+		}, true);
+		addButton.y = 192;
+		pane.addChild(addButton);
 
-		var removeButton:PsychUIButton = new PsychUIButton(185, 185, "Remove", function() {
+		var removeButton:UIButton = new UIButton("Remove", halfW, 26, function() {
 			if (config != null) {
 				if (config.animations.exists(curAnim)) {
 					config.animations.remove(curAnim);
@@ -257,8 +284,10 @@ class NoteSplashEditorState extends MusicBeatState {
 				}
 			}
 		});
-		UI.add(removeButton);
-		UI.add(animDropDown);
+		removeButton.danger = true;
+		removeButton.x = halfW + 10;
+		removeButton.y = 192;
+		pane.addChild(removeButton);
 
 		reloadImage = function() {
 			imageSkin = imageInputText.text;
@@ -303,72 +332,66 @@ class NoteSplashEditorState extends MusicBeatState {
 			maxFps.value = 26;
 			setAnimDropDown();
 			parseRGB();
-			changeShader.selectedLabel = "Red";
-			changeShader.onSelect(0, "Red");
+			selectShaderChannel('Red');
 		}
 	}
 
-	var imageInputText:PsychUIInputText;
-	var scaleNumericStepper:PsychUINumericStepper;
+	var imageInputText:UITextInput;
+	var scaleNumericStepper:UIStepper;
 
 	function addPropertiesTab() {
-		var ui = properUI.getTab("Properties").menu;
+		var pane:Sprite = makePanel(FlxG.width - ANIM_W - PROP_W - 20, 20, PROP_W, 230, 'Properties');
+		var rowW:Float = PROP_W - PAD * 2;
+		var halfW:Float = (rowW - 10) / 2;
 
-		ui.add(new FlxText(20, 10, 0, "Image:"));
-		imageInputText = new PsychUIInputText(60, 10, 120, imageSkin, 8);
-		ui.add(imageInputText);
+		imageInputText = new UITextInput('Image:', rowW, imageSkin);
+		pane.addChild(imageInputText);
 
-		var reloadButton:PsychUIButton = new PsychUIButton(185, 6.8, "Reload Image", function() {
+		var reloadButton:UIButton = new UIButton("Reload Image", rowW, 26, function() {
 			reloadImage();
 		});
-		ui.add(reloadButton);
+		reloadButton.y = 32;
+		pane.addChild(reloadButton);
 
-		ui.add(new FlxText(20, 40, "Scale:"));
-		scaleNumericStepper = new PsychUINumericStepper(20, 57.5, 0.1, 1, 0, 4, 2, 60);
-		ui.add(scaleNumericStepper);
+		scaleNumericStepper = new UIStepper('Scale:', rowW, 1, 0.1);
+		scaleNumericStepper.min = 0;
+		scaleNumericStepper.max = 4;
+		scaleNumericStepper.decimals = 2;
+		scaleNumericStepper.y = 66;
+		pane.addChild(scaleNumericStepper);
 
 		scaleNumericStepper.value = config != null ? config.scale : 1;
 
-		ui.add(new FlxText(130, 40, "Animations:"));
+		var allowRGBCheck:UICheckbox = new UICheckbox("Allow RGB?", halfW, config != null
+			&& cast(config.allowRGB, Null<Bool>) != null ? config.allowRGB : false, function(checked:Bool) {
+				if (config != null)
+					config.allowRGB = checked;
+			});
+		allowRGBCheck.y = 98;
+		pane.addChild(allowRGBCheck);
 
-		var saveButton:PsychUIButton = new PsychUIButton(20, 130, "Save", saveSplash);
-		ui.add(saveButton);
+		var allowPixelCheck:UICheckbox = new UICheckbox("Allow Pixel?", halfW, config != null
+			&& cast(config.allowPixel, Null<Bool>) != null ? config.allowPixel : false, function(checked:Bool) {
+				if (config != null)
+					config.allowPixel = checked;
+			});
+		allowPixelCheck.x = halfW + 10;
+		allowPixelCheck.y = 98;
+		pane.addChild(allowPixelCheck);
 
-		templateButton = new PsychUIButton(20, 155, "Template");
-		ui.add(templateButton);
+		var saveButton:UIButton = new UIButton("Save", halfW, 26, saveSplash, true);
+		saveButton.y = 132;
+		pane.addChild(saveButton);
 
-		var loadButton:PsychUIButton = new PsychUIButton(180, 155, "Convert TXT", loadTxt);
-		ui.add(loadButton);
+		templateButton = new UIButton("Template", halfW, 26);
+		templateButton.danger = true;
+		templateButton.x = halfW + 10;
+		templateButton.y = 132;
+		pane.addChild(templateButton);
 
-		var allowRGBCheck:PsychUICheckBox = new PsychUICheckBox(20, 105, "", 1);
-		function check() {
-			if (config != null)
-				config.allowRGB = allowRGBCheck.checked;
-		}
-		allowRGBCheck.onClick = check;
-		allowRGBCheck.checked = config != null && cast(config.allowRGB, Null<Bool>) != null ? config.allowRGB : false;
-
-		var rgbText = new FlxText(allowRGBCheck.x + 20, 0);
-		rgbText.text = "Allow RGB?";
-		rgbText.y = allowRGBCheck.y + 2.5;
-		ui.add(rgbText);
-
-		ui.add(allowRGBCheck);
-
-		var allowPixelCheck:PsychUICheckBox = new PsychUICheckBox(allowRGBCheck.x + 110, allowRGBCheck.y, "", 1);
-		function check() {
-			if (config != null)
-				config.allowPixel = allowPixelCheck.checked;
-		}
-		allowPixelCheck.onClick = check;
-		allowPixelCheck.checked = config != null && cast(config.allowPixel, Null<Bool>) != null ? config.allowPixel : false;
-
-		var pixelText = new FlxText(allowPixelCheck.x + 20, 0);
-		pixelText.text = "Allow Pixel?";
-		pixelText.y = allowPixelCheck.y + 2.5;
-		ui.add(pixelText);
-
-		ui.add(allowPixelCheck);
+		var loadButton:UIButton = new UIButton("Convert TXT", rowW, 26, loadTxt);
+		loadButton.y = 164;
+		pane.addChild(loadButton);
 	}
 
 	var redEnabled:Bool = true;
@@ -377,58 +400,25 @@ class NoteSplashEditorState extends MusicBeatState {
 	var redShader:Array<Int> = [0, 0, 0];
 	var greenShader:Array<Int> = [0, 0, 0];
 	var blueShader:Array<Int> = [0, 0, 0];
-	var changeShader:PsychUIDropDownMenu;
-	var defaultButton:PsychUICheckBox;
+	var changeShader:UIDropdown;
+	var curShaderChannel:String = 'Red';
+	var defaultButton:UICheckbox;
+	var shaderPane:Sprite;
 
 	function addShadersTab() {
-		var tab = shaderUI.getTab("Shader").menu;
+		shaderPane = makePanel(FlxG.width - SHADER_W - 10, 300, SHADER_W, 220, 'Shader');
+		var pane:Sprite = shaderPane;
+		var rowW:Float = SHADER_W - PAD * 2;
 
-		tab.add(new FlxText(40, 10, "Replacing Color:"));
-		tab.add(new FlxText(25, 30, "Red:"));
-		tab.add(new FlxText(25, 50, "Green:"));
-		tab.add(new FlxText(25, 70, "Blue:"));
-
-		var red = new PsychUINumericStepper(60, 30, 1, redShader[0], 0, 255, 0);
-		red.onValueChange = () -> {
-			var shader = switch (changeShader.selectedLabel) {
-				case "Red": redShader[0] = Std.int(red.value);
-				case "Green": greenShader[0] = Std.int(red.value);
-				case _: blueShader[0] = Std.int(red.value);
-			}
-			setConfigRGB();
-		};
-		tab.add(red);
-
-		var green = new PsychUINumericStepper(60, 50, 1, redShader[1], 0, 255, 0);
-		green.onValueChange = () -> {
-			var shader = switch (changeShader.selectedLabel) {
-				case "Red": redShader[1] = Std.int(green.value);
-				case "Green": greenShader[1] = Std.int(green.value);
-				case _: blueShader[1] = Std.int(green.value);
-			}
-			setConfigRGB();
-		};
-		tab.add(green);
-
-		var blue = new PsychUINumericStepper(60, 70, 1, redShader[2], 0, 255, 0);
-		blue.onValueChange = () -> {
-			var shader = switch (changeShader.selectedLabel) {
-				case "Red": redShader[2] = Std.int(blue.value);
-				case "Green": greenShader[2] = Std.int(blue.value);
-				case _: blueShader[2] = Std.int(blue.value);
-			}
-			setConfigRGB();
-		};
-		tab.add(blue);
+		var red:UIStepper = null;
+		var green:UIStepper = null;
+		var blue:UIStepper = null;
 
 		function onCheck(change:Bool = true) {
-			if (!defaultButton.checked)
-				shaderUI.alpha = 1;
-			else
-				shaderUI.alpha = 0.6;
+			pane.alpha = defaultButton.checked ? 0.6 : 1;
 
 			if (change)
-				switch (changeShader.selectedLabel) {
+				switch (curShaderChannel) {
 					case "Red":
 						redEnabled = !defaultButton.checked;
 					case "Green":
@@ -440,8 +430,8 @@ class NoteSplashEditorState extends MusicBeatState {
 			setConfigRGB();
 		}
 
-		add(new FlxText(shaderUI.x + 20, shaderUI.y + 135, 0, "Color to Replace:"));
-		changeShader = new PsychUIDropDownMenu(shaderUI.x + 20, shaderUI.y + 150, ["Red", "Green", "Blue"], function(id:Int, name:String) {
+		changeShader = new UIDropdown('Color to Replace:', rowW, function(id:Int, name:String) {
+			curShaderChannel = name;
 			var shader = switch (name) {
 				case "Red": redShader;
 				case "Green": greenShader;
@@ -452,7 +442,7 @@ class NoteSplashEditorState extends MusicBeatState {
 			green.value = shader[1];
 			blue.value = shader[2];
 
-			// changing checked doesn't initiate onCheck!!
+			// changing checked doesn't re-run onCheck, so refresh the dim state manually
 			defaultButton.checked = switch (name) {
 				case "Red": !redEnabled;
 				case "Green": !greenEnabled;
@@ -460,14 +450,62 @@ class NoteSplashEditorState extends MusicBeatState {
 			}
 			onCheck(false);
 		});
-		add(changeShader);
+		changeShader.setItems(['Red', 'Green', 'Blue']);
+		pane.addChild(changeShader);
 
-		defaultButton = new PsychUICheckBox(shaderUI.x + 30, shaderUI.y + 115, "Do not replace", 100, () -> onCheck());
-		defaultButton.text.y += 2.5;
-		add(defaultButton);
+		defaultButton = new UICheckbox("Do not replace", rowW, false, function(_) onCheck());
+		defaultButton.y = 32;
+		pane.addChild(defaultButton);
 
-		changeShader.selectedLabel = "Red";
-		changeShader.onSelect(0, "Red");
+		red = new UIStepper('Red:', rowW, redShader[0], 1, function(v:Float) {
+			switch (curShaderChannel) {
+				case "Red": redShader[0] = Std.int(v);
+				case "Green": greenShader[0] = Std.int(v);
+				case _: blueShader[0] = Std.int(v);
+			}
+			setConfigRGB();
+		});
+		red.min = 0;
+		red.max = 255;
+		red.y = 66;
+		pane.addChild(red);
+
+		green = new UIStepper('Green:', rowW, redShader[1], 1, function(v:Float) {
+			switch (curShaderChannel) {
+				case "Red": redShader[1] = Std.int(v);
+				case "Green": greenShader[1] = Std.int(v);
+				case _: blueShader[1] = Std.int(v);
+			}
+			setConfigRGB();
+		});
+		green.min = 0;
+		green.max = 255;
+		green.y = 98;
+		pane.addChild(green);
+
+		blue = new UIStepper('Blue:', rowW, redShader[2], 1, function(v:Float) {
+			switch (curShaderChannel) {
+				case "Red": redShader[2] = Std.int(v);
+				case "Green": greenShader[2] = Std.int(v);
+				case _: blueShader[2] = Std.int(v);
+			}
+			setConfigRGB();
+		});
+		blue.min = 0;
+		blue.max = 255;
+		blue.y = 130;
+		pane.addChild(blue);
+
+		selectShaderChannel('Red');
+	}
+
+	/** Re-selects a shader channel and replays its dropdown callback (used by template/reload). **/
+	function selectShaderChannel(name:String):Void {
+		if (changeShader == null)
+			return;
+		changeShader.select(['Red', 'Green', 'Blue'].indexOf(name));
+		if (changeShader.onSelect != null)
+			changeShader.onSelect(['Red', 'Green', 'Blue'].indexOf(name), name);
 	}
 
 	dynamic function reloadImage() // Dynamic because needs to be changed later
@@ -502,7 +540,7 @@ class NoteSplashEditorState extends MusicBeatState {
 			config.scale = scaleNumericStepper.value;
 		}
 
-		var blockInput:Bool = PsychUIInputText.focusOn != null;
+		var blockInput:Bool = (UIFocus.focused != null) || UIRoot.overlayOpen;
 		if (!blockInput && config != null && config.animations != null && config.animations.exists(curAnim) && curAnim != null && curAnim.length > 0) {
 			function splash() {
 				if (config.animations.get(curAnim) != null) {
@@ -574,7 +612,7 @@ class NoteSplashEditorState extends MusicBeatState {
 				openSubState(new NoteSplashEditorHelpSubState());
 		}
 
-		if (FlxG.mouse.overlaps(strums)) {
+		if (!FlxSmidr.mouseBlocked && FlxG.mouse.overlaps(strums)) {
 			strums.forEach(function(strum:StrumNote) {
 				if (FlxG.mouse.overlaps(strum)) {
 					if (!FlxG.mouse.justPressed) {
@@ -582,7 +620,6 @@ class NoteSplashEditorState extends MusicBeatState {
 							strum.playAnim('pressed');
 					} else {
 						strum.playAnim('confirm', true);
-						// strum.holdTimer = Math.POSITIVE_INFINITY;
 
 						var splash:NoteSplash = new NoteSplash(0, 0, imageSkin);
 						splash.inEditor = true;
@@ -801,6 +838,10 @@ class NoteSplashEditorState extends MusicBeatState {
 
 	override function destroy() {
 		NoteSplash.configs.clear();
+		if (uiRoot != null) {
+			FlxSmidr.dispose();
+			uiRoot = null;
+		}
 		super.destroy();
 
 		FlxG.sound.music.volume = 1;
