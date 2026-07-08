@@ -7,6 +7,20 @@ import objects.StrumNote;
 import flixel.group.FlxSpriteGroup.FlxTypedSpriteGroup;
 import flixel.input.keyboard.FlxKey;
 import haxe.Json;
+import smidr.UIRoot;
+import smidr.UITheme;
+import smidr.UIFonts;
+import smidr.UILocale;
+import smidr.input.UIFocus;
+import smidr.widgets.UIButton;
+import smidr.widgets.UICheckbox;
+import smidr.widgets.UIDropdown;
+import smidr.widgets.UILabel;
+import smidr.widgets.UIPanel;
+import smidr.widgets.UIScrollPane;
+import smidr.widgets.UIStepper;
+import smidr.widgets.UITabs;
+import smidr.widgets.UITextInput;
 
 using StringTools;
 
@@ -27,9 +41,12 @@ class NoteSkinEditorState extends MusicBeatState {
 
 	var infoText:FlxText;
 	var tipText:FlxText;
-	var skinDropDown:PsychUIDropDownMenu;
-	var newNameInput:PsychUIInputText;
+	var skinDropDown:UIDropdown;
+	var skinItems:Array<String> = [];
+	var newNameInput:UITextInput;
 	var notifyTimer:Float = 0;
+
+	var uiRoot:UIRoot;
 
 	inline function font()
 		return Paths.font('vcr.ttf');
@@ -216,241 +233,331 @@ class NoteSkinEditorState extends MusicBeatState {
 		group.add(l);
 	}
 
-	var box:PsychUIBox;
+	/** Layers the UI root above the game view but below the FPS counter. **/
+	function attachRoot():Void {
+		var fps = Main.fpsVar;
+		if (fps != null && fps.parent != null)
+			uiRoot.attach(fps.parent, fps.parent.getChildIndex(fps));
+		else
+			uiRoot.attach(FlxG.stage);
+	}
+
+	function onGameResized(_:Int, _:Int):Void
+		syncViewport();
+
+	function syncViewport():Void {
+		var sm = FlxG.scaleMode;
+		uiRoot.setViewport(sm.offset.x, sm.offset.y, sm.scale.x, sm.scale.y);
+	}
+
+	static inline var PAD:Int = 10;
+	static inline var BOX_W:Int = 350;
+
+	var boxTabs:UITabs;
+	var tabPanes:Array<UIScrollPane> = [];
 
 	function addUI() {
-		box = new PsychUIBox(FlxG.width - 330, 20, 320, 430, ['General', 'Properties', 'Images', 'Offsets']);
-		box.canMove = box.canMinimize = true;
-		box.scrollFactor.set();
-		add(box);
-		addGeneralTab();
-		addPropertiesTab();
-		addImagesTab();
-		addOffsetsTab();
+		UILocale.translate = function(k:String, f:String):String return Language.getPhrase(k, f);
+		UIFonts.register('assets/fonts/vcr.ttf');
+
+		uiRoot = new UIRoot();
+		attachRoot();
+		syncViewport();
+		FlxG.signals.gameResized.add(onGameResized);
+
+		var boxX:Float = FlxG.width - BOX_W - 10;
+		var boxY:Float = 20;
+
+		boxTabs = new UITabs(BOX_W, [{label: 'General'}, {label: 'Properties'}, {label: 'Images'}, {label: 'Offsets'}], function(i:Int):Void {
+			for (n in 0...tabPanes.length)
+				tabPanes[n].visible = (n == i);
+		});
+
+		var paneH:Float = 340;
+		var boxH:Float = boxTabs.h + 8 + paneH + PAD;
+
+		var panel:UIPanel = new UIPanel(BOX_W, boxH, UITheme.panel);
+		panel.x = boxX;
+		panel.y = boxY;
+		uiRoot.content.addChild(panel);
+
+		boxTabs.x = boxX;
+		boxTabs.y = boxY;
+		uiRoot.content.addChild(boxTabs);
+
+		tabPanes = [];
+		for (i in 0...4) {
+			var pane:UIScrollPane = new UIScrollPane(BOX_W - PAD * 2, paneH);
+			pane.x = boxX + PAD;
+			pane.y = boxY + boxTabs.h + 8;
+			pane.visible = false;
+			uiRoot.content.addChild(pane);
+			tabPanes.push(pane);
+		}
+
+		addGeneralTab(tabPanes[0]);
+		addPropertiesTab(tabPanes[1]);
+		addImagesTab(tabPanes[2]);
+		addOffsetsTab(tabPanes[3]);
+
+		boxTabs.select(0);
+		tabPanes[0].visible = true;
 	}
 
-	function label(t:FlxSpriteGroup, x:Float, y:Float, text:String, size:Int = 12):FlxText {
-		var f = new FlxText(x, y, 0, text, size);
-		f.setFormat(font(), size, FlxColor.WHITE);
-		t.add(f);
-		return f;
+	inline function paneRowW(pane:UIScrollPane):Float
+		return pane.w - PAD - 12;
+
+	function paneLabel(pane:UIScrollPane, x:Float, y:Float, text:String, size:Int = 11):UILabel {
+		var l:UILabel = new UILabel(text, size, 2);
+		l.x = x;
+		l.y = y;
+		pane.content.addChild(l);
+		return l;
 	}
 
-	function addGeneralTab() {
-		var t = box.getTab('General').menu;
+	function addGeneralTab(pane:UIScrollPane) {
+		var rowW:Float = paneRowW(pane);
+		var halfW:Float = (rowW - 10) / 2;
 
-		label(t, 10, 8, 'Folder skin:');
-		var skins = NoteSkinConfig.list();
-		if (skins.length < 1)
-			skins.push(skinName);
-		skinDropDown = new PsychUIDropDownMenu(10, 28, skins, function(id:Int, name:String) {
+		skinItems = NoteSkinConfig.list();
+		if (skinItems.length < 1)
+			skinItems.push(skinName);
+		skinDropDown = new UIDropdown('Folder skin:', rowW, function(id:Int, name:String) {
 			loadSkin(name);
 			refreshFields();
 		});
-		skinDropDown.selectedLabel = skinName;
+		skinDropDown.setItems(skinItems.copy());
+		skinDropDown.select(Std.int(Math.max(0, skinItems.indexOf(skinName))));
+		pane.content.addChild(skinDropDown);
 
-		var reload = new PsychUIButton(10, 62, 'Reload', function() {
+		var reload:UIButton = new UIButton('Reload', 90, 26, function() {
 			NoteSkinConfig.reset();
 			loadSkin(skinName);
 			refreshFields();
 		});
-		reload.resize(90, 26);
-		t.add(reload);
+		reload.y = 34;
+		pane.content.addChild(reload);
 
-		var saveBtn = new PsychUIButton(110, 62, 'Save', saveSkin);
-		saveBtn.resize(80, 26);
-		t.add(saveBtn);
+		var saveBtn:UIButton = new UIButton('Save', 80, 26, saveSkin, true);
+		saveBtn.x = 100;
+		saveBtn.y = 34;
+		pane.content.addChild(saveBtn);
 
-		var saveRootBtn = new PsychUIButton(200, 62, 'Save to game folder', saveToRoot);
-		saveRootBtn.resize(110, 26);
-		t.add(saveRootBtn);
+		var saveRootBtn:UIButton = new UIButton('Save to game folder', rowW - 190, 26, saveToRoot);
+		saveRootBtn.x = 190;
+		saveRootBtn.y = 34;
+		pane.content.addChild(saveRootBtn);
 
-		label(t, 10, 96, 'New skin name:', 11);
-		newNameInput = new PsychUIInputText(115, 93, 120, 'skin', 8);
-		t.add(newNameInput);
-		var createBtn = new PsychUIButton(240, 91, 'Create', createNewSkin);
-		createBtn.resize(70, 26);
-		t.add(createBtn);
+		newNameInput = new UITextInput('New skin name:', rowW - 80, 'skin');
+		newNameInput.y = 70;
+		pane.content.addChild(newNameInput);
 
-		label(t, 10, 126, 'Keys:');
-		var keysStep = new PsychUINumericStepper(60, 123, 1, 4, Mania.MIN, Mania.MAX, 0, 60);
-		keysStep.onValueChange = function() {
-			setKeyCount(Std.int(keysStep.value));
+		var createBtn:UIButton = new UIButton('Create', 70, 24, createNewSkin);
+		createBtn.x = rowW - 70;
+		createBtn.y = 70;
+		pane.content.addChild(createBtn);
+
+		var keysStep:UIStepper = new UIStepper('Keys:', halfW, 4, 1, function(v:Float) {
+			setKeyCount(Std.int(v));
 			buildPreview();
 			refreshFields();
-		};
-		t.add(keysStep);
+		});
+		keysStep.min = Mania.MIN;
+		keysStep.max = Mania.MAX;
+		keysStep.y = 104;
+		pane.content.addChild(keysStep);
 
-		var gridCheck = new PsychUICheckBox(140, 125, 'Show grid', 110);
-		gridCheck.checked = showGrid;
-		gridCheck.onClick = function() {
-			showGrid = gridCheck.checked;
+		var gridCheck:UICheckbox = new UICheckbox('Show grid', halfW, showGrid, function(v:Bool) {
+			showGrid = v;
 			destroyGroup(grid);
 			buildGrid();
-		};
-		t.add(gridCheck);
+		});
+		gridCheck.x = halfW + 10;
+		gridCheck.y = 104;
+		pane.content.addChild(gridCheck);
 
-		label(t, 10, 160, 'Grid size:');
-		var gridStep = new PsychUINumericStepper(85, 157, 4, gridSize, 8, 200, 0, 60);
-		gridStep.onValueChange = function() {
-			gridSize = Std.int(gridStep.value);
+		var gridStep:UIStepper = new UIStepper('Grid size:', halfW, gridSize, 4, function(v:Float) {
+			gridSize = Std.int(v);
 			destroyGroup(grid);
 			buildGrid();
-		};
-		t.add(gridStep);
+		});
+		gridStep.min = 8;
+		gridStep.max = 200;
+		gridStep.y = 136;
+		pane.content.addChild(gridStep);
 
-		var boundsCheck = new PsychUICheckBox(160, 159, 'Frame bounds', 130);
-		boundsCheck.checked = showBounds;
-		boundsCheck.onClick = function() {
-			showBounds = boundsCheck.checked;
+		var boundsCheck:UICheckbox = new UICheckbox('Frame bounds', halfW, showBounds, function(v:Bool) {
+			showBounds = v;
 			destroyGroup(bounds);
 			buildBounds();
-		};
-		t.add(boundsCheck);
+		});
+		boundsCheck.x = halfW + 10;
+		boundsCheck.y = 136;
+		pane.content.addChild(boundsCheck);
 
-		label(t, 10, 196, 'Save: shared skins write to', 11);
-		label(t, 10, 210, 'mods/images/noteSkins/<name>-modified/', 11);
+		paneLabel(pane, 0, 172, 'Save: shared skins write to');
+		paneLabel(pane, 0, 186, 'mods/images/noteSkins/<name>-modified/');
 
-		t.add(skinDropDown);
+		pane.refreshContent(210);
 	}
 
-	var scaleStep:PsychUINumericStepper;
-	var alphaStep:PsychUINumericStepper;
-	var confirmFpsStep:PsychUINumericStepper;
-	var angleSteps:Array<PsychUINumericStepper> = [];
-	var colorableCheck:PsychUICheckBox;
-	var rotateCheck:PsychUICheckBox;
-	var pixelCheck:PsychUICheckBox;
-	var pixelVarCheck:PsychUICheckBox;
-	var aaCheck:PsychUICheckBox;
-	var holdAACheck:PsychUICheckBox;
+	var scaleStep:UIStepper;
+	var alphaStep:UIStepper;
+	var confirmFpsStep:UIStepper;
+	var angleSteps:Array<UIStepper> = [];
+	var colorableCheck:UICheckbox;
+	var rotateCheck:UICheckbox;
+	var pixelCheck:UICheckbox;
+	var pixelVarCheck:UICheckbox;
+	var aaCheck:UICheckbox;
+	var holdAACheck:UICheckbox;
 
-	function addPropertiesTab() {
-		var t = box.getTab('Properties').menu;
+	function addPropertiesTab(pane:UIScrollPane) {
+		var rowW:Float = paneRowW(pane);
+		var halfW:Float = (rowW - 10) / 2;
 
-		label(t, 10, 10, 'Scale:');
-		scaleStep = new PsychUINumericStepper(75, 7, 0.05, 0.7, 0.05, 4, 2, 70);
-		scaleStep.onValueChange = function() {
-			config.scale = scaleStep.value;
+		scaleStep = new UIStepper('Scale:', halfW, 0.7, 0.05, function(v:Float) {
+			config.scale = v;
 			buildPreview();
-		};
-		t.add(scaleStep);
+		});
+		scaleStep.min = 0.05;
+		scaleStep.max = 4;
+		scaleStep.decimals = 2;
+		pane.content.addChild(scaleStep);
 
-		label(t, 170, 10, 'Hold alpha:');
-		alphaStep = new PsychUINumericStepper(250, 7, 0.05, 1, 0, 1, 2, 60);
-		alphaStep.onValueChange = function() {
-			config.holdAlpha = alphaStep.value;
+		alphaStep = new UIStepper('Hold alpha:', halfW, 1, 0.05, function(v:Float) {
+			config.holdAlpha = v;
 			buildPreview();
-		};
-		t.add(alphaStep);
+		});
+		alphaStep.min = 0;
+		alphaStep.max = 1;
+		alphaStep.decimals = 2;
+		alphaStep.x = halfW + 10;
+		pane.content.addChild(alphaStep);
 
-		label(t, 10, 44, 'Anim FPS:');
-		confirmFpsStep = new PsychUINumericStepper(105, 41, 1, 24, 0, 60, 0, 60);
-		confirmFpsStep.onValueChange = function() {
-			config.fps = Std.int(confirmFpsStep.value);
+		confirmFpsStep = new UIStepper('Anim FPS:', halfW, 24, 1, function(v:Float) {
+			config.fps = Std.int(v);
 			buildPreview();
-		};
-		t.add(confirmFpsStep);
+		});
+		confirmFpsStep.min = 0;
+		confirmFpsStep.max = 60;
+		confirmFpsStep.y = 32;
+		pane.content.addChild(confirmFpsStep);
 
-		colorableCheck = makeCheck(t, 10, 78, 'Colorable (RGB) - all', function(v) {
+		colorableCheck = makeCheck(pane, 0, 68, 'Colorable (RGB) - all', halfW, function(v) {
 			config.colorable = v;
 			if (imgColorableCheck != null)
 				imgColorableCheck.checked = NoteSkinConfig.colorableFor(config, elemField(curElem));
 		});
-		rotateCheck = makeCheck(t, 160, 78, 'Rotate shared', function(v) config.rotate = v);
-		pixelCheck = makeCheck(t, 10, 104, 'Pixel perfect render', function(v) config.pixel = v);
-		aaCheck = makeCheck(t, 10, 130, 'Antialiasing', function(v) config.antialiasing = v);
-		holdAACheck = makeCheck(t, 160, 130, 'Hold AA', function(v) config.holdAntialiasing = v);
-		pixelVarCheck = makeCheck(t, 10, 156, 'Has pixel variant (-pixel)', function(v) config.pixelVariant = v);
+		rotateCheck = makeCheck(pane, halfW + 10, 68, 'Rotate shared', halfW, function(v) config.rotate = v);
+		pixelCheck = makeCheck(pane, 0, 96, 'Pixel perfect render', halfW, function(v) config.pixel = v);
+		aaCheck = makeCheck(pane, halfW + 10, 96, 'Antialiasing', halfW, function(v) config.antialiasing = v);
+		holdAACheck = makeCheck(pane, 0, 124, 'Hold AA', halfW, function(v) config.holdAntialiasing = v);
+		pixelVarCheck = makeCheck(pane, halfW + 10, 124, 'Has pixel variant (-pixel)', halfW, function(v) config.pixelVariant = v);
 
-		label(t, 10, 214, 'Direction angles (L / D / U / R):', 11);
-		var labels = ['L', 'D', 'U', 'R'];
+		paneLabel(pane, 0, 160, 'Direction angles (L / D / U / R):');
+		var quarterW:Float = (rowW - 30) / 4;
+		var labels = ['L:', 'D:', 'U:', 'R:'];
+		angleSteps = [];
 		for (i in 0...4) {
-			label(t, 10 + i * 74, 234, labels[i], 11);
-			var step = new PsychUINumericStepper(28 + i * 74, 231, 15, [-90, 180, 0, 90][i], -360, 360, 0, 44);
+			var step:UIStepper = new UIStepper(labels[i], quarterW, [-90, 180, 0, 90][i], 15, null);
 			var idx = i;
-			step.onValueChange = function() {
+			step.onChange = function(v:Float) {
 				if (config.directionAngles == null)
 					config.directionAngles = [-90, 180, 0, 90];
-				config.directionAngles[idx] = step.value;
+				config.directionAngles[idx] = v;
 				buildPreview();
 			};
+			step.min = -360;
+			step.max = 360;
+			step.boxWidth = 52;
+			step.x = i * (quarterW + 10);
+			step.y = 182;
 			angleSteps.push(step);
-			t.add(step);
+			pane.content.addChild(step);
 		}
 
-		label(t, 10, 270, 'Scalars & angles are shared across all', 11);
-		label(t, 10, 284, 'keycounts; images are per keycount.', 11);
+		paneLabel(pane, 0, 218, 'Scalars & angles are shared across all');
+		paneLabel(pane, 0, 232, 'keycounts; images are per keycount.');
+
+		pane.refreshContent(256);
 	}
 
-	function makeCheck(t:FlxSpriteGroup, x:Float, y:Float, lbl:String, onSet:Bool->Void):PsychUICheckBox {
-		var c = new PsychUICheckBox(x, y, lbl, 200);
-		c.onClick = function() {
-			onSet(c.checked);
+	function makeCheck(pane:UIScrollPane, x:Float, y:Float, lbl:String, w:Float, onSet:Bool->Void):UICheckbox {
+		var c:UICheckbox = new UICheckbox(lbl, w, false, function(v:Bool) {
+			onSet(v);
 			buildPreview();
-		};
-		t.add(c);
+		});
+		c.x = x;
+		c.y = y;
+		pane.content.addChild(c);
 		return c;
 	}
 
-	var imgKeysLabel:FlxText;
-	var imgElemDrop:PsychUIDropDownMenu;
-	var imgPerDir:PsychUICheckBox;
-	var imgColorableCheck:PsychUICheckBox;
-	var imgAnimatedCheck:PsychUICheckBox;
-	var imgIn:Array<PsychUIInputText> = [];
-	var imgLbl:Array<FlxText> = [];
+	var imgKeysLabel:UILabel;
+	var imgElemDrop:UIDropdown;
+	var imgPerDir:UICheckbox;
+	var imgColorableCheck:UICheckbox;
+	var imgAnimatedCheck:UICheckbox;
+	var imgIn:Array<UITextInput> = [];
 	var curElem:String = 'Note';
 	var curPerDir:Bool = false;
 
 	static final IMG_ELEMS = ['Note', 'Strum', 'Pressed', 'Confirm', 'Hold', 'End'];
 
-	function addImagesTab() {
-		var t = box.getTab('Images').menu;
-		imgKeysLabel = label(t, 8, 6, '', 11);
+	function addImagesTab(pane:UIScrollPane) {
+		var rowW:Float = paneRowW(pane);
+		var halfW:Float = (rowW - 10) / 2;
 
-		label(t, 8, 28, 'Element:', 11);
-		imgElemDrop = new PsychUIDropDownMenu(70, 24, IMG_ELEMS.copy(), function(id, name) {
+		imgKeysLabel = paneLabel(pane, 0, 0, '');
+
+		imgElemDrop = new UIDropdown('Element:', halfW, function(id, name) {
 			curElem = name;
 			loadImageInputs();
 		});
+		imgElemDrop.setItems(IMG_ELEMS.copy());
+		imgElemDrop.select(0);
+		imgElemDrop.y = 20;
+		pane.content.addChild(imgElemDrop);
 
-		imgPerDir = new PsychUICheckBox(190, 26, 'Per-direction', 130);
-		imgPerDir.onClick = function() {
-			curPerDir = imgPerDir.checked;
+		imgPerDir = new UICheckbox('Per-direction', halfW, false, function(v:Bool) {
+			curPerDir = v;
 			loadImageInputs();
-		};
-		t.add(imgPerDir);
+		});
+		imgPerDir.x = halfW + 10;
+		imgPerDir.y = 20;
+		pane.content.addChild(imgPerDir);
 
-		imgColorableCheck = new PsychUICheckBox(8, 48, 'Colorable', 150);
-		imgColorableCheck.onClick = function() {
-			setColorable(elemField(curElem), imgColorableCheck.checked);
-		};
-		t.add(imgColorableCheck);
+		imgColorableCheck = new UICheckbox('Colorable', halfW, false, function(v:Bool) {
+			setColorable(elemField(curElem), v);
+		});
+		imgColorableCheck.y = 52;
+		pane.content.addChild(imgColorableCheck);
 
-		imgAnimatedCheck = new PsychUICheckBox(165, 48, 'Animated', 150);
-		imgAnimatedCheck.onClick = function() {
-			setAnimated(elemField(curElem), imgAnimatedCheck.checked);
-		};
-		t.add(imgAnimatedCheck);
+		imgAnimatedCheck = new UICheckbox('Animated', halfW, false, function(v:Bool) {
+			setAnimated(elemField(curElem), v);
+		});
+		imgAnimatedCheck.x = halfW + 10;
+		imgAnimatedCheck.y = 52;
+		pane.content.addChild(imgAnimatedCheck);
 
-		var y:Float = 76;
+		imgIn = [];
+		var y:Float = 86;
 		for (i in 0...5) {
-			imgLbl.push(label(t, 8, y + 3, '', 11));
-			var inp = new PsychUIInputText(85, y, 150, '', 8);
+			var inp:UITextInput = new UITextInput('', rowW, '');
+			inp.y = y;
 			imgIn.push(inp);
-			t.add(inp);
-			y += 30;
+			pane.content.addChild(inp);
+			y += 32;
 		}
 
-		var apply = new PsychUIButton(8, y + 8, 'Apply images', function() applyImagesFor(curElem));
-		apply.resize(150, 26);
-		t.add(apply);
-		label(t, 8, y + 42, 'Click Apply to write. Empty = use shared', 10);
-		label(t, 8, y + 55, 'arrow. Per-direction = distinct per lane.', 10);
+		var apply:UIButton = new UIButton('Apply images', 150, 26, function() applyImagesFor(curElem), true);
+		apply.y = y + 6;
+		pane.content.addChild(apply);
+		paneLabel(pane, 0, y + 40, 'Click Apply to write. Empty = use shared');
+		paneLabel(pane, 0, y + 54, 'arrow. Per-direction = distinct per lane.');
 
-		t.add(imgElemDrop);
-		imgElemDrop.selectedLabel = 'Note';
+		pane.refreshContent(y + 80);
 	}
 
 	inline function isDirectional(elem:String):Bool
@@ -499,22 +606,20 @@ class NoteSkinEditorState extends MusicBeatState {
 		if (curPerDir) {
 			var names = ['left', 'down', 'up', 'right', 'square'];
 			for (i in 0...5) {
-				imgLbl[i].text = names[i] + ':';
+				imgIn[i].label = names[i] + ':';
 				imgIn[i].visible = true;
 				imgIn[i].text = perDirVal(field, names[i]);
 			}
 		} else if (isDirectional(curElem)) {
-			imgLbl[0].text = 'Arrow:';
-			imgLbl[4].text = 'Square:';
+			imgIn[0].label = 'Arrow:';
+			imgIn[4].label = 'Square:';
 			imgIn[0].visible = imgIn[4].visible = true;
 			imgIn[0].text = fieldArrow(field);
 			imgIn[4].text = fieldSquare(field);
-			imgLbl[1].text = imgLbl[2].text = imgLbl[3].text = '';
 		} else {
-			imgLbl[0].text = 'Image:';
+			imgIn[0].label = 'Image:';
 			imgIn[0].visible = true;
 			imgIn[0].text = fieldArrow(field);
-			imgLbl[1].text = imgLbl[2].text = imgLbl[3].text = imgLbl[4].text = '';
 		}
 	}
 
@@ -642,7 +747,7 @@ class NoteSkinEditorState extends MusicBeatState {
 			tipText.text = 'Hover a strum = pressed, click = confirm';
 		}
 
-		var blockInput:Bool = PsychUIInputText.focusOn != null;
+		var blockInput:Bool = (UIFocus.focused != null) || UIRoot.overlayOpen;
 		if (!blockInput && controls.BACK) {
 			NoteSkinConfig.editorOverride = null;
 			NoteSkinConfig.pixelMode = false;
@@ -668,6 +773,11 @@ class NoteSkinEditorState extends MusicBeatState {
 	override function destroy() {
 		NoteSkinConfig.editorOverride = null;
 		NoteSkinConfig.pixelMode = false;
+		FlxG.signals.gameResized.remove(onGameResized);
+		if (uiRoot != null) {
+			uiRoot.dispose();
+			uiRoot = null;
+		}
 		super.destroy();
 
 		FlxG.sound.muteKeys = [FlxKey.ZERO];
@@ -675,49 +785,65 @@ class NoteSkinEditorState extends MusicBeatState {
 		FlxG.sound.volumeUpKeys = [FlxKey.NUMPADPLUS, FlxKey.PLUS];
 	}
 
-	var offElemDrop:PsychUIDropDownMenu;
-	var offDirDrop:PsychUIDropDownMenu;
-	var offX:PsychUINumericStepper;
-	var offY:PsychUINumericStepper;
+	var offElemDrop:UIDropdown;
+	var offDirDrop:UIDropdown;
+	var offX:UIStepper;
+	var offY:UIStepper;
+	var curOffElem:String = 'Note';
+	var curOffDir:String = 'left';
 
 	static final OFF_ELEMS = ['Note', 'Strum', 'Hold'];
 
-	function addOffsetsTab() {
-		var t = box.getTab('Offsets').menu;
+	function addOffsetsTab(pane:UIScrollPane) {
+		var rowW:Float = paneRowW(pane);
+		var halfW:Float = (rowW - 10) / 2;
 
-		label(t, 10, 10, 'Nudge art per direction to center it.', 11);
+		paneLabel(pane, 0, 0, 'Nudge art per direction to center it.');
 
-		label(t, 10, 40, 'Element:');
-		offElemDrop = new PsychUIDropDownMenu(75, 36, OFF_ELEMS.copy(), function(id, name) loadOffsetSteppers());
-		label(t, 10, 74, 'Direction:');
-		offDirDrop = new PsychUIDropDownMenu(85, 70, ['left', 'down', 'up', 'right', 'square'], function(id, name) loadOffsetSteppers());
+		offElemDrop = new UIDropdown('Element:', rowW, function(id, name) {
+			curOffElem = name;
+			loadOffsetSteppers();
+		});
+		offElemDrop.setItems(OFF_ELEMS.copy());
+		offElemDrop.select(0);
+		offElemDrop.y = 22;
+		pane.content.addChild(offElemDrop);
 
-		label(t, 10, 112, 'X:');
-		offX = new PsychUINumericStepper(35, 109, 1, 0, -300, 300, 0, 70);
-		offX.onValueChange = function() applyOffsetSteppers();
-		t.add(offX);
+		offDirDrop = new UIDropdown('Direction:', rowW, function(id, name) {
+			curOffDir = name;
+			loadOffsetSteppers();
+		});
+		offDirDrop.setItems(['left', 'down', 'up', 'right', 'square']);
+		offDirDrop.select(0);
+		offDirDrop.y = 54;
+		pane.content.addChild(offDirDrop);
 
-		label(t, 130, 112, 'Y:');
-		offY = new PsychUINumericStepper(155, 109, 1, 0, -300, 300, 0, 70);
-		offY.onValueChange = function() applyOffsetSteppers();
-		t.add(offY);
+		offX = new UIStepper('X:', halfW, 0, 1, function(_) applyOffsetSteppers());
+		offX.min = -300;
+		offX.max = 300;
+		offX.y = 90;
+		pane.content.addChild(offX);
 
-		var resetBtn = new PsychUIButton(10, 145, 'Reset this', function() {
+		offY = new UIStepper('Y:', halfW, 0, 1, function(_) applyOffsetSteppers());
+		offY.min = -300;
+		offY.max = 300;
+		offY.x = halfW + 10;
+		offY.y = 90;
+		pane.content.addChild(offY);
+
+		var resetBtn:UIButton = new UIButton('Reset this', 100, 26, function() {
 			offX.value = 0;
 			offY.value = 0;
 			applyOffsetSteppers();
 		});
-		resetBtn.resize(100, 26);
-		t.add(resetBtn);
+		resetBtn.y = 124;
+		pane.content.addChild(resetBtn);
 
-		label(t, 10, 185, 'Offsets are shared across keycounts,', 11);
-		label(t, 10, 199, 'keyed by direction.', 11);
+		paneLabel(pane, 0, 160, 'Offsets are shared across keycounts,');
+		paneLabel(pane, 0, 174, 'keyed by direction.');
 
-		t.add(offElemDrop);
-		t.add(offDirDrop);
+		pane.refreshContent(198);
 
-		offElemDrop.selectedLabel = 'Note';
-		offDirDrop.selectedLabel = 'left';
 		loadOffsetSteppers();
 	}
 
@@ -731,8 +857,8 @@ class NoteSkinEditorState extends MusicBeatState {
 	function loadOffsetSteppers() {
 		if (offX == null)
 			return;
-		var f:Dynamic = Reflect.field(config, offsetFieldName(offElemDrop.selectedLabel));
-		var v:Dynamic = (f == null) ? null : Reflect.field(f, offDirDrop.selectedLabel);
+		var f:Dynamic = Reflect.field(config, offsetFieldName(curOffElem));
+		var v:Dynamic = (f == null) ? null : Reflect.field(f, curOffDir);
 		if (v != null && Std.isOfType(v, Array)) {
 			var a:Array<Dynamic> = v;
 			offX.value = a.length > 0 ? a[0] : 0;
@@ -744,13 +870,13 @@ class NoteSkinEditorState extends MusicBeatState {
 	}
 
 	function applyOffsetSteppers() {
-		var fn = offsetFieldName(offElemDrop.selectedLabel);
+		var fn = offsetFieldName(curOffElem);
 		var f:Dynamic = Reflect.field(config, fn);
 		if (f == null) {
 			f = {};
 			Reflect.setField(config, fn, f);
 		}
-		Reflect.setField(f, offDirDrop.selectedLabel, [offX.value, offY.value]);
+		Reflect.setField(f, curOffDir, [offX.value, offY.value]);
 		buildPreview();
 	}
 
@@ -842,8 +968,9 @@ class NoteSkinEditorState extends MusicBeatState {
 			sys.io.File.saveContent('$dir/skin.tcfg', backend.config.TcfgWriter.write(config));
 			NoteSkinConfig.reset();
 			skinName = 'noteSkins/$name';
-			skinDropDown.list = NoteSkinConfig.list();
-			skinDropDown.selectedLabel = skinName;
+			skinItems = NoteSkinConfig.list();
+			skinDropDown.setItems(skinItems.copy());
+			skinDropDown.select(Std.int(Math.max(0, skinItems.indexOf(skinName))));
 			loadSkin(skinName);
 			refreshFields();
 			notify('Created $dir/skin.tcfg');
