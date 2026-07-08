@@ -47,11 +47,14 @@ class ScriptRules {
 		{re: ~/[.'"]prevNote\b/, kind: REMOVED, appliesTo: BOTH, message: 'prevNote no longer exists: v2 sustains are one NoteData, not a head + stacked-tail chain.', suggestion: 'Read the single NoteData (length > 0) instead of walking a prevNote chain.'},
 
 		// ---- unspawnNotes (compat-only via legacy/UnspawnNoteProxy) --------------------------
-		{re: ~/\bunspawnNotes\b/, kind: COMPAT_ONLY, appliesTo: BOTH, message: 'unspawnNotes (whole pre-spawned chart) exists only under compatibilityMode, via the legacy proxy.', suggestion: 'Native v2: read game.playerField.notes / game.opponentField.notes (NoteData list).'},
+		{re: ~/\bunspawnNotes\b/, kind: COMPAT_ONLY, appliesTo: BOTH, message: 'unspawnNotes (whole pre-spawned chart) exists only under compatibilityMode, via the legacy proxy.', suggestion: 'Native v2: read game.playerField.notes / game.opponentField.notes; style spawned notes with setPropertyFromGroup(\'game.<side>Field.notes\', id, ...) inside onSpawnNote.'},
+
+		// ---- Common per-note callback bug: `i` is not defined inside note callbacks ---------
+		{re: ~/PropertyFromGroup\s*\(\s*['"][^'"]*['"]\s*,\s*i\s*,/, kind: DEPRECATED, appliesTo: LUA, message: 'This indexes a note group with `i`, which is nil inside note callbacks (Lua coerces it to 0), so it always hits the wrong note.', suggestion: 'Use the callback\'s `id` argument: in v2 it is the note\'s index in its field\'s active list (valid inside the callback).'},
 
 		// ---- Write-through mirrors under compatibilityMode ----------------------------------
-		{re: ~/\bnotes\.members\s*\[/, kind: REMOVED, appliesTo: BOTH, message: 'Indexing game.notes.members by the callback id no longer works: v2 note callbacks always pass id = -1 (there is no member index anymore).', suggestion: 'Read game.lastJudgedNote (the judged NoteData: time/type/length/...) inside the hit/miss callbacks instead.'},
-		{re: ~/\bnotes\.members\b/, kind: COMPAT_ONLY, appliesTo: BOTH, message: 'game.notes is a compatibilityMode mirror; visual writes (x/y/alpha/angle with copyX etc. off, offsetX/offsetY/multAlpha/multSpeed) now propagate to the real v2 drawables, but structural add/remove does not.', suggestion: 'Prefer the v2 fields / note types; native v2 reads game.playerField / opponentField.'},
+		{re: ~/\bnotes\.members\s*\[/, kind: REMOVED, appliesTo: BOTH, message: 'Indexing game.notes.members by the callback id no longer works: v2 hit/miss callbacks pass id = -1 (there is no member index anymore).', suggestion: 'Read game.lastJudgedNote in hit/miss callbacks; in onSpawnNote, id indexes the field, so use setPropertyFromGroup(\'game.<side>Field.notes\', id, ...).'},
+		{re: ~/\bnotes\.members\b/, kind: COMPAT_ONLY, appliesTo: BOTH, message: 'game.notes is a compatibilityMode mirror; visual writes (x/y/alpha/angle with copyX etc. off, offsetX/offsetY/multAlpha/multSpeed) now propagate to the real v2 drawables, but structural add/remove does not.', suggestion: 'Prefer the v2 fields / note types; native v2 targets game.playerField / opponentField (.notes) with the onSpawnNote id.'},
 		{re: ~/\bplayerStrums\b|\bopponentStrums\b|\bstrumLineNotes\b/, kind: COMPAT_ONLY, appliesTo: BOTH, message: 'The strum groups are compatibilityMode mirrors; x/y/alpha/angle writes now move the real receptors, but other props stay read-only.', suggestion: 'Native v2: move/scale the real strums via playerReceptors / opponentReceptors.'},
 
 		// ---- Note-skin pointers (still work; nudge toward the folder note-skin system) -------
