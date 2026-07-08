@@ -175,12 +175,15 @@ class PlayState extends MusicBeatState {
 
 	private static var prevCamFollow:FlxObject;
 
-	// LEGACY-ONLY (compatibilityMode): the v2 strums are `playerReceptors`/`opponentReceptors`
-	// (`objects.notes.Receptor`). These `StrumNote` groups are the pre-v2 script API, filled with
-	// inert mirror adapters by `legacy.NoteCompatLayer` only under `Mods.noteCompatibilityMode()`.
-	public var strumLineNotes:FlxTypedGroup<StrumNote> = new FlxTypedGroup<StrumNote>();
-	public var opponentStrums:FlxTypedGroup<StrumNote> = new FlxTypedGroup<StrumNote>();
-	public var playerStrums:FlxTypedGroup<StrumNote> = new FlxTypedGroup<StrumNote>();
+	// Pre-v2 strum script API, now a native ALIAS onto the real `Receptor`s (not inert mirrors): these
+	// groups HOLD the actual receptors (opponent then player), so `getPropertyFromGroup`/
+	// `setPropertyFromGroup('strumLineNotes'|'playerStrums'|'opponentStrums', i, 'x'/'y'/'alpha'/...)`
+	// move/read the live strums with no legacy layer needed. They are reference containers only -- never
+	// added to the scene (`receptorGroup` renders); `refreshStrumAliases` (re)fills them after receptors
+	// are (re)built. `playerReceptors`/`opponentReceptors` (arrays) are the same objects, v2-side.
+	public var strumLineNotes:FlxTypedGroup<Receptor> = new FlxTypedGroup<Receptor>();
+	public var opponentStrums:FlxTypedGroup<Receptor> = new FlxTypedGroup<Receptor>();
+	public var playerStrums:FlxTypedGroup<Receptor> = new FlxTypedGroup<Receptor>();
 	public var grpNoteSplashes:FlxTypedGroup<NoteSplash> = new FlxTypedGroup<NoteSplash>();
 
 	public var camZooming:Bool = false;
@@ -551,7 +554,8 @@ class PlayState extends MusicBeatState {
 		uiGroup.add(timeBar);
 		uiGroup.add(timeTxt);
 
-		noteGroup.add(strumLineNotes);
+		// strumLineNotes is a script-only alias group holding the real receptors -- NOT rendered here
+		// (receptorGroup draws them); adding it would double-draw the strums.
 
 		if (ClientPrefs.data.timeBarType == 'Song Name') {
 			timeTxt.size = 24;
@@ -1530,6 +1534,8 @@ class PlayState extends MusicBeatState {
 
 		opponentReceptors = (firstOpp != null) ? firstOpp.receptors : opponentReceptors;
 		playerReceptors = (firstPlayer != null) ? firstPlayer.receptors : playerReceptors;
+
+		refreshStrumAliases();
 
 		setOnScripts('keyCount', totalColumns);
 		setOnScripts('mania', totalColumns - 1);
@@ -2855,6 +2861,8 @@ class PlayState extends MusicBeatState {
 		opponentReceptors = (firstOpp != null) ? firstOpp.receptors : [];
 		playerReceptors = (firstPlayer != null) ? firstPlayer.receptors : [];
 
+		refreshStrumAliases();
+
 		// Note layering, per-skin (`skin.tcfg` `holdsOverHeads`) or the global `sustainsOverNotes` option.
 		if (backend.NoteSkinConfig.holdsOverHeads()) {
 			// Over: sustains drawn on top of the receptors and the heads.
@@ -2887,10 +2895,26 @@ class PlayState extends MusicBeatState {
 			setOnScripts('defaultOpponentStrumX' + i, opponentReceptors[i].x);
 			setOnScripts('defaultOpponentStrumY' + i, opponentReceptors[i].y);
 		}
+	}
 
-		// noteCompat (if any) was created in generateSong; now that receptors exist, build the strum mirror.
-		if (noteCompat != null)
-			noteCompat.buildStrums(playerReceptors, opponentReceptors, strumLineNotes, playerStrums, opponentStrums);
+	/**
+		(Re)builds the pre-v2 strum alias groups (`opponentStrums` / `playerStrums` / `strumLineNotes`) to
+		hold the live receptors -- opponent columns first, then player, matching the legacy `strumLineNotes`
+		index order. Called after receptors are (re)built (`buildNoteFields`, `changeKeyCount`). The groups
+		only carry references (never drawn), so scripts move/read the real strums through them natively.
+	**/
+	function refreshStrumAliases():Void {
+		opponentStrums.clear();
+		playerStrums.clear();
+		strumLineNotes.clear();
+		for (r in opponentReceptors) {
+			opponentStrums.add(r);
+			strumLineNotes.add(r);
+		}
+		for (r in playerReceptors) {
+			playerStrums.add(r);
+			strumLineNotes.add(r);
+		}
 	}
 
 	function buildReceptors(isPlayer:Bool, keyCount:Int, targetCenter:Float):Array<Receptor> {
@@ -3131,11 +3155,10 @@ class PlayState extends MusicBeatState {
 			}
 		}
 
-		// compatibilityMode only: mirror the live v2 state onto the legacy game.notes / strum groups.
-		if (noteCompat != null) {
+		// compatibilityMode only: mirror the live v2 note state onto the legacy game.notes group. (Strums
+		// are no longer mirrored -- `strumLineNotes`/`player`/`opponentStrums` alias the real receptors.)
+		if (noteCompat != null)
 			noteCompat.syncNotes(noteFields);
-			noteCompat.syncStrums();
-		}
 	}
 
 	function keysCheck():Void {

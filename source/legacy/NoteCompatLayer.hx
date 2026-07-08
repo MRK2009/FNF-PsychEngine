@@ -42,15 +42,6 @@ class NoteCompatLayer {
 	final noteAdapters:Map<ActiveNote, Note> = new Map();
 	final aliveThisFrame:Map<ActiveNote, Bool> = new Map();
 
-	var strumAdapters:Array<StrumNote> = [];
-	var strumReceptors:Array<Receptor> = [];
-	// Last agreed x/y/alpha/angle per strum adapter, so syncStrums can tell a script write (adapter now
-	// differs) from the untouched pull-from-receptor case and push the change onto the real receptor.
-	var strumPrevX:Array<Float> = [];
-	var strumPrevY:Array<Float> = [];
-	var strumPrevAlpha:Array<Float> = [];
-	var strumPrevAngle:Array<Float> = [];
-
 	final unspawnProxies:Array<UnspawnNoteProxy> = [];
 
 	/**
@@ -343,80 +334,14 @@ class NoteCompatLayer {
 		return d;
 	}
 
-	/**
-		Builds one inert `LegacyStrumNote` adapter per receptor and fills the legacy strum groups, so
-		`game.playerStrums` / `opponentStrums` / `strumLineNotes` are populated for script reads.
-		@param playerRecs the player receptors (column order)
-		@param oppRecs the opponent receptors
-		@param strumLine the combined `strumLineNotes` group
-		@param playerStrums the player strum group
-		@param opponentStrums the opponent strum group
-	**/
-	public function buildStrums(playerRecs:Array<Receptor>, oppRecs:Array<Receptor>, strumLine:FlxTypedGroup<StrumNote>,
-			playerStrums:FlxTypedGroup<StrumNote>, opponentStrums:FlxTypedGroup<StrumNote>):Void {
-		addStrums(oppRecs, 0, strumLine, opponentStrums);
-		addStrums(playerRecs, 1, strumLine, playerStrums);
-	}
-
-	function addStrums(recs:Array<Receptor>, player:Int, strumLine:FlxTypedGroup<StrumNote>, sideGroup:FlxTypedGroup<StrumNote>):Void {
-		for (i in 0...recs.length) {
-			var rec:Receptor = recs[i];
-			var s:StrumNote = new StrumNote(rec.x, rec.y, i, player);
-			s.visible = false;
-			s.active = false;
-			strumAdapters.push(s);
-			strumReceptors.push(rec);
-			strumPrevX.push(rec.x);
-			strumPrevY.push(rec.y);
-			strumPrevAlpha.push(rec.alpha);
-			strumPrevAngle.push(rec.angle);
-			strumLine.add(s);
-			sideGroup.add(s);
-		}
-	}
-
-	/**
-		Two-way sync between each strum adapter and its live receptor. `x`/`y`/`alpha`/`angle` are
-		write-through: when a script moved/faded the adapter (its value differs from the last agreed one)
-		that change is pushed onto the real receptor; otherwise the adapter is pulled from the receptor.
-		The geometry reads (`width`/`downScroll`/…) stay pull-only. Call each frame.
-	**/
-	public function syncStrums():Void {
-		for (i in 0...strumAdapters.length) {
-			var s:StrumNote = strumAdapters[i];
-			var rec:Receptor = strumReceptors[i];
-			if (s == null || rec == null)
-				continue;
-
-			var fx:Float = (s.x != strumPrevX[i]) ? s.x : rec.x;
-			var fy:Float = (s.y != strumPrevY[i]) ? s.y : rec.y;
-			var fa:Float = (s.alpha != strumPrevAlpha[i]) ? s.alpha : rec.alpha;
-			var fang:Float = (s.angle != strumPrevAngle[i]) ? s.angle : rec.angle;
-			rec.x = s.x = strumPrevX[i] = fx;
-			rec.y = s.y = strumPrevY[i] = fy;
-			rec.alpha = s.alpha = strumPrevAlpha[i] = fa;
-			rec.angle = s.angle = strumPrevAngle[i] = fang;
-
-			s.width = rec.width;
-			s.height = rec.height;
-			s.downScroll = rec.downScroll;
-			s.direction = rec.direction;
-		}
-	}
+	// Strums are no longer mirrored here: `PlayState.strumLineNotes`/`playerStrums`/`opponentStrums` are
+	// native alias groups holding the real receptors (see `PlayState.refreshStrumAliases`), so pre-v2
+	// strum property reads/writes hit the live receptors directly, in every mode.
 
 	/** Drops every adapter (e.g. on song restart / state exit). **/
 	public function clear():Void {
 		for (an in noteAdapters.keys())
 			reclaim(an);
-		for (s in strumAdapters)
-			if (s != null)
-				s.destroy();
-		strumAdapters = [];
-		strumReceptors = [];
-		strumPrevX = [];
-		strumPrevY = [];
-		strumPrevAlpha = [];
-		strumPrevAngle = [];
 		for (p in unspawnProxies)
 			if (p != null)
 				p.destroy();
