@@ -1,16 +1,17 @@
 package editors.charting;
 
-import ui.UIRoot;
-import ui.UITheme;
-import ui.widgets.UIButton;
-import ui.widgets.UIChip;
-import ui.widgets.UIIconButton;
-import ui.widgets.UIIconRail;
-import ui.widgets.UILabel;
-import ui.widgets.UIMenuBar;
-import ui.widgets.UIPanel;
-import ui.widgets.UIScrollPane;
-import ui.widgets.UISeparator;
+import smidr.UIRoot;
+import smidr.UITheme;
+import smidr.types.UIGlyph;
+import smidr.widgets.UIButton;
+import smidr.widgets.UIChip;
+import smidr.widgets.UIIcon;
+import smidr.widgets.UIIconRail;
+import smidr.widgets.UILabel;
+import smidr.widgets.UIMenuBar;
+import smidr.widgets.UIPanel;
+import smidr.widgets.UIScrollPane;
+import smidr.widgets.UISeparator;
 
 /**
 	The editor chrome: slim menu bar, left icon rail, left dock, center notefield hole,
@@ -73,7 +74,7 @@ final class EditorShell {
 	public final searchBtn:UIButton;
 
 	/** Menu-bar gear button (jumps to the Options tab). **/
-	public final optionsBtn:UIIconButton;
+	public final optionsBtn:UIButton;
 
 	/** The left activity rail (tabs assigned by the owner). **/
 	public final rail:UIIconRail;
@@ -90,19 +91,40 @@ final class EditorShell {
 	public final transportPanel:UIPanel;
 
 	/** Previous-section transport button. **/
-	public final prevBtn:UIIconButton;
+	public final prevBtn:UIButton;
 
-	/** Play/pause transport button (`active` mirrors playback). **/
-	public final playBtn:UIIconButton;
+	/** Play/pause transport button (drive it through `playing`). **/
+	public final playBtn:UIButton;
 
 	/** Next-section transport button. **/
-	public final nextBtn:UIIconButton;
+	public final nextBtn:UIButton;
 
 	/** Stop transport button. **/
-	public final stopBtn:UIIconButton;
+	public final stopBtn:UIButton;
 
-	/** Section-loop toggle button (`active` = looping). **/
-	public final loopBtn:UIIconButton;
+	/** Section-loop toggle button (drive it through `looping`). **/
+	public final loopBtn:UIButton;
+
+	final playIcon:UIIcon;
+
+	/** Playback state shown on the play button (accent + play/pause glyph swap). **/
+	public var playing(default, set):Bool = false;
+
+	/** Section-loop state shown on the loop button. **/
+	public var looping(default, set):Bool = false;
+
+	function set_playing(v:Bool):Bool {
+		playing = v;
+		playBtn.accent = v;
+		playIcon.glyph = v ? UIGlyph.PAUSE : UIGlyph.PLAY;
+		return v;
+	}
+
+	function set_looping(v:Bool):Bool {
+		looping = v;
+		loopBtn.accent = v;
+		return v;
+	}
 
 	/** Playhead-BPM readout chip. **/
 	public final bpmChip:UIChip;
@@ -191,16 +213,17 @@ final class EditorShell {
 		var iconY:Float = transportPanel.y + (transportH - iconS) / 2;
 		var tx:Float = UITheme.px(8);
 
-		prevBtn = new UIIconButton(UIIconButton.PREV, iconS);
+		prevBtn = UIButton.icon(UIIcon.fromGlyph(UIGlyph.PREV, 16), iconS);
 		prevBtn.tooltip = "Previous section";
-		playBtn = new UIIconButton(UIIconButton.PLAY, iconS);
+		playIcon = UIIcon.fromGlyph(UIGlyph.PLAY, 16);
+		playBtn = UIButton.icon(playIcon, iconS);
 		playBtn.tooltip = "Play / pause";
 		playBtn.tooltipShortcut = "Space";
-		nextBtn = new UIIconButton(UIIconButton.NEXT, iconS);
+		nextBtn = UIButton.icon(UIIcon.fromGlyph(UIGlyph.NEXT, 16), iconS);
 		nextBtn.tooltip = "Next section";
-		stopBtn = new UIIconButton(UIIconButton.STOP, iconS);
+		stopBtn = UIButton.icon(UIIcon.fromGlyph(UIGlyph.STOP, 16), iconS);
 		stopBtn.tooltip = "Stop and return";
-		loopBtn = new UIIconButton(UIIconButton.LOOP, iconS);
+		loopBtn = UIButton.icon(UIIcon.fromGlyph(UIGlyph.LOOP, 16), iconS);
 		loopBtn.tooltip = "Loop section";
 		for (b in [prevBtn, playBtn, nextBtn, stopBtn, loopBtn]) {
 			b.x = tx;
@@ -279,7 +302,7 @@ final class EditorShell {
 		searchBtn.tooltipShortcut = "Ctrl+K";
 		c.addChild(searchBtn);
 
-		optionsBtn = new UIIconButton(UIIconButton.GEAR, menuH);
+		optionsBtn = UIButton.icon(UIIcon.fromGlyph(UIGlyph.GEAR, 10), menuH);
 		optionsBtn.tooltip = "Editor options";
 		c.addChild(optionsBtn);
 
@@ -329,7 +352,7 @@ final class EditorShell {
 	The transport's scrubbable song strip: progress fill + playhead tick; click or drag
 	anywhere to seek (`onScrub(progress 0..1)` fires while dragging).
 **/
-final class TransportTimeline extends ui.UIComponent {
+final class TransportTimeline extends smidr.UIComponent {
 	/** Playback progress 0..1 (owner-driven). **/
 	public var progress(default, set):Float = 0;
 
@@ -370,18 +393,18 @@ final class TransportTimeline extends ui.UIComponent {
 		var g = graphics;
 		g.clear();
 		var r:Float = UITheme.px(5);
-		g.beginFill(ui.UIColor.rgb(UITheme.inputBg));
+		g.beginFill(smidr.UIColor.rgb(UITheme.inputBg));
 		g.drawRoundRect(0, 0, w, h, r, r);
 		g.endFill();
 		if (progress > 0) {
-			g.beginFill(ui.UIColor.rgb(UITheme.accentDark), 0.55);
+			g.beginFill(smidr.UIColor.rgb(UITheme.accentDark), 0.55);
 			g.drawRoundRect(1, 1, (w - 2) * progress, h - 2, r, r);
 			g.endFill();
 		}
-		g.lineStyle(1, ui.UIColor.rgb(UITheme.border));
+		g.lineStyle(1, smidr.UIColor.rgb(UITheme.border));
 		g.drawRoundRect(0.5, 0.5, w - 1, h - 1, r, r);
 		g.lineStyle();
-		g.beginFill(ui.UIColor.rgb(UITheme.accent));
+		g.beginFill(smidr.UIColor.rgb(UITheme.accent));
 		var px:Float = 1 + (w - 3) * progress;
 		g.drawRect(px, 1, 2, h - 2);
 		g.endFill();

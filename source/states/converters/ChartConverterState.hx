@@ -7,19 +7,19 @@ import backend.tools.chartconvert.ChartConvertJob.ModScan;
 import backend.tools.chartconvert.ChartConvertJob.FolderJob;
 import backend.tools.chartconvert.ChartConvertJob.ChartEntry;
 import backend.tools.chartconvert.ChartConvertJob.ConvertSummary;
-import ui.UIRoot;
-import ui.UITheme;
-import ui.UIFonts;
-import ui.UILocale;
-import ui.UIComponent;
-import ui.input.UIFocus;
-import ui.widgets.UIPanel;
-import ui.widgets.UIScrollPane;
-import ui.widgets.UILabel;
-import ui.widgets.UIButton;
-import ui.widgets.UICheckbox;
-import ui.widgets.UIToast;
-import ui.widgets.UITooltip;
+import smidr.UIRoot;
+import smidr.UITheme;
+import smidr.UIFonts;
+import smidr.UILocale;
+import smidr.UIComponent;
+import smidr.input.UIFocus;
+import smidr.widgets.UIPanel;
+import smidr.widgets.UIScrollPane;
+import smidr.widgets.UILabel;
+import smidr.widgets.UIButton;
+import smidr.widgets.UICheckbox;
+import smidr.widgets.UIToast;
+import smidr.widgets.UITooltip;
 
 /**
 	The Chart Converter screen, built on the in-engine UI framework (`source/ui/`): a left rail that

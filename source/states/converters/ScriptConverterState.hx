@@ -7,19 +7,19 @@ import backend.tools.scriptconvert.ScriptScanner.FolderReport;
 import backend.tools.scriptconvert.ScriptScanner.FileReport;
 import backend.tools.scriptconvert.ScriptScanner.ScanIssue;
 import backend.tools.scriptconvert.ScriptRule;
-import ui.UIRoot;
-import ui.UITheme;
-import ui.UIFonts;
-import ui.UILocale;
-import ui.UIComponent;
-import ui.input.UIFocus;
-import ui.widgets.UIPanel;
-import ui.widgets.UIScrollPane;
-import ui.widgets.UILabel;
-import ui.widgets.UIButton;
-import ui.widgets.UIDropdown;
-import ui.widgets.UIToast;
-import ui.widgets.UITooltip;
+import smidr.UIRoot;
+import smidr.UITheme;
+import smidr.UIFonts;
+import smidr.UILocale;
+import smidr.UIComponent;
+import smidr.input.UIFocus;
+import smidr.widgets.UIPanel;
+import smidr.widgets.UIScrollPane;
+import smidr.widgets.UILabel;
+import smidr.widgets.UIButton;
+import smidr.widgets.UIDropdown;
+import smidr.widgets.UIToast;
+import smidr.widgets.UITooltip;
 
 /**
 	The Script Converter screen, built on the in-engine UI framework (`source/ui/`): a scrollable

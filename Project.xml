@@ -132,6 +132,7 @@
 	<haxelib name="flixel-addons"/>
 	<haxelib name="flixel-animate"/>
 	<haxelib name="tjson"/>
+	<haxelib name="smidr"/> <!-- SmiðrUI, the engine UI toolkit (editors, options, converters) -->
 
 	<!-- Psych features -->
 	<haxelib name="hxluajit"         if="LUA_ALLOWED"/>

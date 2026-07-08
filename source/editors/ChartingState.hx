@@ -18,31 +18,31 @@ import editors.charting.script.EditorScriptHost;
 import editors.content.FileDialogHandler;
 import editors.content.PsychJsonPrinter;
 import flixel.FlxG;
-import ui.UIComponent;
-import ui.UIFonts;
-import ui.UILocale;
-import ui.UIRoot;
-import ui.UITheme;
-import ui.input.UIFocus;
-import ui.input.UIPointer;
-import ui.widgets.UIAccordion;
-import ui.widgets.UIButton;
-import ui.widgets.UICheckbox;
-import ui.widgets.UIChip;
-import ui.widgets.UIContextMenu;
-import ui.widgets.UIDropdown;
-import ui.widgets.UILabel;
-import ui.widgets.UIMenuItem;
-import ui.widgets.UIModal;
-import ui.widgets.UIPanel;
-import ui.widgets.UIRailTab;
-import ui.widgets.UIScrollPane;
-import ui.widgets.UISeparator;
-import ui.widgets.UISlider;
-import ui.widgets.UIStepper;
-import ui.widgets.UITextInput;
-import ui.widgets.UIToast;
-import ui.widgets.UITooltip;
+import smidr.UIComponent;
+import smidr.UIFonts;
+import smidr.UILocale;
+import smidr.UIRoot;
+import smidr.UITheme;
+import smidr.input.UIFocus;
+import smidr.input.UIPointer;
+import smidr.widgets.UIAccordion;
+import smidr.widgets.UIButton;
+import smidr.widgets.UICheckbox;
+import smidr.widgets.UIChip;
+import smidr.widgets.UIContextMenu;
+import smidr.widgets.UIDropdown;
+import smidr.widgets.UILabel;
+import smidr.widgets.UIMenuItem;
+import smidr.widgets.UIModal;
+import smidr.widgets.UIPanel;
+import smidr.widgets.UIRailTab;
+import smidr.widgets.UIScrollPane;
+import smidr.widgets.UISeparator;
+import smidr.widgets.UISlider;
+import smidr.widgets.UIStepper;
+import smidr.widgets.UITextInput;
+import smidr.widgets.UIToast;
+import smidr.widgets.UITooltip;
 
 /**
 	The chart editor. Owns and wires every decoupled part: the retained OpenFL UI layer
@@ -531,7 +531,7 @@ class ChartingState extends MusicBeatState {
 		shell.nextBtn.onClick = function():Void gotoSection(editSection + 1);
 		shell.playBtn.onClick = togglePlayback;
 		shell.stopBtn.onClick = stopPlayback;
-		shell.loopBtn.onClick = function():Void shell.loopBtn.active = !shell.loopBtn.active;
+		shell.loopBtn.onClick = function():Void shell.looping = !shell.looping;
 		shell.timeline.onScrub = onTimelineScrub;
 
 		shell.searchBtn.onClick = todo("Search isn't implemented yet");
@@ -1800,8 +1800,8 @@ class ChartingState extends MusicBeatState {
 			EditorPrefs.save();
 		});
 		themeDrop.boxWidth = UITheme.px(120);
-		themeDrop.setItems([for (p in ui.UITheme.PRESETS) p.name]);
-		themeDrop.select(clampIndex(EditorPrefs.themePreset, ui.UITheme.PRESETS.length));
+		themeDrop.setItems([for (p in smidr.UITheme.PRESETS) p.name]);
+		themeDrop.select(clampIndex(EditorPrefs.themePreset, smidr.UITheme.PRESETS.length));
 		themeDrop.tooltip = "Base colour scheme (Light mode included)";
 		flow.add(themeDrop);
 		var accentHex:UITextInput = new UITextInput("Accent (hex)", colW,
@@ -1813,7 +1813,7 @@ class ChartingState extends MusicBeatState {
 					EditorPrefs.save();
 				} else if (col >= 0) {
 					EditorPrefs.accentOverride = col;
-					ui.UITheme.applyAccent(col);
+					smidr.UITheme.applyAccent(col);
 					EditorPrefs.save();
 				}
 			});
@@ -2081,10 +2081,10 @@ class ChartingState extends MusicBeatState {
 
 	/** Applies the saved theme preset + optional custom accent to the live UI. **/
 	function applyThemeFromPrefs():Void {
-		var idx:Int = clampIndex(EditorPrefs.themePreset, ui.UITheme.PRESETS.length);
-		ui.UITheme.apply(ui.UITheme.PRESETS[idx].palette);
+		var idx:Int = clampIndex(EditorPrefs.themePreset, smidr.UITheme.PRESETS.length);
+		smidr.UITheme.apply(smidr.UITheme.PRESETS[idx].palette);
 		if (EditorPrefs.accentOverride >= 0)
-			ui.UITheme.applyAccent(EditorPrefs.accentOverride);
+			smidr.UITheme.applyAccent(EditorPrefs.accentOverride);
 	}
 
 	/** Parses a `RRGGBB` / `#RRGGBB` hex string, or -1 when it isn't a valid colour. **/
@@ -2868,15 +2868,15 @@ class ChartingState extends MusicBeatState {
 		audio.update(elapsed);
 		if (audio.playing) {
 			var t:Float = audio.time;
-			if (shell.loopBtn.active && t >= model.sectionEnd(editSection)) {
+			if (shell.looping && t >= model.sectionEnd(editSection)) {
 				seekTo(model.sectionStart(editSection));
 				t = audio.time;
 			}
 			noteField.setViewTime(t);
 			tickMetronomeAndHits(t);
 		}
-		if (shell.playBtn.active != audio.playing)
-			shell.playBtn.active = audio.playing;
+		if (shell.playing != audio.playing)
+			shell.playing = audio.playing;
 
 		noteField.updateHot(elapsed);
 
@@ -3302,7 +3302,7 @@ private typedef CustomButton = {
 	One row of the keybinds modal: action label left, current bind right. Click to capture the
 	next keypress (with live modifiers) as the primary bind; Escape cancels the capture.
 **/
-private final class KeybindRow extends ui.UIComponent implements ui.input.IUIFocusable {
+private final class KeybindRow extends smidr.UIComponent implements smidr.input.IUIFocusable {
 	final action:editors.charting.data.EditorKeybinds.EditorAction;
 	final labelTf:openfl.text.TextField;
 	final bindTf:openfl.text.TextField;
@@ -3315,16 +3315,16 @@ private final class KeybindRow extends ui.UIComponent implements ui.input.IUIFoc
 	public function new(action:editors.charting.data.EditorKeybinds.EditorAction, width:Float) {
 		super(true, true);
 		this.action = action;
-		labelTf = ui.UIFonts.make(UITheme.fs(11), UITheme.text2);
+		labelTf = smidr.UIFonts.make(UITheme.fs(11), UITheme.text2);
 		addChild(labelTf);
-		bindTf = ui.UIFonts.make(UITheme.fs(11), UITheme.text);
+		bindTf = smidr.UIFonts.make(UITheme.fs(11), UITheme.text);
 		addChild(bindTf);
 		resize(width, UITheme.px(24));
 		render();
 	}
 
 	override function click():Void {
-		ui.input.UIFocus.set(this);
+		smidr.input.UIFocus.set(this);
 		super.click();
 	}
 
@@ -3344,7 +3344,7 @@ private final class KeybindRow extends ui.UIComponent implements ui.input.IUIFoc
 
 	public function onKeyDown(keyCode:Int, charCode:Int, ctrl:Bool, shift:Bool, alt:Bool):Bool {
 		if (keyCode == 27) {
-			ui.input.UIFocus.clear();
+			smidr.input.UIFocus.clear();
 			return true;
 		}
 		// bare modifier presses wait for the real key
@@ -3356,7 +3356,7 @@ private final class KeybindRow extends ui.UIComponent implements ui.input.IUIFoc
 			shift: shift,
 			alt: alt
 		});
-		ui.input.UIFocus.clear();
+		smidr.input.UIFocus.clear();
 		invalidate();
 		return true;
 	}
@@ -3365,20 +3365,20 @@ private final class KeybindRow extends ui.UIComponent implements ui.input.IUIFoc
 		var g = graphics;
 		g.clear();
 		var fill:Int = capturing ? UITheme.panel3 : (hovered ? UITheme.panel2 : UITheme.inputBg);
-		g.beginFill(ui.UIColor.rgb(fill));
+		g.beginFill(smidr.UIColor.rgb(fill));
 		g.drawRoundRect(0, 0, w, h, UITheme.px(6), UITheme.px(6));
 		g.endFill();
-		g.lineStyle(1, ui.UIColor.rgb(capturing ? UITheme.accent : UITheme.border));
+		g.lineStyle(1, smidr.UIColor.rgb(capturing ? UITheme.accent : UITheme.border));
 		g.drawRoundRect(0.5, 0.5, w - 1, h - 1, UITheme.px(6), UITheme.px(6));
 		g.lineStyle();
 
-		ui.UIFonts.restyle(labelTf, UITheme.fs(11), UITheme.text2);
+		smidr.UIFonts.restyle(labelTf, UITheme.fs(11), UITheme.text2);
 		if (labelTf.text != action.label)
 			labelTf.text = action.label;
 		labelTf.x = UITheme.px(8);
 		labelTf.y = (h - labelTf.height) / 2;
 
-		ui.UIFonts.restyle(bindTf, UITheme.fs(11), capturing ? UITheme.highlight : UITheme.text);
+		smidr.UIFonts.restyle(bindTf, UITheme.fs(11), capturing ? UITheme.highlight : UITheme.text);
 		var bindText:String = capturing ? "press a key..." : editors.charting.data.EditorKeybinds.bindLabel(action.id);
 		if (bindText == "")
 			bindText = "unbound";

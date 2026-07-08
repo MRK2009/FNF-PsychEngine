@@ -13,7 +13,7 @@ import flixel.util.FlxColor;
 import objects.notes.NoteData;
 import objects.notes.NoteSprite;
 import objects.notes.Receptor;
-import ui.UITheme;
+import smidr.UITheme;
 
 /** One realized note: chart data + the pooled drawables currently showing it. **/
 private final class LiveNote {
