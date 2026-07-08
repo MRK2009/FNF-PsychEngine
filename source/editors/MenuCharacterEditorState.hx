@@ -9,6 +9,7 @@ import objects.MenuCharacter;
 import editors.content.Prompt;
 import editors.content.PsychJsonPrinter;
 import smidr.UIRoot;
+import smidr.flixel.FlxSmidr;
 import smidr.UITheme;
 import smidr.UIFonts;
 import smidr.UILocale;
@@ -75,23 +76,6 @@ class MenuCharacterEditorState extends MusicBeatState {
 		super.create();
 	}
 
-	/** Layers the UI root above the game view but below the FPS counter. **/
-	function attachRoot():Void {
-		var fps = Main.fpsVar;
-		if (fps != null && fps.parent != null)
-			uiRoot.attach(fps.parent, fps.parent.getChildIndex(fps));
-		else
-			uiRoot.attach(FlxG.stage);
-	}
-
-	function onGameResized(_:Int, _:Int):Void
-		syncViewport();
-
-	function syncViewport():Void {
-		var sm = FlxG.scaleMode;
-		uiRoot.setViewport(sm.offset.x, sm.offset.y, sm.scale.x, sm.scale.y);
-	}
-
 	static inline var PAD:Int = 10;
 
 	var charType:Int = 0;
@@ -101,10 +85,8 @@ class MenuCharacterEditorState extends MusicBeatState {
 		UILocale.translate = function(k:String, f:String):String return Language.getPhrase(k, f);
 		UIFonts.register('assets/fonts/vcr.ttf');
 
-		uiRoot = new UIRoot();
-		attachRoot();
-		syncViewport();
-		FlxG.signals.gameResized.add(onGameResized);
+		uiRoot = FlxSmidr.init();
+		FlxSmidr.autoBlockMouse = true;
 
 		// Character type selector (was a radio group in a small box).
 		var typeW:Float = 420;
@@ -422,10 +404,9 @@ class MenuCharacterEditorState extends MusicBeatState {
 	}
 
 	override function destroy() {
-		FlxG.signals.gameResized.remove(onGameResized);
 		ClientPrefs.toggleVolumeKeys(true);
 		if (uiRoot != null) {
-			uiRoot.dispose();
+			FlxSmidr.dispose();
 			uiRoot = null;
 		}
 		super.destroy();

@@ -10,6 +10,7 @@ import editors.content.FileDialogHandler;
 import flash.net.FileFilter;
 import openfl.display.Sprite;
 import smidr.UIRoot;
+import smidr.flixel.FlxSmidr;
 import smidr.UITheme;
 import smidr.UIFonts;
 import smidr.UILocale;
@@ -97,11 +98,9 @@ class OsuConverterState extends MusicBeatState {
 		UILocale.translate = function(k:String, f:String):String return Language.getPhrase(k, f);
 		UIFonts.register('assets/fonts/vcr.ttf');
 
-		uiRoot = new UIRoot();
-		attachRoot();
-		syncViewport();
+		uiRoot = FlxSmidr.init();
+		FlxSmidr.autoBlockMouse = true;
 		UITooltip.install();
-		FlxG.signals.gameResized.add(onGameResized);
 
 		buildChrome();
 		buildDropZone();
@@ -119,23 +118,6 @@ class OsuConverterState extends MusicBeatState {
 		#end
 
 		super.create();
-	}
-
-	/** Layers the UI root above the game view but below the FPS counter (mirrors the other converters). **/
-	function attachRoot():Void {
-		var fps = Main.fpsVar;
-		if (fps != null && fps.parent != null)
-			uiRoot.attach(fps.parent, fps.parent.getChildIndex(fps));
-		else
-			uiRoot.attach(FlxG.stage);
-	}
-
-	function onGameResized(_:Int, _:Int):Void
-		syncViewport();
-
-	function syncViewport():Void {
-		var sm = FlxG.scaleMode;
-		uiRoot.setViewport(sm.offset.x, sm.offset.y, sm.scale.x, sm.scale.y);
 	}
 
 	function buildChrome():Void {
@@ -667,12 +649,11 @@ class OsuConverterState extends MusicBeatState {
 			openfl.Lib.application.window.onDropFile.remove(onDropFile)
 		catch (error:Dynamic) {}
 		#end
-		FlxG.signals.gameResized.remove(onGameResized);
 		FlxG.mouse.useSystemCursor = false;
 		FlxG.mouse.visible = false;
 		UITooltip.reset();
 		if (uiRoot != null) {
-			uiRoot.dispose();
+			FlxSmidr.dispose();
 			uiRoot = null;
 		}
 		super.destroy();

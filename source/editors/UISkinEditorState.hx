@@ -10,6 +10,7 @@ import flixel.tweens.FlxEase;
 import flixel.util.FlxTimer;
 import flixel.input.keyboard.FlxKey;
 import smidr.UIRoot;
+import smidr.flixel.FlxSmidr;
 import smidr.UITheme;
 import smidr.UIFonts;
 import smidr.UILocale;
@@ -168,23 +169,6 @@ class UISkinEditorState extends MusicBeatState {
 
 	// ---- UI (SmidrUI) ----
 
-	/** Layers the UI root above the game view but below the FPS counter. **/
-	function attachRoot():Void {
-		var fps = Main.fpsVar;
-		if (fps != null && fps.parent != null)
-			uiRoot.attach(fps.parent, fps.parent.getChildIndex(fps));
-		else
-			uiRoot.attach(FlxG.stage);
-	}
-
-	function onGameResized(_:Int, _:Int):Void
-		syncViewport();
-
-	function syncViewport():Void {
-		var sm = FlxG.scaleMode;
-		uiRoot.setViewport(sm.offset.x, sm.offset.y, sm.scale.x, sm.scale.y);
-	}
-
 	static inline var PAD:Int = 10;
 	static inline var BOX_W:Int = 350;
 
@@ -196,10 +180,8 @@ class UISkinEditorState extends MusicBeatState {
 		UILocale.translate = function(k:String, f:String):String return Language.getPhrase(k, f);
 		UIFonts.register('assets/fonts/vcr.ttf');
 
-		uiRoot = new UIRoot();
-		attachRoot();
-		syncViewport();
-		FlxG.signals.gameResized.add(onGameResized);
+		uiRoot = FlxSmidr.init();
+		FlxSmidr.autoBlockMouse = true;
 
 		boxX = FlxG.width - BOX_W - 10;
 		var boxY:Float = 20;
@@ -862,7 +844,7 @@ class UISkinEditorState extends MusicBeatState {
 			dragIndex = -1;
 			return;
 		}
-		var overUI:Bool = (FlxG.mouse.x > boxX);
+		var overUI:Bool = FlxSmidr.mouseBlocked;
 		if (dragIndex < 0 && FlxG.mouse.justPressed && !overUI) {
 			for (i in 0...handleSpr.length) {
 				if (!handleSpr[i].visible)
@@ -1000,9 +982,8 @@ class UISkinEditorState extends MusicBeatState {
 
 	override function destroy() {
 		UISkinConfig.editorOverride = null;
-		FlxG.signals.gameResized.remove(onGameResized);
 		if (uiRoot != null) {
-			uiRoot.dispose();
+			FlxSmidr.dispose();
 			uiRoot = null;
 		}
 		super.destroy();

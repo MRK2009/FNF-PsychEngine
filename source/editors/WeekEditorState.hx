@@ -15,6 +15,7 @@ import editors.MasterEditorMenu;
 import editors.content.Prompt;
 import openfl.display.Sprite;
 import smidr.UIRoot;
+import smidr.flixel.FlxSmidr;
 import smidr.UITheme;
 import smidr.UIFonts;
 import smidr.UILocale;
@@ -114,23 +115,6 @@ class WeekEditorState extends MusicBeatState {
 		super.create();
 	}
 
-	/** Layers the UI root above the game view but below the FPS counter. **/
-	function attachRoot():Void {
-		var fps = Main.fpsVar;
-		if (fps != null && fps.parent != null)
-			uiRoot.attach(fps.parent, fps.parent.getChildIndex(fps));
-		else
-			uiRoot.attach(FlxG.stage);
-	}
-
-	function onGameResized(_:Int, _:Int):Void
-		syncViewport();
-
-	function syncViewport():Void {
-		var sm = FlxG.scaleMode;
-		uiRoot.setViewport(sm.offset.x, sm.offset.y, sm.scale.x, sm.scale.y);
-	}
-
 	static inline var PAD:Int = 10;
 	static inline var BOX_W:Int = 300;
 
@@ -141,10 +125,8 @@ class WeekEditorState extends MusicBeatState {
 		UILocale.translate = function(k:String, f:String):String return Language.getPhrase(k, f);
 		UIFonts.register('assets/fonts/vcr.ttf');
 
-		uiRoot = new UIRoot();
-		attachRoot();
-		syncViewport();
-		FlxG.signals.gameResized.add(onGameResized);
+		uiRoot = FlxSmidr.init();
+		FlxSmidr.autoBlockMouse = true;
 
 		boxTabs = new UITabs(BOX_W, [{label: 'Other'}, {label: 'Week'}], function(i:Int):Void {
 			for (n in 0...tabPanes.length)
@@ -487,10 +469,9 @@ class WeekEditorState extends MusicBeatState {
 	}
 
 	override function destroy() {
-		FlxG.signals.gameResized.remove(onGameResized);
 		ClientPrefs.toggleVolumeKeys(true);
 		if (uiRoot != null) {
-			uiRoot.dispose();
+			FlxSmidr.dispose();
 			uiRoot = null;
 		}
 		super.destroy();
@@ -663,23 +644,6 @@ class WeekEditorFreeplayState extends MusicBeatState {
 		super.create();
 	}
 
-	/** Layers the UI root above the game view but below the FPS counter. **/
-	function attachRoot():Void {
-		var fps = Main.fpsVar;
-		if (fps != null && fps.parent != null)
-			uiRoot.attach(fps.parent, fps.parent.getChildIndex(fps));
-		else
-			uiRoot.attach(FlxG.stage);
-	}
-
-	function onGameResized(_:Int, _:Int):Void
-		syncViewport();
-
-	function syncViewport():Void {
-		var sm = FlxG.scaleMode;
-		uiRoot.setViewport(sm.offset.x, sm.offset.y, sm.scale.x, sm.scale.y);
-	}
-
 	static inline var PAD:Int = 10;
 	static inline var BOX_W:Int = 280;
 
@@ -687,10 +651,8 @@ class WeekEditorFreeplayState extends MusicBeatState {
 		UILocale.translate = function(k:String, f:String):String return Language.getPhrase(k, f);
 		UIFonts.register('assets/fonts/vcr.ttf');
 
-		uiRoot = new UIRoot();
-		attachRoot();
-		syncViewport();
-		FlxG.signals.gameResized.add(onGameResized);
+		uiRoot = FlxSmidr.init();
+		FlxSmidr.autoBlockMouse = true;
 
 		var boxH:Float = 196;
 		var boxX:Float = FlxG.width - BOX_W - 110;
@@ -873,10 +835,9 @@ class WeekEditorFreeplayState extends MusicBeatState {
 	}
 
 	override function destroy() {
-		FlxG.signals.gameResized.remove(onGameResized);
 		ClientPrefs.toggleVolumeKeys(true);
 		if (uiRoot != null) {
-			uiRoot.dispose();
+			FlxSmidr.dispose();
 			uiRoot = null;
 		}
 		super.destroy();

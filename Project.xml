@@ -202,6 +202,11 @@
 	     Belt-and-suspenders: OsuConversionJob also holds a hard @:keep reference to it. -->
 	<haxeflag name="--macro" value="keep('backend.osu.OsuStoryboardPlayer')" if="desktop" />
 
+	<!-- PsychUI stays compiled for Lua/HScript mods even though the engine's own menus moved to
+	     SmidrUI: legacy/editors still references it, but keep() guards against DCE stripping any
+	     class a script constructs via import()/reflection. -->
+	<haxeflag name="--macro" value="keep('backend.ui')" />
+
 	<!-- ================================ Icons ================================== -->
 
 	<assets path='art/icons/iconOG.png' rename='icon.png' if="linux || mac" />

@@ -13,6 +13,7 @@ import objects.Bar;
 import editors.content.Prompt;
 import editors.content.PsychJsonPrinter;
 import smidr.UIRoot;
+import smidr.flixel.FlxSmidr;
 import smidr.UITheme;
 import smidr.UIFonts;
 import smidr.UILocale;
@@ -271,31 +272,12 @@ class CharacterEditorState extends MusicBeatState {
 	var tabPanes1:Array<Sprite> = [];
 	var tabPanes2:Array<UIScrollPane> = [];
 
-	/** Layers the UI root above the game view but below the FPS counter. **/
-	function attachRoot():Void {
-		var fps = Main.fpsVar;
-		if (fps != null && fps.parent != null)
-			uiRoot.attach(fps.parent, fps.parent.getChildIndex(fps));
-		else
-			uiRoot.attach(FlxG.stage);
-	}
-
-	function onGameResized(_:Int, _:Int):Void
-		syncViewport();
-
-	function syncViewport():Void {
-		var sm = FlxG.scaleMode;
-		uiRoot.setViewport(sm.offset.x, sm.offset.y, sm.scale.x, sm.scale.y);
-	}
-
 	function makeUIMenu() {
 		UILocale.translate = function(k:String, f:String):String return Language.getPhrase(k, f);
 		UIFonts.register('assets/fonts/vcr.ttf');
 
-		uiRoot = new UIRoot();
-		attachRoot();
-		syncViewport();
-		FlxG.signals.gameResized.add(onGameResized);
+		uiRoot = FlxSmidr.init();
+		FlxSmidr.autoBlockMouse = true;
 
 		// Top box: Ghost / Settings.
 		var box1X:Float = FlxG.width - BOX1_W - 15;
@@ -1103,7 +1085,7 @@ class CharacterEditorState extends MusicBeatState {
 		} else
 			holdingArrowsTime = 0;
 
-		if (FlxG.mouse.pressedRight && (FlxG.mouse.deltaScreenX != 0 || FlxG.mouse.deltaScreenY != 0)) {
+		if (!FlxSmidr.mouseBlocked && FlxG.mouse.pressedRight && (FlxG.mouse.deltaScreenX != 0 || FlxG.mouse.deltaScreenY != 0)) {
 			character.offset.x -= FlxG.mouse.deltaScreenX;
 			character.offset.y -= FlxG.mouse.deltaScreenY;
 			changedOffset = true;
@@ -1475,10 +1457,9 @@ class CharacterEditorState extends MusicBeatState {
 	}
 
 	override function destroy() {
-		FlxG.signals.gameResized.remove(onGameResized);
 		ClientPrefs.toggleVolumeKeys(true);
 		if (uiRoot != null) {
-			uiRoot.dispose();
+			FlxSmidr.dispose();
 			uiRoot = null;
 		}
 		super.destroy();

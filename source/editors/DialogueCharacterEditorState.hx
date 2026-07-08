@@ -12,6 +12,7 @@ import cutscenes.DialogueCharacter;
 import editors.content.Prompt;
 import openfl.display.Sprite;
 import smidr.UIRoot;
+import smidr.flixel.FlxSmidr;
 import smidr.UITheme;
 import smidr.UIFonts;
 import smidr.UILocale;
@@ -150,23 +151,6 @@ class DialogueCharacterEditorState extends MusicBeatState {
 		super.create();
 	}
 
-	/** Layers the UI root above the game view but below the FPS counter. **/
-	function attachRoot():Void {
-		var fps = Main.fpsVar;
-		if (fps != null && fps.parent != null)
-			uiRoot.attach(fps.parent, fps.parent.getChildIndex(fps));
-		else
-			uiRoot.attach(FlxG.stage);
-	}
-
-	function onGameResized(_:Int, _:Int):Void
-		syncViewport();
-
-	function syncViewport():Void {
-		var sm = FlxG.scaleMode;
-		uiRoot.setViewport(sm.offset.x, sm.offset.y, sm.scale.x, sm.scale.y);
-	}
-
 	static inline var PAD:Int = 10;
 	static inline var BOX_W:Int = 300;
 
@@ -179,10 +163,8 @@ class DialogueCharacterEditorState extends MusicBeatState {
 		UILocale.translate = function(k:String, f:String):String return Language.getPhrase(k, f);
 		UIFonts.register('assets/fonts/vcr.ttf');
 
-		uiRoot = new UIRoot();
-		attachRoot();
-		syncViewport();
-		FlxG.signals.gameResized.add(onGameResized);
+		uiRoot = FlxSmidr.init();
+		FlxSmidr.autoBlockMouse = true;
 
 		// Dialogue position selector (was a radio group box).
 		var typeW:Float = 400;
@@ -876,10 +858,9 @@ class DialogueCharacterEditorState extends MusicBeatState {
 	}
 
 	override function destroy() {
-		FlxG.signals.gameResized.remove(onGameResized);
 		ClientPrefs.toggleVolumeKeys(true);
 		if (uiRoot != null) {
-			uiRoot.dispose();
+			FlxSmidr.dispose();
 			uiRoot = null;
 		}
 		super.destroy();

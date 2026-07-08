@@ -5,6 +5,7 @@ import backend.osu.OsuManiaSkinConvertJob;
 import editors.content.FileDialogHandler;
 import flash.net.FileFilter;
 import smidr.UIRoot;
+import smidr.flixel.FlxSmidr;
 import smidr.UITheme;
 import smidr.UIFonts;
 import smidr.UILocale;
@@ -51,10 +52,8 @@ class OsuSkinConverterState extends MusicBeatState {
 		UILocale.translate = function(k:String, f:String):String return Language.getPhrase(k, f);
 		UIFonts.register('assets/fonts/vcr.ttf');
 
-		uiRoot = new UIRoot();
-		attachRoot();
-		syncViewport();
-		FlxG.signals.gameResized.add(onGameResized);
+		uiRoot = FlxSmidr.init();
+		FlxSmidr.autoBlockMouse = true;
 
 		var title:UILabel = new UILabel('osu!Mania SKIN CONVERTER', 22, 0);
 		title.x = 20;
@@ -116,23 +115,6 @@ class OsuSkinConverterState extends MusicBeatState {
 		btn.y = y;
 		uiRoot.content.addChild(btn);
 		return btn;
-	}
-
-	/** Layers the UI root above the game view but below the FPS counter (mirrors the other converters). **/
-	function attachRoot():Void {
-		var fps = Main.fpsVar;
-		if (fps != null && fps.parent != null)
-			uiRoot.attach(fps.parent, fps.parent.getChildIndex(fps));
-		else
-			uiRoot.attach(FlxG.stage);
-	}
-
-	function onGameResized(_:Int, _:Int):Void
-		syncViewport();
-
-	function syncViewport():Void {
-		var sm = FlxG.scaleMode;
-		uiRoot.setViewport(sm.offset.x, sm.offset.y, sm.scale.x, sm.scale.y);
 	}
 
 	override function update(elapsed:Float) {
@@ -236,11 +218,10 @@ class OsuSkinConverterState extends MusicBeatState {
 			openfl.Lib.application.window.onDropFile.remove(onDropFile)
 		catch (e:Dynamic) {}
 		#end
-		FlxG.signals.gameResized.remove(onGameResized);
 		FlxG.mouse.useSystemCursor = false;
 		FlxG.mouse.visible = false;
 		if (uiRoot != null) {
-			uiRoot.dispose();
+			FlxSmidr.dispose();
 			uiRoot = null;
 		}
 		super.destroy();
