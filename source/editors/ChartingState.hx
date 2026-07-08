@@ -1558,7 +1558,9 @@ class ChartingState extends MusicBeatState {
 			chart.gfVersion = v;
 			chart.syncPrimaryCharacters();
 		});
-		addPickerRow(flow, colW, "Stage", stageList(), chart.stage, function(v:String):Void {
+		var shownStage:String = (chart.stage != null && chart.stage.length > 0) ? chart.stage
+			: backend.StageData.vanillaSongStage(Paths.formatToSongPath(chart.song));
+		addPickerRow(flow, colW, "Stage", stageList(), shownStage, function(v:String):Void {
 			undoStack.snapshot(model, 'Stage');
 			chart.stage = v;
 		});

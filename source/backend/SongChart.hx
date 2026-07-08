@@ -72,7 +72,11 @@ class SongChart {
 	public var player1:String = 'bf';
 	public var player2:String = 'dad';
 	public var gfVersion:String = 'gf';
-	public var stage:String = 'stage';
+
+	/** `null` when the chart doesn't declare a stage -- the loaders then resolve it through
+		`StageData.vanillaSongStage` (base-game week stages) before falling back to `'stage'`.
+		Defaulting to `'stage'` here would swallow that fallback and break the vanilla weeks. **/
+	public var stage:String = null;
 	public var format:String = 'psych_v2';
 	public var timeSignature:Array<Int> = null;
 	public var keyCount:Int = 4;
