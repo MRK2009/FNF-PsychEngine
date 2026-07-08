@@ -8,7 +8,25 @@ import backend.osu.OsuConversionJob;
 import backend.tools.MediaConverter;
 import editors.content.FileDialogHandler;
 import flash.net.FileFilter;
-import flixel.group.FlxSpriteGroup;
+import openfl.display.Sprite;
+import smidr.UIRoot;
+import smidr.UITheme;
+import smidr.UIFonts;
+import smidr.UILocale;
+import smidr.UIComponent;
+import smidr.input.UIFocus;
+import smidr.widgets.UIButton;
+import smidr.widgets.UICheckbox;
+import smidr.widgets.UIDropdown;
+import smidr.widgets.UILabel;
+import smidr.widgets.UILoadingBar;
+import smidr.widgets.UIPanel;
+import smidr.widgets.UIScrollPane;
+import smidr.widgets.UISeparator;
+import smidr.widgets.UITabs;
+import smidr.widgets.UITextInput;
+import smidr.widgets.UIToast;
+import smidr.widgets.UITooltip;
 
 using StringTools;
 
@@ -20,36 +38,39 @@ using StringTools;
 class OsuConverterState extends MusicBeatState {
 	static inline var TMP_ROOT:String = '.osu_tmp';
 	static inline var BAR_W:Int = 500;
-	static inline var FILL_W:Int = 496;
-	static inline var ACCENT:Int = 0xFFFF64C8;
-	static inline var PANEL:Int = 0xFF14141F;
+	static inline var ZONE_X:Int = 40;
+	static inline var ZONE_Y:Int = 80;
+	static inline var ZONE_W:Int = 820;
+	static inline var ZONE_H:Int = 430;
 	static inline var BOX_W:Int = 360;
 	static inline var BOX_H:Int = 470;
 
-	var box:PsychUIBox;
-	var queueText:FlxText;
-	var statusText:FlxText;
+	var uiRoot:UIRoot;
+	var queueLabel:UILabel;
+	var statusLabel:UILabel;
 	var fileDialog:FileDialogHandler;
 
-	var pathInput:PsychUIInputText;
-	var packInput:PsychUIInputText;
-	var extraInput:PsychUIInputText;
-	var bitrateDrop:PsychUIDropDownMenu;
-	var codecDrop:PsychUIDropDownMenu;
-	var bgCheck:PsychUICheckBox;
-	var videoCheck:PsychUICheckBox;
-	var sbCheck:PsychUICheckBox;
-	var hsCheck:PsychUICheckBox;
-	var svCheck:PsychUICheckBox;
-	var quantizeCheck:PsychUICheckBox;
-	var stdKeyDrop:PsychUIDropDownMenu;
-	var stdKeysLabel:FlxText;
+	var tabs:UITabs;
+	var tabPanes:Array<Sprite> = [];
+
+	var pathInput:UITextInput;
+	var packInput:UITextInput;
+	var extraInput:UITextInput;
+	var bitrateSel:String = '192k';
+	var codecSel:String = 'vp9';
+	var bgCheck:UICheckbox;
+	var videoCheck:UICheckbox;
+	var sbCheck:UICheckbox;
+	var hsCheck:UICheckbox;
+	var svCheck:UICheckbox;
+	var quantizeCheck:UICheckbox;
+	var stdKeySel:String = '4K';
+	var stdKeysLabel:UILabel;
 	var stdKeys:Array<Int> = [4];
 
-	var logText:FlxText;
+	var logPane:UIScrollPane;
+	var logLabel:UILabel;
 	var logLines:Array<String> = [];
-	var logScroll:Float = 0;
-	var logAutoScroll:Bool = true;
 	var selectedPath:String = null;
 	var queuedPaths:Array<String> = []; // batch: multiple dropped/browsed sources, all into one pack
 	var busy:Bool = false;
@@ -59,59 +80,35 @@ class OsuConverterState extends MusicBeatState {
 	var msgQueue:sys.thread.Deque<String> = new sys.thread.Deque<String>();
 	#end
 
-	var progLabel:FlxText;
-	var progBarBG:FlxSprite;
-	var progBarFill:FlxSprite;
-	var stopBtn:PsychUIButton;
-
-	inline function font()
-		return Paths.font('vcr.ttf');
+	var progBar:UILoadingBar;
+	var stopBtn:UIButton;
 
 	override function create() {
 		FlxG.camera.bgColor = FlxColor.BLACK;
+		persistentUpdate = true;
+		FlxG.mouse.visible = true;
+		FlxG.mouse.useSystemCursor = true;
 
 		var bg:FlxSprite = new FlxSprite().loadGraphic(Paths.image('menuDesat'));
 		bg.scrollFactor.set();
 		bg.color = 0xFF15151F;
 		add(bg);
 
-		var titleBar:FlxSprite = new FlxSprite(0, 0).makeGraphic(FlxG.width, 60, 0xFF1B1B26);
-		titleBar.alpha = 0.92;
-		titleBar.scrollFactor.set();
-		add(titleBar);
+		UILocale.translate = function(k:String, f:String):String return Language.getPhrase(k, f);
+		UIFonts.register('assets/fonts/vcr.ttf');
 
-		var accentLine:FlxSprite = new FlxSprite(0, 60).makeGraphic(FlxG.width, 3, ACCENT);
-		accentLine.scrollFactor.set();
-		add(accentLine);
+		uiRoot = new UIRoot();
+		attachRoot();
+		syncViewport();
+		UITooltip.install();
+		FlxG.signals.gameResized.add(onGameResized);
 
-		var title:FlxText = new FlxText(0, 8, FlxG.width, 'osu! -> Psych Converter', 30);
-		title.setFormat(font(), 30, FlxColor.WHITE, CENTER, OUTLINE, FlxColor.BLACK);
-		title.scrollFactor.set();
-		add(title);
-
-		var subtitle:FlxText = new FlxText(0, 40, FlxG.width, 'mania & std beatmaps to Friday Night Funkin', 14);
-		subtitle.setFormat(font(), 14, 0xFFB7B7C9, CENTER);
-		subtitle.scrollFactor.set();
-		add(subtitle);
-
+		buildChrome();
 		buildDropZone();
-
-		box = new PsychUIBox(FlxG.width - 380, 80, BOX_W, BOX_H, ['Input', 'Options', 'Log']);
-		box.canMove = box.canMinimize = true;
-		box.scrollFactor.set();
-		add(box);
-
-		statusText = new FlxText(12, FlxG.height - 26, FlxG.width - 24, 'ESC: back to Converters menu', 13);
-		statusText.setFormat(font(), 13, 0xFFB7B7C9, LEFT, OUTLINE, FlxColor.BLACK);
-		statusText.scrollFactor.set();
-		add(statusText);
-
-		buildInputTab();
-		buildOptionsTab();
-		buildLogTab();
+		buildBox();
 		buildProgressBar();
 
-		box.selectedIndex = 0;
+		selectTab(0);
 		log('Drop a .osz / .osu / folder onto the window, or use Browse.');
 
 		#if desktop
@@ -121,69 +118,262 @@ class OsuConverterState extends MusicBeatState {
 			trace('drop listener failed: $error');
 		#end
 
-		FlxG.mouse.visible = true;
 		super.create();
 	}
 
-	function label(tab:FlxSpriteGroup, x:Float, y:Float, text:String, size:Int = 12):FlxText {
-		var field:FlxText = new FlxText(x, y, 340, text, size);
-		field.setFormat(font(), size, FlxColor.WHITE);
-		tab.add(field);
-		return field;
+	/** Layers the UI root above the game view but below the FPS counter (mirrors the other converters). **/
+	function attachRoot():Void {
+		var fps = Main.fpsVar;
+		if (fps != null && fps.parent != null)
+			uiRoot.attach(fps.parent, fps.parent.getChildIndex(fps));
+		else
+			uiRoot.attach(FlxG.stage);
 	}
 
-	function buildDropZone() {
-		var px:Int = 40, py:Int = 80, pw:Int = 820, ph:Int = 430;
+	function onGameResized(_:Int, _:Int):Void
+		syncViewport();
 
-		var border:FlxSprite = new FlxSprite(px, py).makeGraphic(pw, ph, ACCENT);
-		border.alpha = 0.5;
-		border.scrollFactor.set();
-		add(border);
+	function syncViewport():Void {
+		var sm = FlxG.scaleMode;
+		uiRoot.setViewport(sm.offset.x, sm.offset.y, sm.scale.x, sm.scale.y);
+	}
 
-		var inner:FlxSprite = new FlxSprite(px + 3, py + 3).makeGraphic(pw - 6, ph - 6, PANEL);
-		inner.alpha = 0.92;
-		inner.scrollFactor.set();
-		add(inner);
+	function buildChrome():Void {
+		var title:UILabel = new UILabel('osu! -> Psych Converter', 30, 0);
+		title.x = ZONE_X;
+		title.y = 14;
+		uiRoot.content.addChild(title);
 
-		var heading:FlxText = new FlxText(px, py + 64, pw, 'DROP BEATMAP HERE', 42);
-		heading.setFormat(font(), 42, FlxColor.WHITE, CENTER, OUTLINE, FlxColor.BLACK);
-		heading.scrollFactor.set();
-		add(heading);
+		var subtitle:UILabel = new UILabel('mania & std beatmaps to Friday Night Funkin', 14, 2);
+		subtitle.x = ZONE_X;
+		subtitle.y = 52;
+		uiRoot.content.addChild(subtitle);
 
-		var hint:FlxText = new FlxText(px, py + 126, pw, 'drag a .osz, .osu, or a folder anywhere on the window', 17);
-		hint.setFormat(font(), 17, 0xFFB7B7C9, CENTER);
-		hint.scrollFactor.set();
-		add(hint);
+		statusLabel = new UILabel('ESC: back to Converters menu', 13, 2);
+		statusLabel.x = 12;
+		statusLabel.y = FlxG.height - 26;
+		uiRoot.content.addChild(statusLabel);
+	}
 
-		var hint2:FlxText = new FlxText(px, py + 152, pw, 'or use Browse in the Input tab', 14);
-		hint2.setFormat(font(), 14, 0xFF8A8AA0, CENTER);
-		hint2.scrollFactor.set();
-		add(hint2);
+	function buildDropZone():Void {
+		var panel:UIPanel = new UIPanel(ZONE_W, ZONE_H, UITheme.panel);
+		panel.x = ZONE_X;
+		panel.y = ZONE_Y;
+		uiRoot.content.addChild(panel);
 
-		var divider:FlxSprite = new FlxSprite(px + 24, py + 200).makeGraphic(pw - 48, 2, ACCENT);
-		divider.alpha = 0.4;
-		divider.scrollFactor.set();
-		add(divider);
+		var heading:UILabel = new UILabel('DROP BEATMAP HERE', 42, 0);
+		heading.render();
+		heading.x = ZONE_X + (ZONE_W - heading.width) / 2;
+		heading.y = ZONE_Y + 64;
+		uiRoot.content.addChild(heading);
 
-		var qHead:FlxText = new FlxText(px + 24, py + 210, pw - 48, 'QUEUE', 15);
-		qHead.setFormat(font(), 15, ACCENT, LEFT);
-		qHead.scrollFactor.set();
-		add(qHead);
+		var hint:UILabel = new UILabel('drag a .osz, .osu, or a folder anywhere on the window', 17, 2);
+		hint.render();
+		hint.x = ZONE_X + (ZONE_W - hint.width) / 2;
+		hint.y = ZONE_Y + 126;
+		uiRoot.content.addChild(hint);
 
-		queueText = new FlxText(px + 24, py + 234, pw - 48, '', 14);
-		queueText.setFormat(font(), 14, FlxColor.WHITE, LEFT);
-		queueText.wordWrap = true;
-		queueText.scrollFactor.set();
-		add(queueText);
+		var hint2:UILabel = new UILabel('or use Browse in the Input tab', 14, 3);
+		hint2.render();
+		hint2.x = ZONE_X + (ZONE_W - hint2.width) / 2;
+		hint2.y = ZONE_Y + 152;
+		uiRoot.content.addChild(hint2);
 
-		var clearBtn:PsychUIButton = new PsychUIButton(px + 24, py + ph - 42, 'Clear queue', function() clearQueue(), 130, 28);
-		clearBtn.scrollFactor.set();
-		add(clearBtn);
+		var divider:UISeparator = new UISeparator(ZONE_W - 48, false);
+		divider.x = ZONE_X + 24;
+		divider.y = ZONE_Y + 200;
+		uiRoot.content.addChild(divider);
+
+		var qHead:UILabel = new UILabel('QUEUE', 15, 0);
+		qHead.colorOverride = UITheme.accent;
+		qHead.x = ZONE_X + 24;
+		qHead.y = ZONE_Y + 210;
+		uiRoot.content.addChild(qHead);
+
+		queueLabel = new UILabel('', 14, 1);
+		queueLabel.wrapWidth = ZONE_W - 48;
+		queueLabel.x = ZONE_X + 24;
+		queueLabel.y = ZONE_Y + 234;
+		uiRoot.content.addChild(queueLabel);
+
+		var clearBtn:UIButton = new UIButton('Clear queue', 130, 28, clearQueue);
+		clearBtn.x = ZONE_X + 24;
+		clearBtn.y = ZONE_Y + ZONE_H - 42;
+		uiRoot.content.addChild(clearBtn);
 
 		updateQueueText();
 	}
 
-	function clearQueue() {
+	/** The right-hand tabbed box: Input / Options / Log panes under a shared panel + tab strip. **/
+	function buildBox():Void {
+		var boxX:Float = FlxG.width - 380;
+		var boxY:Float = ZONE_Y;
+
+		var panel:UIPanel = new UIPanel(BOX_W, BOX_H, UITheme.panel);
+		panel.x = boxX;
+		panel.y = boxY;
+		uiRoot.content.addChild(panel);
+
+		tabs = new UITabs(BOX_W, [{label: 'Input'}, {label: 'Options'}, {label: 'Log'}], selectTab);
+		tabs.x = boxX;
+		tabs.y = boxY;
+		uiRoot.content.addChild(tabs);
+
+		var paneY:Float = boxY + tabs.h + 8;
+		tabPanes = [];
+		for (i in 0...3) {
+			var pane:Sprite = new Sprite();
+			pane.x = boxX + 10;
+			pane.y = paneY;
+			pane.visible = false;
+			uiRoot.content.addChild(pane);
+			tabPanes.push(pane);
+		}
+
+		buildInputTab(tabPanes[0]);
+		buildOptionsTab(tabPanes[1]);
+		buildLogTab(tabPanes[2], BOX_H - tabs.h - 26);
+	}
+
+	function selectTab(index:Int):Void {
+		for (i in 0...tabPanes.length)
+			tabPanes[i].visible = (i == index);
+		if (tabs.selectedIndex != index)
+			tabs.select(index);
+	}
+
+	function paneLabel(pane:Sprite, x:Float, y:Float, text:String, size:Int = 12, tone:Int = 0):UILabel {
+		var l:UILabel = new UILabel(text, size, tone);
+		l.wrapWidth = BOX_W - 20 - x;
+		l.x = x;
+		l.y = y;
+		pane.addChild(l);
+		return l;
+	}
+
+	function buildInputTab(pane:Sprite):Void {
+		paneLabel(pane, 0, 0, 'Source (.osz / .osu / folder):');
+		pathInput = new UITextInput('', 340, '');
+		pathInput.y = 22;
+		pane.addChild(pathInput);
+
+		var browse:UIButton = new UIButton('Browse file', 160, 26, browseFile);
+		browse.y = 56;
+		pane.addChild(browse);
+
+		var browseDir:UIButton = new UIButton('Browse folder', 160, 26, browseFolder);
+		browseDir.x = 172;
+		browseDir.y = 56;
+		pane.addChild(browseDir);
+
+		paneLabel(pane, 0, 94, 'Tip: drag & drop anywhere. Batch: drop several files, or pick a folder of .osz - all go to one pack.', 11, 2);
+
+		var convert:UIButton = new UIButton('CONVERT', 340, 40, startConvert, true);
+		convert.fontSize = 15;
+		convert.y = 150;
+		pane.addChild(convert);
+	}
+
+	function buildOptionsTab(pane:Sprite):Void {
+		var rowW:Float = 340;
+
+		packInput = new UITextInput('Modpack name:', rowW, OsuConvertDefaults.PACK_NAME);
+		packInput.boxWidth = 180;
+		pane.addChild(packInput);
+
+		var bitrateDrop:UIDropdown = new UIDropdown('Audio quality:', rowW, function(i:Int, v:String):Void bitrateSel = v);
+		bitrateDrop.setItems(OsuConvertDefaults.AUDIO_BITRATES.copy());
+		bitrateDrop.select(OsuConvertDefaults.AUDIO_BITRATES.indexOf('192k'));
+		bitrateDrop.y = 30;
+		pane.addChild(bitrateDrop);
+
+		bgCheck = new UICheckbox('Convert background -> 1280x720', rowW, true);
+		bgCheck.y = 62;
+		pane.addChild(bgCheck);
+
+		videoCheck = new UICheckbox('Convert video -> WebM', rowW);
+		videoCheck.y = 88;
+		pane.addChild(videoCheck);
+
+		var codecDrop:UIDropdown = new UIDropdown('Video codec:', rowW, function(i:Int, v:String):Void codecSel = v);
+		codecDrop.setItems(OsuConvertDefaults.VIDEO_CODECS.copy());
+		codecDrop.select(OsuConvertDefaults.VIDEO_CODECS.indexOf('vp9'));
+		codecDrop.y = 116;
+		pane.addChild(codecDrop);
+
+		extraInput = new UITextInput('Video extra ffmpeg args:', rowW, '');
+		extraInput.boxWidth = 140;
+		extraInput.y = 148;
+		pane.addChild(extraInput);
+
+		sbCheck = new UICheckbox('Convert storyboard (experimental)', rowW);
+		sbCheck.y = 180;
+		pane.addChild(sbCheck);
+
+		svCheck = new UICheckbox('Mimic SV (osu! scroll behavior)', rowW);
+		svCheck.y = 206;
+		pane.addChild(svCheck);
+
+		// SV now uses the engine's native Scroll Velocity events -- no bundled script, so no script choice.
+
+		quantizeCheck = new UICheckbox('Quantize notes (auto-snap timing)', rowW);
+		quantizeCheck.y = 232;
+		pane.addChild(quantizeCheck);
+
+		var stdKeyDrop:UIDropdown = new UIDropdown('osu!std -> mania:', 220, function(i:Int, v:String):Void stdKeySel = v);
+		stdKeyDrop.setItems(['4K', '5K', '6K', '7K', '8K', '9K']);
+		stdKeyDrop.select(0);
+		stdKeyDrop.y = 272;
+		pane.addChild(stdKeyDrop);
+
+		var addKeyBtn:UIButton = new UIButton('+', 30, 22, addStdKey);
+		addKeyBtn.x = 232;
+		addKeyBtn.y = 272;
+		pane.addChild(addKeyBtn);
+
+		var resetKeyBtn:UIButton = new UIButton('Reset', 72, 22, resetStdKeys);
+		resetKeyBtn.x = 268;
+		resetKeyBtn.y = 272;
+		pane.addChild(resetKeyBtn);
+
+		stdKeysLabel = paneLabel(pane, 0, 304, '');
+		updateStdKeysLabel();
+
+		hsCheck = new UICheckbox('Convert hitsounds', rowW, true);
+		hsCheck.y = 330;
+		pane.addChild(hsCheck);
+	}
+
+	function buildLogTab(pane:Sprite, viewH:Float):Void {
+		logPane = new UIScrollPane(BOX_W - 20, viewH);
+		pane.addChild(logPane);
+
+		logLabel = new UILabel('', 11, 1);
+		logLabel.wrapWidth = BOX_W - 20 - UITheme.px(4) - 12;
+		logLabel.x = 2;
+		logLabel.y = 2;
+		logPane.content.addChild(logLabel);
+	}
+
+	function buildProgressBar():Void {
+		var barX:Float = (FlxG.width - BAR_W) / 2;
+		var barY:Float = FlxG.height - 86;
+
+		progBar = new UILoadingBar('', BAR_W);
+		progBar.x = barX;
+		progBar.y = barY;
+		progBar.visible = false;
+		uiRoot.content.addChild(progBar);
+
+		stopBtn = new UIButton('Stop', 90, 24, requestStop);
+		stopBtn.danger = true;
+		stopBtn.x = barX + BAR_W + 12;
+		stopBtn.y = barY;
+		stopBtn.visible = false;
+		uiRoot.content.addChild(stopBtn);
+	}
+
+	function clearQueue():Void {
 		queuedPaths = [];
 		if (pathInput != null)
 			pathInput.text = '';
@@ -191,11 +381,11 @@ class OsuConverterState extends MusicBeatState {
 		log('Queue cleared.');
 	}
 
-	function updateQueueText() {
-		if (queueText == null)
+	function updateQueueText():Void {
+		if (queueLabel == null)
 			return;
 		if (queuedPaths.length < 1) {
-			queueText.text = 'nothing queued yet';
+			queueLabel.text = 'nothing queued yet';
 			return;
 		}
 		var lines:Array<String> = [];
@@ -204,90 +394,11 @@ class OsuConverterState extends MusicBeatState {
 			lines.push('${i + 1}.  ' + haxe.io.Path.withoutDirectory(queuedPaths[i]));
 		if (queuedPaths.length > max)
 			lines.push('... and ${queuedPaths.length - max} more');
-		queueText.text = lines.join('\n');
+		queueLabel.text = lines.join('\n');
 	}
 
-	function buildInputTab() {
-		var tab = box.getTab('Input').menu;
-		label(tab, 10, 8, 'Source (.osz / .osu / folder):');
-		pathInput = new PsychUIInputText(10, 28, 330, '', 8);
-		tab.add(pathInput);
-
-		var browse:PsychUIButton = new PsychUIButton(10, 56, 'Browse file', function() browseFile());
-		browse.resize(150, 26);
-		tab.add(browse);
-
-		var browseDir:PsychUIButton = new PsychUIButton(180, 56, 'Browse folder', function() browseFolder());
-		browseDir.resize(150, 26);
-		tab.add(browseDir);
-
-		label(tab, 10, 90, 'Tip: drag & drop anywhere. Batch: drop several\nfiles, or pick a folder of .osz - all go to one pack.', 11);
-
-		var convert:PsychUIButton = new PsychUIButton(10, 150, 'CONVERT', function() startConvert());
-		convert.resize(330, 40);
-		tab.add(convert);
-	}
-
-	function buildOptionsTab() {
-		var tab = box.getTab('Options').menu;
-
-		label(tab, 10, 8, 'Modpack name:');
-		packInput = new PsychUIInputText(140, 6, 200, OsuConvertDefaults.PACK_NAME, 8);
-		tab.add(packInput);
-
-		label(tab, 10, 36, 'Audio quality:');
-		bitrateDrop = new PsychUIDropDownMenu(140, 32, OsuConvertDefaults.AUDIO_BITRATES.copy(), function(index, name) {}, 120);
-		bitrateDrop.selectedLabel = '192k';
-		tab.add(bitrateDrop);
-
-		bgCheck = new PsychUICheckBox(10, 70, 'Convert background -> 1280x720', 220);
-		bgCheck.checked = true;
-		tab.add(bgCheck);
-
-		videoCheck = new PsychUICheckBox(10, 96, 'Convert video -> WebM', 220);
-		tab.add(videoCheck);
-
-		label(tab, 10, 122, 'Video codec:');
-		codecDrop = new PsychUIDropDownMenu(140, 118, OsuConvertDefaults.VIDEO_CODECS.copy(), function(index, name) {}, 120);
-		codecDrop.selectedLabel = 'vp9';
-		tab.add(codecDrop);
-
-		label(tab, 10, 150, 'Video extra ffmpeg args:');
-		extraInput = new PsychUIInputText(10, 170, 330, '', 8);
-		tab.add(extraInput);
-
-		sbCheck = new PsychUICheckBox(10, 198, 'Convert storyboard (experimental)', 220);
-		tab.add(sbCheck);
-
-		svCheck = new PsychUICheckBox(10, 224, 'Mimic SV (osu! scroll behavior)', 220);
-		tab.add(svCheck);
-
-		// SV now uses the engine's native Scroll Velocity events -- no bundled script, so no script choice.
-
-		quantizeCheck = new PsychUICheckBox(10, 258, 'Quantize notes (auto-snap timing)', 260);
-		tab.add(quantizeCheck);
-
-		label(tab, 10, 312, 'osu!std -> mania:');
-		stdKeyDrop = new PsychUIDropDownMenu(140, 308, ['4K', '5K', '6K', '7K', '8K', '9K'], function(index, name) {}, 80);
-		stdKeyDrop.selectedLabel = '4K';
-		tab.add(stdKeyDrop);
-
-		var addKeyBtn:PsychUIButton = new PsychUIButton(226, 308, '+', function() addStdKey(), 30, 22);
-		tab.add(addKeyBtn);
-
-		var resetKeyBtn:PsychUIButton = new PsychUIButton(262, 308, 'Reset', function() resetStdKeys(), 72, 22);
-		tab.add(resetKeyBtn);
-
-		stdKeysLabel = label(tab, 10, 338, '');
-		updateStdKeysLabel();
-
-		hsCheck = new PsychUICheckBox(10, 364, 'Convert hitsounds', 220);
-		hsCheck.checked = true;
-		tab.add(hsCheck);
-	}
-
-	function addStdKey() {
-		var k:Int = parseKeyLabel(stdKeyDrop.selectedLabel);
+	function addStdKey():Void {
+		var k:Int = parseKeyLabel(stdKeySel);
 		if (k >= 1 && !stdKeys.contains(k)) {
 			stdKeys.push(k);
 			stdKeys.sort((a, b) -> a - b);
@@ -295,12 +406,12 @@ class OsuConverterState extends MusicBeatState {
 		}
 	}
 
-	function resetStdKeys() {
+	function resetStdKeys():Void {
 		stdKeys = [4];
 		updateStdKeysLabel();
 	}
 
-	function updateStdKeysLabel() {
+	function updateStdKeysLabel():Void {
 		if (stdKeysLabel != null)
 			stdKeysLabel.text = 'Generates: ' + (stdKeys.length > 0 ? [for (k in stdKeys) '${k}K'].join(', ') : '(none -> 4K)');
 	}
@@ -310,102 +421,30 @@ class OsuConverterState extends MusicBeatState {
 		return (n == null) ? 4 : n;
 	}
 
-	function buildLogTab() {
-		logText = new FlxText(0, 0, BOX_W - 20, '', 11);
-		logText.setFormat(font(), 11, FlxColor.WHITE);
-		logText.wordWrap = true;
-		logText.scrollFactor.set();
-		logText.visible = false;
-		add(logText);
+	function showProgressBar(show:Bool):Void {
+		if (progBar != null)
+			progBar.visible = show;
 	}
 
-	function updateLogView() {
-		if (logText == null || box == null)
-			return;
-
-		var show:Bool = !box.isMinimized && box.selectedIndex == 2;
-		logText.visible = show;
-		if (!show)
-			return;
-
-		var viewTop:Float = box.y + box.tabHeight + 8;
-		var viewH:Float = BOX_H - box.tabHeight - 16;
-		var maxScroll:Float = Math.max(0, logText.height - viewH);
-
-		var mx:Float = FlxG.mouse.x, my:Float = FlxG.mouse.y;
-		var overBox:Bool = mx >= box.x && mx <= box.x + BOX_W && my >= box.y && my <= box.y + BOX_H;
-		if (overBox && FlxG.mouse.wheel != 0) {
-			logScroll -= FlxG.mouse.wheel * 32;
-			logAutoScroll = false;
-		}
-
-		if (logAutoScroll)
-			logScroll = maxScroll;
-		if (logScroll < 0)
-			logScroll = 0;
-		if (logScroll > maxScroll)
-			logScroll = maxScroll;
-		if (logScroll >= maxScroll - 1)
-			logAutoScroll = true;
-
-		logText.x = box.x + 10;
-		logText.y = viewTop - logScroll;
-		logText.clipRect = new flixel.math.FlxRect(0, logScroll, logText.width, viewH);
-	}
-
-	function buildProgressBar() {
-		var barX:Float = (FlxG.width - BAR_W) / 2;
-		var barY:Float = FlxG.height - 86;
-
-		progLabel = new FlxText(0, barY - 30, FlxG.width, '', 16);
-		progLabel.setFormat(font(), 16, FlxColor.WHITE, CENTER, OUTLINE, FlxColor.BLACK);
-		progLabel.scrollFactor.set();
-		add(progLabel);
-
-		progBarBG = new FlxSprite(barX, barY).makeGraphic(BAR_W, 24, 0xFF0E0E16);
-		progBarBG.scrollFactor.set();
-		add(progBarBG);
-
-		progBarFill = new FlxSprite(barX + 2, barY + 2).makeGraphic(FILL_W, 20, ACCENT);
-		progBarFill.scrollFactor.set();
-		add(progBarFill);
-
-		stopBtn = new PsychUIButton(barX + BAR_W + 12, barY, 'Stop', function() requestStop(), 90, 24);
-		stopBtn.scrollFactor.set();
-		stopBtn.visible = false;
-		add(stopBtn);
-
-		showProgressBar(false);
-	}
-
-	function showProgressBar(show:Bool) {
-		if (progLabel != null)
-			progLabel.visible = show;
-		if (progBarBG != null)
-			progBarBG.visible = show;
-		if (progBarFill != null)
-			progBarFill.visible = show;
-	}
-
-	function setProgress(frac:Float, text:String) {
+	function setProgress(frac:Float, text:String):Void {
 		if (frac < 0)
 			frac = 0;
 		if (frac > 1)
 			frac = 1;
-		if (progBarFill != null)
-			progBarFill.clipRect = new flixel.math.FlxRect(0, 0, FILL_W * frac, 20);
-		if (progLabel != null)
-			progLabel.text = text;
+		if (progBar != null) {
+			progBar.setProgress(frac);
+			progBar.label = text;
+		}
 	}
 
-	function ensureDialog() {
+	function ensureDialog():Void {
 		if (fileDialog == null) {
 			fileDialog = new FileDialogHandler();
 			add(fileDialog);
 		}
 	}
 
-	function browseFile() {
+	function browseFile():Void {
 		if (busy)
 			return;
 		ensureDialog();
@@ -414,7 +453,7 @@ class OsuConverterState extends MusicBeatState {
 		fileDialog.open(null, 'Select an osu! beatmap', [new FileFilter('osu! beatmap', '*.osz;*.osu')], function() setPath(fileDialog.path));
 	}
 
-	function browseFolder() {
+	function browseFolder():Void {
 		if (busy)
 			return;
 		ensureDialog();
@@ -424,14 +463,14 @@ class OsuConverterState extends MusicBeatState {
 	}
 
 	#if desktop
-	function onDropFile(path:String) {
+	function onDropFile(path:String):Void {
 		if (busy)
 			return;
 		setPath(path);
 	}
 	#end
 
-	function setPath(path:String) {
+	function setPath(path:String):Void {
 		if (path == null || path.trim().length < 1)
 			return;
 		path = path.trim();
@@ -444,7 +483,7 @@ class OsuConverterState extends MusicBeatState {
 		log('Added: $path (${queuedPaths.length} queued)');
 	}
 
-	function startConvert() {
+	function startConvert():Void {
 		if (busy)
 			return;
 
@@ -463,10 +502,10 @@ class OsuConverterState extends MusicBeatState {
 
 		var opts:OsuConvertOptions = OsuConvertDefaults.make();
 		opts.packName = (packInput.text.trim().length > 0) ? packInput.text.trim() : OsuConvertDefaults.PACK_NAME;
-		opts.audioBitrate = bitrateDrop.selectedLabel;
+		opts.audioBitrate = bitrateSel;
 		opts.convertBackground = bgCheck.checked;
 		opts.convertVideo = videoCheck.checked;
-		opts.videoCodec = codecDrop.selectedLabel;
+		opts.videoCodec = codecSel;
 		opts.videoExtraArgs = extraInput.text;
 		opts.convertStoryboard = sbCheck.checked;
 		opts.convertHitsounds = hsCheck.checked;
@@ -477,9 +516,8 @@ class OsuConverterState extends MusicBeatState {
 		queuedPaths = []; // consumed by this run
 		updateQueueText();
 		logLines = [];
-		logScroll = 0;
-		logAutoScroll = true;
-		box.selectedIndex = 2; // jump to the Log tab
+		refreshLog();
+		selectTab(2); // jump to the Log tab
 		log('Starting conversion...');
 
 		#if desktop
@@ -541,7 +579,7 @@ class OsuConverterState extends MusicBeatState {
 		#end
 	}
 
-	function requestStop() {
+	function requestStop():Void {
 		if (!busy || cancelRequested)
 			return;
 		cancelRequested = true;
@@ -550,12 +588,12 @@ class OsuConverterState extends MusicBeatState {
 		refreshStopButton();
 	}
 
-	function refreshStopButton() {
+	function refreshStopButton():Void {
 		if (stopBtn != null)
 			stopBtn.visible = busy && !cancelRequested;
 	}
 
-	function finishConvert(result:String) {
+	function finishConvert(result:String):Void {
 		busy = false;
 		cancelRequested = false;
 		showProgressBar(false);
@@ -568,18 +606,26 @@ class OsuConverterState extends MusicBeatState {
 				log('Conversion stopped.');
 			case 'ok':
 				log('Conversion complete.');
+				UIToast.show('Conversion complete.');
 			default:
 				log('Conversion finished with errors (see log above).');
 		}
 	}
 
-	function log(line:String) {
+	function log(line:String):Void {
 		logLines.push(line);
 		while (logLines.length > 200)
 			logLines.shift();
-		if (logText != null)
-			logText.text = logLines.join('\n');
+		refreshLog();
 		trace('[osu-convert] $line');
+	}
+
+	function refreshLog():Void {
+		if (logLabel == null || logPane == null)
+			return;
+		logLabel.text = logLines.join('\n');
+		logPane.refreshContent(logLabel.measure() + 8);
+		logPane.setScroll(1e9); // clamped to the bottom
 	}
 
 	override function update(elapsed:Float) {
@@ -603,16 +649,16 @@ class OsuConverterState extends MusicBeatState {
 		}
 		#end
 
-		if (!busy && controls.BACK) {
+		if (!busy && subState == null && !UIRoot.overlayOpen && UIFocus.focused == null && controls.BACK) {
 			#if desktop
 			try
 				openfl.Lib.application.window.onDropFile.remove(onDropFile)
 			catch (error:Dynamic) {}
 			#end
+			FlxG.sound.play(Paths.sound('cancelMenu'));
 			MusicBeatState.switchState(new MasterConverterState());
 		}
 		super.update(elapsed);
-		updateLogView();
 	}
 
 	override function destroy() {
@@ -621,6 +667,14 @@ class OsuConverterState extends MusicBeatState {
 			openfl.Lib.application.window.onDropFile.remove(onDropFile)
 		catch (error:Dynamic) {}
 		#end
+		FlxG.signals.gameResized.remove(onGameResized);
+		FlxG.mouse.useSystemCursor = false;
+		FlxG.mouse.visible = false;
+		UITooltip.reset();
+		if (uiRoot != null) {
+			uiRoot.dispose();
+			uiRoot = null;
+		}
 		super.destroy();
 	}
 }

@@ -4,6 +4,14 @@ package states.converters;
 import backend.osu.OsuManiaSkinConvertJob;
 import editors.content.FileDialogHandler;
 import flash.net.FileFilter;
+import smidr.UIRoot;
+import smidr.UITheme;
+import smidr.UIFonts;
+import smidr.UILocale;
+import smidr.input.UIFocus;
+import smidr.widgets.UIButton;
+import smidr.widgets.UILabel;
+import smidr.widgets.UIPanel;
 
 using StringTools;
 
@@ -15,21 +23,24 @@ using StringTools;
 **/
 class OsuSkinConverterState extends MusicBeatState {
 	static inline var TMP_ROOT:String = '.osu_skin_tmp';
-	static inline var ACCENT:Int = 0xFF64C8FF;
-	static inline var PANEL:Int = 0xFF14141F;
+	static inline var ZONE_X:Int = 40;
+	static inline var ZONE_Y:Int = 70;
+	static inline var ZONE_W:Int = 820;
+	static inline var ZONE_H:Int = 230;
 
+	var uiRoot:UIRoot;
 	var fileDialog:FileDialogHandler;
 	var queued:Array<String> = [];
-	var queueText:FlxText;
-	var logText:FlxText;
+	var queueLabel:UILabel;
+	var logLabel:UILabel;
 	var logLines:Array<String> = [];
 	var busy:Bool = false;
 
-	inline function font()
-		return Paths.font('vcr.ttf');
-
 	override function create() {
 		FlxG.camera.bgColor = FlxColor.BLACK;
+		persistentUpdate = true;
+		FlxG.mouse.visible = true;
+		FlxG.mouse.useSystemCursor = true;
 		fileDialog = new FileDialogHandler();
 
 		var bg:FlxSprite = new FlxSprite().loadGraphic(Paths.image('menuDesat'));
@@ -37,38 +48,54 @@ class OsuSkinConverterState extends MusicBeatState {
 		bg.color = 0xFF20202A;
 		add(bg);
 
-		var px:Int = 40, py:Int = 70, pw:Int = 820, ph:Int = 230;
-		var border:FlxSprite = new FlxSprite(px, py).makeGraphic(pw, ph, ACCENT);
-		border.alpha = 0.5;
-		add(border);
-		var inner:FlxSprite = new FlxSprite(px + 3, py + 3).makeGraphic(pw - 6, ph - 6, PANEL);
-		inner.alpha = 0.92;
-		add(inner);
+		UILocale.translate = function(k:String, f:String):String return Language.getPhrase(k, f);
+		UIFonts.register('assets/fonts/vcr.ttf');
 
-		var heading:FlxText = new FlxText(px, py + 44, pw, 'DROP osu! SKIN HERE', 40);
-		heading.setFormat(font(), 40, FlxColor.WHITE, CENTER, OUTLINE, FlxColor.BLACK);
-		add(heading);
+		uiRoot = new UIRoot();
+		attachRoot();
+		syncViewport();
+		FlxG.signals.gameResized.add(onGameResized);
 
-		var hint:FlxText = new FlxText(px, py + 104, pw, 'drag a .osk file or a folder containing skin.ini onto the window', 16);
-		hint.setFormat(font(), 16, 0xFFB7B7C9, CENTER);
-		add(hint);
+		var title:UILabel = new UILabel('osu!Mania SKIN CONVERTER', 22, 0);
+		title.x = 20;
+		title.y = 18;
+		uiRoot.content.addChild(title);
 
-		var title:FlxText = new FlxText(20, 18, FlxG.width - 40, 'osu!Mania SKIN CONVERTER', 22);
-		title.setFormat(font(), 22, FlxColor.WHITE, LEFT, OUTLINE, FlxColor.BLACK);
-		add(title);
+		var panel:UIPanel = new UIPanel(ZONE_W, ZONE_H, UITheme.panel);
+		panel.x = ZONE_X;
+		panel.y = ZONE_Y;
+		uiRoot.content.addChild(panel);
 
-		queueText = new FlxText(px, py + 150, pw, '', 16);
-		queueText.setFormat(font(), 16, 0xFFFFD24A, CENTER);
-		add(queueText);
+		var heading:UILabel = new UILabel('DROP osu! SKIN HERE', 40, 0);
+		heading.render();
+		heading.x = ZONE_X + (ZONE_W - heading.width) / 2;
+		heading.y = ZONE_Y + 44;
+		uiRoot.content.addChild(heading);
 
-		add(new PsychUIButton(px, py + ph + 12, 'Browse .osk', function() browseFile(), 160, 28));
-		add(new PsychUIButton(px + 170, py + ph + 12, 'Browse folder', function() browseFolder(), 160, 28));
-		add(new PsychUIButton(px + 340, py + ph + 12, 'Convert', function() startConvert(), 160, 28));
-		add(new PsychUIButton(px + 510, py + ph + 12, 'Clear', function() clearQueue(), 120, 28));
+		var hint:UILabel = new UILabel('drag a .osk file or a folder containing skin.ini onto the window', 16, 2);
+		hint.render();
+		hint.x = ZONE_X + (ZONE_W - hint.width) / 2;
+		hint.y = ZONE_Y + 104;
+		uiRoot.content.addChild(hint);
 
-		logText = new FlxText(px, py + ph + 56, pw, '', 15);
-		logText.setFormat(font(), 15, 0xFFDDDDEE, LEFT);
-		add(logText);
+		queueLabel = new UILabel('', 16, 1);
+		queueLabel.colorOverride = UITheme.warning;
+		queueLabel.x = ZONE_X;
+		queueLabel.y = ZONE_Y + 150;
+		uiRoot.content.addChild(queueLabel);
+
+		var btnY:Float = ZONE_Y + ZONE_H + 12;
+		addButton('Browse .osk', ZONE_X, btnY, 160, browseFile);
+		addButton('Browse folder', ZONE_X + 170, btnY, 160, browseFolder);
+		var convert:UIButton = addButton('Convert', ZONE_X + 340, btnY, 160, startConvert);
+		convert.accent = true;
+		addButton('Clear', ZONE_X + 510, btnY, 120, clearQueue);
+
+		logLabel = new UILabel('', 15, 1);
+		logLabel.wrapWidth = ZONE_W;
+		logLabel.x = ZONE_X;
+		logLabel.y = btnY + 44;
+		uiRoot.content.addChild(logLabel);
 
 		log('Drop a .osk / skin folder onto the window, or use Browse.');
 		updateQueueText();
@@ -80,18 +107,43 @@ class OsuSkinConverterState extends MusicBeatState {
 			trace('drop listener failed: $e');
 		#end
 
-		FlxG.mouse.visible = true;
 		super.create();
+	}
+
+	function addButton(label:String, x:Float, y:Float, w:Float, onClick:Void->Void):UIButton {
+		var btn:UIButton = new UIButton(label, w, 28, onClick);
+		btn.x = x;
+		btn.y = y;
+		uiRoot.content.addChild(btn);
+		return btn;
+	}
+
+	/** Layers the UI root above the game view but below the FPS counter (mirrors the other converters). **/
+	function attachRoot():Void {
+		var fps = Main.fpsVar;
+		if (fps != null && fps.parent != null)
+			uiRoot.attach(fps.parent, fps.parent.getChildIndex(fps));
+		else
+			uiRoot.attach(FlxG.stage);
+	}
+
+	function onGameResized(_:Int, _:Int):Void
+		syncViewport();
+
+	function syncViewport():Void {
+		var sm = FlxG.scaleMode;
+		uiRoot.setViewport(sm.offset.x, sm.offset.y, sm.scale.x, sm.scale.y);
 	}
 
 	override function update(elapsed:Float) {
 		super.update(elapsed);
-		if (!busy && controls.BACK) {
+		if (!busy && subState == null && !UIRoot.overlayOpen && UIFocus.focused == null && controls.BACK) {
 			#if desktop
 			try
 				openfl.Lib.application.window.onDropFile.remove(onDropFile)
 			catch (e:Dynamic) {}
 			#end
+			FlxG.sound.play(Paths.sound('cancelMenu'));
 			MusicBeatState.switchState(new MasterConverterState());
 		}
 	}
@@ -141,7 +193,9 @@ class OsuSkinConverterState extends MusicBeatState {
 	}
 
 	function updateQueueText() {
-		queueText.text = (queued.length < 1) ? 'Nothing queued.' : '${queued.length} skin(s) queued';
+		queueLabel.text = (queued.length < 1) ? 'Nothing queued.' : '${queued.length} skin(s) queued';
+		queueLabel.render();
+		queueLabel.x = ZONE_X + (ZONE_W - queueLabel.width) / 2;
 	}
 
 	function startConvert() {
@@ -171,9 +225,25 @@ class OsuSkinConverterState extends MusicBeatState {
 		logLines.push(line);
 		while (logLines.length > 12)
 			logLines.shift();
-		if (logText != null)
-			logText.text = logLines.join('\n');
+		if (logLabel != null)
+			logLabel.text = logLines.join('\n');
 		trace('[osu skin] ' + line);
+	}
+
+	override function destroy() {
+		#if desktop
+		try
+			openfl.Lib.application.window.onDropFile.remove(onDropFile)
+		catch (e:Dynamic) {}
+		#end
+		FlxG.signals.gameResized.remove(onGameResized);
+		FlxG.mouse.useSystemCursor = false;
+		FlxG.mouse.visible = false;
+		if (uiRoot != null) {
+			uiRoot.dispose();
+			uiRoot = null;
+		}
+		super.destroy();
 	}
 }
 #end
