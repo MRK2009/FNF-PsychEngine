@@ -1546,14 +1546,17 @@ class ChartingState extends MusicBeatState {
 		addPickerRow(flow, colW, "Player", characterList(), chart.player1, function(v:String):Void {
 			undoStack.snapshot(model, 'Characters');
 			chart.player1 = v;
+			chart.syncPrimaryCharacters();
 		});
 		addPickerRow(flow, colW, "Opponent", characterList(), chart.player2, function(v:String):Void {
 			undoStack.snapshot(model, 'Characters');
 			chart.player2 = v;
+			chart.syncPrimaryCharacters();
 		});
 		addPickerRow(flow, colW, "Girlfriend", characterList(), chart.gfVersion, function(v:String):Void {
 			undoStack.snapshot(model, 'Characters');
 			chart.gfVersion = v;
+			chart.syncPrimaryCharacters();
 		});
 		addPickerRow(flow, colW, "Stage", stageList(), chart.stage, function(v:String):Void {
 			undoStack.snapshot(model, 'Stage');

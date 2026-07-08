@@ -113,6 +113,23 @@ class SongChart {
 	public static inline var LEGACY_GF:Int = 2;
 
 	/**
+		Re-points the primary opponent/player/gf strumlines at the current `player2`/`player1`/`gfVersion`
+		metadata. The character pickers edit only the scalar metadata; the runtime binds sing animations to
+		the native `strumLines[].characters`, so without this a live editor playtest keeps the old character
+		(only a full reload re-derives the lines through `fromLegacy`). Extra/custom lines are untouched.
+	**/
+	public function syncPrimaryCharacters():Void {
+		for (sd in strumLines) {
+			switch (sd.index) {
+				case LEGACY_OPPONENT: sd.characters = [player2];
+				case LEGACY_PLAYER: sd.characters = [player1];
+				case LEGACY_GF: sd.characters = [gfVersion];
+				default:
+			}
+		}
+	}
+
+	/**
 		Copies the scalar metadata from a legacy `Song.SwagSong` onto this chart.
 		@param song the source chart
 	**/

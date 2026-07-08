@@ -106,6 +106,7 @@ class SongTab {
 
 		s.playerDropDown = new PsychUIDropDownMenu(objX, objY + 40, [''], function(id:Int, character:String) {
 			PlayState.SONG.player1 = character;
+			PlayState.SONG.syncPrimaryCharacters();
 			s.updateJsonData();
 			s.updateHeads(true);
 			s.loadMusic();
@@ -120,6 +121,7 @@ class SongTab {
 
 		s.opponentDropDown = new PsychUIDropDownMenu(objX, objY + 80, [''], function(id:Int, character:String) {
 			PlayState.SONG.player2 = character;
+			PlayState.SONG.syncPrimaryCharacters();
 			s.updateJsonData();
 			s.updateHeads(true);
 			s.loadMusic();
@@ -129,6 +131,7 @@ class SongTab {
 
 		s.girlfriendDropDown = new PsychUIDropDownMenu(objX, objY + 120, [''], function(id:Int, character:String) {
 			PlayState.SONG.gfVersion = character;
+			PlayState.SONG.syncPrimaryCharacters();
 			if (s.charPreview.showChars) s.charPreview.reloadEditorChars();
 			trace('selected $character');
 		});
