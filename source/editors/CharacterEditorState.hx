@@ -21,6 +21,8 @@ import smidr.input.UIFocus;
 import smidr.widgets.UIButton;
 import smidr.widgets.UICheckbox;
 import smidr.widgets.UIDropdown;
+import smidr.widgets.UILabel;
+import smidr.widgets.UIModal;
 import smidr.widgets.UIPanel;
 import smidr.widgets.UIScrollPane;
 import smidr.widgets.UISlider;
@@ -40,8 +42,7 @@ class CharacterEditorState extends MusicBeatState {
 	var dadPosition = FlxPoint.weak();
 	var bfPosition = FlxPoint.weak();
 
-	var helpBg:FlxSprite;
-	var helpTexts:FlxSpriteGroup;
+	var helpModal:UIModal = null;
 	var cameraZoomText:FlxText;
 	var frameAdvanceText:FlxText;
 
@@ -164,7 +165,6 @@ class CharacterEditorState extends MusicBeatState {
 		frameAdvanceText.cameras = [camHUD];
 		add(frameAdvanceText);
 
-		addHelpScreen();
 		FlxG.mouse.visible = true;
 		FlxG.camera.zoom = 1;
 
@@ -180,56 +180,67 @@ class CharacterEditorState extends MusicBeatState {
 		super.create();
 	}
 
-	function addHelpScreen() {
-		var str:Array<String> = [
-			"CAMERA",
-			"E/Q - Camera Zoom In/Out",
-			"J/K/L/I - Move Camera",
-			"R - Reset Camera Zoom",
-			"",
-			"CHARACTER",
-			"Ctrl + R - Reset Current Offset",
-			"Ctrl + C - Copy Current Offset",
-			"Ctrl + V - Paste Copied Offset on Current Animation",
-			"Ctrl + Z - Undo Last Paste or Reset",
-			"W/S - Previous/Next Animation",
-			"Space - Replay Animation",
-			"Arrow Keys/Mouse & Right Click - Move Offset",
-			"A/D - Frame Advance (Back/Forward)",
-			"",
-			"OTHER",
-			"F12 - Toggle Silhouettes",
-			"Hold Shift - Move Offsets 10x faster and Camera 4x faster",
-			"Hold Control - Move camera 4x slower"
+	/** Opens (or closes, when already open) the F1 keybind reference as a SmidrUI modal. **/
+	function toggleHelpModal():Void {
+		if (helpModal != null) {
+			helpModal.close();
+			return;
+		}
+
+		var sections:Array<{title:String, lines:Array<String>}> = [
+			{
+				title: 'CAMERA',
+				lines: ['E/Q - Camera Zoom In/Out', 'J/K/L/I - Move Camera', 'R - Reset Camera Zoom']
+			},
+			{
+				title: 'CHARACTER',
+				lines: [
+					'Ctrl + R - Reset Current Offset',
+					'Ctrl + C - Copy Current Offset',
+					'Ctrl + V - Paste Copied Offset on Current Animation',
+					'Ctrl + Z - Undo Last Paste or Reset',
+					'W/S - Previous/Next Animation',
+					'Space - Replay Animation',
+					'Arrow Keys/Mouse & Right Click - Move Offset',
+					'A/D - Frame Advance (Back/Forward)'
+				]
+			},
+			{
+				title: 'OTHER',
+				lines: [
+					'F12 - Toggle Silhouettes',
+					'Hold Shift - Move Offsets 10x faster and Camera 4x faster',
+					'Hold Control - Move camera 4x slower'
+				]
+			}
 		];
 
-		helpBg = new FlxSprite().makeGraphic(1, 1, FlxColor.BLACK);
-		helpBg.scale.set(FlxG.width, FlxG.height);
-		helpBg.updateHitbox();
-		helpBg.alpha = 0.6;
-		helpBg.cameras = [camHUD];
-		helpBg.active = helpBg.visible = false;
-		add(helpBg);
+		var modal:UIModal = new UIModal('Character Editor Help', 620, 460);
+		helpModal = modal;
+		modal.onClosed = function() {
+			if (helpModal == modal)
+				helpModal = null;
+		};
 
-		helpTexts = new FlxSpriteGroup();
-		helpTexts.cameras = [camHUD];
-		for (i => txt in str) {
-			if (txt.length < 1)
-				continue;
-
-			var helpText:FlxText = new FlxText(0, 0, 600, txt, 16);
-			helpText.setFormat(null, 16, FlxColor.WHITE, CENTER, OUTLINE_FAST, FlxColor.BLACK);
-			helpText.borderColor = FlxColor.BLACK;
-			helpText.scrollFactor.set();
-			helpText.borderSize = 1;
-			helpText.screenCenter();
-			add(helpText);
-			helpText.y += ((i - str.length / 2) * 32) + 16;
-			helpText.active = false;
-			helpTexts.add(helpText);
+		var y:Float = 6;
+		for (section in sections) {
+			var head:UILabel = new UILabel(section.title, 14, 0);
+			head.colorOverride = UITheme.accent;
+			head.x = 24;
+			head.y = y;
+			modal.body.addChild(head);
+			y += 26;
+			for (line in section.lines) {
+				var lbl:UILabel = new UILabel(line, 12, 1);
+				lbl.x = 36;
+				lbl.y = y;
+				modal.body.addChild(lbl);
+				y += 20;
+			}
+			y += 12;
 		}
-		helpTexts.active = helpTexts.visible = false;
-		add(helpTexts);
+
+		modal.open();
 	}
 
 	function addCharacter(reload:Bool = false) {
@@ -1002,6 +1013,10 @@ class CharacterEditorState extends MusicBeatState {
 		}
 		ClientPrefs.toggleVolumeKeys(true);
 
+		// F1 toggles the help modal even while it is open (the modal also closes on Escape).
+		if (FlxG.keys.justPressed.F1)
+			toggleHelpModal();
+
 		if (UIRoot.overlayOpen)
 			return;
 
@@ -1186,10 +1201,7 @@ class CharacterEditorState extends MusicBeatState {
 		if (FlxG.keys.justPressed.F12)
 			silhouettes.visible = !silhouettes.visible;
 
-		if (FlxG.keys.justPressed.F1 || (helpBg.visible && FlxG.keys.justPressed.ESCAPE)) {
-			helpBg.visible = !helpBg.visible;
-			helpTexts.visible = helpBg.visible;
-		} else if (FlxG.keys.justPressed.ESCAPE || controls.BACK) {
+		if (FlxG.keys.justPressed.ESCAPE || controls.BACK) {
 			if (!_goToPlayState) {
 				if (!unsavedProgress) {
 					MusicBeatState.switchState(new editors.MasterEditorMenu());
