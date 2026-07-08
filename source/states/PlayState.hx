@@ -3050,10 +3050,24 @@ class PlayState extends MusicBeatState {
 					if (!data.hitByOpponent && !data.ignore)
 						opponentNoteHit(note);
 				} else if (data.hit && data.isSustain()) {
-					if (songPos >= data.endTime())
-						line.field.remove(note); // hold finished -- reclaim now
-					else
+					var recs:Array<Receptor> = line.field.receptors;
+					var rec:Receptor = (recs != null && data.column >= 0 && data.column < recs.length) ? recs[data.column] : null;
+					if (songPos >= data.endTime()) {
+						// Hold finished -- drop the receptor back to static (the bot has no key to release).
+						if (rec != null) {
+							rec.playAnim('static');
+							rec.resetAnim = 0;
+						}
+						line.field.remove(note); // reclaim now
+					} else {
 						resingHold(data.gfNote ? gf : line.cameraCharacter(), data, songPos); // keep the line's char singing (per-step)
+						// Keep the receptor lit for the hold's duration, matching the player side.
+						if (rec != null) {
+							if (rec.animation.curAnim == null || rec.animation.curAnim.name != 'confirm')
+								rec.playAnim('confirm', true);
+							rec.resetAnim = 0;
+						}
+					}
 				}
 			}
 		}
