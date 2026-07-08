@@ -9,26 +9,40 @@ import flixel.tweens.FlxTween;
 import flixel.tweens.FlxEase;
 import flixel.util.FlxTimer;
 import flixel.input.keyboard.FlxKey;
+import smidr.UIRoot;
+import smidr.UITheme;
+import smidr.UIFonts;
+import smidr.UILocale;
+import smidr.input.UIFocus;
+import smidr.widgets.UIButton;
+import smidr.widgets.UICheckbox;
+import smidr.widgets.UIDropdown;
+import smidr.widgets.UILabel;
+import smidr.widgets.UIPanel;
+import smidr.widgets.UIScrollPane;
+import smidr.widgets.UIStepper;
+import smidr.widgets.UITabs;
+import smidr.widgets.UITextInput;
 
 using StringTools;
 
 /**
 	In-engine editor for UI skins (judgement popups / combo / numbers / countdown). Mirrors
-	`NoteSkinEditorState`: a `PsychUIBox` with tabs, a folder-skin dropdown, save/create to
+	`NoteSkinEditorState`: a SmidrUI tab box, a folder-skin dropdown, save/create to
 	`mods/images/uiSkins/<name>`, and a LIVE preview driven through `UISkinConfig.editorOverride` +
 	`setConfig` so edits show immediately. The preview replays the real popup/countdown using the same
 	`UISkinConfig` accessors `PlayState` uses, so what you tune is what you get.
 **/
 class UISkinEditorState extends MusicBeatState {
-	var box:PsychUIBox;
 	var config:UISkinData;
 	var skinName:String = UISkinConfig.DEFAULT;
 
 	var previewGroup:FlxSpriteGroup = new FlxSpriteGroup();
 	var pool:Array<FlxSprite> = [];
 
-	var skinDropDown:PsychUIDropDownMenu;
-	var newNameInput:PsychUIInputText;
+	var skinDropDown:UIDropdown;
+	var skinItems:Array<String> = [];
+	var newNameInput:UITextInput;
 	var infoText:FlxText;
 	var tipText:FlxText;
 	var notifyTimer:Float = 0;
@@ -45,6 +59,8 @@ class UISkinEditorState extends MusicBeatState {
 	var dragIndex:Int = -1;
 	var grabX:Float = 0;
 	var grabY:Float = 0;
+
+	var uiRoot:UIRoot;
 
 	// The motion elements + the rating names the Images tab exposes.
 	static final ELEMENTS:Array<String> = ['rating', 'combo', 'numbers'];
@@ -104,7 +120,7 @@ class UISkinEditorState extends MusicBeatState {
 
 	override function beatHit() {
 		super.beatHit();
-		if (!autoBeat || box == null)
+		if (!autoBeat || uiRoot == null)
 			return;
 		sampleCombo = (sampleCombo + 1) % 1000;
 		var diff:Float = FlxG.random.float(0, 90);
@@ -150,223 +166,334 @@ class UISkinEditorState extends MusicBeatState {
 	inline function cfg():Dynamic
 		return cast config;
 
-	// ---- UI ----
+	// ---- UI (SmidrUI) ----
+
+	/** Layers the UI root above the game view but below the FPS counter. **/
+	function attachRoot():Void {
+		var fps = Main.fpsVar;
+		if (fps != null && fps.parent != null)
+			uiRoot.attach(fps.parent, fps.parent.getChildIndex(fps));
+		else
+			uiRoot.attach(FlxG.stage);
+	}
+
+	function onGameResized(_:Int, _:Int):Void
+		syncViewport();
+
+	function syncViewport():Void {
+		var sm = FlxG.scaleMode;
+		uiRoot.setViewport(sm.offset.x, sm.offset.y, sm.scale.x, sm.scale.y);
+	}
+
+	static inline var PAD:Int = 10;
+	static inline var BOX_W:Int = 350;
+
+	var boxTabs:UITabs;
+	var tabPanes:Array<UIScrollPane> = [];
+	var boxX:Float = 0;
 
 	function addUI() {
-		box = new PsychUIBox(FlxG.width - 340, 20, 330, 460, ['Skin', 'Images', 'Motion', 'Judgements']);
-		box.canMove = box.canMinimize = true;
-		box.scrollFactor.set();
-		add(box);
-		addSkinTab();
-		addImagesTab();
-		addMotionTab();
-		addJudgementsTab();
+		UILocale.translate = function(k:String, f:String):String return Language.getPhrase(k, f);
+		UIFonts.register('assets/fonts/vcr.ttf');
+
+		uiRoot = new UIRoot();
+		attachRoot();
+		syncViewport();
+		FlxG.signals.gameResized.add(onGameResized);
+
+		boxX = FlxG.width - BOX_W - 10;
+		var boxY:Float = 20;
+
+		boxTabs = new UITabs(BOX_W, [{label: 'Skin'}, {label: 'Images'}, {label: 'Motion'}, {label: 'Judgements'}], function(i:Int):Void {
+			for (n in 0...tabPanes.length)
+				tabPanes[n].visible = (n == i);
+		});
+
+		var paneH:Float = 370;
+		var boxH:Float = boxTabs.h + 8 + paneH + PAD;
+
+		var panel:UIPanel = new UIPanel(BOX_W, boxH, UITheme.panel);
+		panel.x = boxX;
+		panel.y = boxY;
+		uiRoot.content.addChild(panel);
+
+		boxTabs.x = boxX;
+		boxTabs.y = boxY;
+		uiRoot.content.addChild(boxTabs);
+
+		tabPanes = [];
+		for (i in 0...4) {
+			var pane:UIScrollPane = new UIScrollPane(BOX_W - PAD * 2, paneH);
+			pane.x = boxX + PAD;
+			pane.y = boxY + boxTabs.h + 8;
+			pane.visible = false;
+			uiRoot.content.addChild(pane);
+			tabPanes.push(pane);
+		}
+
+		addSkinTab(tabPanes[0]);
+		addImagesTab(tabPanes[1]);
+		addMotionTab(tabPanes[2]);
+		addJudgementsTab(tabPanes[3]);
+
+		boxTabs.select(0);
+		tabPanes[0].visible = true;
 	}
 
-	function label(t:FlxSpriteGroup, x:Float, y:Float, text:String, size:Int = 12):FlxText {
-		var f = new FlxText(x, y, 0, text, size);
-		f.setFormat(font(), size, FlxColor.WHITE);
-		t.add(f);
-		return f;
+	inline function paneRowW(pane:UIScrollPane):Float
+		return pane.w - PAD - 12;
+
+	function paneLabel(pane:UIScrollPane, x:Float, y:Float, text:String, size:Int = 11):UILabel {
+		var l:UILabel = new UILabel(text, size, 2);
+		l.x = x;
+		l.y = y;
+		pane.content.addChild(l);
+		return l;
 	}
 
-	function addSkinTab() {
-		var t = box.getTab('Skin').menu;
+	function addSkinTab(pane:UIScrollPane) {
+		var rowW:Float = paneRowW(pane);
+		var halfW:Float = (rowW - 10) / 2;
 
-		label(t, 10, 8, 'Folder skin:');
-		var skins = UISkinConfig.list();
-		if (skins.length < 1)
-			skins.push(skinName);
-		skinDropDown = new PsychUIDropDownMenu(10, 28, skins, function(id:Int, name:String) {
+		skinItems = UISkinConfig.list();
+		if (skinItems.length < 1)
+			skinItems.push(skinName);
+		skinDropDown = new UIDropdown('Folder skin:', rowW, function(id:Int, name:String) {
 			loadSkin(name);
 			refreshFields();
 		});
-		skinDropDown.selectedLabel = skinName;
+		skinDropDown.setItems(skinItems.copy());
+		skinDropDown.select(Std.int(Math.max(0, skinItems.indexOf(skinName))));
+		pane.content.addChild(skinDropDown);
 
-		var reload = new PsychUIButton(10, 62, 'Reload', function() {
+		var reload:UIButton = new UIButton('Reload', 90, 26, function() {
 			UISkinConfig.reset();
 			loadSkin(skinName);
 			refreshFields();
 		});
-		reload.resize(90, 26);
-		t.add(reload);
+		reload.y = 34;
+		pane.content.addChild(reload);
 
-		var saveBtn = new PsychUIButton(110, 62, 'Save', saveSkin);
-		saveBtn.resize(80, 26);
-		t.add(saveBtn);
+		var saveBtn:UIButton = new UIButton('Save', 80, 26, saveSkin, true);
+		saveBtn.x = 100;
+		saveBtn.y = 34;
+		pane.content.addChild(saveBtn);
 
-		var saveRootBtn = new PsychUIButton(200, 62, 'Save to game folder', saveToRoot);
-		saveRootBtn.resize(120, 26);
-		t.add(saveRootBtn);
+		var saveRootBtn:UIButton = new UIButton('Save to game folder', rowW - 190, 26, saveToRoot);
+		saveRootBtn.x = 190;
+		saveRootBtn.y = 34;
+		pane.content.addChild(saveRootBtn);
 
-		label(t, 10, 96, 'New skin name:', 11);
-		newNameInput = new PsychUIInputText(115, 93, 120, 'skin', 8);
-		t.add(newNameInput);
-		var createBtn = new PsychUIButton(240, 91, 'Create', createNewSkin);
-		createBtn.resize(70, 26);
-		t.add(createBtn);
+		newNameInput = new UITextInput('New skin name:', rowW - 80, 'skin');
+		newNameInput.y = 70;
+		pane.content.addChild(newNameInput);
+
+		var createBtn:UIButton = new UIButton('Create', 70, 24, createNewSkin);
+		createBtn.x = rowW - 70;
+		createBtn.y = 70;
+		pane.content.addChild(createBtn);
 
 		// (per-element popup scale lives on the Motion tab; there's no separate "general" scale)
-		aaCheck = new PsychUICheckBox(10, 129, 'Antialiasing', 110);
-		aaCheck.onClick = function() {
-			cfg().antialiasing = aaCheck.checked;
+		aaCheck = new UICheckbox('Antialiasing', halfW, false, function(v:Bool) {
+			cfg().antialiasing = v;
 			commit();
-		};
-		t.add(aaCheck);
+		});
+		aaCheck.y = 104;
+		pane.content.addChild(aaCheck);
 
-		pixelCheck = new PsychUICheckBox(10, 150, 'Pixel', 90);
-		pixelCheck.onClick = function() {
-			cfg().pixel = pixelCheck.checked;
+		pixelCheck = new UICheckbox('Pixel', halfW, false, function(v:Bool) {
+			cfg().pixel = v;
 			commit();
-		};
-		t.add(pixelCheck);
+		});
+		pixelCheck.x = halfW + 10;
+		pixelCheck.y = 104;
+		pane.content.addChild(pixelCheck);
 
-		pixelVarCheck = new PsychUICheckBox(110, 150, 'Pixel variant', 110);
-		pixelVarCheck.onClick = function() {
-			cfg().pixelVariant = pixelVarCheck.checked;
+		pixelVarCheck = new UICheckbox('Pixel variant', halfW, false, function(v:Bool) {
+			cfg().pixelVariant = v;
 			commit();
-		};
-		t.add(pixelVarCheck);
+		});
+		pixelVarCheck.y = 132;
+		pane.content.addChild(pixelVarCheck);
 
-		var autoBeatCheck = new PsychUICheckBox(10, 198, 'Auto popup on beat', 160);
-		autoBeatCheck.checked = autoBeat;
-		autoBeatCheck.onClick = function() autoBeat = autoBeatCheck.checked;
-		t.add(autoBeatCheck);
-
-		var hitboxCheck = new PsychUICheckBox(180, 198, 'Drag hitboxes', 130);
-		hitboxCheck.checked = showHitboxes;
-		hitboxCheck.onClick = function() {
-			showHitboxes = hitboxCheck.checked;
+		var comboWordCheck:UICheckbox = new UICheckbox('Show combo word', halfW, showComboWord, function(v:Bool) {
+			showComboWord = v;
 			positionHandles();
-		};
-		t.add(hitboxCheck);
+		});
+		comboWordCheck.x = halfW + 10;
+		comboWordCheck.y = 132;
+		pane.content.addChild(comboWordCheck);
 
-		var comboWordCheck = new PsychUICheckBox(10, 174, 'Show combo word', 150);
-		comboWordCheck.checked = showComboWord;
-		comboWordCheck.onClick = function() {
-			showComboWord = comboWordCheck.checked;
+		var autoBeatCheck:UICheckbox = new UICheckbox('Auto popup on beat', halfW, autoBeat, function(v:Bool) autoBeat = v);
+		autoBeatCheck.y = 160;
+		pane.content.addChild(autoBeatCheck);
+
+		var hitboxCheck:UICheckbox = new UICheckbox('Drag hitboxes', halfW, showHitboxes, function(v:Bool) {
+			showHitboxes = v;
 			positionHandles();
-		};
-		t.add(comboWordCheck);
+		});
+		hitboxCheck.x = halfW + 10;
+		hitboxCheck.y = 160;
+		pane.content.addChild(hitboxCheck);
 
-		var previewBtn = new PsychUIButton(10, 226, 'Preview Judgement', function() firePreview(20), 150);
-		t.add(previewBtn);
-		var previewMissBtn = new PsychUIButton(170, 226, 'Preview (loose)', function() firePreview(120), 130);
-		t.add(previewMissBtn);
-		var countdownBtn = new PsychUIButton(10, 256, 'Preview Countdown', fireCountdown, 150);
-		t.add(countdownBtn);
+		var previewBtn:UIButton = new UIButton('Preview Judgement', halfW, 26, function() firePreview(20));
+		previewBtn.y = 194;
+		pane.content.addChild(previewBtn);
 
-		label(t, 10, 292, 'Saves to mods/images/uiSkins/<name>/', 11);
+		var previewMissBtn:UIButton = new UIButton('Preview (loose)', halfW, 26, function() firePreview(120));
+		previewMissBtn.x = halfW + 10;
+		previewMissBtn.y = 194;
+		pane.content.addChild(previewMissBtn);
 
-		t.add(skinDropDown);
+		var countdownBtn:UIButton = new UIButton('Preview Countdown', rowW, 26, fireCountdown);
+		countdownBtn.y = 226;
+		pane.content.addChild(countdownBtn);
+
+		paneLabel(pane, 0, 262, 'Saves to mods/images/uiSkins/<name>/');
+
+		pane.refreshContent(286);
 	}
 
-	var aaCheck:PsychUICheckBox;
-	var pixelCheck:PsychUICheckBox;
-	var pixelVarCheck:PsychUICheckBox;
+	var aaCheck:UICheckbox;
+	var pixelCheck:UICheckbox;
+	var pixelVarCheck:UICheckbox;
 
-	var comboInput:PsychUIInputText;
-	var numInput:PsychUIInputText;
-	var readyInput:PsychUIInputText;
-	var setInput:PsychUIInputText;
-	var goInput:PsychUIInputText;
-	var ratingInputs:Map<String, PsychUIInputText> = new Map();
+	var comboInput:UITextInput;
+	var numInput:UITextInput;
+	var readyInput:UITextInput;
+	var setInput:UITextInput;
+	var goInput:UITextInput;
+	var ratingInputs:Map<String, UITextInput> = new Map();
 
-	function addImagesTab() {
-		var t = box.getTab('Images').menu;
+	function addImagesTab(pane:UIScrollPane) {
+		var rowW:Float = paneRowW(pane);
 
-		comboInput = imageField(t, 10, 12, 'combo word:', function(v) {
+		comboInput = imageField(pane, rowW, 0, 'combo word:', function(v) {
 			cfg().combo = v;
 		});
-		numInput = imageField(t, 10, 44, 'number prefix:', function(v) {
+		numInput = imageField(pane, rowW, 32, 'number prefix:', function(v) {
 			cfg().num = v;
 		});
-		readyInput = imageField(t, 10, 76, 'ready:', function(v) {
+		readyInput = imageField(pane, rowW, 64, 'ready:', function(v) {
 			cfg().ready = v;
 		});
-		setInput = imageField(t, 10, 108, 'set:', function(v) {
+		setInput = imageField(pane, rowW, 96, 'set:', function(v) {
 			cfg().set = v;
 		});
-		goInput = imageField(t, 10, 140, 'go:', function(v) {
+		goInput = imageField(pane, rowW, 128, 'go:', function(v) {
 			cfg().go = v;
 		});
 
-		label(t, 10, 176, 'Rating images:', 12);
-		var y:Float = 196;
+		paneLabel(pane, 0, 164, 'Rating images:', 12);
+		var y:Float = 184;
 		for (name in RATING_NAMES) {
-			ratingInputs.set(name, imageField(t, 10, y, name + ':', function(v) {
+			ratingInputs.set(name, imageField(pane, rowW, y, name + ':', function(v) {
 				if (cfg().ratings == null)
 					cfg().ratings = {};
 				Reflect.setField(cfg().ratings, name, v);
 				commit();
 			}));
-			y += 30;
+			y += 32;
 		}
+
+		pane.refreshContent(y + 8);
 	}
 
-	function imageField(t:FlxSpriteGroup, x:Float, y:Float, name:String, onSet:String->Void):PsychUIInputText {
-		label(t, x, y, name, 11);
-		var input = new PsychUIInputText(x + 110, y - 3, 160, '', 8);
-		input.onChange = function(old:String, cur:String) {
-			onSet(cur.trim());
+	function imageField(pane:UIScrollPane, rowW:Float, y:Float, name:String, onSet:String->Void):UITextInput {
+		var input:UITextInput = new UITextInput(name, rowW, '', function(v:String) {
+			onSet(v.trim());
 			commit();
-		};
-		t.add(input);
+		});
+		input.y = y;
+		pane.content.addChild(input);
 		return input;
 	}
 
-	var motionElemDrop:PsychUIDropDownMenu;
-	var mDuration:PsychUINumericStepper;
-	var mStartDelay:PsychUINumericStepper;
-	var mScale:PsychUINumericStepper;
-	var mEaseDrop:PsychUIDropDownMenu;
-	var mVelYMin:PsychUINumericStepper;
-	var mVelYMax:PsychUINumericStepper;
-	var mAccYMin:PsychUINumericStepper;
-	var mAccYMax:PsychUINumericStepper;
+	var motionElemDrop:UIDropdown;
+	var mDuration:UIStepper;
+	var mStartDelay:UIStepper;
+	var mScale:UIStepper;
+	var mEaseDrop:UIDropdown;
+	var mVelYMin:UIStepper;
+	var mVelYMax:UIStepper;
+	var mAccYMin:UIStepper;
+	var mAccYMax:UIStepper;
+	var curMotionElem:String = 'rating';
+	var curEase:String = 'linear';
 
-	function addMotionTab() {
-		var t = box.getTab('Motion').menu;
+	function addMotionTab(pane:UIScrollPane) {
+		var rowW:Float = paneRowW(pane);
+		var halfW:Float = (rowW - 10) / 2;
 
-		label(t, 10, 10, 'Element:');
-		motionElemDrop = new PsychUIDropDownMenu(80, 6, ELEMENTS.copy(), function(id, name) loadMotion());
-		label(t, 10, 44, 'Duration (s):', 11);
-		mDuration = new PsychUINumericStepper(110, 41, 0.05, 0.2, 0, 5, 2, 70);
-		mDuration.onValueChange = function() applyMotion();
-		t.add(mDuration);
+		motionElemDrop = new UIDropdown('Element:', rowW, function(id, name) {
+			curMotionElem = name;
+			loadMotion();
+		});
+		motionElemDrop.setItems(ELEMENTS.copy());
+		motionElemDrop.select(0);
+		pane.content.addChild(motionElemDrop);
 
-		label(t, 10, 76, 'Start delay (0=auto):', 11);
-		mStartDelay = new PsychUINumericStepper(120, 73, 0.01, 0, 0, 5, 3, 70);
-		mStartDelay.onValueChange = function() applyMotion();
-		t.add(mStartDelay);
+		mDuration = new UIStepper('Duration (s):', halfW, 0.2, 0.05, function(_) applyMotion());
+		mDuration.min = 0;
+		mDuration.max = 5;
+		mDuration.decimals = 2;
+		mDuration.y = 32;
+		pane.content.addChild(mDuration);
 
-		label(t, 10, 108, 'Scale:', 11);
-		mScale = new PsychUINumericStepper(70, 105, 0.05, 0.7, 0.05, 8, 2, 70);
-		mScale.onValueChange = function() applyMotion();
-		t.add(mScale);
+		mStartDelay = new UIStepper('Delay (0=auto):', halfW, 0, 0.01, function(_) applyMotion());
+		mStartDelay.min = 0;
+		mStartDelay.max = 5;
+		mStartDelay.decimals = 3;
+		mStartDelay.x = halfW + 10;
+		mStartDelay.y = 32;
+		pane.content.addChild(mStartDelay);
 
-		label(t, 10, 140, 'Ease:');
-		mEaseDrop = new PsychUIDropDownMenu(70, 136, EASES.copy(), function(id, name) applyMotion());
+		mScale = new UIStepper('Scale:', halfW, 0.7, 0.05, function(_) applyMotion());
+		mScale.min = 0.05;
+		mScale.max = 8;
+		mScale.decimals = 2;
+		mScale.y = 64;
+		pane.content.addChild(mScale);
 
-		label(t, 10, 176, 'Up velocity min/max:', 11);
-		mVelYMin = new PsychUINumericStepper(10, 196, 5, 140, 0, 2000, 0, 70);
-		mVelYMin.onValueChange = function() applyMotion();
-		t.add(mVelYMin);
-		mVelYMax = new PsychUINumericStepper(90, 196, 5, 160, 0, 2000, 0, 70);
-		mVelYMax.onValueChange = function() applyMotion();
-		t.add(mVelYMax);
+		mEaseDrop = new UIDropdown('Ease:', rowW, function(id, name) {
+			curEase = name;
+			applyMotion();
+		});
+		mEaseDrop.setItems(EASES.copy());
+		mEaseDrop.select(0);
+		mEaseDrop.y = 96;
+		pane.content.addChild(mEaseDrop);
 
-		label(t, 10, 226, 'Gravity (accelY) min/max:', 11);
-		mAccYMin = new PsychUINumericStepper(10, 246, 10, 200, 0, 4000, 0, 70);
-		mAccYMin.onValueChange = function() applyMotion();
-		t.add(mAccYMin);
-		mAccYMax = new PsychUINumericStepper(90, 246, 10, 300, 0, 4000, 0, 70);
-		mAccYMax.onValueChange = function() applyMotion();
-		t.add(mAccYMax);
+		paneLabel(pane, 0, 130, 'Up velocity min/max:');
+		mVelYMin = new UIStepper('Min:', halfW, 140, 5, function(_) applyMotion());
+		mVelYMin.min = 0;
+		mVelYMin.max = 2000;
+		mVelYMin.y = 148;
+		pane.content.addChild(mVelYMin);
 
-		t.add(motionElemDrop);
-		t.add(mEaseDrop);
-		motionElemDrop.selectedLabel = 'rating';
+		mVelYMax = new UIStepper('Max:', halfW, 160, 5, function(_) applyMotion());
+		mVelYMax.min = 0;
+		mVelYMax.max = 2000;
+		mVelYMax.x = halfW + 10;
+		mVelYMax.y = 148;
+		pane.content.addChild(mVelYMax);
+
+		paneLabel(pane, 0, 182, 'Gravity (accelY) min/max:');
+		mAccYMin = new UIStepper('Min:', halfW, 200, 10, function(_) applyMotion());
+		mAccYMin.min = 0;
+		mAccYMin.max = 4000;
+		mAccYMin.y = 200;
+		pane.content.addChild(mAccYMin);
+
+		mAccYMax = new UIStepper('Max:', halfW, 300, 10, function(_) applyMotion());
+		mAccYMax.min = 0;
+		mAccYMax.max = 4000;
+		mAccYMax.x = halfW + 10;
+		mAccYMax.y = 200;
+		pane.content.addChild(mAccYMax);
+
+		pane.refreshContent(236);
+
 		loadMotion();
 	}
 
@@ -374,7 +501,7 @@ class UISkinEditorState extends MusicBeatState {
 	function elemNode():Dynamic {
 		if (cfg().tween == null)
 			cfg().tween = {};
-		var el:String = motionElemDrop.selectedLabel;
+		var el:String = curMotionElem;
 		var node:Dynamic = Reflect.field(cfg().tween, el);
 		if (node == null) {
 			node = {};
@@ -386,11 +513,12 @@ class UISkinEditorState extends MusicBeatState {
 	function loadMotion() {
 		if (mDuration == null)
 			return;
-		var node:Dynamic = (cfg().tween != null) ? Reflect.field(cfg().tween, motionElemDrop.selectedLabel) : null;
+		var node:Dynamic = (cfg().tween != null) ? Reflect.field(cfg().tween, curMotionElem) : null;
 		mDuration.value = numOr(node, 'duration', 0.2);
 		mStartDelay.value = numOr(node, 'startDelay', 0);
 		mScale.value = numOr(node, 'scale', 0.7);
-		mEaseDrop.selectedLabel = strOr(node, 'ease', 'linear');
+		curEase = strOr(node, 'ease', 'linear');
+		mEaseDrop.select(Std.int(Math.max(0, EASES.indexOf(curEase))));
 		var vy:Array<Float> = rangeOr(node, 'velocityY', 140, 160);
 		mVelYMin.value = vy[0];
 		mVelYMax.value = vy[1];
@@ -404,34 +532,41 @@ class UISkinEditorState extends MusicBeatState {
 		Reflect.setField(node, 'duration', mDuration.value);
 		Reflect.setField(node, 'startDelay', mStartDelay.value);
 		Reflect.setField(node, 'scale', mScale.value);
-		Reflect.setField(node, 'ease', mEaseDrop.selectedLabel);
+		Reflect.setField(node, 'ease', curEase);
 		Reflect.setField(node, 'velocityY', [mVelYMin.value, mVelYMax.value]);
 		Reflect.setField(node, 'accelY', [mAccYMin.value, mAccYMax.value]);
 		commit();
 	}
 
-	var judgeNameInput:PsychUIInputText;
-	var judgeImageInput:PsychUIInputText;
-	var judgeWindowStep:PsychUINumericStepper;
-	var judgeListDrop:PsychUIDropDownMenu;
+	var judgeNameInput:UITextInput;
+	var judgeImageInput:UITextInput;
+	var judgeWindowStep:UIStepper;
+	var judgeListDrop:UIDropdown;
+	var judgeItems:Array<String> = [];
+	var curJudge:String = '---';
 
-	function addJudgementsTab() {
-		var t = box.getTab('Judgements').menu;
+	function addJudgementsTab(pane:UIScrollPane) {
+		var rowW:Float = paneRowW(pane);
 
-		label(t, 10, 8, 'Custom visual rating tiers (image swap by hit ms).', 11);
-		label(t, 10, 24, 'They do NOT change scoring/combo.', 11);
+		paneLabel(pane, 0, 0, 'Custom visual rating tiers (image swap by hit ms).');
+		paneLabel(pane, 0, 14, 'They do NOT change scoring/combo.');
 
-		label(t, 10, 52, 'Name:', 11);
-		judgeNameInput = new PsychUIInputText(70, 49, 110, 'perfect', 8);
-		t.add(judgeNameInput);
-		label(t, 10, 84, 'Image:', 11);
-		judgeImageInput = new PsychUIInputText(70, 81, 110, 'perfect', 8);
-		t.add(judgeImageInput);
-		label(t, 10, 116, 'Window (ms):', 11);
-		judgeWindowStep = new PsychUINumericStepper(110, 113, 1, 22.5, 0, 500, 2, 80);
-		t.add(judgeWindowStep);
+		judgeNameInput = new UITextInput('Name:', rowW, 'perfect');
+		judgeNameInput.y = 36;
+		pane.content.addChild(judgeNameInput);
 
-		var addBtn = new PsychUIButton(10, 146, 'Add / Update', function() {
+		judgeImageInput = new UITextInput('Image:', rowW, 'perfect');
+		judgeImageInput.y = 68;
+		pane.content.addChild(judgeImageInput);
+
+		judgeWindowStep = new UIStepper('Window (ms):', rowW, 22.5, 1);
+		judgeWindowStep.min = 0;
+		judgeWindowStep.max = 500;
+		judgeWindowStep.decimals = 2;
+		judgeWindowStep.y = 100;
+		pane.content.addChild(judgeWindowStep);
+
+		var addBtn:UIButton = new UIButton('Add / Update', 130, 26, function() {
 			var nm:String = judgeNameInput.text.trim();
 			if (nm.length < 1) {
 				notify('Enter a tier name', false);
@@ -443,11 +578,12 @@ class UISkinEditorState extends MusicBeatState {
 			commit();
 			refreshJudgeList();
 			notify('Tier "$nm" set @ ${judgeWindowStep.value}ms');
-		}, 110);
-		t.add(addBtn);
+		}, true);
+		addBtn.y = 134;
+		pane.content.addChild(addBtn);
 
-		label(t, 10, 186, 'Existing:', 11);
-		judgeListDrop = new PsychUIDropDownMenu(75, 182, ['---'], function(id, name) {
+		judgeListDrop = new UIDropdown('Existing:', rowW, function(id, name) {
+			curJudge = name;
 			if (name == '---')
 				return;
 			var node:Dynamic = Reflect.field(cfg().judgements, name);
@@ -455,18 +591,24 @@ class UISkinEditorState extends MusicBeatState {
 			judgeImageInput.text = (node != null && Reflect.field(node, 'image') != null) ? Std.string(Reflect.field(node, 'image')) : name;
 			judgeWindowStep.value = (node != null && Reflect.field(node, 'window') != null) ? Std.parseFloat(Std.string(Reflect.field(node, 'window'))) : 0;
 		});
-		var removeBtn = new PsychUIButton(10, 216, 'Remove selected', function() {
-			var nm:String = judgeListDrop.selectedLabel;
+		judgeListDrop.y = 172;
+		pane.content.addChild(judgeListDrop);
+
+		var removeBtn:UIButton = new UIButton('Remove selected', 150, 26, function() {
+			var nm:String = curJudge;
 			if (nm == null || nm == '---' || cfg().judgements == null)
 				return;
 			Reflect.deleteField(cfg().judgements, nm);
 			commit();
 			refreshJudgeList();
 			notify('Removed "$nm"');
-		}, 130);
-		t.add(removeBtn);
+		});
+		removeBtn.danger = true;
+		removeBtn.y = 206;
+		pane.content.addChild(removeBtn);
 
-		t.add(judgeListDrop);
+		pane.refreshContent(242);
+
 		refreshJudgeList();
 	}
 
@@ -476,8 +618,10 @@ class UISkinEditorState extends MusicBeatState {
 		var names:Array<String> = (cfg().judgements != null) ? Reflect.fields(cfg().judgements) : [];
 		if (names.length < 1)
 			names = ['---'];
-		judgeListDrop.list = names;
-		judgeListDrop.selectedLabel = names[0];
+		judgeItems = names;
+		judgeListDrop.setItems(names.copy());
+		judgeListDrop.select(0);
+		curJudge = names[0];
 	}
 
 	function refreshFields() {
@@ -714,11 +858,11 @@ class UISkinEditorState extends MusicBeatState {
 	}
 
 	function updateHandles() {
-		if (!showHitboxes || PsychUIInputText.focusOn != null) {
+		if (!showHitboxes || UIFocus.focused != null) {
 			dragIndex = -1;
 			return;
 		}
-		var overUI:Bool = (box != null && FlxG.mouse.x > box.x);
+		var overUI:Bool = (FlxG.mouse.x > boxX);
 		if (dragIndex < 0 && FlxG.mouse.justPressed && !overUI) {
 			for (i in 0...handleSpr.length) {
 				if (!handleSpr[i].visible)
@@ -813,8 +957,9 @@ class UISkinEditorState extends MusicBeatState {
 			sys.io.File.saveContent('$dir/skin.tcfg', backend.config.UiTcfgWriter.write(config));
 			UISkinConfig.reset();
 			skinName = 'uiSkins/$name';
-			skinDropDown.list = UISkinConfig.list();
-			skinDropDown.selectedLabel = skinName;
+			skinItems = UISkinConfig.list();
+			skinDropDown.setItems(skinItems.copy());
+			skinDropDown.select(Std.int(Math.max(0, skinItems.indexOf(skinName))));
 			loadSkin(skinName);
 			refreshFields();
 			notify('Created $dir/skin.tcfg');
@@ -845,7 +990,7 @@ class UISkinEditorState extends MusicBeatState {
 				tipText.color = FlxColor.YELLOW;
 		}
 
-		if (PsychUIInputText.focusOn == null && controls.BACK) {
+		if (UIFocus.focused == null && !UIRoot.overlayOpen && controls.BACK) {
 			UISkinConfig.editorOverride = null;
 			UISkinConfig.reset();
 			FlxG.sound.playMusic(Paths.music('freakyMenu'));
@@ -855,6 +1000,11 @@ class UISkinEditorState extends MusicBeatState {
 
 	override function destroy() {
 		UISkinConfig.editorOverride = null;
+		FlxG.signals.gameResized.remove(onGameResized);
+		if (uiRoot != null) {
+			uiRoot.dispose();
+			uiRoot = null;
+		}
 		super.destroy();
 		FlxG.sound.muteKeys = [FlxKey.ZERO];
 		FlxG.sound.volumeDownKeys = [FlxKey.NUMPADMINUS, FlxKey.MINUS];
