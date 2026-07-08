@@ -229,7 +229,7 @@ final class NoteData {
 			out.push(note);
 		}
 
-		out.sort(function(a:NoteData, b:NoteData):Int return Std.int(a.time - b.time));
+		out.sort(function(a:NoteData, b:NoteData):Int return (a.time < b.time) ? -1 : ((a.time > b.time) ? 1 : 0));
 
 		// The chart's SV points are stored raw; apply the note offset so they align with note times.
 		for (p in chart.scrollPoints)

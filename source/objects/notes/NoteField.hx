@@ -72,8 +72,13 @@ final class NoteField {
 
 	/**
 		Spawns entries that have entered the lead window, positions the alive drawables, and reclaims
-		entries that have fully scrolled past. Spawn/reclaim are by scroll position (SV-correct); with
-		SV off `scrollNow == songPos` and the positions equal raw time, so behaviour is unchanged.
+		entries that have fully scrolled past. Spawning is scroll-position-first (SV-correct: fast
+		sections spawn early) with a raw-time fallback, so a non-monotonic SV timeline (negative or
+		Overlapping velocities) can only delay a spawn to its legacy time window, never skip it -- the
+		list is time-sorted, so the cursor may only stop on a note that is still far away in BOTH
+		coordinates. Reclaim is by raw time (like the legacy runtime), which also keeps the judgement
+		miss window intact under high velocities. With SV off `scrollNow == songPos` and the scroll
+		positions equal raw time, so behaviour is unchanged.
 		@param songPos the current song position in ms
 		@param scrollNow the SV-mapped position of `songPos` (`== songPos` when SV is off)
 	**/
@@ -86,7 +91,7 @@ final class NoteField {
 
 		while (nextSpawn < notes.length) {
 			var data:NoteData = notes[nextSpawn];
-			if (data.scrollPos - scrollNow >= spawnAhead)
+			if (data.scrollPos - scrollNow >= spawnAhead && data.time - songPos >= spawnAhead)
 				break;
 			spawn(data);
 			nextSpawn++;
@@ -104,7 +109,7 @@ final class NoteField {
 					note.sustain.follow(strum, speed, scrollNow);
 			}
 
-			if (scrollNow - note.data.endScrollPos > killBehind) {
+			if (songPos - note.data.endTime() > killBehind) {
 				free(note);
 				active.splice(i, 1);
 			}
