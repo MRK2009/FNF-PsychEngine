@@ -2718,6 +2718,14 @@ class PlayState extends MusicBeatState {
 	public var playerReceptors:Array<Receptor> = [];
 	public var opponentReceptors:Array<Receptor> = [];
 
+	/**
+		The `NoteData` of the note currently being judged; set right before every hit/miss script
+		callback (`goodNoteHit`/`opponentNoteHit`/`noteMiss` and the sustain variants). Lets Lua
+		scripts reach the judged note's fields (`time`/`type`/`length`/...) in v2, where the callback's
+		old member-index argument is always `-1`.
+	**/
+	public var lastJudgedNote:NoteData = null;
+
 	/** Non-null only under `Mods.noteCompatibilityMode()`; mirrors v2 onto the legacy script API. **/
 	public var noteCompat:legacy.NoteCompatLayer = null;
 
@@ -2750,24 +2758,22 @@ class PlayState extends MusicBeatState {
 	}
 
 	/**
-		Fires the compiled stage note hooks (`BaseStage.goodNoteHit`/`opponentNoteHit`/`noteMiss`, which
-		take a legacy `Note`) with the compat adapter. Only runs under `compatibilityMode` -- in v2 play
-		these hooks stay skipped, since the stage API predates the `NoteSprite` the v2 path carries.
+		Fires the compiled stage note hooks (`BaseStage.goodNoteHit`/`opponentNoteHit`/`noteMiss`,
+		taking the judged note's `NoteData`). Always native -- compat packs only affect the Lua/HScript
+		callback surface, never the compiled-stage path.
 		@param which `0` = goodNoteHit, `1` = opponentNoteHit, anything else = noteMiss
 		@param note the active note being judged
 	**/
 	inline function fireStageNote(which:Int, note:ActiveNote):Void {
-		if (noteCompat != null) {
-			var ln:Note = noteCompat.callbackNote(note);
-			for (st in stages) {
-				switch (which) {
-					case 0:
-						st.goodNoteHit(ln);
-					case 1:
-						st.opponentNoteHit(ln);
-					default:
-						st.noteMiss(ln);
-				}
+		var data:NoteData = note.data;
+		for (st in stages) {
+			switch (which) {
+				case 0:
+					st.goodNoteHit(data);
+				case 1:
+					st.opponentNoteHit(data);
+				default:
+					st.noteMiss(data);
 			}
 		}
 	}
@@ -2794,6 +2800,11 @@ class PlayState extends MusicBeatState {
 			}
 		scrollVelocity.build(svPoints);
 		NoteData.applyScrollVelocity(chart.notes, scrollVelocity);
+
+		// Let compiled stages apply load-time note overrides on the decoded list (the v2 replacement
+		// for mutating `unspawnNotes` in createPost) before the fields take ownership of it.
+		for (st in stages)
+			st.notesGenerated(chart.notes);
 
 		receptorGroup = new flixel.group.FlxGroup.FlxTypedGroup<Receptor>();
 
@@ -3408,6 +3419,7 @@ class PlayState extends MusicBeatState {
 
 	function opponentNoteHit(note:ActiveNote):Void {
 		var data:NoteData = note.data;
+		lastJudgedNote = data;
 		var line:StrumLine = lineOf(data);
 		var singer:Character = data.gfNote ? gf : ((line != null) ? line.cameraCharacter() : dad);
 		var result:Dynamic = callOnLuas('opponentNoteHitPre', [-1, data.column, data.type, data.isSustain()]);
@@ -3457,6 +3469,7 @@ class PlayState extends MusicBeatState {
 		var isSus:Bool = data.isSustain();
 		var leData:Int = data.column;
 		var leType:String = data.type;
+		lastJudgedNote = data;
 
 		var result:Dynamic = callOnLuas('goodNoteHitPre', [-1, leData, leType, isSus]);
 		if (notStopped(result))
@@ -3519,6 +3532,7 @@ class PlayState extends MusicBeatState {
 		if (data.missed)
 			return;
 		data.missed = true;
+		lastJudgedNote = data;
 
 		noteMissCommon(data.column, data);
 		var result:Dynamic = callOnLuas('noteMiss', [-1, data.column, data.type, data.isSustain()]);
@@ -3536,6 +3550,7 @@ class PlayState extends MusicBeatState {
 			return;
 		data.missed = true;
 		data.holdReleased = true;
+		lastJudgedNote = data;
 
 		noteMissCommon(data.column, data);
 		var result:Dynamic = callOnLuas('noteMiss', [-1, data.column, data.type, true]);
@@ -3552,6 +3567,7 @@ class PlayState extends MusicBeatState {
 	function headMissForSustain(note:ActiveNote):Void {
 		var data:NoteData = note.data;
 		data.headMissed = true;
+		lastJudgedNote = data;
 		noteMissCommon(data.column, data);
 		var result:Dynamic = callOnLuas('noteMiss', [-1, data.column, data.type, false]);
 		if (notStopped(result))
@@ -3602,6 +3618,7 @@ class PlayState extends MusicBeatState {
 	// A dropped body segment: a full miss, exactly like a missed sustain piece in the pre-v2 runtime.
 	function sustainSegmentMiss(note:ActiveNote):Void {
 		var data:NoteData = note.data;
+		lastJudgedNote = data;
 		noteMissCommon(data.column, data);
 		var result:Dynamic = callOnLuas('noteMiss', [-1, data.column, data.type, true]);
 		if (notStopped(result))

@@ -6,7 +6,7 @@ import flixel.addons.transition.FlxTransitionableState;
 import flixel.addons.display.FlxTiledSprite;
 import substates.GameOverSubstate;
 import states.stages.objects.*;
-import objects.Note;
+import objects.notes.NoteData;
 
 class PhillyBlazin extends BaseStage {
 	var rainShader:RainShader;
@@ -125,17 +125,16 @@ class PhillyBlazin extends BaseStage {
 		}
 		abot.color = 0xFF888888;
 
-		var unspawnNotes:Array<Note> = cast game.unspawnNotes;
-		for (note in unspawnNotes) {
-			if (note == null)
-				continue;
+		remove(dadGroup, true);
+		addBehindBF(dadGroup);
+	}
 
-			// override animations for note types
+	override function notesGenerated(notes:Array<NoteData>) {
+		// override animations for note types
+		for (note in notes) {
 			note.noAnimation = true;
 			note.noMissAnimation = true;
 		}
-		remove(dadGroup, true);
-		addBehindBF(dadGroup);
 	}
 
 	override function beatHit() {
@@ -224,14 +223,14 @@ class PhillyBlazin extends BaseStage {
 	var picoFight:PicoBlazinHandler = new PicoBlazinHandler();
 	var darnellFight:DarnellBlazinHandler = new DarnellBlazinHandler();
 
-	override function goodNoteHit(note:Note) {
-		// trace('hit note! ${note.noteType}');
+	override function goodNoteHit(note:NoteData) {
+		// trace('hit note! ${note.type}');
 		rainTimeScale += 0.7;
 		picoFight.noteHit(note);
 		darnellFight.noteHit(note);
 	}
 
-	override function noteMiss(note:Note) {
+	override function noteMiss(note:NoteData) {
 		// trace('missed note!');
 		picoFight.noteMiss(note);
 		darnellFight.noteMiss(note);
@@ -244,7 +243,7 @@ class PhillyBlazin extends BaseStage {
 	}
 
 	// Darnell Note functions
-	override function opponentNoteHit(note:Note) {
+	override function opponentNoteHit(note:NoteData) {
 		// trace('opponent hit!');
 		picoFight.noteMiss(note);
 		darnellFight.noteMiss(note);

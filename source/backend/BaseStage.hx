@@ -6,6 +6,7 @@ import flixel.FlxSubState;
 import flixel.group.FlxGroup;
 import objects.Note;
 import objects.Character;
+import objects.notes.NoteData;
 
 enum Countdown {
 	THREE;
@@ -91,12 +92,20 @@ class BaseStage extends FlxBasic {
 
 	public function eventPushedUnique(event:EventNote) {}
 
-	// Note Hit/Miss
-	public function goodNoteHit(note:Note) {}
+	// Note Hit/Miss -- fired on every judgement with the note's `NoteData` (`type`/`rating`/`time`/...)
+	public function goodNoteHit(note:NoteData) {}
 
-	public function opponentNoteHit(note:Note) {}
+	public function opponentNoteHit(note:NoteData) {}
 
-	public function noteMiss(note:Note) {}
+	public function noteMiss(note:NoteData) {}
+
+	/**
+		Fired once the chart has been decoded into the flat note list (during `startCountdown`, after
+		`createPost`). This is where load-time note overrides belong: set `blockHit`/`noAnimation`/...
+		on the entries here and the fields spawn them that way.
+		@param notes every decoded note across all strumlines, time-sorted
+	**/
+	public function notesGenerated(notes:Array<NoteData>) {}
 
 	public function noteMissPress(direction:Int) {}
 

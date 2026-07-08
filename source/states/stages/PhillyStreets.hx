@@ -6,7 +6,7 @@ import flixel.addons.display.FlxTiledSprite;
 import flixel.graphics.frames.FlxAtlasFrames;
 import substates.GameOverSubstate;
 import states.stages.objects.*;
-import objects.Note;
+import objects.notes.NoteData;
 import cutscenes.CutsceneHandler;
 
 enum NeneState {
@@ -161,18 +161,10 @@ class PhillyStreets extends BaseStage {
 	var noteTypes:Array<String> = [];
 
 	override function createPost() {
-		var unspawnNotes:Array<Note> = cast game.unspawnNotes;
-		for (note in unspawnNotes) {
-			if (note == null)
-				continue;
-
-			// override animations for note types
-			switch (note.noteType) {
-				case 'weekend-1-firegun':
-					note.blockHit = true;
-			}
-			if (!noteTypes.contains(note.noteType))
-				noteTypes.push(note.noteType);
+		for (n in PlayState.SONG.noteList) {
+			var nt:String = (n.type != null) ? n.type : '';
+			if (!noteTypes.contains(nt))
+				noteTypes.push(nt);
 		}
 
 		spraycanPile = new BGSprite('SpraycanPile', 920, 1045, 1, 1);
@@ -193,6 +185,13 @@ class PhillyStreets extends BaseStage {
 				}
 			}
 		}
+	}
+
+	override function notesGenerated(notes:Array<NoteData>) {
+		// override animations for note types
+		for (note in notes)
+			if (note.type == 'weekend-1-firegun')
+				note.blockHit = true;
 	}
 
 	var videoEnded:Bool = false;
@@ -736,7 +735,7 @@ class PhillyStreets extends BaseStage {
 		FlxTween.quadPath(sprite, path, duration, true, {onComplete: function(_) car2Interruptable = true});
 	}
 
-	override function goodNoteHit(note:Note) {
+	override function goodNoteHit(note:NoteData) {
 		// 10% chance of playing combo50/combo100 animations for Nene
 		if (FlxG.random.bool(10)) {
 			switch (game.combo) {
@@ -749,7 +748,7 @@ class PhillyStreets extends BaseStage {
 			}
 		}
 
-		switch (note.noteType) {
+		switch (note.type) {
 			case 'weekend-1-cockgun': // HE'S PULLING HIS COCK OUT
 				boyfriend.holdTimer = 0;
 				boyfriend.playAnim('cock', true);
@@ -768,10 +767,10 @@ class PhillyStreets extends BaseStage {
 					}
 				}
 
-				game.notes.forEachAlive(function(note:Note) {
-					if (note.noteType == 'weekend-1-firegun')
-						note.blockHit = false;
-				});
+				for (field in PlayState.instance.noteFields)
+					for (active in field.active)
+						if (active.data.type == 'weekend-1-firegun')
+							active.data.blockHit = false;
 				showPicoFade();
 
 			case 'weekend-1-firegun':
@@ -822,9 +821,9 @@ class PhillyStreets extends BaseStage {
 		casingGroup.add(casing);
 	}
 
-	override function opponentNoteHit(note:Note) {
-		var sndTime:Float = note.strumTime - Conductor.songPosition;
-		switch (note.noteType) {
+	override function opponentNoteHit(note:NoteData) {
+		var sndTime:Float = note.time - Conductor.songPosition;
+		switch (note.type) {
 			case 'weekend-1-lightcan':
 				dad.holdTimer = 0;
 				dad.playAnim('lightCan', true);
@@ -861,8 +860,8 @@ class PhillyStreets extends BaseStage {
 
 	var picoFlicker:FlxTimer = null;
 
-	override function noteMiss(note:Note) {
-		switch (note.noteType) {
+	override function noteMiss(note:NoteData) {
+		switch (note.type) {
 			case 'weekend-1-firegun':
 				boyfriend.playAnim('shootMISS', true);
 				boyfriend.specialAnim = true;

@@ -112,15 +112,15 @@ class Template extends BaseStage {
 	}
 
 	// Note Hit/Miss
-	override function goodNoteHit(note:Note) {
+	override function goodNoteHit(note:objects.notes.NoteData) {
 		// Code here
 	}
 
-	override function opponentNoteHit(note:Note) {
+	override function opponentNoteHit(note:objects.notes.NoteData) {
 		// Code here
 	}
 
-	override function noteMiss(note:Note) {
+	override function noteMiss(note:objects.notes.NoteData) {
 		// Code here
 	}
 

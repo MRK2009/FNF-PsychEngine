@@ -19,8 +19,8 @@ import flixel.group.FlxGroup.FlxTypedGroup;
 	- `game.notes` -- one inert `LegacyNote` adapter per currently-active v2 note, re-synced each frame.
 	- `game.playerStrums` / `opponentStrums` / `strumLineNotes` -- one inert `LegacyStrumNote` adapter
 	  per receptor, position mirrored each frame.
-	- callback identity -- `callbackNote` hands HScript note callbacks (and stage `goodNoteHit` hooks) a
-	  `LegacyNote` instead of the v2 `NoteSprite`.
+	- callback identity -- `callbackNote` hands HScript note callbacks a `LegacyNote` instead of the v2
+	  `NoteSprite`. (Compiled `BaseStage` hooks are NOT bridged: they always take the native `NoteData`.)
 
 	The adapters are NEVER drawn or updated (`visible = active = false`); the real v2 drawables render.
 	They are pure data carriers, so they are safe to keep in the scene-added `notes` group.

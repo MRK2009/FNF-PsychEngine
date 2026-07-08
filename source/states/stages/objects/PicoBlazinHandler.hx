@@ -1,6 +1,6 @@
 package states.stages.objects;
 
-import objects.Note;
+import objects.notes.NoteData;
 import objects.Character;
 
 // Pico Note functions
@@ -9,7 +9,7 @@ class PicoBlazinHandler {
 
 	var cantUppercut = false;
 
-	public function noteHit(note:Note) {
+	public function noteHit(note:NoteData) {
 		if (wasNoteHitPoorly(note.rating) && isPlayerLowHealth() && isDarnellPreppingUppercut()) {
 			playPunchHighAnim();
 			return;
@@ -21,7 +21,7 @@ class PicoBlazinHandler {
 			return;
 		}
 
-		switch (note.noteType) {
+		switch (note.type) {
 			case "weekend-1-punchlow":
 				playPunchLowAnim();
 			case "weekend-1-punchlowblocked":
@@ -85,7 +85,7 @@ class PicoBlazinHandler {
 		}
 	}
 
-	public function noteMiss(note:Note) {
+	public function noteMiss(note:NoteData) {
 		// trace('missed note!');
 		if (isDarnellInUppercut()) {
 			playUppercutHitAnim();
@@ -102,7 +102,7 @@ class PicoBlazinHandler {
 			return;
 		}
 
-		switch (note.noteType) {
+		switch (note.type) {
 			// Pico fails to punch, and instead gets hit!
 			case "weekend-1-punchlow":
 				playHitLowAnim();

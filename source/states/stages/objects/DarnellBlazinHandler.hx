@@ -1,6 +1,6 @@
 package states.stages.objects;
 
-import objects.Note;
+import objects.notes.NoteData;
 import objects.Character;
 
 class DarnellBlazinHandler {
@@ -8,7 +8,7 @@ class DarnellBlazinHandler {
 
 	var cantUppercut:Bool = false;
 
-	public function noteHit(note:Note) {
+	public function noteHit(note:NoteData) {
 		// SPECIAL CASE: If Pico hits a poor note at low health (at 30% chance),
 		// Darnell may duck below Pico's punch to attempt an uppercut.
 		// TODO: Maybe add a cooldown to this?
@@ -23,7 +23,7 @@ class DarnellBlazinHandler {
 		}
 
 		// Override the hit note animation.
-		switch (note.noteType) {
+		switch (note.type) {
 			case "weekend-1-punchlow":
 				playHitLowAnim();
 			case "weekend-1-punchlowblocked":
@@ -94,7 +94,7 @@ class DarnellBlazinHandler {
 		cantUppercut = false;
 	}
 
-	public function noteMiss(note:Note) {
+	public function noteMiss(note:NoteData) {
 		// SPECIAL CASE: Darnell prepared to uppercut last time and Pico missed! FINISH HIM!
 		if (dad.getAnimationName() == 'uppercutPrep') {
 			playUppercutAnim();
@@ -112,7 +112,7 @@ class DarnellBlazinHandler {
 		}
 
 		// Override the hit note animation.
-		switch (note.noteType) {
+		switch (note.type) {
 			// Pico tried and failed to punch, punch back!
 			case "weekend-1-punchlow":
 				playPunchLowAnim();
