@@ -1,50 +1,60 @@
 package editors.mobile;
 
 import flixel.FlxG;
-import flixel.math.FlxRect;
 import openfl.display.Sprite;
+import smidr.UIComponent;
 import smidr.UIRoot;
 import smidr.UITheme;
 import smidr.flixel.FlxSmidr;
 import smidr.types.UISurface;
 import smidr.widgets.UIButton;
+import smidr.widgets.UIDrawer;
 import smidr.widgets.UILabel;
+import smidr.widgets.UIModal;
 import smidr.widgets.UIPanel;
 import smidr.widgets.UIScrollPane;
-import smidr.widgets.UIDrawer;
 
 /**
- * Shared touch chrome for the mobile editors: a compact top toolbar (Back, Play/Pause, Undo, Redo,
- * a status label, and a Panels button) plus a right-edge `UIDrawer` whose scroll pane the owning
- * editor fills with its settings. Exposes the canvas viewport rect (`field`) below the toolbar so
- * the editor's Flixel view gets the full width; the drawer overlays it when open.
+ * Android-first editor chrome, designed for a landscape phone held in two hands:
  *
- * Chrome only -- the editor wires the button callbacks and populates `panel`. Built under the mobile
- * `UITheme` preset so every control is finger-sized.
+ * - two THUMB RAILS of big labeled buttons hugging the left/right screen edges (inset so they
+ *   don't fight the system back gesture), the canvas filling everything behind them;
+ * - a slim translucent STATUS STRIP across the top center (song / section / time / zoom);
+ * - a right-edge DRAWER hosting full-height flyout pages (note types, snap, settings) with
+ *   large rows -- opened from rail buttons, never by edge swipe (that edge belongs to Android);
+ * - a floating bottom ACTION BAR for contextual actions on the current selection;
+ * - a GESTURE GUIDE modal (first run + on demand) explaining the touch controls.
+ *
+ * Pure chrome: the owning editor wires callbacks and fills the drawer pages. Runs under the
+ * SmidrUI mobile theme preset so every control is finger-sized.
  */
 class MobileEditorShell {
 	public final root:UIRoot;
-	public final drawer:UIDrawer;
 
-	/** The drawer's scroll content -- the editor adds its setting widgets here. **/
-	public final panel:UIScrollPane;
-
-	/** Canvas viewport in game px (below the toolbar), for the editor's Flixel view. **/
-	public final field:FlxRect;
-
-	public var onBack:Void->Void = null;
-	public var onPlayPause:Void->Void = null;
-	public var onUndo:Void->Void = null;
-	public var onRedo:Void->Void = null;
+	// Layout constants (logical px on the 1280x720 game surface).
+	public static inline var RAIL_W:Float = 150;
+	public static inline var RAIL_BTN_H:Float = 62;
+	public static inline var STRIP_H:Float = 36;
 
 	final mainUI:Sprite;
-	final playBtn:UIButton;
+	final leftRail:Sprite;
+	final rightRail:Sprite;
+	var leftY:Float = 8;
+	var rightY:Float = 8;
+
 	final statusLabel:UILabel;
 
-	/** Drawer width as a fraction of the screen (clamped to a sensible px range). **/
-	public static inline var DRAWER_FRAC:Float = 0.42;
+	final drawer:UIDrawer;
+	final drawerTitle:UILabel;
+	final drawerPane:UIScrollPane;
 
-	public function new(title:String) {
+	final actionBar:Sprite;
+	var actionBarBg:UIPanel;
+	var actionX:Float = 0;
+
+	var guideModal:UIModal = null;
+
+	public function new() {
 		UITheme.applyMobilePreset();
 
 		root = FlxSmidr.init();
@@ -52,73 +62,210 @@ class MobileEditorShell {
 		mainUI = new Sprite();
 		root.content.addChild(mainUI);
 
-		var barH:Float = UITheme.px(34);
-		var pad:Float = UITheme.px(6);
-		var btnH:Float = barH - pad * 2;
+		// Status strip: translucent, centered between the rails.
+		var stripW:Float = FlxG.width - RAIL_W * 2 - 20;
+		var strip:UIPanel = UIPanel.solid(stripW, STRIP_H, 0xB4141419);
+		strip.x = RAIL_W + 10;
+		strip.y = 0;
+		mainUI.addChild(strip);
 
-		var bar:UIPanel = new UIPanel(FlxG.width, barH, UISurface.PANEL);
-		mainUI.addChild(bar);
-
-		var x:Float = pad;
-		function tool(label:String, w:Float, cb:Void->Void):UIButton {
-			var b:UIButton = new UIButton(label, w, btnH, cb);
-			b.fontSize = 13;
-			b.x = x;
-			b.y = pad;
-			mainUI.addChild(b);
-			x += w + pad;
-			return b;
-		}
-
-		var navW:Float = UITheme.px(52);
-		tool('Back', navW, function() if (onBack != null) onBack());
-		playBtn = tool('Play', navW, function() if (onPlayPause != null) onPlayPause());
-		tool('Undo', navW, function() if (onUndo != null) onUndo());
-		tool('Redo', navW, function() if (onRedo != null) onRedo());
-
-		// Panels toggle docks at the right edge.
-		var panelsW:Float = UITheme.px(64);
-		var panelsBtn:UIButton = new UIButton('Panels', panelsW, btnH, function() toggleDrawer());
-		panelsBtn.fontSize = 13;
-		panelsBtn.x = FlxG.width - panelsW - pad;
-		panelsBtn.y = pad;
-		mainUI.addChild(panelsBtn);
-
-		statusLabel = new UILabel(title, 12, 0);
-		statusLabel.x = x + pad;
-		statusLabel.y = pad + UITheme.px(4);
+		statusLabel = new UILabel('', 15, 0);
+		statusLabel.x = strip.x + 14;
+		statusLabel.y = (STRIP_H - 20) / 2;
 		mainUI.addChild(statusLabel);
 
-		// Drawer (right) holds the editor's settings; a scroll pane fills it.
-		var drawerW:Float = Math.max(UITheme.px(220), Math.min(FlxG.width * DRAWER_FRAC, UITheme.px(340)));
-		drawer = new UIDrawer(UIDrawerSide.RIGHT, drawerW);
-		panel = new UIScrollPane(drawerW - UITheme.px(16), FlxG.height - UITheme.px(16));
-		panel.x = UITheme.px(8);
-		panel.y = UITheme.px(8);
-		drawer.content.addChild(panel);
-		drawer.attachEdge();
+		// Thumb rails (slightly translucent so the grid reads as full-screen).
+		leftRail = new Sprite();
+		rightRail = new Sprite();
+		var lp:UIPanel = UIPanel.solid(RAIL_W, FlxG.height, 0xE0191920);
+		leftRail.addChild(lp);
+		var rp:UIPanel = UIPanel.solid(RAIL_W, FlxG.height, 0xE0191920);
+		rightRail.addChild(rp);
+		rightRail.x = FlxG.width - RAIL_W;
+		mainUI.addChild(leftRail);
+		mainUI.addChild(rightRail);
 
-		field = FlxRect.get(0, barH, FlxG.width, FlxG.height - barH);
+		// Drawer: rail-opened flyout pages. Edge swipe stays OFF -- Android's back gesture owns
+		// the screen edges, so panels open from explicit buttons only.
+		drawer = new UIDrawer(UIDrawerSide.RIGHT, 460);
+		drawer.edgeSwipeEnabled = false;
+		drawerTitle = new UILabel('', 18, 0);
+		drawerTitle.x = 18;
+		drawerTitle.y = 14;
+		drawer.content.addChild(drawerTitle);
+		drawerPane = new UIScrollPane(460 - 28, FlxG.height - 60);
+		drawerPane.x = 14;
+		drawerPane.y = 48;
+		drawer.content.addChild(drawerPane);
+
+		// Floating contextual action bar (bottom center, shown while something is selected).
+		actionBar = new Sprite();
+		actionBar.visible = false;
+		mainUI.addChild(actionBar);
 	}
 
-	public function toggleDrawer():Void {
-		if (drawer.isOpen)
-			drawer.close();
+	// ---- Rails ----
+
+	/** Adds the next big button to the left thumb rail. **/
+	public function addLeft(label:String, cb:Void->Void, accent:Bool = false):UIButton {
+		return railButton(leftRail, label, cb, accent, true);
+	}
+
+	/** Adds the next big button to the right thumb rail. **/
+	public function addRight(label:String, cb:Void->Void, accent:Bool = false):UIButton {
+		return railButton(rightRail, label, cb, accent, false);
+	}
+
+	/** Vertical breathing room before the next rail button (visual grouping). **/
+	public function railGap(left:Bool, h:Float = 18):Void {
+		if (left)
+			leftY += h;
 		else
-			drawer.open();
+			rightY += h;
 	}
 
-	public function setPlaying(playing:Bool):Void {
-		playBtn.label = playing ? 'Pause' : 'Play';
+	function railButton(rail:Sprite, label:String, cb:Void->Void, accent:Bool, left:Bool):UIButton {
+		var b:UIButton = new UIButton(label, RAIL_W - 16, RAIL_BTN_H, cb, accent);
+		b.fontSize = 15;
+		b.x = 8;
+		if (left) {
+			b.y = leftY;
+			leftY += RAIL_BTN_H + 10;
+		} else {
+			b.y = rightY;
+			rightY += RAIL_BTN_H + 10;
+		}
+		rail.addChild(b);
+		return b;
 	}
+
+	// ---- Status ----
 
 	public function setStatus(text:String):Void {
 		statusLabel.text = text;
 	}
 
+	// ---- Drawer pages ----
+
+	/**
+		Opens the drawer showing one page. `build` fills the pane's content (children positioned
+		from y=0, width `pageWidth()`) and returns the content height for the scroll range.
+	**/
+	public function openPage(title:String, build:UIScrollPane->Float):Void {
+		drawerTitle.text = title;
+		var i:Int = drawerPane.content.numChildren;
+		while (--i >= 0) {
+			var c = drawerPane.content.getChildAt(i);
+			if (c is UIComponent)
+				(cast c : UIComponent).dispose();
+		}
+		drawerPane.content.removeChildren();
+		var h:Float = build(drawerPane);
+		drawerPane.refreshContent(h);
+		drawerPane.setScroll(0);
+		drawer.open();
+	}
+
+	/** Width available to widgets inside a drawer page. **/
+	public inline function pageWidth():Float {
+		return drawerPane.w - 18;
+	}
+
+	public function closeDrawer():Void {
+		drawer.close();
+	}
+
+	public var drawerOpen(get, never):Bool;
+
+	inline function get_drawerOpen():Bool {
+		return drawer.isOpen;
+	}
+
+	// ---- Contextual action bar ----
+
+	/** Replaces the action bar's buttons: an array of label / accent-or-danger / callback rows. **/
+	public function setActionBar(items:Array<{label:String, cb:Void->Void, ?danger:Bool}>):Void {
+		var i:Int = actionBar.numChildren;
+		while (--i >= 0) {
+			var c = actionBar.getChildAt(i);
+			if (c is UIComponent)
+				(cast c : UIComponent).dispose();
+		}
+		actionBar.removeChildren();
+
+		var btnW:Float = 128;
+		var btnH:Float = 58;
+		var pad:Float = 10;
+		var totalW:Float = items.length * (btnW + pad) + pad;
+
+		actionBarBg = UIPanel.solid(totalW, btnH + pad * 2, 0xE61E1E26);
+		actionBar.addChild(actionBarBg);
+
+		actionX = pad;
+		for (item in items) {
+			var danger:Bool = (item.danger == true);
+			var b:UIButton = new UIButton(item.label, btnW, btnH, item.cb, !danger);
+			if (danger)
+				b.danger = true;
+			b.fontSize = 15;
+			b.x = actionX;
+			b.y = pad;
+			actionBar.addChild(b);
+			actionX += btnW + pad;
+		}
+
+		actionBar.x = (FlxG.width - totalW) / 2;
+		actionBar.y = FlxG.height - (btnH + pad * 2) - 14;
+	}
+
+	public function showActionBar(show:Bool):Void {
+		actionBar.visible = show;
+	}
+
+	// ---- Gesture guide ----
+
+	/** Shows the touch-controls guide modal. `onDismiss` fires when it closes. **/
+	public function showGuide(lines:Array<String>, ?onDismiss:Void->Void):Void {
+		if (guideModal != null)
+			return;
+		var m:UIModal = new UIModal('TOUCH CONTROLS', 660, 130 + lines.length * 44);
+		var y:Float = 8;
+		for (line in lines) {
+			var l:UILabel = new UILabel(line, 17, 0);
+			l.x = 26;
+			l.y = y;
+			m.body.addChild(l);
+			y += 44;
+		}
+		var ok:UIButton = new UIButton('GOT IT', 240, 56, function() m.close(), true);
+		ok.fontSize = 17;
+		ok.x = (660 - 240) / 2;
+		ok.y = y + 8;
+		m.body.addChild(ok);
+		m.onClosed = function() {
+			guideModal = null;
+			if (onDismiss != null)
+				onDismiss();
+		};
+		guideModal = m;
+		m.open();
+	}
+
+	public var guideOpen(get, never):Bool;
+
+	inline function get_guideOpen():Bool {
+		return guideModal != null;
+	}
+
+	public function closeGuide():Void {
+		if (guideModal != null)
+			guideModal.close();
+	}
+
 	public function dispose():Void {
+		if (guideModal != null)
+			guideModal.close();
 		FlxSmidr.dispose();
 		UITheme.clearMobilePreset();
-		field.put();
 	}
 }
