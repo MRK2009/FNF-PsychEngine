@@ -7,7 +7,10 @@
 	::foreach ANDROID_PERMISSIONS::<uses-permission android:name="::__current__::" />
 	::end::
 
-	<application ::foreach ANDROID_APPLICATION::::if ((value != null) && (value != ""))::::key::="::value::" ::end::::end::>
+	<!-- requestLegacyExternalStorage keeps the public PsychEngine folder writable on
+	     Android 10 (API 29), which enforces scoped storage but predates the All Files
+	     Access permission used on 11+. Ignored on every other version. -->
+	<application ::foreach ANDROID_APPLICATION::::if ((value != null) && (value != ""))::::key::="::value::" ::end::::end::android:requestLegacyExternalStorage="true">
 
 		<!-- Android 12+ Game Mode API opt-in: battery/performance modes are handled
 		     in-engine (see mobile.backend.GameModeUtil); system downscaling and FPS

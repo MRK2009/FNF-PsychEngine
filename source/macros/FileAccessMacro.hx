@@ -31,9 +31,11 @@ using haxe.macro.ExprTools;
  */
 class FileAccessMacro
 {
-	// Game packages that read assets. (Std lib / haxelibs are intentionally excluded.)
+	// Game packages that read assets. (Std lib / haxelibs are intentionally excluded;
+	// `mobile` must stay out -- AssetUtil itself lives there.)
 	static final PACKAGES:Array<String> = [
-		'backend', 'objects', 'states', 'options', 'substates', 'cutscenes', 'psychlua', 'scripting'
+		'backend', 'objects', 'states', 'options', 'substates', 'cutscenes', 'psychlua', 'scripting',
+		'editors', 'legacy', 'debug', 'shaders'
 	];
 
 	public static function use():Void
