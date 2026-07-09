@@ -3157,6 +3157,9 @@ class ChartingState extends MusicBeatState {
 				bumpSustain(targets[i], dir);
 		}
 		model.markDirty();
+		// Keep the Sustain stepper in sync with the new length -- the keybind path bypasses the
+		// stepper's own onChange, so without this the displayed value stayed stale.
+		refreshSelectedPanel();
 	}
 
 	function bumpSustain(note:SongNote, dir:Int):Void {

@@ -699,6 +699,7 @@ class CharacterEditorState extends MusicBeatState {
 	var flipXCheckBox:UICheckbox;
 	var noAntialiasingCheckBox:UICheckbox;
 	var swfModeCheckBox:UICheckbox;
+	var loopSingCheckBox:UICheckbox;
 
 	var healthColorStepperR:UIStepper;
 	var healthColorStepperG:UIStepper;
@@ -803,9 +804,18 @@ class CharacterEditorState extends MusicBeatState {
 		noAntialiasingCheckBox.y = 194;
 		pane.content.addChild(noAntialiasingCheckBox);
 
+		// Loop Sing on Hold: re-fire the sing anim each step while a sustain is held (classic "jitter");
+		// off freezes the sing pose through the hold. Shares its row with the SWF Mode toggle.
+		loopSingCheckBox = new UICheckbox("Loop Sing on Hold", halfW, character.loopSingOnHold, function(checked:Bool) {
+			character.loopSingOnHold = checked;
+			unsavedProgress = true;
+		});
+		loopSingCheckBox.y = 226;
+		pane.content.addChild(loopSingCheckBox);
+
 		// SWF Mode: only meaningful for Animate atlas characters; reload the atlas
 		// so the change (movieclip timelines baked vs. static) takes effect live.
-		swfModeCheckBox = new UICheckbox("SWF Mode (Animate)", rowW, character.swfMode, function(checked:Bool) {
+		swfModeCheckBox = new UICheckbox("SWF Mode", halfW, character.swfMode, function(checked:Bool) {
 			character.swfMode = checked;
 			if (character.isAnimateAtlas) {
 				var lastAnim:String = character.getAnimationName();
@@ -826,6 +836,7 @@ class CharacterEditorState extends MusicBeatState {
 			}
 			unsavedProgress = true;
 		});
+		swfModeCheckBox.x = halfW + 10;
 		swfModeCheckBox.y = 226;
 		pane.content.addChild(swfModeCheckBox);
 
@@ -1434,6 +1445,7 @@ class CharacterEditorState extends MusicBeatState {
 
 			"flip_x": character.originalFlipX,
 			"no_antialiasing": character.noAntialiasing,
+			"loop_sing_on_hold": character.loopSingOnHold,
 			"swfMode": character.swfMode,
 			"healthbar_colors": character.healthColorArray,
 			"vocals_file": character.vocalsFile,
