@@ -29,7 +29,25 @@ class FileDialogHandler extends FlxBasic {
 
 	var _currentEvent:openfl.events.Event->Void;
 
+	#if mobile
+	// lime has no mobile FileDialog backend and FileReference.save is a no-op there;
+	// bail before _startUp so `completed` stays true and the editor never locks up.
+	function unsupported(onCancel:Void->Void):Void {
+		#if android
+		try extension.androidtools.widget.Toast.makeText('File dialogs are not supported on this device.',
+			extension.androidtools.widget.Toast.LENGTH_SHORT) catch (_:Dynamic) {}
+		#end
+		flixel.FlxG.log.warn('File dialogs are not supported on mobile.');
+		if (onCancel != null)
+			onCancel();
+	}
+	#end
+
 	public function save(?fileName:String = '', ?dataToSave:String = '', ?onComplete:Void->Void, ?onCancel:Void->Void, ?onError:Void->Void) {
+		#if mobile
+		unsupported(onCancel);
+		return;
+		#end
 		if (!completed) {
 			throw new Exception('You must finish previous operation before starting a new one.');
 		}
@@ -45,6 +63,10 @@ class FileDialogHandler extends FlxBasic {
 
 	public function open(?defaultName:String = null, ?title:String = null, ?filter:Array<FileFilter> = null, ?onComplete:Void->Void, ?onCancel:Void->Void,
 			?onError:Void->Void) {
+		#if mobile
+		unsupported(onCancel);
+		return;
+		#end
 		if (!completed) {
 			throw new Exception('You must finish previous operation before starting a new one.');
 		}
@@ -64,6 +86,10 @@ class FileDialogHandler extends FlxBasic {
 	}
 
 	public function openDirectory(?title:String = null, ?onComplete:Void->Void, ?onCancel:Void->Void, ?onError:Void->Void) {
+		#if mobile
+		unsupported(onCancel);
+		return;
+		#end
 		if (!completed) {
 			throw new Exception('You must finish previous operation before starting a new one.');
 		}
@@ -122,7 +148,7 @@ class FileDialogHandler extends FlxBasic {
 		removeEvents();
 		this.completed = true;
 		if (onCancel != null)
-			onError();
+			onCancel();
 	}
 
 	function onErrorFn(_) {

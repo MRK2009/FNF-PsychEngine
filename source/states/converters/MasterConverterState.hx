@@ -13,9 +13,14 @@ import backend.tools.MediaConverter;
  * they're missing pops up ConverterToolsSubState to download them first.
  */
 class MasterConverterState extends MusicBeatState {
+	// The osu! converters need file dialogs (no mobile backend) and, for beatmaps,
+	// an ffmpeg child process -- desktop only. Script/Chart converters are pure
+	// local-file operations on mods/ and work everywhere.
 	var options:Array<String> = [
+		#if !mobile
 		'osu! Beatmap Converter',
 		'osu! Skin Converter',
+		#end
 		'Script Converter',
 		'Chart Converter'
 	];
@@ -147,6 +152,12 @@ class MasterConverterState extends MusicBeatState {
 	}
 
 	function refreshToolStatus() {
+		#if mobile
+		// no osu! entries on mobile, so the ffmpeg status is meaningless there
+		if (statusTxt != null)
+			statusTxt.text = '';
+		return;
+		#end
 		ffmpegReady = MediaConverter.hasFfmpeg();
 		if (statusTxt == null)
 			return;

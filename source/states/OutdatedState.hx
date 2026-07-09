@@ -58,8 +58,11 @@ class OutdatedState extends MusicBeatState {
 		refresh();
 	}
 
+	// Desktop only: android is a sys target too, but the in-place installer would
+	// download a desktop zip and unpack it over cwd -- which on android is the
+	// public storage folder. Mobile keeps the releases-page link instead.
 	inline function checkSupported():Bool {
-		#if sys return true; #else return false; #end
+		#if (sys && desktop) return true; #else return false; #end
 	}
 
 	function beginRecheck():Void {
