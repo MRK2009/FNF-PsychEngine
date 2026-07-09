@@ -43,6 +43,7 @@ typedef NoteSkinData = {
 	@:optional var strumOffsets:Dynamic;
 	@:optional var holdOffsets:Dynamic;
 	@:optional var keys:Dynamic;
+	@:optional var sheet:String; // CLASSIC skins only: names the atlas file inside a folder (overrides the <name>/<name> and <name>/NOTE_assets convention)
 }
 
 typedef SkinImage = {
@@ -98,6 +99,7 @@ class NoteSkinConfig {
 	static var classicDefaultCache:Null<Bool> = null;
 	static var ownerRootCache:Map<String, String> = new Map();
 	static var locateCache:Map<String, LocatedSkin> = new Map();
+	static var classicSheetCache:Map<String, String> = new Map();
 
 	public static function reset() {
 		configCache.clear();
@@ -109,6 +111,7 @@ class NoteSkinConfig {
 		classicDefaultCache = null;
 		ownerRootCache.clear();
 		locateCache.clear();
+		classicSheetCache.clear();
 		pixelVariantCache = null;
 		pixelVariantComputed = false;
 	}
@@ -207,6 +210,69 @@ class NoteSkinConfig {
 		return data;
 	}
 
+	/**
+		The atlas base key (to pass to `Paths.getSparrowAtlas`) for a CLASSIC skin `name`, or null when
+		no sparrow sheet resolves. Tries, in order: a config-declared `sheet` inside the folder, a loose
+		`noteSkins/<X>.png`, a foldered `noteSkins/<X>/<X>.png`, then `noteSkins/<X>/NOTE_assets.png`.
+		Non-pixel base key; the classic renderer's pixel branch prepends `pixelUI/`. Cached.
+	**/
+	public static function classicSheet(name:String):Null<String> {
+		if (name == null || name.length < 1)
+			return null;
+		if (classicSheetCache.exists(name))
+			return classicSheetCache.get(name);
+
+		var last:String = name.substr(name.lastIndexOf('/') + 1);
+		var candidates:Array<String> = [];
+		var cfg:NoteSkinData = get(name);
+		if (cfg != null && cfg.sheet != null && cfg.sheet.length > 0)
+			candidates.push('$name/${cfg.sheet}');
+		candidates.push(name); // loose sheet
+		candidates.push('$name/$last'); // foldered, named after the folder
+		candidates.push('$name/NOTE_assets'); // foldered default
+
+		var result:String = null;
+		for (c in candidates) {
+			if (Paths.fileExists('images/$c.png', IMAGE)) {
+				result = c;
+				break;
+			}
+		}
+		classicSheetCache.set(name, result);
+		return result;
+	}
+
+	/** Whether `name` is a CLASSIC (atlas-based) skin -- a sparrow sheet resolves for it. **/
+	public static function isClassicSkin(name:String):Bool {
+		return classicSheet(name) != null;
+	}
+
+	/**
+		Optional config for a CLASSIC atlas skin: a foldered `<name>/skin.{tcfg,json}` (same locator as
+		folder skins) or a loose sibling `<name>.{tcfg,json}` next to the sheet. null when the skin ships
+		no config (a bare sheet renders with the standard NOTE_assets prefixes). The current-keycount
+		`keys` override is applied.
+	**/
+	public static function classicConfig(name:String):NoteSkinData {
+		var cfg:NoteSkinData = get(name); // foldered <name>/skin.{tcfg,json}
+		if (cfg == null) {
+			var key:String = 'loose:' + name;
+			if (configCache.exists(key))
+				cfg = configCache.get(key);
+			else {
+				for (ext in EXTS) {
+					var raw:String = Paths.getTextFromFile('images/$name.$ext');
+					if (raw != null) {
+						cfg = cast backend.config.ConfigParser.parse(ext, raw);
+						break;
+					}
+				}
+				configCache.set(key, cfg);
+			}
+		}
+		return withCurrentKeys(cfg);
+	}
+
 	public static inline var DEFAULT:String = 'noteSkins/Default';
 
 	public static var editorOverride:String = null;
@@ -235,10 +301,17 @@ class NoteSkinConfig {
 		if (mergedCache.exists(cacheKey))
 			return mergedCache.get(cacheKey);
 
-		var over:Dynamic = Reflect.field(base.keys, Std.string(count));
-		var merged:NoteSkinData = (over == null) ? base : mergeOverride(base, over);
+		var merged:NoteSkinData = withCurrentKeys(base);
 		mergedCache.set(cacheKey, merged);
 		return merged;
+	}
+
+	/** Applies the per-keycount `keys` override (for `Mania.current`) onto a config, or returns it as-is. **/
+	public static function withCurrentKeys(base:NoteSkinData):NoteSkinData {
+		if (base == null || base.keys == null)
+			return base;
+		var over:Dynamic = Reflect.field(base.keys, Std.string(Mania.clamp(Mania.current)));
+		return (over == null) ? base : mergeOverride(base, over);
 	}
 
 	static function mergeOverride(base:NoteSkinData, over:Dynamic):NoteSkinData {
@@ -269,17 +342,20 @@ class NoteSkinConfig {
 				var dir:String = '$root/$entry';
 				if (!sys.FileSystem.isDirectory(dir))
 					continue;
+				var name:String = 'noteSkins/$entry';
 				var hasSkin:Bool = false;
 				for (ext in EXTS)
 					if (sys.FileSystem.exists('$dir/skin.$ext')) {
 						hasSkin = true;
 						break;
 					}
-				if (hasSkin) {
-					var name:String = 'noteSkins/$entry';
-					if (!result.contains(name))
-						result.push(name);
-				}
+				// Modern folders (skin.tcfg/json) AND foldered CLASSIC atlas skins are both selectable.
+				// Loose classic sheets are surfaced through noteSkins/list.txt instead of an auto-scan
+				// (which would list internal sheets like NOTE_assets/square).
+				if (!hasSkin)
+					hasSkin = classicSheet(name) != null;
+				if (hasSkin && !result.contains(name))
+					result.push(name);
 			}
 		}
 		#end
@@ -330,6 +406,25 @@ class NoteSkinConfig {
 		if (!ClientPrefs.data.forceNoteSkin && modProvidesClassicDefault())
 			return null;
 		return isFolderSkin(DEFAULT) ? DEFAULT : null;
+	}
+
+	/**
+		The player-selected CLASSIC atlas skin name to bind on `ClassicNoteSkin` (the `noteSkin` pref when
+		it names a classic skin), or null to fall back to `ClassicNoteSkin.resolveSkin`'s chart-arrowSkin /
+		`NOTE_assets` / postfix default. The chart `arrowSkin` (when not forced) is intentionally left to
+		that fallback so its resolution stays byte-identical.
+	**/
+	public static function activeClassicSkin():String {
+		var song = PlayState.SONG;
+		if (!ClientPrefs.data.forceNoteSkin && song != null && song.arrowSkin != null && song.arrowSkin.length > 1)
+			return null;
+		var pref:String = ClientPrefs.data.noteSkin;
+		if (pref != null && pref != ClientPrefs.defaultData.noteSkin) {
+			var p:String = 'noteSkins/' + pref.trim();
+			if (isClassicSkin(p))
+				return p;
+		}
+		return null;
 	}
 
 	// Whether a mod (the current one, when its assets are allowed, or any global mod) ships a classic

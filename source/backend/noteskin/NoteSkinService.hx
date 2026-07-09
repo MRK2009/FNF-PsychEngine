@@ -16,28 +16,33 @@ class NoteSkinService {
 	static var folderName:String = null;
 
 	/**
-		@return the shared `ClassicNoteSkin` provider (created on first use)
+		The shared `ClassicNoteSkin` provider (created on first use), bound to `name` -- the selected
+		classic atlas skin, or null for the built-in NOTE_assets/arrowSkin default (also the mode used
+		when it serves as a `FolderNoteSkin` fallback).
+		@param name the classic skin to render, or null for the default
 	**/
-	public static function classic():ClassicNoteSkin {
+	public static function classic(?name:String):ClassicNoteSkin {
 		if (classicSkin == null)
 			classicSkin = new ClassicNoteSkin();
+		classicSkin.activeName = name;
 		return classicSkin;
 	}
 
 	/**
-		@return the provider for the active skin: a `FolderNoteSkin` when a folder skin is active,
-		otherwise the `ClassicNoteSkin`
+		@return the provider for the active skin. Identity is by ASSET LAYOUT: an individual-image folder
+		skin (`skin.tcfg`/`json`, no atlas) -> `FolderNoteSkin`; anything backed by a sparrow atlas (even
+		one that also ships a config) -> the `ClassicNoteSkin` bound to that skin.
 	**/
 	public static function current():INoteSkin {
 		var active:String = NoteSkinConfig.activeSkin();
-		if (active != null) {
+		if (active != null && NoteSkinConfig.isFolderSkin(active) && !NoteSkinConfig.isClassicSkin(active)) {
 			if (folderSkin == null || folderName != active) {
 				folderName = active;
 				folderSkin = new FolderNoteSkin(active, classic());
 			}
 			return folderSkin;
 		}
-		return classic();
+		return classic(NoteSkinConfig.activeClassicSkin());
 	}
 
 	/** Clears the cached providers so the next `current` call rebuilds for the new active skin. **/

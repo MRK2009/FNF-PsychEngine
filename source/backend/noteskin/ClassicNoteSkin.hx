@@ -4,6 +4,8 @@ import flixel.FlxSprite;
 import flixel.graphics.frames.FlxAtlasFrames;
 import shaders.RGBPalette.RGBShaderReference;
 import objects.notes.NoteDefaults;
+import backend.NoteSkinConfig;
+import backend.NoteSkinConfig.NoteSkinData;
 
 using StringTools;
 
@@ -16,18 +18,79 @@ using StringTools;
 	`INoteSkin` for the method contracts.
 **/
 class ClassicNoteSkin implements INoteSkin {
+	/**
+		The selected classic atlas skin (bound by `NoteSkinService` from the `noteSkin` pref), or null to
+		fall back to the chart `arrowSkin` / `NOTE_assets` / postfix default. When set it resolves a loose
+		OR foldered atlas by name via `NoteSkinConfig.classicSheet`, and its optional `skin.tcfg`/`.json`
+		routes the XML frame prefixes + supplies config (offsets/colorable/antialiasing/fps).
+	**/
+	public var activeName:String = null;
+
 	public function new() {}
 
 	public function isPixel():Bool
 		return PlayState.isPixelStage;
 
+	// The name whose optional config applies: the bound skin, else the chart arrowSkin (when not forced).
+	function configName():String {
+		if (activeName != null && activeName.length > 0)
+			return activeName;
+		if (!ClientPrefs.data.forceNoteSkin
+			&& PlayState.SONG != null
+			&& PlayState.SONG.arrowSkin != null
+			&& PlayState.SONG.arrowSkin.length > 1)
+			return PlayState.SONG.arrowSkin;
+		return null;
+	}
+
+	// The active skin's optional config (null = bare sheet -> standard NOTE_assets prefixes, no config).
+	inline function config():NoteSkinData {
+		var name:String = configName();
+		return name == null ? null : NoteSkinConfig.classicConfig(name);
+	}
+
+	// The XML frame prefix for a role/column: the tcfg field's per-column key when the skin routes it,
+	// otherwise the standard NOTE_assets prefix `def`.
+	function routePrefix(cfg:NoteSkinData, field:Dynamic, col:Int, def:String):String {
+		if (cfg != null && field != null) {
+			var key:String = NoteSkinConfig.columnKey(field, col);
+			if (key != null && key.length > 0)
+				return key;
+		}
+		return def;
+	}
+
+	// Merges the default square sheet only when the skin's own atlas lacks the centre/square frames, so a
+	// classic skin missing a centre note still renders it in multikey (and one that ships its own keeps it).
+	inline function mergeSquare(atlas:FlxAtlasFrames):Void {
+		if (Mania.current != Mania.DEFAULT && lacksSquare(atlas)) {
+			var overlay:FlxAtlasFrames = Paths.getSparrowAtlas(Mania.ATLAS);
+			if (overlay != null)
+				atlas.addAtlas(overlay);
+		}
+	}
+
+	static function lacksSquare(atlas:FlxAtlasFrames):Bool {
+		if (atlas == null)
+			return true;
+		for (f in atlas.frames)
+			if (f.name != null && (f.name.indexOf('square') != -1 || f.name.indexOf('SQUARE') != -1))
+				return false;
+		return true;
+	}
+
 	/**
-		Resolves the base classic skin image name: the chart's `arrowSkin` (else the default) plus the
-		user's noteSkin postfix when that variant exists.
+		Resolves the base classic skin image name. The bound `activeName` (loose or foldered atlas) wins;
+		otherwise the chart's `arrowSkin` (else the default) plus the user's noteSkin postfix.
 		@return the resolved skin image base name
 	**/
 	function resolveSkin():String {
 		var path:String = PlayState.isPixelStage ? 'pixelUI/' : '';
+		if (activeName != null && activeName.length > 0) {
+			var sheet:String = NoteSkinConfig.classicSheet(activeName);
+			if (sheet != null)
+				return sheet;
+		}
 		var skin:String;
 		if (!ClientPrefs.data.forceNoteSkin
 			&& PlayState.SONG != null
@@ -67,14 +130,15 @@ class ClassicNoteSkin implements INoteSkin {
 			var atlas:FlxAtlasFrames = Paths.getSparrowAtlas(skin);
 			if (atlas == null)
 				return v;
-			if (Mania.current != Mania.DEFAULT) {
-				var overlay:FlxAtlasFrames = Paths.getSparrowAtlas(Mania.ATLAS);
-				if (overlay != null)
-					atlas.addAtlas(overlay);
-			}
+			mergeSquare(atlas);
 			spr.frames = atlas;
-			spr.antialiasing = ClientPrefs.data.antialiasing;
-			spr.animation.addByPrefix('note', Mania.colArray[nd] + '0');
+			var cfg:NoteSkinData = config();
+			spr.antialiasing = (cfg != null) ? NoteSkinConfig.boolForColumn(cfg.antialiasing, column, ClientPrefs.data.antialiasing) : ClientPrefs.data.antialiasing;
+			var prefix:String = routePrefix(cfg, cfg != null ? cfg.notes : null, column, Mania.colArray[nd] + '0');
+			if (cfg != null)
+				spr.animation.addByPrefix('note', prefix, NoteSkinConfig.fpsForColumn(cfg, column), false);
+			else
+				spr.animation.addByPrefix('note', prefix);
 			spr.setGraphicSize(Std.int(spr.width * Mania.noteSizes[kc - 1]));
 		}
 
@@ -84,6 +148,14 @@ class ClassicNoteSkin implements INoteSkin {
 		spr.animation.play('note', true);
 		v.scaleFactor = spr.scale.x;
 		v.colorable = true;
+
+		var vcfg:NoteSkinData = PlayState.isPixelStage ? null : config();
+		if (vcfg != null) {
+			v.colorable = NoteSkinConfig.colorableFor(vcfg, 'notes');
+			var off:Array<Float> = NoteSkinConfig.offsetFor(vcfg.noteOffsets, column);
+			v.offsetX = off[0];
+			v.offsetY = off[1];
+		}
 		v.ok = true;
 		return v;
 	}
@@ -167,18 +239,16 @@ class ClassicNoteSkin implements INoteSkin {
 			var tailAtlas:FlxAtlasFrames = Paths.getSparrowAtlas(skin);
 			if (bodyAtlas == null || tailAtlas == null)
 				return v;
-			if (Mania.current != Mania.DEFAULT) {
-				var overlay:FlxAtlasFrames = Paths.getSparrowAtlas(Mania.ATLAS);
-				if (overlay != null) {
-					bodyAtlas.addAtlas(overlay);
-					tailAtlas.addAtlas(overlay);
-				}
-			}
+			mergeSquare(bodyAtlas);
+			mergeSquare(tailAtlas);
 			body.frames = bodyAtlas;
 			tail.frames = tailAtlas;
-			body.animation.addByPrefix('hold', Mania.colArray[nd] + ' hold piece', 24, true);
-			tail.animation.addByPrefix('end', Mania.colArray[nd] + ' hold end', 24, true);
-			body.antialiasing = tail.antialiasing = ClientPrefs.data.antialiasing;
+			var cfg:NoteSkinData = config();
+			var fps:Int = (cfg != null) ? NoteSkinConfig.fpsForColumn(cfg, column) : 24;
+			body.animation.addByPrefix('hold', routePrefix(cfg, cfg != null ? cfg.holds : null, column, Mania.colArray[nd] + ' hold piece'), fps, true);
+			tail.animation.addByPrefix('end', routePrefix(cfg, cfg != null ? cfg.ends : null, column, Mania.colArray[nd] + ' hold end'), fps, true);
+			body.antialiasing = tail.antialiasing = (cfg != null) ? NoteSkinConfig.boolForColumn(cfg.antialiasing, column,
+				ClientPrefs.data.antialiasing) : ClientPrefs.data.antialiasing;
 			var sz:Float = Mania.noteSizes[kc - 1];
 			body.setGraphicSize(Std.int(body.width * sz));
 			tail.setGraphicSize(Std.int(tail.width * sz));
@@ -193,6 +263,14 @@ class ClassicNoteSkin implements INoteSkin {
 		// Lane-center the hold like the folder-skin and per-note-texture paths do, so a body/tail frame
 		// narrower (or wider) than the note head still sits on the lane instead of drifting off the head.
 		v.centerOnStrum = true;
+
+		var vcfg:NoteSkinData = PlayState.isPixelStage ? null : config();
+		if (vcfg != null) {
+			v.colorable = NoteSkinConfig.colorableFor(vcfg, 'holds');
+			var off:Array<Float> = NoteSkinConfig.offsetFor(vcfg.holdOffsets, column);
+			v.offsetX = off[0];
+			v.offsetY = off[1];
+		}
 		v.ok = true;
 		return v;
 	}
@@ -357,41 +435,27 @@ class ClassicNoteSkin implements INoteSkin {
 			var atlas:FlxAtlasFrames = Paths.getSparrowAtlas(skin);
 			if (atlas == null)
 				return v;
-			var overlay:FlxAtlasFrames = Paths.getSparrowAtlas(Mania.ATLAS);
-			if (overlay != null)
-				atlas.addAtlas(overlay);
+			mergeSquare(atlas);
 			spr.frames = atlas;
-			spr.antialiasing = ClientPrefs.data.antialiasing;
+			var cfg:NoteSkinData = config();
+			spr.antialiasing = (cfg != null) ? NoteSkinConfig.boolForColumn(cfg.antialiasing, column, ClientPrefs.data.antialiasing) : ClientPrefs.data.antialiasing;
 			var anim:String = Mania.noteAnimations[Mania.current - 1][Std.int(Math.abs(nd)) % Mania.current];
-			spr.animation.addByPrefix('static', 'arrow' + anim.toUpperCase(), 24, false);
-			spr.animation.addByPrefix('pressed', anim + ' press', 24, false);
-			spr.animation.addByPrefix('confirm', anim + ' confirm', 24, false);
+			spr.animation.addByPrefix('static', routePrefix(cfg, cfg != null ? cfg.strums : null, column, 'arrow' + anim.toUpperCase()), 24, false);
+			spr.animation.addByPrefix('pressed', routePrefix(cfg, cfg != null ? cfg.pressed : null, column, anim + ' press'), 24, false);
+			spr.animation.addByPrefix('confirm', routePrefix(cfg, cfg != null ? cfg.confirm : null, column, anim + ' confirm'), 24, false);
 			spr.setGraphicSize(Std.int(spr.width * Mania.noteSizes[kc - 1]));
 		} else {
 			var atlas:FlxAtlasFrames = Paths.getSparrowAtlas(skin);
 			if (atlas == null)
 				return v;
 			spr.frames = atlas;
-			spr.antialiasing = ClientPrefs.data.antialiasing;
+			var cfg:NoteSkinData = config();
+			spr.antialiasing = (cfg != null) ? NoteSkinConfig.boolForColumn(cfg.antialiasing, column, ClientPrefs.data.antialiasing) : ClientPrefs.data.antialiasing;
 			spr.setGraphicSize(Std.int(spr.width * 0.7));
-			switch (Std.int(Math.abs(nd)) % 4) {
-				case 0:
-					spr.animation.addByPrefix('static', 'arrowLEFT');
-					spr.animation.addByPrefix('pressed', 'left press', 24, false);
-					spr.animation.addByPrefix('confirm', 'left confirm', 24, false);
-				case 1:
-					spr.animation.addByPrefix('static', 'arrowDOWN');
-					spr.animation.addByPrefix('pressed', 'down press', 24, false);
-					spr.animation.addByPrefix('confirm', 'down confirm', 24, false);
-				case 2:
-					spr.animation.addByPrefix('static', 'arrowUP');
-					spr.animation.addByPrefix('pressed', 'up press', 24, false);
-					spr.animation.addByPrefix('confirm', 'up confirm', 24, false);
-				case 3:
-					spr.animation.addByPrefix('static', 'arrowRIGHT');
-					spr.animation.addByPrefix('pressed', 'right press', 24, false);
-					spr.animation.addByPrefix('confirm', 'right confirm', 24, false);
-			}
+			var dir:String = ['left', 'down', 'up', 'right'][Std.int(Math.abs(nd)) % 4];
+			spr.animation.addByPrefix('static', routePrefix(cfg, cfg != null ? cfg.strums : null, column, 'arrow' + dir.toUpperCase()));
+			spr.animation.addByPrefix('pressed', routePrefix(cfg, cfg != null ? cfg.pressed : null, column, dir + ' press'), 24, false);
+			spr.animation.addByPrefix('confirm', routePrefix(cfg, cfg != null ? cfg.confirm : null, column, dir + ' confirm'), 24, false);
 		}
 
 		spr.updateHitbox();
@@ -400,6 +464,13 @@ class ClassicNoteSkin implements INoteSkin {
 		else
 			spr.animation.play('static', true);
 		v.colorable = true;
+
+		var vcfg:NoteSkinData = PlayState.isPixelStage ? null : config();
+		if (vcfg != null) {
+			var off:Array<Float> = NoteSkinConfig.offsetFor(vcfg.strumOffsets, column);
+			v.offsetX = off[0];
+			v.offsetY = off[1];
+		}
 		v.ok = true;
 		return v;
 	}
