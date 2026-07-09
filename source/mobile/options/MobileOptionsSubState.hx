@@ -23,6 +23,12 @@ class MobileOptionsSubState extends BaseOptionsMenu
 		var option:Option = new Option('Vibration', 'Vibrate on note hits and misses.', 'vibration', BOOL);
 		addOption(option);
 
+		#if android
+		var option:Option = new Option('Pause Button',
+			'Show an on-screen Pause button during gameplay.\nWhen off, pause with the system Back button/gesture.', 'pauseButton', BOOL);
+		addOption(option);
+		#end
+
 		super();
 	}
 

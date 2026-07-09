@@ -134,6 +134,12 @@
 		     manifest copy tracks lime 8.3.2's template -- re-diff it if lime is updated. -->
 		<template path="art/android/templates" />
 		<template path="art/android/AndroidManifest.xml" rename="app/src/main/AndroidManifest.xml" />
+
+		<!-- Activity-level Back interception: SDL's key path drops system-injected key
+		     events on some builds, so MainActivity consumes KEYCODE_BACK itself and
+		     mobile.backend.BackButton polls the counter. Same file+rename rule as the
+		     manifest above; the rename path must track the app package. -->
+		<template path="art/android/MainActivity.java" rename="app/src/main/java/com/lulu/psychengine/MainActivity.java" />
 	</section>
 
 	<!-- ============================== Libraries =============================== -->

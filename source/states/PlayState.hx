@@ -674,7 +674,12 @@ class PlayState extends MusicBeatState {
 		FlxG.stage.addEventListener(KeyboardEvent.KEY_UP, onKeyRelease);
 
 		#if mobile
-		addHitbox(totalColumns); // Back button pauses (see update()); no on-screen pause button.
+		addHitbox(totalColumns);
+		// On-screen Pause button (top-right, clear of the lanes). Android users can turn
+		// it off in Mobile Settings and pause with the system Back button/gesture instead;
+		// iOS has no Back button, so the button is always shown there.
+		#if android if (ClientPrefs.data.pauseButton) #end
+		addTouchPad('NONE', 'B');
 		#end
 
 		// PRECACHING THINGS THAT GET USED FREQUENTLY TO AVOID LAGSPIKES
@@ -1689,7 +1694,7 @@ class PlayState extends MusicBeatState {
 			botplayTxt.alpha = 1 - Math.sin((Math.PI * botplaySine) / 180);
 		}
 
-		if ((controls.PAUSE #if android || FlxG.android.justPressed.BACK #end) && startedCountdown && canPause) {
+		if ((controls.PAUSE #if android || mobile.backend.BackButton.justPressed #end) && startedCountdown && canPause) {
 			var ret:Dynamic = callOnScripts('onPause', null, true);
 			if (ret != LuaUtils.Function_Stop) {
 				openPauseMenu();

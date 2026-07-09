@@ -95,6 +95,7 @@ import states.TitleState;
 	// Mobile on-screen controls
 	public var controlsAlpha:Float = 0.6;
 	public var vibration:Bool = true;
+	public var pauseButton:Bool = true;
 	public var gameplaySettings:Map<String, Dynamic> = [
 		'scrollspeed' => 1.0,
 		'scrolltype' => 'multiplicative',

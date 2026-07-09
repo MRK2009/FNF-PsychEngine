@@ -102,8 +102,10 @@ class Main extends Sprite {
 		addChild(new FlxGame(game.width, game.height, game.initialState, game.framerate, game.framerate, game.skipSplash, game.startFullscreen));
 
 		#if android
-		// Without this the OS handles Back (minimise/close) before we can read it.
-		FlxG.signals.postGameStart.addOnce(() -> FlxG.android.preventDefaultKeys = [flixel.input.android.FlxAndroidKey.BACK]);
+		// SDL's key path drops system-injected key events on some builds, so Back is
+		// consumed at the activity level (art/android/MainActivity.java) and polled
+		// into a per-frame flag here instead of going through FlxG.android.
+		FlxG.signals.preUpdate.add(mobile.backend.BackButton.poll);
 		// Game Mode (Battery/Performance) is flipped from the Game Dashboard while we're
 		// backgrounded -- re-apply the framerate policy every time focus comes back.
 		FlxG.signals.focusGained.add(ClientPrefs.applyFramerate);

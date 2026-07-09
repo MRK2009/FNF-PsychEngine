@@ -144,7 +144,7 @@ class Controls {
 			return true;
 		}
 		#if android
-		if (key == 'back' && FlxG.android.justPressed.BACK) return true;
+		if (key == 'back' && mobile.backend.BackButton.justPressed) return true;
 		#end
 		#if mobile
 		if (touchJustPressed(key)) return true;
