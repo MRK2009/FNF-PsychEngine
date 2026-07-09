@@ -11,9 +11,10 @@ import lime.system.JNI;
  *
  * The manifest opts into self-handled Battery/Performance modes and refuses the
  * system's downscaling/FPS interventions (see art/android/templates), so this
- * class is where the engine actually reacts: Battery mode caps the framerate via
- * `ClientPrefs.applyFramerate()`, Performance/Standard leave the user's settings
- * untouched (the OS already grants thermal/CPU headroom in Performance mode).
+ * class is where the engine actually reacts, via `ClientPrefs.applyFramerate()`:
+ * Battery pins the display to 60Hz and caps update/draw at 60; Performance runs
+ * the display at its highest refresh rate and locks the game to 120; Standard
+ * keeps the highest refresh rate but lets the user's framerate setting rule.
  *
  * Users flip the mode from the Game Dashboard, usually while the app is
  * backgrounded -- Main re-applies the framerate on every focus regain.
@@ -28,6 +29,9 @@ class GameModeUtil
 
 	/** Update/draw framerate ceiling applied while the system Battery game mode is active. */
 	public static inline var BATTERY_FPS_CAP:Int = 60;
+
+	/** Update/draw framerate the system Performance game mode locks the game to. */
+	public static inline var PERFORMANCE_FPS_LOCK:Int = 120;
 
 	/**
 	 * Queries the current system game mode. Returns `UNSUPPORTED` below Android 12,
@@ -76,11 +80,64 @@ class GameModeUtil
 	}
 
 	/**
-	 * Framerate ceiling the active game mode demands: `BATTERY_FPS_CAP` while the
-	 * Battery mode is active, `0` (no cap) otherwise.
+	 * Framerate ceiling a game mode demands: `BATTERY_FPS_CAP` in Battery mode,
+	 * `0` (no cap -- the user's setting rules) otherwise.
 	 */
-	public static function framerateCap():Int
+	public static inline function framerateCap(mode:Int):Int
 	{
-		return getGameMode() == BATTERY ? BATTERY_FPS_CAP : 0;
+		return mode == BATTERY ? BATTERY_FPS_CAP : 0;
+	}
+
+	/**
+	 * Framerate a game mode pins the game to regardless of the user's setting:
+	 * `PERFORMANCE_FPS_LOCK` in Performance mode, `0` (no lock) otherwise.
+	 */
+	public static inline function forcedFramerate(mode:Int):Int
+	{
+		return mode == PERFORMANCE ? PERFORMANCE_FPS_LOCK : 0;
+	}
+
+	/**
+	 * Applies the display policy for a game mode: Battery pins the panel to 60Hz,
+	 * every other mode runs it at its highest refresh rate (the OS default often
+	 * idles below it). No-op below Android 6 or if the JNI lookup fails.
+	 */
+	public static function applyDisplayPolicy(mode:Int):Void
+	{
+		#if android
+		try
+		{
+			final packageName:String = lime.app.Application.current.meta.get('packageName');
+			final setRate:Null<Dynamic> = JNICache.createStaticMethod('$packageName.MainActivity', 'setDisplayRefreshRate', '(I)V');
+			if (setRate != null)
+				setRate(mode == BATTERY ? 60 : 0);
+		}
+		catch (e:Dynamic)
+		{
+			trace('GameModeUtil: failed to set display refresh rate: $e');
+		}
+		#end
+	}
+
+	/**
+	 * Game Mode API loading hint (Android 13+): tells the OS whether the game is in a
+	 * loading screen (it may boost CPU to shorten it) or back in interruptible gameplay.
+	 * No-op below API 33, on non-Android targets, or if the JNI lookup fails.
+	 */
+	public static function setLoading(isLoading:Bool):Void
+	{
+		#if android
+		try
+		{
+			final packageName:String = lime.app.Application.current.meta.get('packageName');
+			final setGameState:Null<Dynamic> = JNICache.createStaticMethod('$packageName.MainActivity', 'setGameState', '(Z)V');
+			if (setGameState != null)
+				setGameState(isLoading);
+		}
+		catch (e:Dynamic)
+		{
+			trace('GameModeUtil: failed to set game state: $e');
+		}
+		#end
 	}
 }

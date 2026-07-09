@@ -89,6 +89,40 @@ class StorageUtil
 				}
 			}
 		}
+		installBundledExamples();
+		#end
+	}
+
+	/**
+	 * Copies the bundled example_mods files (mod template + readme) from the APK into
+	 * the public mods/ folder, so a fresh install isn't an empty directory. Per-file
+	 * and skip-if-present, so user changes/deletions are never overwritten.
+	 */
+	static function installBundledExamples():Void
+	{
+		#if (android || ios)
+		final modsRoot:String = Path.join([getStorageDirectory(), 'mods']);
+		for (asset in openfl.utils.Assets.list())
+		{
+			if (!StringTools.startsWith(asset, 'example_mods/'))
+				continue;
+			final dest:String = Path.join([modsRoot, asset.substr('example_mods/'.length)]);
+			if (FileSystem.exists(dest))
+				continue;
+			try
+			{
+				final destDir:String = Path.directory(dest);
+				if (!FileSystem.exists(destDir))
+					FileSystem.createDirectory(destDir);
+				final bytes = openfl.utils.Assets.getBytes(asset);
+				if (bytes != null)
+					sys.io.File.saveBytes(dest, bytes);
+			}
+			catch (e:Dynamic)
+			{
+				trace('StorageUtil: failed to install "$asset": $e');
+			}
+		}
 		#end
 	}
 }

@@ -18,6 +18,16 @@ class BackButton
 {
 	public static var justPressed(default, null):Bool = false;
 
+	/**
+	 * Clears the flag for the rest of the frame. Call after acting on a press when the
+	 * action opens a state/substate that flixel updates within the SAME frame (e.g.
+	 * pausing -- otherwise PauseSubState sees the same press and instantly resumes).
+	 */
+	public static inline function consume():Void
+	{
+		justPressed = false;
+	}
+
 	#if android
 	static var counter:Null<JNIStaticField>;
 	static var lastCount:Int = 0;

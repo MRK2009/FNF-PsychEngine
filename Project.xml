@@ -81,8 +81,12 @@
 	</section>
 
 	<section if="MODS_ALLOWED">
-		<assets path='example_mods' rename='mods' embed='false' type='template' unless="mac"/>
+		<assets path='example_mods' rename='mods' embed='false' type='template' unless="mac || mobile"/>
 		<assets path='example_mods' rename='mods' embed='false' if="mac"/>
+		<!-- Mobile: the template copy above only reaches the build dir, never the device.
+		     Ship the examples inside the APK instead; StorageUtil.installBundledExamples
+		     copies them into the public mods/ folder on boot (per-file, idempotent). -->
+		<assets path='example_mods' rename='example_mods' if="mobile"/>
 		<assets path='list.txt' rename='modsList.txt' />
 	</section>
 
@@ -110,6 +114,9 @@
 		<config:android permission="android.permission.VIBRATE" />
 		<config:android target-sdk-version="34" />
 		<config:android minimum-sdk-version="21" />
+		<!-- Render into the display cutout on notched phones instead of letterboxing;
+		     lime's GameActivity applies this via layoutInDisplayCutoutMode on API 28+. -->
+		<config:android layoutInDisplayCutoutMode="shortEdges" />
 
 		<include path="signing.local.xml" unless="debug" /> <!-- REMOVE THIS if you don't use signing keys -->
 

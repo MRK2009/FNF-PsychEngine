@@ -106,19 +106,26 @@ class Main extends Sprite {
 		// consumed at the activity level (art/android/MainActivity.java) and polled
 		// into a per-frame flag here instead of going through FlxG.android.
 		FlxG.signals.preUpdate.add(mobile.backend.BackButton.poll);
+		smidr.UIRoot.onLongPress = (_) -> if (ClientPrefs.data.vibration) Haptic.vibrateOneShot(0.03, 1, 0.4);
 		// Game Mode (Battery/Performance) is flipped from the Game Dashboard while we're
 		// backgrounded -- re-apply the framerate policy every time focus comes back.
 		FlxG.signals.focusGained.add(ClientPrefs.applyFramerate);
 		#end
 
-		#if !mobile
+		#if mobile
+		// The counter lives in raw stage pixels: scale it to the game's logical 720p so it's
+		// readable on high-density screens, and inset it clear of curved corners/cutouts.
+		final fpsScale:Float = Lib.current.stage.stageHeight / 720;
+		fpsVar = new FPSCounter(Std.int(45 * fpsScale), Std.int(12 * fpsScale), 0xFFFFFF);
+		fpsVar.scaleX = fpsVar.scaleY = fpsScale;
+		#else
 		fpsVar = new FPSCounter(10, 3, 0xFFFFFF);
+		#end
 		addChild(fpsVar);
+		fpsVar.visible = DebugPrefs.data.showFPS;
+		#if !mobile
 		Lib.current.stage.align = "tl";
 		Lib.current.stage.scaleMode = StageScaleMode.NO_SCALE;
-		if (fpsVar != null) {
-			fpsVar.visible = DebugPrefs.data.showFPS;
-		}
 		#end
 
 		#if (linux || mac) // fix the app icon not showing up on the Linux Panel / Mac Dock

@@ -161,12 +161,22 @@ class ClientPrefs {
 	/**
 		Pushes `framerate`/`uncapFramerate` onto flixel. When uncapped, the draw rate is raised to
 		`FRAMERATE_UNCAPPED` while the update/logic rate stays pinned at `FRAMERATE_MAX`; otherwise both
-		track `data.framerate`. On Android the system Battery game mode caps both rates
-		(`GameModeUtil.framerateCap()`). Call after changing either pref (boot + options).
+		track `data.framerate`. On Android the system game mode overrides this: Battery caps both
+		rates at 60 (and pins the display to 60Hz), Performance locks both to 120 (see
+		`GameModeUtil`). Call after changing either pref (boot + options + focus regained).
 	**/
 	public static function applyFramerate():Void {
 		#if android
-		final cap:Int = mobile.backend.GameModeUtil.framerateCap();
+		final mode:Int = mobile.backend.GameModeUtil.getGameMode();
+		mobile.backend.GameModeUtil.applyDisplayPolicy(mode);
+
+		final forced:Int = mobile.backend.GameModeUtil.forcedFramerate(mode);
+		if (forced > 0) {
+			applyRates(forced);
+			return;
+		}
+
+		final cap:Int = mobile.backend.GameModeUtil.framerateCap(mode);
 		#else
 		final cap:Int = 0;
 		#end
@@ -180,6 +190,10 @@ class ClientPrefs {
 		var fps:Int = data.uncapFramerate ? FRAMERATE_MAX : data.framerate;
 		if (cap > 0 && fps > cap)
 			fps = cap;
+		applyRates(fps);
+	}
+
+	static function applyRates(fps:Int):Void {
 		if (fps > FlxG.drawFramerate) {
 			FlxG.updateFramerate = fps;
 			FlxG.drawFramerate = fps;

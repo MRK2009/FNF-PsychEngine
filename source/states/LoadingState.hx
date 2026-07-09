@@ -81,6 +81,7 @@ class LoadingState extends MusicBeatState {
 	#end
 
 	override function create() {
+		#if android mobile.backend.GameModeUtil.setLoading(true); #end
 		backend.Mods.allowCurrentModAssets = true; // loading gameplay assets: keep active mod resolution
 		persistentUpdate = true;
 		barGroup = new FlxSpriteGroup();
@@ -305,6 +306,7 @@ class LoadingState extends MusicBeatState {
 
 	function onLoad() {
 		_loaded();
+		#if android mobile.backend.GameModeUtil.setLoading(false); #end
 
 		if (stopMusic && FlxG.sound.music != null)
 			FlxG.sound.music.stop();

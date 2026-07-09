@@ -1695,6 +1695,9 @@ class PlayState extends MusicBeatState {
 		}
 
 		if ((controls.PAUSE #if android || mobile.backend.BackButton.justPressed #end) && startedCountdown && canPause) {
+			// flixel opens + updates the requested substate within this same frame, so the
+			// press that paused would instantly resume through PauseSubState's controls.BACK
+			#if android mobile.backend.BackButton.consume(); #end
 			var ret:Dynamic = callOnScripts('onPause', null, true);
 			if (ret != LuaUtils.Function_Stop) {
 				openPauseMenu();
