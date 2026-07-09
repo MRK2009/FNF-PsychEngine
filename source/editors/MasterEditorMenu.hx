@@ -101,7 +101,11 @@ class MasterEditorMenu extends MusicBeatState {
 		if (controls.ACCEPT) {
 			switch (options[curSelected]) {
 				case 'Chart Editor':
+					#if mobile
+					LoadingState.loadAndSwitchState(new editors.mobile.MobileChartingState(), false);
+					#else
 					LoadingState.loadAndSwitchState(new editors.ChartingState(), false);
+					#end
 				case 'Legacy Chart Editor':
 					LoadingState.loadAndSwitchState(new legacy.editors.ChartingState(), false);
 				case 'Character Editor':
