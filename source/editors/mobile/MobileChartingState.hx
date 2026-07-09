@@ -134,7 +134,9 @@ class MobileChartingState extends MusicBeatState {
 	function buildDrawer():Void {
 		var w:Float = shell.panel.w - UITheme.px(12);
 		var y:Float = UITheme.px(4);
-		inline function place(c:Dynamic, h:Float):Void {
+		// Typed as UIComponent (not Dynamic): hxcpp can't resolve openfl's `x`/`y` properties through
+		// Dynamic reflection ("Invalid field:x"), but the concrete base has them as real fields.
+		inline function place(c:smidr.UIComponent, h:Float):Void {
 			c.x = UITheme.px(4);
 			c.y = y;
 			shell.panel.content.addChild(c);
