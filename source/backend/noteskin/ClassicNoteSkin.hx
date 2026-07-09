@@ -65,8 +65,13 @@ class ClassicNoteSkin implements INoteSkin {
 			v.pixel = true;
 		} else {
 			var atlas:FlxAtlasFrames = Paths.getSparrowAtlas(skin);
-			if (Mania.current != Mania.DEFAULT)
-				atlas.addAtlas(Paths.getSparrowAtlas(Mania.ATLAS));
+			if (atlas == null)
+				return v;
+			if (Mania.current != Mania.DEFAULT) {
+				var overlay:FlxAtlasFrames = Paths.getSparrowAtlas(Mania.ATLAS);
+				if (overlay != null)
+					atlas.addAtlas(overlay);
+			}
 			spr.frames = atlas;
 			spr.antialiasing = ClientPrefs.data.antialiasing;
 			spr.animation.addByPrefix('note', Mania.colArray[nd] + '0');
@@ -115,8 +120,11 @@ class ClassicNoteSkin implements INoteSkin {
 			var atlas:FlxAtlasFrames = Paths.getSparrowAtlas(texture);
 			if (atlas == null)
 				return;
-			if (Mania.current != Mania.DEFAULT)
-				atlas.addAtlas(Paths.getSparrowAtlas(Mania.ATLAS));
+			if (Mania.current != Mania.DEFAULT) {
+				var overlay:FlxAtlasFrames = Paths.getSparrowAtlas(Mania.ATLAS);
+				if (overlay != null)
+					atlas.addAtlas(overlay);
+			}
 			spr.frames = atlas;
 			spr.antialiasing = ClientPrefs.data.antialiasing;
 			spr.animation.addByPrefix('note', Mania.colArray[nd] + '0');
@@ -157,9 +165,14 @@ class ClassicNoteSkin implements INoteSkin {
 		} else {
 			var bodyAtlas:FlxAtlasFrames = Paths.getSparrowAtlas(skin);
 			var tailAtlas:FlxAtlasFrames = Paths.getSparrowAtlas(skin);
+			if (bodyAtlas == null || tailAtlas == null)
+				return v;
 			if (Mania.current != Mania.DEFAULT) {
-				bodyAtlas.addAtlas(Paths.getSparrowAtlas(Mania.ATLAS));
-				tailAtlas.addAtlas(Paths.getSparrowAtlas(Mania.ATLAS));
+				var overlay:FlxAtlasFrames = Paths.getSparrowAtlas(Mania.ATLAS);
+				if (overlay != null) {
+					bodyAtlas.addAtlas(overlay);
+					tailAtlas.addAtlas(overlay);
+				}
 			}
 			body.frames = bodyAtlas;
 			tail.frames = tailAtlas;
@@ -222,8 +235,11 @@ class ClassicNoteSkin implements INoteSkin {
 			if (bodyAtlas == null || tailAtlas == null)
 				return;
 			if (Mania.current != Mania.DEFAULT) {
-				bodyAtlas.addAtlas(Paths.getSparrowAtlas(Mania.ATLAS));
-				tailAtlas.addAtlas(Paths.getSparrowAtlas(Mania.ATLAS));
+				var overlay:FlxAtlasFrames = Paths.getSparrowAtlas(Mania.ATLAS);
+				if (overlay != null) {
+					bodyAtlas.addAtlas(overlay);
+					tailAtlas.addAtlas(overlay);
+				}
 			}
 			body.frames = bodyAtlas;
 			tail.frames = tailAtlas;
@@ -275,8 +291,11 @@ class ClassicNoteSkin implements INoteSkin {
 			var atlas:FlxAtlasFrames = Paths.getSparrowAtlas(source);
 			if (atlas == null)
 				return;
-			if (Mania.current != Mania.DEFAULT)
-				atlas.addAtlas(Paths.getSparrowAtlas(Mania.ATLAS));
+			if (Mania.current != Mania.DEFAULT) {
+				var overlay:FlxAtlasFrames = Paths.getSparrowAtlas(Mania.ATLAS);
+				if (overlay != null)
+					atlas.addAtlas(overlay);
+			}
 			spr.frames = atlas;
 			var prefix:String = switch (role) {
 				case 'hold': Mania.colArray[nd] + ' hold piece';
@@ -300,9 +319,13 @@ class ClassicNoteSkin implements INoteSkin {
 		var v:NoteVisual = new NoteVisual();
 		var nd:Int = column;
 		var kc:Int = Mania.clamp(keyCount);
+		// Resolve the SAME skin the note heads use (chart arrowSkin, location-flexible NOTE_assets,
+		// the user's noteSkin postfix) -- receptors previously hardcoded the default, so they ignored
+		// the chart/mod skin and could point at a sheet whose XML was missing (crash) or wrong.
+		var skin:String = resolveSkin();
 
 		if (PlayState.isPixelStage) {
-			var graphic = Paths.image('pixelUI/' + resolveSkin());
+			var graphic = Paths.image('pixelUI/' + skin);
 			if (graphic == null)
 				return v;
 			spr.loadGraphic(graphic);
@@ -331,8 +354,12 @@ class ClassicNoteSkin implements INoteSkin {
 			}
 			v.pixel = true;
 		} else if (Mania.current != Mania.DEFAULT) {
-			var atlas:FlxAtlasFrames = Paths.getSparrowAtlas(NoteDefaults.defaultNoteSkin);
-			atlas.addAtlas(Paths.getSparrowAtlas(Mania.ATLAS));
+			var atlas:FlxAtlasFrames = Paths.getSparrowAtlas(skin);
+			if (atlas == null)
+				return v;
+			var overlay:FlxAtlasFrames = Paths.getSparrowAtlas(Mania.ATLAS);
+			if (overlay != null)
+				atlas.addAtlas(overlay);
 			spr.frames = atlas;
 			spr.antialiasing = ClientPrefs.data.antialiasing;
 			var anim:String = Mania.noteAnimations[Mania.current - 1][Std.int(Math.abs(nd)) % Mania.current];
@@ -341,7 +368,10 @@ class ClassicNoteSkin implements INoteSkin {
 			spr.animation.addByPrefix('confirm', anim + ' confirm', 24, false);
 			spr.setGraphicSize(Std.int(spr.width * Mania.noteSizes[kc - 1]));
 		} else {
-			spr.frames = Paths.getSparrowAtlas(NoteDefaults.defaultNoteSkin);
+			var atlas:FlxAtlasFrames = Paths.getSparrowAtlas(skin);
+			if (atlas == null)
+				return v;
+			spr.frames = atlas;
 			spr.antialiasing = ClientPrefs.data.antialiasing;
 			spr.setGraphicSize(Std.int(spr.width * 0.7));
 			switch (Std.int(Math.abs(nd)) % 4) {

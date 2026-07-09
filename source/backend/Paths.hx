@@ -390,18 +390,31 @@ class Paths {
 	inline static public function getSparrowAtlas(key:String, ?parentFolder:String = null, ?allowGPU:Bool = true):FlxAtlasFrames {
 		var imageLoaded:FlxGraphic = image(key, parentFolder, allowGPU);
 		if (imageLoaded == null) return null; // missing image -> avoid openfl spamming "null" asset-id errors
+
+		var xmlData:String = null;
 		#if MODS_ALLOWED
-		var xmlExists:Bool = false;
-
-		var xml:String = modsXml(key);
-		if (FileSystem.exists(xml))
-			xmlExists = true;
-
-		return FlxAtlasFrames.fromSparrow(imageLoaded,
-			(xmlExists ? File.getContent(xml) : getPath(Language.getFileTranslation('images/$key') + '.xml', TEXT, parentFolder)));
-		#else
-		return FlxAtlasFrames.fromSparrow(imageLoaded, getPath(Language.getFileTranslation('images/$key') + '.xml', TEXT, parentFolder));
+		var modXml:String = modsXml(key);
+		if (FileSystem.exists(modXml))
+			xmlData = File.getContent(modXml);
 		#end
+		if (xmlData == null) {
+			var path:String = getPath(Language.getFileTranslation('images/$key') + '.xml', TEXT, parentFolder);
+			#if sys
+			if (FileSystem.exists(path)) xmlData = File.getContent(path);
+			#end
+			// Some base atlases (e.g. noteSkins/square) ship only in the OpenFL manifest, not as loose
+			// disk files, so fall back to Assets -- this is how fromSparrow used to resolve the path,
+			// and reading via FileSystem alone would miss them and wrongly report the atlas as absent.
+			if (xmlData == null && OpenFlAssets.exists(path, TEXT))
+				xmlData = Assets.getText(path);
+		}
+		// A resolved image whose description is missing/empty (e.g. a mod ships the PNG but not the
+		// matching .xml) would null-deref inside FlxAtlasFrames.fromSparrow (empty XML has no
+		// firstElement). Bail with no frames so callers can fall back instead of crashing.
+		if (xmlData == null || StringTools.trim(xmlData).length == 0)
+			return null;
+
+		return FlxAtlasFrames.fromSparrow(imageLoaded, xmlData);
 	}
 
 	inline static public function getPackerAtlas(key:String, ?parentFolder:String = null, ?allowGPU:Bool = true):FlxAtlasFrames {

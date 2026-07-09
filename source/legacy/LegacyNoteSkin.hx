@@ -74,7 +74,9 @@ class LegacyNoteSkin {
 				FlxG.log.error('LegacyStrumNote: skin "$texture" has no sparrow atlas (folder skin or missing?); classic strum render skipped');
 				return;
 			}
-			atlas.addAtlas(Paths.getSparrowAtlas(Mania.ATLAS));
+			var overlay:flixel.graphics.frames.FlxAtlasFrames = Paths.getSparrowAtlas(Mania.ATLAS);
+			if (overlay != null)
+				atlas.addAtlas(overlay);
 			strum.frames = atlas;
 			strum.antialiasing = ClientPrefs.data.antialiasing;
 
@@ -182,8 +184,11 @@ class LegacyNoteSkin {
 			}
 			// Multikey: notes on the default skin merge in the square atlas (centre "square" note).
 			// Custom per-note textures are left alone.
-			if (Mania.current != Mania.DEFAULT && (texture == null || texture.length < 1))
-				atlas.addAtlas(Paths.getSparrowAtlas(Mania.ATLAS));
+			if (Mania.current != Mania.DEFAULT && (texture == null || texture.length < 1)) {
+				var overlay:flixel.graphics.frames.FlxAtlasFrames = Paths.getSparrowAtlas(Mania.ATLAS);
+				if (overlay != null)
+					atlas.addAtlas(overlay);
+			}
 			note.frames = atlas;
 			note.loadNoteAnims();
 			if (!note.isSustainNote) {
