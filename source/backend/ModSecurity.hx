@@ -130,6 +130,11 @@ class ModSecurity {
 		// fully-qualified forms are listed for those.
 		"FPSCounter" => true,
 		"debug.FPSCounter" => true,
+		// Main holds the FPS counter as `Main.fpsVar`, so blocking FPSCounter alone
+		// isn't enough -- scripts reached the live instance through Main. Main exposes
+		// nothing else a mod needs (just the boot config + entry point), so block it
+		// outright to close the hole.
+		"Main" => true,
 		"GPUMemory" => true,
 		"debug.GPUMemory" => true,
 		"hxhardware.CPU" => true,
