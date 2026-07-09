@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Game Mode API (Android 12+): the engine self-handles Battery and Performance
+     modes (queried via GameManager in mobile.backend.GameModeUtil). Downscaling
+     and system FPS override stay disabled: a rhythm game must never have its
+     render resolution or frame pacing altered behind its back. -->
+<game-mode-config xmlns:android="http://schemas.android.com/apk/res/android"
+	android:supportsBatteryGameMode="true"
+	android:supportsPerformanceGameMode="true"
+	android:allowGameDownscaling="false"
+	android:allowGameFpsOverride="false" />

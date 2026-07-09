@@ -124,6 +124,16 @@
 		     mask it into circle/squircle/rounded-square shapes. Android resolves the same
 		     "@drawable/icon" name to the adaptive xml on 26+ and the raster on older. -->
 		<template path="art/icons/templates" />
+
+		<!-- Game Mode API (Android 12+) opt-in: overrides lime's AndroidManifest to add
+		     the android.game_mode_config meta-data + ships res/xml/game_mode_config.xml.
+		     Battery/Performance modes are self-handled (mobile.backend.GameModeUtil);
+		     system downscaling and FPS override are refused. The manifest MUST be the
+		     explicit file+rename form: file templates are copied after the directory
+		     overlays, which lose collisions against lime's own templates. NOTE: the
+		     manifest copy tracks lime 8.3.2's template -- re-diff it if lime is updated. -->
+		<template path="art/android/templates" />
+		<template path="art/android/AndroidManifest.xml" rename="app/src/main/AndroidManifest.xml" />
 	</section>
 
 	<!-- ============================== Libraries =============================== -->

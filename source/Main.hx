@@ -104,6 +104,9 @@ class Main extends Sprite {
 		#if android
 		// Without this the OS handles Back (minimise/close) before we can read it.
 		FlxG.signals.postGameStart.addOnce(() -> FlxG.android.preventDefaultKeys = [flixel.input.android.FlxAndroidKey.BACK]);
+		// Game Mode (Battery/Performance) is flipped from the Game Dashboard while we're
+		// backgrounded -- re-apply the framerate policy every time focus comes back.
+		FlxG.signals.focusGained.add(ClientPrefs.applyFramerate);
 		#end
 
 		#if !mobile
