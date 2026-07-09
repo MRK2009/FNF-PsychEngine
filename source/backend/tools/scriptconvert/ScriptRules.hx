@@ -47,7 +47,15 @@ class ScriptRules {
 		{re: ~/[.'"]prevNote\b/, kind: REMOVED, appliesTo: BOTH, message: 'prevNote no longer exists: v2 sustains are one NoteData, not a head + stacked-tail chain.', suggestion: 'Read the single NoteData (length > 0) instead of walking a prevNote chain.'},
 
 		// ---- unspawnNotes (compat-only via legacy/UnspawnNoteProxy) --------------------------
-		{re: ~/\bunspawnNotes\b/, kind: COMPAT_ONLY, appliesTo: BOTH, message: 'unspawnNotes (whole pre-spawned chart) exists only under compatibilityMode, via the legacy proxy.', suggestion: 'Native v2: read game.playerField.notes / game.opponentField.notes; style spawned notes with setPropertyFromGroup(\'game.<side>Field.notes\', id, ...) inside onSpawnNote.'},
+		// Not auto-rewritten: turning an up-front unspawnNotes loop into per-note callbacks is a
+		// structural change, so the converter guides the port instead of swapping tokens.
+		{
+			re: ~/\bunspawnNotes\b/, kind: COMPAT_ONLY, appliesTo: BOTH,
+			message: 'unspawnNotes (the whole pre-spawned chart) only exists under compatibilityMode via a legacy proxy, and per-note edits through it are unreliable in v2.',
+			suggestion: 'Port the loop BODY into onSpawnNote, which fires once per note as it spawns -- move whatever you set on each unspawned note (texture / type / x / y / alpha / ignore) onto the spawning note there. '
+				+ 'Target it with the callback id: setPropertyFromGroup(\'game.<side>Field.notes\', id, \'<field>\', value) (Lua), or read the callback noteData directly (HScript). '
+				+ 'For up-front reads that just count/measure the chart, iterate the chart data once in onCreatePost instead of unspawnNotes.'
+		},
 
 		// ---- Common per-note callback bug: `i` is not defined inside note callbacks ---------
 		{re: ~/PropertyFromGroup\s*\(\s*['"][^'"]*['"]\s*,\s*i\s*,/, kind: DEPRECATED, appliesTo: LUA, message: 'This indexes a note group with `i`, which is nil inside note callbacks (Lua coerces it to 0), so it always hits the wrong note.', suggestion: 'Use the callback\'s `id` argument: in v2 it is the note\'s index in its field\'s active list (valid inside the callback).'},
