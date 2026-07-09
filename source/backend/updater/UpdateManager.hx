@@ -182,10 +182,16 @@ class UpdateManager {
 		if (best == null)
 			return null;
 
+		// The downloadable build asset per platform: the release APK on android, the Windows zip on
+		// desktop. Reuses the UpdateInfo zip* fields for whichever asset this build installs.
+		#if android
+		var zip:ReleaseAsset = findAsset(best.assets, a -> a.name.toLowerCase().endsWith('.apk'));
+		#else
 		var zip:ReleaseAsset = findAsset(best.assets, a -> {
 			var n:String = a.name.toLowerCase();
 			return n.indexOf('windows') >= 0 && n.endsWith('.zip');
 		});
+		#end
 		var sums:ReleaseAsset = findAsset(best.assets, a -> a.name.toLowerCase().indexOf('sha256sums') >= 0);
 
 		if (zip == null)

@@ -88,6 +88,16 @@ class UpdateState extends MusicBeatState {
 			percentText.text = '${Math.round(installer.percent() * 100)}%';
 		statusText.text = phaseLabel(phase);
 
+		#if android
+		// Android hands off to the OS package installer instead of restarting: launch it once the
+		// download is ready, then let the user reopen it or back out (the app stays alive until the
+		// system replaces it).
+		if (!finished && installer.isReady()) {
+			installer.relaunch();
+			finished = true;
+			hintText.text = 'Follow the system prompt.     ENTER  Reopen installer     ESCAPE  Back';
+		}
+		#else
 		if (relaunchTimer < 0 && installer.isReady())
 			relaunchTimer = 0.6;
 		if (relaunchTimer >= 0) {
@@ -96,6 +106,7 @@ class UpdateState extends MusicBeatState {
 				installer.relaunch();
 			return;
 		}
+		#end
 
 		if (!finished && (phase == 'error' || phase == 'need-elevation')) {
 			finished = true;
@@ -105,6 +116,11 @@ class UpdateState extends MusicBeatState {
 		if (finished) {
 			if (controls.ACCEPT) {
 				FlxG.sound.play(Paths.sound('confirmMenu'));
+				#if android
+				if (installer.isReady())
+					installer.relaunch(); // reopen the system installer
+				else
+				#end
 				CoolUtil.browserLoad(UpdateManager.RELEASES_PAGE);
 			} else if (controls.BACK) {
 				FlxG.sound.play(Paths.sound('cancelMenu'));
@@ -140,7 +156,7 @@ class UpdateState extends MusicBeatState {
 			case 'verifying': 'Verifying download...';
 			case 'extracting': 'Extracting...';
 			case 'applying': 'Installing...';
-			case 'ready': 'Restarting...';
+			case 'ready': #if android 'Opening installer...' #else 'Restarting...' #end;
 			case 'need-elevation': 'Permission needed -- install folder is not writable';
 			case 'error': 'Update failed';
 			default: 'Preparing...';

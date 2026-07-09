@@ -112,6 +112,7 @@
 		<config:android permission="android.permission.READ_MEDIA_VIDEO" />
 		<config:android permission="android.permission.READ_MEDIA_AUDIO" />
 		<config:android permission="android.permission.VIBRATE" />
+		<config:android permission="android.permission.REQUEST_INSTALL_PACKAGES" /> <!-- self-update: hand a downloaded APK to the system installer -->
 		<config:android target-sdk-version="34" />
 		<config:android minimum-sdk-version="21" />
 		<!-- Render into the display cutout on notched phones instead of letterboxing;

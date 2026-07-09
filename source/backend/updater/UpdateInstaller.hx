@@ -66,6 +66,10 @@ class UpdateInstaller {
 	}
 
 	public function start():Void {
+		#if android
+		startAndroid();
+		return;
+		#end
 		root = Path.directory(Sys.programPath());
 		tmpDir = Path.join([root, DIR_TMP]);
 		stageDir = Path.join([root, DIR_STAGING]);
@@ -147,11 +151,63 @@ class UpdateInstaller {
 	 * Relaunches the application after update installation is complete.
 	 */
 	public function relaunch():Void {
+		#if android
+		// "Relaunch" on android = hand the downloaded APK to the system installer; the OS takes
+		// over from here (installs, then the user reopens the updated app).
+		mobile.backend.ApkInstaller.install(apkFile);
+		return;
+		#end
 		try {
 			new sys.io.Process(Sys.programPath(), []);
 		} catch (e:Dynamic) {}
 		Sys.exit(0);
 	}
+
+	#if android
+	var apkFile:String;
+
+	/**
+	 * Android update flow: download the release APK, verify it (when GitHub provides a digest),
+	 * stage it in the app cache, then flag ready so `relaunch()` can launch the system installer.
+	 * There is no file-swap/staging step -- Android replaces the whole package itself.
+	 */
+	function startAndroid():Void {
+		if (info.zipUrl == null) {
+			fail('This release has no Android APK to download.');
+			return;
+		}
+		apkFile = mobile.backend.ApkInstaller.apkPath();
+		setPhase('downloading');
+		setPercent(0);
+		log('Downloading ${info.zipName}...');
+		httpBinary(info.zipUrl, true, function(bytes:Bytes) {
+			log('Download complete (${fmtMB(bytes.length)}).');
+			try {
+				// Verify against GitHub's digest when present. When absent we still proceed: Android
+				// only installs a sideload update signed with the SAME key as the running build, so a
+				// tampered download is rejected at install time regardless.
+				if (info.zipSha256 != null) {
+					setPhase('verifying');
+					log('Verifying SHA-256...');
+					var actual:String = haxe.crypto.Sha256.make(bytes).toHex().toLowerCase();
+					if (actual != info.zipSha256.toLowerCase())
+						throw 'Checksum mismatch -- the download is corrupt or tampered with.';
+					log('Checksum OK.');
+				}
+				ensureDir(Path.directory(apkFile));
+				File.saveBytes(apkFile, bytes);
+			} catch (e:Dynamic) {
+				fail(Std.string(e));
+				return;
+			}
+			log('Ready to install -- follow the system prompt.');
+			mutex.acquire();
+			_ready = true;
+			mutex.release();
+			setPhase('ready');
+		});
+	}
+	#end
 
 	/**
 	 * Downloads the SHA256SUMS.txt file from the release.
@@ -612,6 +668,7 @@ class UpdateInstaller {
 	 * Waits for the previous process to exit, applies files, and relaunches the application.
 	 */
 	public static function applyPendingOnBoot():Void {
+		#if android return; #end // android installs via the OS package installer -- no file-swap staging
 		var root:String = Path.directory(Sys.programPath());
 		var staging:String = Path.join([root, DIR_STAGING]);
 		if (!FileSystem.exists(Path.join([staging, MARKER_READY])))
@@ -646,6 +703,7 @@ class UpdateInstaller {
 	 * Removes backup files (.old.bak) from previous installations.
 	 */
 	public static function cleanupOnBoot():Void {
+		#if android return; #end // no desktop staging dirs on android
 		var root:String = Path.directory(Sys.programPath());
 		deleteTree(Path.join([root, DIR_TMP]));
 		var staging:String = Path.join([root, DIR_STAGING]);

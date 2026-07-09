@@ -58,11 +58,11 @@ class OutdatedState extends MusicBeatState {
 		refresh();
 	}
 
-	// Desktop only: android is a sys target too, but the in-place installer would
-	// download a desktop zip and unpack it over cwd -- which on android is the
-	// public storage folder. Mobile keeps the releases-page link instead.
+	// Desktop swaps its own files in place; android downloads the release APK and hands it to the
+	// system installer (backend.updater.UpdateInstaller / mobile.backend.ApkInstaller). Other
+	// mobile targets (iOS) have no self-update path and keep the releases-page link.
 	inline function checkSupported():Bool {
-		#if (sys && desktop) return true; #else return false; #end
+		#if (desktop || android) return true; #else return false; #end
 	}
 
 	function beginRecheck():Void {

@@ -1,5 +1,7 @@
 package ::APP_PACKAGE::;
 
+import android.content.Intent;
+import android.content.pm.PackageInstaller;
 import android.view.InputDevice;
 import android.view.KeyEvent;
 
@@ -15,6 +17,80 @@ import android.view.KeyEvent;
 public class MainActivity extends org.haxe.lime.GameActivity {
 
 	public static volatile int backCount = 0;
+
+	// Self-update: streams a downloaded release APK into a PackageInstaller session and commits it.
+	// Android can't hot-swap its own running APK, so mobile.backend.UpdateInstaller downloads the
+	// APK and calls this. Uses the framework PackageInstaller (no androidx/FileProvider dependency);
+	// the confirm UI is launched from onNewIntent when the session reports PENDING_USER_ACTION.
+	// Requires the REQUEST_INSTALL_PACKAGES permission.
+	public static void installApk (final String path) {
+
+		final android.app.Activity activity = org.haxe.extension.Extension.mainActivity;
+		if (activity == null || path == null) return;
+
+		activity.runOnUiThread (new Runnable () { public void run () {
+
+			PackageInstaller.Session session = null;
+
+			try {
+
+				java.io.File apk = new java.io.File (path);
+				PackageInstaller installer = activity.getPackageManager ().getPackageInstaller ();
+				PackageInstaller.SessionParams params = new PackageInstaller.SessionParams (PackageInstaller.SessionParams.MODE_FULL_INSTALL);
+
+				int sessionId = installer.createSession (params);
+				session = installer.openSession (sessionId);
+
+				java.io.OutputStream out = session.openWrite ("psych_update", 0, apk.length ());
+				java.io.InputStream in = new java.io.FileInputStream (apk);
+				byte[] buffer = new byte[65536];
+				int read;
+				while ((read = in.read (buffer)) > 0) out.write (buffer, 0, read);
+				session.fsync (out);
+				in.close ();
+				out.close ();
+
+				Intent statusIntent = new Intent (activity, MainActivity.class);
+				int flags = android.os.Build.VERSION.SDK_INT >= 31 ? android.app.PendingIntent.FLAG_MUTABLE : 0;
+				android.app.PendingIntent pending = android.app.PendingIntent.getActivity (activity, sessionId, statusIntent, flags);
+				session.commit (pending.getIntentSender ());
+				session.close ();
+
+			} catch (Throwable t) {
+
+				android.util.Log.e ("PsychEngine", "installApk failed", t);
+				if (session != null) session.abandon ();
+
+			}
+
+		}});
+
+	}
+
+	// The PackageInstaller session reports its result back to this activity; when it needs the user
+	// to confirm (the normal non-privileged case), launch the confirmation UI it hands us.
+	@Override protected void onNewIntent (Intent intent) {
+
+		super.onNewIntent (intent);
+
+		if (intent != null && intent.hasExtra (PackageInstaller.EXTRA_STATUS)) {
+
+			int status = intent.getIntExtra (PackageInstaller.EXTRA_STATUS, -1);
+			if (status == PackageInstaller.STATUS_PENDING_USER_ACTION) {
+
+				Intent confirm = (Intent) intent.getParcelableExtra (Intent.EXTRA_INTENT);
+				if (confirm != null) {
+
+					confirm.addFlags (Intent.FLAG_ACTIVITY_NEW_TASK);
+					startActivity (confirm);
+
+				}
+
+			}
+
+		}
+
+	}
 
 	// Game Mode API loading hint (API 33+): lets the OS boost CPU during load screens.
 	// Called from Haxe via mobile.backend.GameModeUtil.setLoading.
