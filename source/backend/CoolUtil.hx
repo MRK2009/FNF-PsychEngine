@@ -188,4 +188,17 @@ class CoolUtil {
 				text.borderStyle = NONE;
 		}
 	}
+
+	/**
+		Relaunches the game process (desktop only): spawns a fresh instance, then exits this one.
+		Used to apply settings that OpenAL/lime only read at startup (e.g. the audio buffer).
+	**/
+	public static function restartGame():Void {
+		#if desktop
+		try
+			new sys.io.Process(Sys.programPath(), [])
+		catch (_:Dynamic) {}
+		Sys.exit(0);
+		#end
+	}
 }

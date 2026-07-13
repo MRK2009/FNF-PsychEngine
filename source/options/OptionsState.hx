@@ -33,6 +33,7 @@ import smidr.widgets.UIStepper;
 import smidr.widgets.UITextInput;
 import smidr.widgets.UIModal;
 import smidr.overlays.UITooltip;
+import smidr.flixel.FlxSmidr;
 
 /**
 	The Options menu, built on the in-engine UI framework (`source/ui/`): a category rail on the left
@@ -119,34 +120,16 @@ class OptionsState extends MusicBeatState {
 		UILocale.translate = function(k:String, f:String):String return Language.getPhrase(k, f);
 		UIFonts.register('assets/fonts/vcr.ttf');
 
-		uiRoot = new UIRoot();
-		attachRoot();
-		syncViewport();
+		// FlxSmidr drives the root each postUpdate and keeps it above camera-layer resets (which is
+		// what left the UI hidden until a resize under the old manual attach). super.create() below
+		// triggers such a reset, and FlxSmidr's cameraAdded hook re-raises the root immediately.
+		uiRoot = FlxSmidr.init();
+		FlxSmidr.autoBlockMouse = true;
 		UITooltip.install();
-		FlxG.signals.gameResized.add(onGameResized);
 
 		buildChrome();
 		selectCategory(0);
 		super.create();
-	}
-
-	/** Layers the UI root above the game view but below the FPS counter (mirrors ChartingState). **/
-	function attachRoot():Void {
-		var fps = Main.fpsVar;
-		if (fps != null && fps.parent != null)
-			uiRoot.attach(fps.parent, fps.parent.getChildIndex(fps));
-		else
-			uiRoot.attach(FlxG.stage);
-	}
-
-	/** Re-syncs the UI viewport when the game window is resized. **/
-	function onGameResized(_:Int, _:Int):Void
-		syncViewport();
-
-	/** Maps the UI root over the game's letterboxed viewport so UI coordinates match game coordinates. **/
-	function syncViewport():Void {
-		var sm = FlxG.scaleMode;
-		uiRoot.setViewport(sm.offset.x, sm.offset.y, sm.scale.x, sm.scale.y);
 	}
 
 	/** Builds the static chrome: panels, title/header/hint labels, category rail and the scroll pane. **/
@@ -260,7 +243,11 @@ class OptionsState extends MusicBeatState {
 			}
 		}
 		headerLabel.text = 'Search';
-		descLabel.text = (rowEntries.length == 0) ? 'No matches for "$query"' : '${rowEntries.length} result(s)';
+		descLabel.text = switch (rowEntries.length) {
+			case 0: 'No matches for "$query"';
+			case 1: '1 result';
+			case n: '$n results';
+		};
 		for (b in railButtons)
 			b.accent = false;
 		return y;
@@ -283,7 +270,7 @@ class OptionsState extends MusicBeatState {
 					acc.x = 12;
 					acc.y = y;
 					pane.content.addChild(acc);
-					rowEntries.push({kind: 2, y: y, h: 24, secTitle: title});
+					rowEntries.push({kind: 2, y: y, h: 24, secTitle: title, widget: acc});
 					y += 32;
 					sectionOpen = !isCollapsed;
 
@@ -321,7 +308,7 @@ class OptionsState extends MusicBeatState {
 		b.x = 12;
 		b.y = y + (ROW_H - 40) / 2;
 		pane.content.addChild(b);
-		rowEntries.push({kind: 1, y: y, h: 40, which: which});
+		rowEntries.push({kind: 1, y: y, h: 40, which: which, widget: b});
 		return y + ROW_H;
 	}
 
@@ -344,6 +331,9 @@ class OptionsState extends MusicBeatState {
 
 	/** Keyboard / controller navigation: rail depth (categories) versus row depth (settings). **/
 	function handleKeyboard(elapsed:Float):Void {
+		// A modal (e.g. the restart prompt) owns input while it's up; it handles its own Escape.
+		if (UIRoot.overlayOpen)
+			return;
 		if (FlxG.keys.justPressed.SLASH) {
 			UIFocus.set(searchInput);
 			return;
@@ -584,7 +574,17 @@ class OptionsState extends MusicBeatState {
 	}
 
 	/** Redraws the selection background under the focused row, or hides it on the rail. **/
+	/** Lights up the keyboard-focused row's own control (its hover visual), clearing the rest. **/
+	function updateRowHighlight():Void {
+		for (i in 0...rowEntries.length) {
+			var w:UIComponent = rowEntries[i].widget;
+			if (w != null)
+				w.highlighted = !onSidebar && i == curRow;
+		}
+	}
+
 	function positionHighlight():Void {
+		updateRowHighlight();
 		if (selHighlight == null)
 			return;
 		var g = selHighlight.graphics;
@@ -885,6 +885,17 @@ class OptionsState extends MusicBeatState {
 
 	/** Saves settings and returns to gameplay (when opened from a song) or the main menu. **/
 	function exitState():Void {
+		#if desktop
+		// A restart-required setting changed (e.g. Audio Buffer): offer to relaunch before leaving.
+		if (ClientPrefs.data.audioBuffer != backend.ALSoftConfig.appliedBuffer) {
+			showRestartPrompt();
+			return;
+		}
+		#end
+		doExit();
+	}
+
+	function doExit():Void {
 		FlxG.sound.play(Paths.sound('cancelMenu'));
 		ClientPrefs.saveSettings();
 		if (onPlayState) {
@@ -895,6 +906,36 @@ class OptionsState extends MusicBeatState {
 		} else
 			MusicBeatState.switchState(new MainMenuState());
 	}
+
+	#if desktop
+	/** Asks whether to relaunch now so a restart-required setting takes effect; "Later" exits normally. **/
+	function showRestartPrompt():Void {
+		var modal:UIModal = new UIModal('Restart Required', 460, 200);
+
+		var msg:UILabel = new UILabel('Audio Buffer only takes effect after a restart.\nRestart now to apply it?', 15, 2);
+		msg.x = 24;
+		msg.y = 12;
+		modal.body.addChild(msg);
+
+		var restart:UIButton = new UIButton('Restart Now', 190, 38, function():Void {
+			ClientPrefs.saveSettings();
+			CoolUtil.restartGame();
+		}, true);
+		restart.x = 24;
+		restart.y = 100;
+		modal.body.addChild(restart);
+
+		var later:UIButton = new UIButton('Later', 190, 38, function():Void {
+			modal.close();
+			doExit();
+		});
+		later.x = 232;
+		later.y = 100;
+		modal.body.addChild(later);
+
+		modal.open();
+	}
+	#end
 
 	/** Fades the menu music back in and handles ESC/back when no widget or overlay owns the key. **/
 	override function update(elapsed:Float):Void {
@@ -917,14 +958,11 @@ class OptionsState extends MusicBeatState {
 
 	/** Tears down the hosted UI root and reloads prefs from disk on the way out. **/
 	override function destroy():Void {
-		FlxG.signals.gameResized.remove(onGameResized);
 		FlxG.mouse.useSystemCursor = false;
 		FlxG.mouse.visible = false;
 		UITooltip.reset();
-		if (uiRoot != null) {
-			uiRoot.dispose();
-			uiRoot = null;
-		}
+		FlxSmidr.dispose();
+		uiRoot = null;
 		if (changedMusic && !onPlayState && FlxG.sound.music != null)
 			FlxG.sound.playMusic(Paths.music('freakyMenu'), 1, true);
 		ClientPrefs.loadPrefs();
