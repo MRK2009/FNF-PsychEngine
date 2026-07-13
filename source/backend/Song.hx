@@ -181,7 +181,16 @@ class Song {
 				values = [e.v1, e.v2];
 			var v1:Dynamic = (values.length > 0 && values[0] != null) ? values[0] : '';
 			var v2:Dynamic = (values.length > 1 && values[1] != null) ? values[1] : '';
-			out.push([(e.t != null) ? e.t : 0, [[e.name, v1, v2]]]);
+			var t:Float = (e.t != null) ? e.t : 0;
+			var sub:Array<Dynamic> = [e.name, v1, v2];
+			// Restore grouping: eventsToV2 flattens each group's sub-events into consecutive objects at
+			// the same time, so fold a same-time event back into the group we just built instead of
+			// spawning a new one (otherwise stacked events un-stack on reload).
+			var last:Dynamic = (out.length > 0) ? out[out.length - 1] : null;
+			if (last != null && Std.isOfType(last, Array) && Std.isOfType(last[1], Array) && last[0] == t)
+				(last[1] : Array<Dynamic>).push(sub);
+			else
+				out.push([t, [sub]]);
 		}
 		return out;
 	}
