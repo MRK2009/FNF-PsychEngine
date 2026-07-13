@@ -305,6 +305,12 @@ class OptionsCatalog {
 		rows.push(Setting(new Option('Pause Music:', 'What song do you prefer for the Pause Screen?', 'pauseMusic', STRING,
 			['None', 'Tea Time', 'Breakfast', 'Breakfast (Pico)'])));
 
+		#if (desktop || android)
+		rows.push(Setting(new Option('Audio Buffer',
+			"Lower = less audio delay, but may crackle on weaker hardware.\nTakes effect after restarting the game.", 'audioBuffer', STRING,
+			['Low', 'Balanced', 'Safe'])));
+		#end
+
 		var offset:Option = new Option('Audio Offset', 'Delay to line the song up with what you see + hear.', 'noteOffset', INT);
 		offset.displayFormat = '%vms';
 		offset.scrollSpeed = 200;

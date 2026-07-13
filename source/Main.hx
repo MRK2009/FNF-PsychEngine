@@ -22,7 +22,7 @@ import states.TitleState;
 import lime.graphics.Image;
 #end
 #if desktop
-import backend.ALSoftConfig; // Just to make sure DCE doesn't remove this, since it's not directly referenced anywhere else.
+import backend.ALSoftConfig;
 #end
 // crash handler stuff
 #if CRASH_HANDLER
@@ -92,6 +92,10 @@ class Main extends Sprite {
 
 		FlxG.save.bind('funkin', CoolUtil.getSavePath());
 		Highscore.load();
+
+		// Write the OpenAL-Soft latency config from the saved `audioBuffer` preference. Must run after
+		// the save is bound (to read it) and before the FlxGame below opens the audio device.
+		backend.ALSoftConfig.apply();
 
 		// HScript error/warn/fatal logging is handled by psychlua.HScript's
 		// static loggers (they mirror messages to the in-game debug overlay).

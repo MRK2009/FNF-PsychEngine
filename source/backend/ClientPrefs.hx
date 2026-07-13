@@ -87,6 +87,9 @@ import states.TitleState;
 	public var noReset:Bool = false;
 	public var healthBarAlpha:Float = 1;
 	public var hitsoundVolume:Float = 0;
+	// OpenAL-Soft output buffering preset ('Low'/'Balanced'/'Safe'). Lower = less audio latency but
+	// higher underrun risk. Read at startup by backend.ALSoftConfig; changes apply on next launch.
+	public var audioBuffer:String = 'Balanced';
 	public var pauseMusic:String = 'Tea Time';
 	public var checkForUpdates:Bool = true;
 	public var updateChannel:String = 'stable'; // 'stable' | 'bleeding' (in-engine self-updater)

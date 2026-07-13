@@ -8,6 +8,9 @@ resampler=fast_bsinc24
 front-stablizer=false
 output-limiter=false
 volume-adjust=0
+# Output buffering: ~half the default (3x1024) for lower latency. Raise periods to 4 if you get crackle under load.
+period_size=512
+periods=3
 [decoder]
 hq-mode=false
 distance-comp=false
