@@ -194,7 +194,7 @@ class DialogueEditorState extends MusicBeatState {
 		});
 		soundInputText.x = boxX + PAD;
 		soundInputText.y = rowY + 96;
-		soundInputText.boxWidth = 115;
+		soundInputText.controlWidth = 115;
 		uiRoot.content.addChild(soundInputText);
 
 		lineInputText = new UITextInput('Text:', rowW, DEFAULT_TEXT, function(v:String) {

@@ -1,7 +1,7 @@
 package editors.charting.script;
 
 import editors.ChartingState;
-import smidr.widgets.UIToast;
+import smidr.overlays.UIToast;
 
 /**
 	The stable script-facing facade over the chart editor. Scripts also get the `editor`

@@ -29,20 +29,20 @@ import smidr.widgets.UIAccordion;
 import smidr.widgets.UIButton;
 import smidr.widgets.UICheckbox;
 import smidr.widgets.UIChip;
-import smidr.widgets.UIContextMenu;
+import smidr.overlays.UIContextMenu;
 import smidr.widgets.UIDropdown;
 import smidr.widgets.UILabel;
-import smidr.widgets.UIMenuItem;
+import smidr.types.UIMenuItem;
 import smidr.widgets.UIModal;
 import smidr.widgets.UIPanel;
-import smidr.widgets.UIRailTab;
+import smidr.types.UIRailTabDef;
 import smidr.widgets.UIScrollPane;
 import smidr.widgets.UISeparator;
 import smidr.widgets.UISlider;
 import smidr.widgets.UIStepper;
 import smidr.widgets.UITextInput;
-import smidr.widgets.UIToast;
-import smidr.widgets.UITooltip;
+import smidr.overlays.UIToast;
+import smidr.overlays.UITooltip;
 
 /**
 	The chart editor. Owns and wires every decoupled part: the retained OpenFL UI layer
@@ -648,11 +648,11 @@ class ChartingState extends MusicBeatState {
 		The rail tab set. Events/Audio/Display already live in the right dock, so they only appear as
 		rail tabs in combined-dock mode (where the right dock is folded away); CHAR/STRM likewise.
 	**/
-	function railTabs():Array<UIRailTab> {
+	function railTabs():Array<UIRailTabDef> {
 		railPanelMap.resize(0);
-		var tabs:Array<UIRailTab> = [];
+		var tabs:Array<UIRailTabDef> = [];
 		function add(panel:Int, caption:String, tip:String):Void {
-			tabs.push({caption: caption, tooltipFallback: tip});
+			tabs.push({label: caption, tooltipFallback: tip});
 			railPanelMap.push(panel);
 		}
 		add(0, "SONG", "Song");
@@ -1279,7 +1279,7 @@ class ChartingState extends MusicBeatState {
 		var stepper:UIStepper = new UIStepper("Section", 360 - 32, editSection, 1);
 		stepper.min = 0;
 		stepper.max = model.sectionCount() - 1;
-		stepper.boxWidth = UITheme.px(110);
+		stepper.controlWidth = UITheme.px(110);
 		stepper.x = 16;
 		stepper.y = 16;
 		modal.body.addChild(stepper);
@@ -1470,7 +1470,7 @@ class ChartingState extends MusicBeatState {
 			chart.song = v;
 			refreshSongLabel();
 		});
-		name.boxWidth = UITheme.px(130);
+		name.controlWidth = UITheme.px(130);
 		flow.add(name);
 
 		var bpm:UIStepper = new UIStepper("Base BPM", colW, chart.bpm, 1, function(v:Float):Void {
@@ -1537,7 +1537,7 @@ class ChartingState extends MusicBeatState {
 			model.setDenominator(0, VALID_DENOMINATORS[index], EditorPrefs.timeSigAdapt);
 		});
 		denom.tooltip = "Base time signature denominator";
-		denom.boxWidth = UITheme.px(90);
+		denom.controlWidth = UITheme.px(90);
 		denom.setItems(DENOMINATOR_LABELS);
 		denom.select(denomIndex(model.denominatorAt(0)));
 		flow.add(denom);
@@ -1604,7 +1604,7 @@ class ChartingState extends MusicBeatState {
 			if (current != null && current.length > 0 && options.indexOf(current) < 0)
 				options.unshift(current);
 			var drop:UIDropdown = new UIDropdown(label, colW, function(_:Int, value:String):Void commit(value));
-			drop.boxWidth = UITheme.px(140);
+			drop.controlWidth = UITheme.px(140);
 			drop.setItems(options);
 			var idx:Int = options.indexOf(current);
 			if (idx >= 0)
@@ -1612,7 +1612,7 @@ class ChartingState extends MusicBeatState {
 			flow.add(drop);
 		} else {
 			var input:UITextInput = new UITextInput(label, colW, (current != null) ? current : '', function(v:String):Void commit(v));
-			input.boxWidth = UITheme.px(140);
+			input.controlWidth = UITheme.px(140);
 			flow.add(input);
 		}
 	}
@@ -1629,19 +1629,19 @@ class ChartingState extends MusicBeatState {
 
 		var title:UITextInput = new UITextInput("Title", colW, (metaWorking.songName != null) ? metaWorking.songName : '',
 			function(v:String):Void metaWorking.songName = v);
-		title.boxWidth = UITheme.px(130);
+		title.controlWidth = UITheme.px(130);
 		flow.add(title);
 		var artist:UITextInput = new UITextInput("Artist", colW, (metaWorking.artist != null) ? metaWorking.artist : '',
 			function(v:String):Void metaWorking.artist = v);
-		artist.boxWidth = UITheme.px(130);
+		artist.controlWidth = UITheme.px(130);
 		flow.add(artist);
 		var charter:UITextInput = new UITextInput("Charter", colW, (metaWorking.charter != null) ? metaWorking.charter : '',
 			function(v:String):Void metaWorking.charter = v);
-		charter.boxWidth = UITheme.px(130);
+		charter.controlWidth = UITheme.px(130);
 		flow.add(charter);
 		var source:UITextInput = new UITextInput("Source", colW, (metaWorking.source != null) ? metaWorking.source : '',
 			function(v:String):Void metaWorking.source = v);
-		source.boxWidth = UITheme.px(130);
+		source.controlWidth = UITheme.px(130);
 		flow.add(source);
 		var tags:UITextInput = new UITextInput("Tags", colW, (metaWorking.tags != null) ? metaWorking.tags.join(', ') : '', function(v:String):Void {
 			var list:Array<String> = [];
@@ -1651,7 +1651,7 @@ class ChartingState extends MusicBeatState {
 			metaWorking.tags = list;
 		});
 		tags.tooltip = "Comma-separated";
-		tags.boxWidth = UITheme.px(130);
+		tags.controlWidth = UITheme.px(130);
 		flow.add(tags);
 
 		flow.header(new UIAccordion("Display Overrides", colW));
@@ -1727,13 +1727,13 @@ class ChartingState extends MusicBeatState {
 			undoStack.snapshotCoalesced(model, 'Note Skin');
 			chart.arrowSkin = (v.length > 0) ? v : null;
 		});
-		arrow.boxWidth = UITheme.px(130);
+		arrow.controlWidth = UITheme.px(130);
 		flow.add(arrow);
 		var splash:UITextInput = new UITextInput("Splash Skin", colW, (chart.splashSkin != null) ? chart.splashSkin : '', function(v:String):Void {
 			undoStack.snapshotCoalesced(model, 'Splash Skin');
 			chart.splashSkin = (v.length > 0) ? v : null;
 		});
-		splash.boxWidth = UITheme.px(130);
+		splash.controlWidth = UITheme.px(130);
 		flow.add(splash);
 		flow.add(new UICheckbox("Disable Note RGB", colW, chart.disableNoteRGB, function(v:Bool):Void {
 			undoStack.snapshot(model, 'Note RGB');
@@ -1745,25 +1745,25 @@ class ChartingState extends MusicBeatState {
 			undoStack.snapshotCoalesced(model, 'Game Over');
 			chart.gameOverChar = (v.length > 0) ? v : null;
 		});
-		goChar.boxWidth = UITheme.px(130);
+		goChar.controlWidth = UITheme.px(130);
 		flow.add(goChar);
 		var goSound:UITextInput = new UITextInput("Death Sound", colW, (chart.gameOverSound != null) ? chart.gameOverSound : '', function(v:String):Void {
 			undoStack.snapshotCoalesced(model, 'Game Over');
 			chart.gameOverSound = (v.length > 0) ? v : null;
 		});
-		goSound.boxWidth = UITheme.px(130);
+		goSound.controlWidth = UITheme.px(130);
 		flow.add(goSound);
 		var goLoop:UITextInput = new UITextInput("Loop Music", colW, (chart.gameOverLoop != null) ? chart.gameOverLoop : '', function(v:String):Void {
 			undoStack.snapshotCoalesced(model, 'Game Over');
 			chart.gameOverLoop = (v.length > 0) ? v : null;
 		});
-		goLoop.boxWidth = UITheme.px(130);
+		goLoop.controlWidth = UITheme.px(130);
 		flow.add(goLoop);
 		var goEnd:UITextInput = new UITextInput("Retry Sound", colW, (chart.gameOverEnd != null) ? chart.gameOverEnd : '', function(v:String):Void {
 			undoStack.snapshotCoalesced(model, 'Game Over');
 			chart.gameOverEnd = (v.length > 0) ? v : null;
 		});
-		goEnd.boxWidth = UITheme.px(130);
+		goEnd.controlWidth = UITheme.px(130);
 		flow.add(goEnd);
 	}
 
@@ -1781,13 +1781,13 @@ class ChartingState extends MusicBeatState {
 		flow.header(new UIAccordion("Note Adaptation", colW));
 		var adaptLabels:Array<String> = ["Keep (ms)", "Rescale", "Snap"];
 		var bpmAdapt:UIDropdown = new UIDropdown("BPM Change", colW, function(i:Int, _:String):Void EditorPrefs.bpmAdapt = i);
-		bpmAdapt.boxWidth = UITheme.px(120);
+		bpmAdapt.controlWidth = UITheme.px(120);
 		bpmAdapt.setItems(adaptLabels);
 		bpmAdapt.select(clampIndex(EditorPrefs.bpmAdapt, adaptLabels.length));
 		bpmAdapt.tooltip = "How existing notes react when you change BPM";
 		flow.add(bpmAdapt);
 		var tsAdapt:UIDropdown = new UIDropdown("Time Sig Change", colW, function(i:Int, _:String):Void EditorPrefs.timeSigAdapt = i);
-		tsAdapt.boxWidth = UITheme.px(120);
+		tsAdapt.controlWidth = UITheme.px(120);
 		tsAdapt.setItems(adaptLabels);
 		tsAdapt.select(clampIndex(EditorPrefs.timeSigAdapt, adaptLabels.length));
 		tsAdapt.tooltip = "How existing notes react when you change beats or denominator";
@@ -1799,7 +1799,7 @@ class ChartingState extends MusicBeatState {
 			applyThemeFromPrefs();
 			EditorPrefs.save();
 		});
-		themeDrop.boxWidth = UITheme.px(120);
+		themeDrop.controlWidth = UITheme.px(120);
 		themeDrop.setItems([for (p in smidr.UITheme.PRESETS) p.name]);
 		themeDrop.select(clampIndex(EditorPrefs.themePreset, smidr.UITheme.PRESETS.length));
 		themeDrop.tooltip = "Base colour scheme (Light mode included)";
@@ -1817,13 +1817,13 @@ class ChartingState extends MusicBeatState {
 					EditorPrefs.save();
 				}
 			});
-		accentHex.boxWidth = UITheme.px(100);
+		accentHex.controlWidth = UITheme.px(100);
 		accentHex.tooltip = "Custom accent colour, e.g. 8A5EE0 (blank = use the preset's accent)";
 		flow.add(accentHex);
 
 		flow.header(new UIAccordion("Metronome", colW));
 		var metroDrop:UIDropdown = new UIDropdown("Sound", colW, function(index:Int, _:String):Void EditorPrefs.metroPreset = index);
-		metroDrop.boxWidth = UITheme.px(120);
+		metroDrop.controlWidth = UITheme.px(120);
 		metroDrop.setItems([for (p in METRONOME_PRESETS) p.name]);
 		metroDrop.select(clampIndex(EditorPrefs.metroPreset, METRONOME_PRESETS.length));
 		flow.add(metroDrop);
@@ -1857,7 +1857,7 @@ class ChartingState extends MusicBeatState {
 			undoStack.snapshot(model, 'Camera Target');
 			model.setCameraTarget(editSection, index);
 		});
-		camTargetDrop.boxWidth = UITheme.px(110);
+		camTargetDrop.controlWidth = UITheme.px(110);
 		var lineIds:Array<String> = [];
 		for (line in model.chart.strumLines)
 			lineIds.push(line.id);
@@ -1895,7 +1895,7 @@ class ChartingState extends MusicBeatState {
 			model.setDenominator(editSection, VALID_DENOMINATORS[index], EditorPrefs.timeSigAdapt);
 		});
 		denomDrop.tooltip = "Time signature denominator (inherited until changed)";
-		denomDrop.boxWidth = UITheme.px(90);
+		denomDrop.controlWidth = UITheme.px(90);
 		denomDrop.setItems(DENOMINATOR_LABELS);
 		denomDrop.select(denomIndex(model.denominatorAt(editSection)));
 		flow.add(denomDrop);
@@ -1942,7 +1942,7 @@ class ChartingState extends MusicBeatState {
 		copyFromStep.decimals = 0;
 		copyFromStep.min = 1;
 		copyFromStep.max = 999;
-		copyFromStep.boxWidth = UITheme.px(80);
+		copyFromStep.controlWidth = UITheme.px(80);
 		flow.add(copyFromStep);
 		flow.add(new UIButton("Copy From", colW, UITheme.px(26), copyFromNSectionsBack));
 		var clear:UIButton = new UIButton("Clear Section", colW, UITheme.px(28), clearSection);
@@ -1963,7 +1963,7 @@ class ChartingState extends MusicBeatState {
 		hitTimeStep.decimals = 1;
 		hitTimeStep.min = 0;
 		hitTimeStep.max = 1e10;
-		hitTimeStep.boxWidth = UITheme.px(100);
+		hitTimeStep.controlWidth = UITheme.px(100);
 		flow.add(hitTimeStep);
 		sustainStep = new UIStepper("Sustain", colW, 0, 0.5, function(v:Float):Void {
 			if (selection.count == 0)
@@ -1977,7 +1977,7 @@ class ChartingState extends MusicBeatState {
 		sustainStep.decimals = 1;
 		sustainStep.min = 0;
 		sustainStep.max = 1e10;
-		sustainStep.boxWidth = UITheme.px(100);
+		sustainStep.controlWidth = UITheme.px(100);
 		flow.add(sustainStep);
 		noteTypeDrop = new UIDropdown("Note Type", colW, function(index:Int, _:String):Void {
 			if (selection.count == 0)
@@ -1989,7 +1989,7 @@ class ChartingState extends MusicBeatState {
 				selection.notes[i].type = typeName;
 			model.markDirty();
 		});
-		noteTypeDrop.boxWidth = UITheme.px(130);
+		noteTypeDrop.controlWidth = UITheme.px(130);
 		noteTypeDrop.setItems(noteTypesList, [for (i => n in noteTypesList) (n == '') ?'$i. Normal':'$i. $n']);
 		flow.add(noteTypeDrop);
 
@@ -2240,7 +2240,7 @@ class ChartingState extends MusicBeatState {
 		addHintRow(flow, colW, "Drops an osu!mania-style preset at the playhead.");
 
 		var patDrop:UIDropdown = new UIDropdown("Pattern", colW, function(i:Int, _:String):Void patternId = i);
-		patDrop.boxWidth = UITheme.px(130);
+		patDrop.controlWidth = UITheme.px(130);
 		patDrop.setItems(ChartPattern.NAMES);
 		patDrop.select(clampIndex(patternId, ChartPattern.NAMES.length));
 		flow.add(patDrop);
@@ -2265,7 +2265,7 @@ class ChartingState extends MusicBeatState {
 		if (patternLine < 0 || patternLine >= lines.length)
 			patternLine = defaultPatternLine();
 		var lineDrop:UIDropdown = new UIDropdown("Target Line", colW, function(i:Int, _:String):Void patternLine = lineIdx[i]);
-		lineDrop.boxWidth = UITheme.px(130);
+		lineDrop.controlWidth = UITheme.px(130);
 		lineDrop.setItems(lineIds);
 		var sel:Int = lineIdx.indexOf(patternLine);
 		lineDrop.select(sel >= 0 ? sel : 0);
@@ -2480,7 +2480,7 @@ class ChartingState extends MusicBeatState {
 		var input:UITextInput = new UITextInput("Character", 380 - 32, (line.characters.length > 0) ? line.characters[0] : '');
 		input.x = 16;
 		input.y = 12;
-		input.boxWidth = UITheme.px(180);
+		input.controlWidth = UITheme.px(180);
 		modal.body.addChild(input);
 		var ok:UIButton = new UIButton("Apply", 110, 28, function():Void {
 			undoStack.snapshot(model, 'Line Character');
@@ -2530,7 +2530,7 @@ class ChartingState extends MusicBeatState {
 			EditorPrefs.waveTarget = index;
 			applyWaveConfig();
 		});
-		waveDrop.boxWidth = UITheme.px(130);
+		waveDrop.controlWidth = UITheme.px(130);
 		waveDrop.setItems(["Instrumental", "Player Vocals", "Opponent Vocals"]);
 		waveDrop.select(clampIndex(EditorPrefs.waveTarget, 3));
 		flow.add(waveDrop);
@@ -2614,17 +2614,17 @@ class ChartingState extends MusicBeatState {
 				model.markDirty();
 			}
 		});
-		eventDrop.boxWidth = UITheme.px(150);
+		eventDrop.controlWidth = UITheme.px(150);
 		eventDrop.setItems([for (e in eventsList) e[0]]);
 		if (eventsList.length > 0)
 			eventDrop.tooltip = eventsList[0][1];
 		flow.add(eventDrop);
 
 		eventVal1 = new UITextInput("Value 1", colW, "", function(v:String):Void applyEventValue(1, v));
-		eventVal1.boxWidth = UITheme.px(150);
+		eventVal1.controlWidth = UITheme.px(150);
 		flow.add(eventVal1);
 		eventVal2 = new UITextInput("Value 2", colW, "", function(v:String):Void applyEventValue(2, v));
-		eventVal2.boxWidth = UITheme.px(150);
+		eventVal2.controlWidth = UITheme.px(150);
 		flow.add(eventVal2);
 		flow.add(eventButtonRow(colW));
 		flow.add(new UISeparator(colW));

@@ -18,8 +18,8 @@ import smidr.widgets.UIScrollPane;
 import smidr.widgets.UILabel;
 import smidr.widgets.UIButton;
 import smidr.widgets.UICheckbox;
-import smidr.widgets.UIToast;
-import smidr.widgets.UITooltip;
+import smidr.overlays.UIToast;
+import smidr.overlays.UITooltip;
 
 /**
 	The Chart Converter screen, built on the in-engine UI framework (`source/ui/`): a left rail that

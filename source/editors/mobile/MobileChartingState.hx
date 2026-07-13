@@ -24,7 +24,7 @@ import smidr.widgets.UIButton;
 import smidr.widgets.UICheckbox;
 import smidr.widgets.UIScrollPane;
 import smidr.widgets.UIStepper;
-import smidr.widgets.UIToast;
+import smidr.overlays.UIToast;
 
 /**
  * The touch-first Chart Editor, designed for Android (landscape, two-thumb use).

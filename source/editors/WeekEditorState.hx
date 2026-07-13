@@ -251,7 +251,7 @@ class WeekEditorState extends MusicBeatState {
 			reloadBG();
 		});
 		backgroundInputText.y = 64;
-		backgroundInputText.boxWidth = 125;
+		backgroundInputText.controlWidth = 125;
 		pane.addChild(backgroundInputText);
 
 		displayNameInputText = new UITextInput('Display Name:', rowW, '', function(v:String) {
@@ -677,7 +677,7 @@ class WeekEditorFreeplayState extends MusicBeatState {
 		bgColorStepperR = new UIStepper('R:', thirdW, 255, 20, function(_) updateBG());
 		bgColorStepperR.min = 0;
 		bgColorStepperR.max = 255;
-		bgColorStepperR.boxWidth = 52;
+		bgColorStepperR.controlWidth = 52;
 		bgColorStepperR.x = boxX + PAD;
 		bgColorStepperR.y = rowY;
 		uiRoot.content.addChild(bgColorStepperR);
@@ -685,7 +685,7 @@ class WeekEditorFreeplayState extends MusicBeatState {
 		bgColorStepperG = new UIStepper('G:', thirdW, 255, 20, function(_) updateBG());
 		bgColorStepperG.min = 0;
 		bgColorStepperG.max = 255;
-		bgColorStepperG.boxWidth = 52;
+		bgColorStepperG.controlWidth = 52;
 		bgColorStepperG.x = boxX + PAD + thirdW + 10;
 		bgColorStepperG.y = rowY;
 		uiRoot.content.addChild(bgColorStepperG);
@@ -693,7 +693,7 @@ class WeekEditorFreeplayState extends MusicBeatState {
 		bgColorStepperB = new UIStepper('B:', thirdW, 255, 20, function(_) updateBG());
 		bgColorStepperB.min = 0;
 		bgColorStepperB.max = 255;
-		bgColorStepperB.boxWidth = 52;
+		bgColorStepperB.controlWidth = 52;
 		bgColorStepperB.x = boxX + PAD + (thirdW + 10) * 2;
 		bgColorStepperB.y = rowY;
 		uiRoot.content.addChild(bgColorStepperB);
@@ -738,7 +738,7 @@ class WeekEditorFreeplayState extends MusicBeatState {
 		});
 		iconInputText.x = boxX + PAD;
 		iconInputText.y = rowY + 66;
-		iconInputText.boxWidth = 130;
+		iconInputText.controlWidth = 130;
 		uiRoot.content.addChild(iconInputText);
 
 		var hideFreeplayCheckbox:UICheckbox = new UICheckbox("Hide Week from Freeplay?", rowW, weekFile.hideFreeplay, function(checked:Bool) {

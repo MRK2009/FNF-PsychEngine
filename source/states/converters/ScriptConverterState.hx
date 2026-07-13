@@ -18,8 +18,8 @@ import smidr.widgets.UIScrollPane;
 import smidr.widgets.UILabel;
 import smidr.widgets.UIButton;
 import smidr.widgets.UIDropdown;
-import smidr.widgets.UIToast;
-import smidr.widgets.UITooltip;
+import smidr.overlays.UIToast;
+import smidr.overlays.UITooltip;
 
 /**
 	The Script Converter screen, built on the in-engine UI framework (`source/ui/`): a scrollable

@@ -21,7 +21,7 @@ import smidr.widgets.UIButton;
 import smidr.widgets.UICheckbox;
 import smidr.widgets.UIDropdown;
 import smidr.widgets.UIPanel;
-import smidr.widgets.UISegmented;
+import smidr.widgets.UISegmentedControl;
 import smidr.widgets.UIStepper;
 import smidr.widgets.UITabs;
 import smidr.widgets.UITextInput;
@@ -157,7 +157,7 @@ class DialogueCharacterEditorState extends MusicBeatState {
 	var mainTabs:UITabs;
 	var tabPanes:Array<Sprite> = [];
 	var curTabName:String = 'Character';
-	var typeSegment:UISegmented;
+	var typeSegment:UISegmentedControl;
 
 	function addEditorBox() {
 		UILocale.translate = function(k:String, f:String):String return Language.getPhrase(k, f);
@@ -173,7 +173,7 @@ class DialogueCharacterEditorState extends MusicBeatState {
 		typePanel.y = FlxG.height - 60;
 		uiRoot.content.addChild(typePanel);
 
-		typeSegment = new UISegmented('Position:', typeW - PAD * 2, ['Left', 'Center', 'Right'], function(i:Int) {
+		typeSegment = new UISegmentedControl('Position:', typeW - PAD * 2, ['Left', 'Center', 'Right'], function(i:Int) {
 			switch (i) {
 				case 0:
 					character.jsonFile.dialogue_pos = 'left';
@@ -185,7 +185,7 @@ class DialogueCharacterEditorState extends MusicBeatState {
 			updateCharTypeBox();
 			unsavedProgress = true;
 		});
-		typeSegment.boxWidth = 220;
+		typeSegment.controlWidth = 220;
 		typeSegment.x = typePanel.x + PAD;
 		typeSegment.y = typePanel.y + PAD;
 		uiRoot.content.addChild(typeSegment);
@@ -259,17 +259,17 @@ class DialogueCharacterEditorState extends MusicBeatState {
 
 		animationInputText = new UITextInput('Animation name:', rowW, '');
 		animationInputText.y = 32;
-		animationInputText.boxWidth = 135;
+		animationInputText.controlWidth = 135;
 		pane.addChild(animationInputText);
 
 		loopInputText = new UITextInput('Loop name (.XML):', rowW, '');
 		loopInputText.y = 64;
-		loopInputText.boxWidth = 120;
+		loopInputText.controlWidth = 120;
 		pane.addChild(loopInputText);
 
 		idleInputText = new UITextInput('Idle/Finished (.XML):', rowW, '');
 		idleInputText.y = 96;
-		idleInputText.boxWidth = 100;
+		idleInputText.controlWidth = 100;
 		pane.addChild(idleInputText);
 
 		var addUpdateButton:UIButton = new UIButton("Add/Update", (rowW - 10) / 2, 26, function() {
@@ -381,7 +381,7 @@ class DialogueCharacterEditorState extends MusicBeatState {
 			character.jsonFile.image = v;
 			unsavedProgress = true;
 		});
-		imageInputText.boxWidth = 130;
+		imageInputText.controlWidth = 130;
 		pane.addChild(imageInputText);
 
 		xStepper = new UIStepper('Offset X:', halfW, character.jsonFile.position[0], 10, function(v:Float) {
@@ -389,7 +389,7 @@ class DialogueCharacterEditorState extends MusicBeatState {
 			reloadCharacter();
 			unsavedProgress = true;
 		});
-		xStepper.boxWidth = 56;
+		xStepper.controlWidth = 56;
 		xStepper.min = -2000;
 		xStepper.max = 2000;
 		xStepper.y = 32;
@@ -400,7 +400,7 @@ class DialogueCharacterEditorState extends MusicBeatState {
 			reloadCharacter();
 			unsavedProgress = true;
 		});
-		yStepper.boxWidth = 56;
+		yStepper.controlWidth = 56;
 		yStepper.min = -2000;
 		yStepper.max = 2000;
 		yStepper.x = halfW + 10;
@@ -412,7 +412,7 @@ class DialogueCharacterEditorState extends MusicBeatState {
 			reloadCharacter();
 			unsavedProgress = true;
 		});
-		scaleStepper.boxWidth = 56;
+		scaleStepper.controlWidth = 56;
 		scaleStepper.min = 0.1;
 		scaleStepper.max = 10;
 		scaleStepper.decimals = 2;

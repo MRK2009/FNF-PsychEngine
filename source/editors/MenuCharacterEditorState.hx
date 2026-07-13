@@ -18,7 +18,7 @@ import smidr.widgets.UIButton;
 import smidr.widgets.UICheckbox;
 import smidr.widgets.UILabel;
 import smidr.widgets.UIPanel;
-import smidr.widgets.UISegmented;
+import smidr.widgets.UISegmentedControl;
 import smidr.widgets.UIStepper;
 import smidr.widgets.UITextInput;
 
@@ -79,7 +79,7 @@ class MenuCharacterEditorState extends MusicBeatState {
 	static inline var PAD:Int = 10;
 
 	var charType:Int = 0;
-	var typeSegment:UISegmented;
+	var typeSegment:UISegmentedControl;
 
 	function addEditorBox() {
 		UILocale.translate = function(k:String, f:String):String return Language.getPhrase(k, f);
@@ -95,11 +95,11 @@ class MenuCharacterEditorState extends MusicBeatState {
 		typePanel.y = FlxG.height - 230;
 		uiRoot.content.addChild(typePanel);
 
-		typeSegment = new UISegmented('Character Type:', typeW - PAD * 2, ['Opponent', 'Boyfriend', 'Girlfriend'], function(i:Int) {
+		typeSegment = new UISegmentedControl('Character Type:', typeW - PAD * 2, ['Opponent', 'Boyfriend', 'Girlfriend'], function(i:Int) {
 			charType = i;
 			updateCharacters();
 		});
-		typeSegment.boxWidth = 250;
+		typeSegment.controlWidth = 250;
 		typeSegment.x = typePanel.x + PAD;
 		typeSegment.y = typePanel.y + PAD;
 		uiRoot.content.addChild(typeSegment);
@@ -128,7 +128,7 @@ class MenuCharacterEditorState extends MusicBeatState {
 		});
 		imageInputText.x = boxX + PAD;
 		imageInputText.y = rowY;
-		imageInputText.boxWidth = 115;
+		imageInputText.controlWidth = 115;
 		uiRoot.content.addChild(imageInputText);
 
 		idleInputText = new UITextInput('Idle anim (.XML):', rowW, characterFile.idle_anim, function(v:String) {
@@ -137,7 +137,7 @@ class MenuCharacterEditorState extends MusicBeatState {
 		});
 		idleInputText.x = boxX + PAD;
 		idleInputText.y = rowY + 32;
-		idleInputText.boxWidth = 110;
+		idleInputText.controlWidth = 110;
 		uiRoot.content.addChild(idleInputText);
 
 		confirmInputText = new UITextInput('Start Press anim:', rowW, characterFile.confirm_anim, function(v:String) {
@@ -146,7 +146,7 @@ class MenuCharacterEditorState extends MusicBeatState {
 		});
 		confirmInputText.x = boxX + PAD;
 		confirmInputText.y = rowY + 64;
-		confirmInputText.boxWidth = 110;
+		confirmInputText.controlWidth = 110;
 		uiRoot.content.addChild(confirmInputText);
 
 		scaleStepper = new UIStepper('Scale:', rowW, 1, 0.05, function(v:Float) {

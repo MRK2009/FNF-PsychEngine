@@ -732,7 +732,7 @@ class StageEditorState extends MusicBeatState {
 			FlxTransitionableState.skipNextTransIn = FlxTransitionableState.skipNextTransOut = true;
 			MusicBeatState.switchState(new StageEditorState(lastLoadedStage, stageJson));
 		});
-		directoryDropDown.boxWidth = 110;
+		directoryDropDown.controlWidth = 110;
 		directoryDropDown.setItems(directoryList.copy());
 		directoryDropDown.select(Std.int(Math.max(0, directoryList.indexOf(stageJson.directory))));
 		pane.content.addChild(directoryDropDown);
@@ -773,13 +773,13 @@ class StageEditorState extends MusicBeatState {
 			unsavedProgress = true;
 		};
 		camDadStepperX = new UIStepper('Opp X:', halfW, cx, 50, camDadChanged);
-		camDadStepperX.boxWidth = 62;
+		camDadStepperX.controlWidth = 62;
 		camDadStepperX.min = -10000;
 		camDadStepperX.max = 10000;
 		camDadStepperX.y = 118;
 		pane.content.addChild(camDadStepperX);
 		camDadStepperY = new UIStepper('Y:', halfW, cy, 50, camDadChanged);
-		camDadStepperY.boxWidth = 62;
+		camDadStepperY.controlWidth = 62;
 		camDadStepperY.min = -10000;
 		camDadStepperY.max = 10000;
 		camDadStepperY.x = halfW + 10;
@@ -801,13 +801,13 @@ class StageEditorState extends MusicBeatState {
 			unsavedProgress = true;
 		};
 		camGfStepperX = new UIStepper('GF X:', halfW, cx, 50, camGfChanged);
-		camGfStepperX.boxWidth = 62;
+		camGfStepperX.controlWidth = 62;
 		camGfStepperX.min = -10000;
 		camGfStepperX.max = 10000;
 		camGfStepperX.y = 150;
 		pane.content.addChild(camGfStepperX);
 		camGfStepperY = new UIStepper('Y:', halfW, cy, 50, camGfChanged);
-		camGfStepperY.boxWidth = 62;
+		camGfStepperY.controlWidth = 62;
 		camGfStepperY.min = -10000;
 		camGfStepperY.max = 10000;
 		camGfStepperY.x = halfW + 10;
@@ -829,13 +829,13 @@ class StageEditorState extends MusicBeatState {
 			unsavedProgress = true;
 		};
 		camBfStepperX = new UIStepper('BF X:', halfW, cx, 50, camBfChanged);
-		camBfStepperX.boxWidth = 62;
+		camBfStepperX.controlWidth = 62;
 		camBfStepperX.min = -10000;
 		camBfStepperX.max = 10000;
 		camBfStepperX.y = 182;
 		pane.content.addChild(camBfStepperX);
 		camBfStepperY = new UIStepper('Y:', halfW, cy, 50, camBfChanged);
-		camBfStepperY.boxWidth = 62;
+		camBfStepperY.controlWidth = 62;
 		camBfStepperY.min = -10000;
 		camBfStepperY.max = 10000;
 		camBfStepperY.x = halfW + 10;
@@ -849,7 +849,7 @@ class StageEditorState extends MusicBeatState {
 			FlxG.camera.zoom = stageJson.defaultZoom;
 			unsavedProgress = true;
 		});
-		zoomStepper.boxWidth = 62;
+		zoomStepper.controlWidth = 62;
 		zoomStepper.min = minZoom;
 		zoomStepper.max = maxZoom;
 		zoomStepper.decimals = 2;
@@ -861,7 +861,7 @@ class StageEditorState extends MusicBeatState {
 			FlxG.camera.followLerp = 0.04 * stageJson.camera_speed;
 			unsavedProgress = true;
 		});
-		cameraSpeedStepper.boxWidth = 62;
+		cameraSpeedStepper.controlWidth = 62;
 		cameraSpeedStepper.min = 0;
 		cameraSpeedStepper.max = 10;
 		cameraSpeedStepper.decimals = 2;
@@ -1051,7 +1051,7 @@ class StageEditorState extends MusicBeatState {
 				selected.alpha = v;
 			unsavedProgress = true;
 		});
-		alphaStepper.boxWidth = 52;
+		alphaStepper.controlWidth = 52;
 		alphaStepper.min = 0;
 		alphaStepper.max = 1;
 		alphaStepper.decimals = 2;
@@ -1081,7 +1081,7 @@ class StageEditorState extends MusicBeatState {
 				selected.angle = v;
 			unsavedProgress = true;
 		});
-		angleStepper.boxWidth = 62;
+		angleStepper.controlWidth = 62;
 		angleStepper.min = 0;
 		angleStepper.max = 360;
 		angleStepper.y = 256;
@@ -2257,19 +2257,19 @@ class StageEditorAnimationSubstate extends MusicBeatSubstate {
 		animUI.addChild(initAnimButton);
 
 		animationInputText = new UITextInput('Animation name:', rowW, '');
-		animationInputText.boxWidth = 135;
+		animationInputText.controlWidth = 135;
 		animationInputText.x = boxX + PAD;
 		animationInputText.y = rowY + 58;
 		animUI.addChild(animationInputText);
 
 		animationNameInputText = new UITextInput('Symbol Name/Tag:', rowW, '');
-		animationNameInputText.boxWidth = 125;
+		animationNameInputText.controlWidth = 125;
 		animationNameInputText.x = boxX + PAD;
 		animationNameInputText.y = rowY + 90;
 		animUI.addChild(animationNameInputText);
 
 		animationIndicesInputText = new UITextInput('ADVANCED - Indices:', rowW, '');
-		animationIndicesInputText.boxWidth = 105;
+		animationIndicesInputText.controlWidth = 105;
 		animationIndicesInputText.x = boxX + PAD;
 		animationIndicesInputText.y = rowY + 122;
 		animUI.addChild(animationIndicesInputText);

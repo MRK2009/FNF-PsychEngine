@@ -11,7 +11,7 @@ import smidr.UITheme;
 import smidr.widgets.UIButton;
 import smidr.widgets.UICheckbox;
 import smidr.widgets.UIScrollPane;
-import smidr.widgets.UIToast;
+import smidr.overlays.UIToast;
 
 class PreloadListSubState extends BasePrompt {
 	var lockedList:Array<String>;

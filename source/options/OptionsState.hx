@@ -32,7 +32,7 @@ import smidr.widgets.UIDropdown;
 import smidr.widgets.UIStepper;
 import smidr.widgets.UITextInput;
 import smidr.widgets.UIModal;
-import smidr.widgets.UITooltip;
+import smidr.overlays.UITooltip;
 
 /**
 	The Options menu, built on the in-engine UI framework (`source/ui/`): a category rail on the left

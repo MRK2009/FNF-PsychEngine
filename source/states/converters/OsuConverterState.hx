@@ -20,14 +20,14 @@ import smidr.widgets.UIButton;
 import smidr.widgets.UICheckbox;
 import smidr.widgets.UIDropdown;
 import smidr.widgets.UILabel;
-import smidr.widgets.UILoadingBar;
+import smidr.widgets.UIProgressBar;
 import smidr.widgets.UIPanel;
 import smidr.widgets.UIScrollPane;
 import smidr.widgets.UISeparator;
 import smidr.widgets.UITabs;
 import smidr.widgets.UITextInput;
-import smidr.widgets.UIToast;
-import smidr.widgets.UITooltip;
+import smidr.overlays.UIToast;
+import smidr.overlays.UITooltip;
 
 using StringTools;
 
@@ -81,7 +81,7 @@ class OsuConverterState extends MusicBeatState {
 	var msgQueue:sys.thread.Deque<String> = new sys.thread.Deque<String>();
 	#end
 
-	var progBar:UILoadingBar;
+	var progBar:UIProgressBar;
 	var stopBtn:UIButton;
 
 	override function create() {
@@ -260,7 +260,7 @@ class OsuConverterState extends MusicBeatState {
 		var rowW:Float = 340;
 
 		packInput = new UITextInput('Modpack name:', rowW, OsuConvertDefaults.PACK_NAME);
-		packInput.boxWidth = 180;
+		packInput.controlWidth = 180;
 		pane.addChild(packInput);
 
 		var bitrateDrop:UIDropdown = new UIDropdown('Audio quality:', rowW, function(i:Int, v:String):Void bitrateSel = v);
@@ -284,7 +284,7 @@ class OsuConverterState extends MusicBeatState {
 		pane.addChild(codecDrop);
 
 		extraInput = new UITextInput('Video extra ffmpeg args:', rowW, '');
-		extraInput.boxWidth = 140;
+		extraInput.controlWidth = 140;
 		extraInput.y = 148;
 		pane.addChild(extraInput);
 
@@ -341,7 +341,7 @@ class OsuConverterState extends MusicBeatState {
 		var barX:Float = (FlxG.width - BAR_W) / 2;
 		var barY:Float = FlxG.height - 86;
 
-		progBar = new UILoadingBar('', BAR_W);
+		progBar = new UIProgressBar('', BAR_W);
 		progBar.x = barX;
 		progBar.y = barY;
 		progBar.visible = false;

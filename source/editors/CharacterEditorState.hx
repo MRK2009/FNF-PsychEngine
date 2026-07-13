@@ -569,12 +569,12 @@ class CharacterEditorState extends MusicBeatState {
 
 		animationInputText = new UITextInput('Animation name:', rowW, '');
 		animationInputText.y = 32;
-		animationInputText.boxWidth = 190;
+		animationInputText.controlWidth = 190;
 		pane.content.addChild(animationInputText);
 
 		animationNameInputText = new UITextInput('Symbol Name/Tag:', rowW, '');
 		animationNameInputText.y = 64;
-		animationNameInputText.boxWidth = 180;
+		animationNameInputText.controlWidth = 180;
 		pane.content.addChild(animationNameInputText);
 
 		animationFramerate = new UIStepper('Framerate:', rowW, 24, 1);
@@ -589,7 +589,7 @@ class CharacterEditorState extends MusicBeatState {
 
 		animationIndicesInputText = new UITextInput('ADVANCED - Indices:', rowW, '');
 		animationIndicesInputText.y = 160;
-		animationIndicesInputText.boxWidth = 160;
+		animationIndicesInputText.controlWidth = 160;
 		pane.content.addChild(animationIndicesInputText);
 
 		var addUpdateButton:UIButton = new UIButton("Add/Update", 150, 28, function() {
@@ -747,7 +747,7 @@ class CharacterEditorState extends MusicBeatState {
 			unsavedProgress = true;
 		});
 		healthIconInputText.y = 66;
-		healthIconInputText.boxWidth = 180;
+		healthIconInputText.controlWidth = 180;
 		pane.content.addChild(healthIconInputText);
 
 		vocalsInputText = new UITextInput('Vocals File Postfix:', rowW, character.vocalsFile != null ? character.vocalsFile : '', function(v:String) {
@@ -755,7 +755,7 @@ class CharacterEditorState extends MusicBeatState {
 			unsavedProgress = true;
 		});
 		vocalsInputText.y = 98;
-		vocalsInputText.boxWidth = 160;
+		vocalsInputText.controlWidth = 160;
 		pane.content.addChild(vocalsInputText);
 
 		singDurationStepper = new UIStepper('Sing Anim length:', rowW, character.singDuration, 0.1, function(v:Float) {
@@ -890,7 +890,7 @@ class CharacterEditorState extends MusicBeatState {
 		});
 		healthColorStepperR.min = 0;
 		healthColorStepperR.max = 255;
-		healthColorStepperR.boxWidth = 52;
+		healthColorStepperR.controlWidth = 52;
 		healthColorStepperR.y = 322;
 		pane.content.addChild(healthColorStepperR);
 
@@ -901,7 +901,7 @@ class CharacterEditorState extends MusicBeatState {
 		});
 		healthColorStepperG.min = 0;
 		healthColorStepperG.max = 255;
-		healthColorStepperG.boxWidth = 52;
+		healthColorStepperG.controlWidth = 52;
 		healthColorStepperG.x = thirdW + 10;
 		healthColorStepperG.y = 322;
 		pane.content.addChild(healthColorStepperG);
@@ -913,7 +913,7 @@ class CharacterEditorState extends MusicBeatState {
 		});
 		healthColorStepperB.min = 0;
 		healthColorStepperB.max = 255;
-		healthColorStepperB.boxWidth = 52;
+		healthColorStepperB.controlWidth = 52;
 		healthColorStepperB.x = (thirdW + 10) * 2;
 		healthColorStepperB.y = 322;
 		pane.content.addChild(healthColorStepperB);
