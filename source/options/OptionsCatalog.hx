@@ -250,6 +250,14 @@ class OptionsCatalog {
 			"If checked, allows the GPU to be used for caching textures, decreasing RAM usage.\nDon't turn this on if you have a shitty Graphics Card.",
 			'cacheOnGPU', BOOL)));
 
+		#if desktop
+		var widescreen:Option = new Option('Widescreen',
+			"If checked, removes black bars on the sides in windowed mode",
+			'widescreen', BOOL);
+		widescreen.onChange = function() backend.FullScreenScaleMode.enabled = ClientPrefs.data.widescreen;
+		rows.push(Setting(widescreen));
+		#end
+
 		#if !html5
 		var framerate:Option = new Option('Framerate', "Pretty self explanatory, isn't it?", 'framerate', INT);
 		final refreshRate:Int = FlxG.stage.application.window.displayMode.refreshRate;

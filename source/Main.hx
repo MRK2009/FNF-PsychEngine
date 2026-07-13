@@ -31,6 +31,7 @@ import haxe.CallStack;
 import haxe.io.Path;
 #end
 import backend.Highscore;
+import backend.FullScreenScaleMode;
 
 // NATIVE API STUFF, YOU CAN IGNORE THIS AND SCROLL //
 #if (linux && !debug)
@@ -126,6 +127,16 @@ class Main extends Sprite {
 		#if !mobile
 		Lib.current.stage.align = "tl";
 		Lib.current.stage.scaleMode = StageScaleMode.NO_SCALE;
+		#end
+
+		// Widescreen ("no black bars") fill when game is windowed or running on a display wider than 16:9. 
+		//Off by default -- a standard
+		// 16:9 display renders identically to the letterbox fit. Desktop-only for now; the mobile path
+		// needs a notch/cutout API before it can widen safely.
+		// Deferred to preGameStart: assigning FlxG.scaleMode fires flixel's setter -> game.onResize(null)
+		// -> FlxG.stage.stageWidth, and the stage is still null this early in Main's constructor.
+		#if desktop
+		FlxG.signals.preGameStart.addOnce(() -> FlxG.scaleMode = new FullScreenScaleMode(ClientPrefs.data.widescreen));
 		#end
 
 		#if (linux || mac) // fix the app icon not showing up on the Linux Panel / Mac Dock

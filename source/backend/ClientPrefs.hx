@@ -29,6 +29,9 @@ import states.TitleState;
 	public var framerate:Int = 60;
 	public var uncapFramerate:Bool = false;
 	public var camZooms:Bool = true;
+	// Widescreen fill: on displays wider than 16:9 the game widens instead of adding pillarbox bars.
+	// Off by default -- standard 16:9 displays render identically either way. See backend.FullScreenScaleMode.
+	public var widescreen:Bool = false;
 	public var hideHud:Bool = false;
 	public var noteOffset:Int = 0;
 	public var arrowRGB:Array<Array<FlxColor>> = [
@@ -330,6 +333,13 @@ class ClientPrefs {
 		#end
 
 		applyFramerate();
+
+		// Apply the saved widescreen state to the live scale mode. Prefs load after the mode is
+		// installed (Main's preGameStart), so the on-disk value only takes effect here.
+		#if desktop
+		if (backend.FullScreenScaleMode.instance != null)
+			backend.FullScreenScaleMode.enabled = data.widescreen;
+		#end
 
 		if (FlxG.save.data.gameplaySettings != null) {
 			var savedMap:Map<String, Dynamic> = FlxG.save.data.gameplaySettings;
