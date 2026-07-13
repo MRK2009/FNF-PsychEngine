@@ -10,6 +10,7 @@ import flixel.util.FlxColor;
 <target id="haxe">
 	<lib name="dwmapi.lib" if="windows"/>
 	<lib name="gdi32.lib" if="windows"/>
+	<lib name="advapi32.lib" if="windows"/>
 </target>
 ')
 @:cppFileCode('
@@ -51,6 +52,33 @@ void getHandle() {
 		EnumWindows(findByPID, (LPARAM)&data);
 		curHandle = data.handle;
 	}
+}
+
+// -1 = unknown, 0 = light, 1 = dark. Cached so re-applying on focus is a no-op unless the
+// user actually changed their Windows color scheme (avoids a title-bar repaint every alt-tab).
+int lastTitleBarDark = -1;
+void applyTitleBarTheme() {
+	getHandle();
+	if (curHandle == (HWND)0) return;
+
+	// Settings > Personalization > Colors > "Choose your default Windows mode" (title bars/taskbar).
+	// Missing key (older Windows) defaults to light.
+	DWORD lightTheme = 1;
+	DWORD sz = sizeof(lightTheme);
+	RegGetValueA(HKEY_CURRENT_USER, "Software\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\Themes\\\\Personalize",
+		"SystemUsesLightTheme", RRF_RT_REG_DWORD, NULL, &lightTheme, &sz);
+
+	int dark = (lightTheme == 0) ? 1 : 0;
+	if (dark == lastTitleBarDark) return;
+	lastTitleBarDark = dark;
+
+	BOOL useDark = dark ? TRUE : FALSE;
+	if (DwmSetWindowAttribute(curHandle, attributeDarkMode, &useDark, sizeof(useDark)) != S_OK)
+		DwmSetWindowAttribute(curHandle, attributeDarkModeFallback, &useDark, sizeof(useDark));
+
+	// Caption/border/text colors are intentionally left at their defaults so Windows applies the
+	// user\'s "Show accent color on title bars and window borders" preference automatically.
+	SetWindowPos(curHandle, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
 }
 ')
 #end
@@ -107,6 +135,18 @@ class Native {
 				ReleaseDC(curHandle, curHDC);
 			}
 		');
+		#end
+	}
+
+	/**
+		Matches the window title bar to the user's current Windows color scheme (dark/light) and lets
+		Windows apply their accent-on-title-bar preference. Safe to call repeatedly -- the native side
+		no-ops unless the scheme actually changed, so it can be wired to `focusGained` for live updates.
+		No-op on non-Windows (macOS/Linux decorations follow the system automatically).
+	**/
+	public static function applyWindowTheme():Void {
+		#if (cpp && windows)
+		untyped __cpp__('applyTitleBarTheme();');
 		#end
 	}
 }

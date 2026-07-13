@@ -65,6 +65,9 @@ class Main extends Sprite {
 
 		#if (cpp && windows)
 		backend.Native.fixScaling();
+		// Match the title bar to the user's Windows color scheme, and keep it in sync if they change it.
+		backend.Native.applyWindowTheme();
+		FlxG.signals.focusGained.add(backend.Native.applyWindowTheme);
 		#end
 
 		// Mobile storage: point the engine at a public, file-manager-browsable folder
