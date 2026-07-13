@@ -624,6 +624,11 @@ final class EditorNoteField {
 			var line:Int = laneLine[lane];
 			var kc:Int = lineKeyCount(line);
 			var receptor:Receptor = new Receptor(0, 0, laneCol[lane], 0, kc);
+			// The editor lays receptors out on its own cell grid, not gameplay's swagWidth slots, so
+			// suppress the lane-centering offset folder skins apply (frameWidth - swagWidth)/2 -- it
+			// shifts the glyph off the note columns and re-applies on every confirm->static flash.
+			receptor.laneCenter = false;
+			receptor.playAnim('static', true);
 			var s:Float = (receptor.frameWidth > 0) ? cell / receptor.frameWidth : 1;
 			receptor.scale.set(s, s);
 			receptor.updateHitbox();
