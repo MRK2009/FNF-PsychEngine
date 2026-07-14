@@ -116,6 +116,16 @@ final class EditorKeybinds {
 		action('delete', 'Delete Selection', 'Editing', [mk(FlxKey.DELETE)]);
 		action('sustain_shrink', 'Shrink Sustain', 'Editing', [mk(FlxKey.Q)]);
 		action('sustain_grow', 'Grow Sustain', 'Editing', [mk(FlxKey.E)]);
+		action('adapt_notes', 'Adapt Notes to Snap', 'Editing', [mk(FlxKey.A, true, true)]);
+
+		// Section tools -- Alt combos (the Alt modifier is otherwise unused, so no collisions).
+		action('section_copy', 'Copy Section', 'Section', [mk(FlxKey.C, false, false, true)]);
+		action('section_swap', 'Swap Section Sides', 'Section', [mk(FlxKey.S, false, false, true)]);
+		action('section_duet', 'Duet Section', 'Section', [mk(FlxKey.D, false, false, true)]);
+		action('section_mirror', 'Mirror Section', 'Section', [mk(FlxKey.M, false, false, true)]);
+		action('section_copy_prev', 'Copy Previous Section', 'Section', [mk(FlxKey.P, false, false, true)]);
+		action('section_copy_from', 'Copy From N Back', 'Section', [mk(FlxKey.F, false, false, true)]);
+		action('section_clear', 'Clear Section', 'Section', [mk(FlxKey.BACKSPACE, false, false, true)]);
 
 		action('note_place', 'Place / Remove Note', 'Mouse', [mk(MOUSE_LEFT)]);
 		action('note_context', 'Note Context Menu', 'Mouse', [mk(MOUSE_RIGHT)]);

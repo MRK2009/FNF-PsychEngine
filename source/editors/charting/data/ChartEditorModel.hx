@@ -852,6 +852,17 @@ final class ChartEditorModel {
 		return idx;
 	}
 
+	/** Sets a line's role -- 0 = CPU/opponent, 1 = player, 2 = additional/extra -- keeping `isPlayer`
+		in sync. Purely a role change; notes and camera targets are untouched. **/
+	public function setLineRole(idx:Int, type:Int):Void {
+		if (idx < 0 || idx >= chart.strumLines.length)
+			return;
+		var line:StrumLineData = chart.strumLines[idx];
+		line.type = type;
+		line.isPlayer = (type == 1);
+		markDirty();
+	}
+
 	/** Removes a strumline: its notes are deleted and higher line indices shift down. **/
 	public function removeStrumLine(idx:Int):Void {
 		if (idx < 0 || idx >= chart.strumLines.length)

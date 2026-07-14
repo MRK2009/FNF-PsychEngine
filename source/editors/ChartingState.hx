@@ -257,11 +257,7 @@ class ChartingState extends MusicBeatState {
 		audio.load(backend.Song.loadedSongName, chart.needsVoices);
 		audio.setVolumes(EditorPrefs.instVol, EditorPrefs.mainVol, EditorPrefs.oppVol);
 		audio.setRate(RATE_VALUES[rateIndex]);
-		if (audio.loaded) {
-			var guard:Int = 0;
-			while (model.endTime < audio.length && guard++ < 4000)
-				model.ensureSectionCount(model.sectionCount() + 1);
-		}
+		fillSectionsToSongEnd();
 
 		model.onChanged = onModelChanged;
 		selection.onChanged = onSelectionChanged;
@@ -296,6 +292,7 @@ class ChartingState extends MusicBeatState {
 		noteField.waveEnabled = EditorPrefs.waveform;
 		applyWaveConfig();
 		noteField.vortexEnabled = EditorPrefs.vortex;
+		noteField.showHiddenLines = EditorPrefs.showHiddenLines;
 		add(noteField.group);
 		add(noteField.overlay);
 
@@ -471,7 +468,7 @@ class ChartingState extends MusicBeatState {
 	function updateTimeLabel():Void {
 		if (noteField == null)
 			return;
-		shell.timeLabel.text = fmtTime(noteField.viewTime) + ' / ' + fmtTime(model.endTime);
+		shell.timeLabel.text = fmtTime(noteField.viewTime) + ' / ' + fmtTime(totalMs());
 		shell.layoutTime();
 	}
 
@@ -496,11 +493,31 @@ class ChartingState extends MusicBeatState {
 		keysStep.value = model.keyCountAt(sec);
 	}
 
-	/** Moves the section cursor (extends the chart when stepping past the end). **/
+	/**
+		Grows the chart with empty sections until it spans the loaded song, so the whole song is
+		navigable/scrubbable the moment it opens -- no need to play to the end and drop a note.
+		No-op when there's no audio (a songless scratch chart grows on demand via `gotoSection`).
+	**/
+	function fillSectionsToSongEnd():Void {
+		if (audio == null || !audio.loaded)
+			return;
+		var guard:Int = 0;
+		while (model.endTime < audio.length && guard++ < 4000)
+			model.ensureSectionCount(model.sectionCount() + 1);
+	}
+
+	/** Moves the section cursor. With a song loaded, clamps to the last in-song section (the chart is
+		already filled to the song end) so the playhead can never run past the song; songless charts
+		still extend on demand. **/
 	public function gotoSection(sec:Int):Void {
 		if (sec < 0)
 			sec = 0;
-		model.ensureSectionCount(sec + 1);
+		if (audio != null && audio.loaded) {
+			var maxSec:Int = model.sectionAt(audio.length);
+			if (sec > maxSec)
+				sec = maxSec;
+		} else
+			model.ensureSectionCount(sec + 1);
 		var changed:Bool = (sec != editSection);
 		editSection = sec;
 		if (noteField != null)
@@ -529,7 +546,7 @@ class ChartingState extends MusicBeatState {
 			{title: "Edit", items: editMenu},
 			{title: "View", items: viewMenu},
 			{title: "Playback", items: playbackMenu},
-			{title: "Tools", items: toolsMenu},
+			{title: "Options", items: optionsMenu},
 			{title: "Help", items: helpMenu}
 		]);
 
@@ -551,7 +568,7 @@ class ChartingState extends MusicBeatState {
 		shell.timeline.onScrub = onTimelineScrub;
 
 		shell.searchBtn.onClick = todo("Search isn't implemented yet");
-		shell.optionsBtn.onClick = function():Void selectPanel(7);
+		shell.optionsBtn.onClick = openOptionsModal;
 	}
 
 	/** The timeline's full span: audio length when loaded, else the chart end. **/
@@ -662,7 +679,7 @@ class ChartingState extends MusicBeatState {
 
 	/**
 		The rail tab set. Events/Audio/Display already live in the right dock, so they only appear as
-		rail tabs in combined-dock mode (where the right dock is folded away); CHAR/STRM likewise.
+		rail tabs in combined-dock mode (where the right dock is folded away); STRM likewise.
 	**/
 	function railTabs():Array<UIRailTabDef> {
 		railPanelMap.resize(0);
@@ -682,11 +699,8 @@ class ChartingState extends MusicBeatState {
 		if (EditorPrefs.combinedDock)
 			add(6, "DISP", "Display");
 		add(10, "PTRN", "Patterns");
-		add(7, "OPTS", "Options");
-		if (EditorPrefs.combinedDock) {
-			add(8, "CHAR", "Character");
+		if (EditorPrefs.combinedDock)
 			add(9, "STRM", "Strumlines");
-		}
 		return tabs;
 	}
 
@@ -862,6 +876,7 @@ class ChartingState extends MusicBeatState {
 			{label: "Vortex Mode", checked: EditorPrefs.vortex, onSelect: function():Void setToggle(3, !EditorPrefs.vortex)},
 			{label: "Quant Colors", checked: EditorPrefs.quantColors, onSelect: function():Void setToggle(4, !EditorPrefs.quantColors)},
 			{label: "Downscroll", checked: EditorPrefs.downscroll, onSelect: function():Void setToggle(5, !EditorPrefs.downscroll)},
+			{label: "Show Hidden Lines", checked: EditorPrefs.showHiddenLines, onSelect: function():Void setToggle(6, !EditorPrefs.showHiddenLines)},
 			{separator: true},
 			{label: "Combined Dock", checked: EditorPrefs.combinedDock, onSelect: function():Void setCombinedDock(!EditorPrefs.combinedDock)}
 		]);
@@ -881,11 +896,12 @@ class ChartingState extends MusicBeatState {
 		]);
 	}
 
-	function toolsMenu():Array<UIMenuItem> {
-		return appendCustom("Tools", [
+	function optionsMenu():Array<UIMenuItem> {
+		return appendCustom("Options", [
+			{label: "Editor Options...", onSelect: openOptionsModal},
 			{label: "Keybinds...", onSelect: openKeybindsModal},
-			{label: "Adapt Notes to Snap", onSelect: adaptNotesToSnap},
 			{separator: true},
+			{label: "Adapt Notes to Snap", shortcut: EditorKeybinds.bindLabel('adapt_notes'), onSelect: adaptNotesToSnap},
 			{label: "Legacy Chart Editor", onSelect: openLegacyEditor}
 		]);
 	}
@@ -899,7 +915,8 @@ class ChartingState extends MusicBeatState {
 
 	function newChart():Void {
 		backend.Song.chartPath = null;
-		backend.Song.loadedSongName = null;
+		// Keep the currently-loaded song so the blank chart auto-fills sections across it and is
+		// immediately navigable (adoptChart reloads its audio + fills to the song end).
 		adoptChart(makeBlankChart());
 		UIToast.show('New chart');
 	}
@@ -920,11 +937,7 @@ class ChartingState extends MusicBeatState {
 		audio.load(backend.Song.loadedSongName, chart.needsVoices);
 		audio.setVolumes(EditorPrefs.instVol, EditorPrefs.mainVol, EditorPrefs.oppVol);
 		audio.setRate(RATE_VALUES[rateIndex]);
-		if (audio.loaded) {
-			var guard:Int = 0;
-			while (model.endTime < audio.length && guard++ < 4000)
-				model.ensureSectionCount(model.sectionCount() + 1);
-		}
+		fillSectionsToSongEnd();
 		noteField.maxTime = audio.loaded ? audio.length : -1;
 		noteField.waveSource = audio.waveformSound(EditorPrefs.waveTarget);
 		noteField.onModelChanged();
@@ -1208,6 +1221,12 @@ class ChartingState extends MusicBeatState {
 					downscrollChip.on = value;
 				if (noteField != null)
 					noteField.setDownscroll(value);
+			case 6:
+				EditorPrefs.showHiddenLines = value;
+				if (noteField != null) {
+					noteField.showHiddenLines = value;
+					noteField.refreshLayout();
+				}
 		}
 	}
 
@@ -1234,7 +1253,31 @@ class ChartingState extends MusicBeatState {
 			noteField.resize(shell.fieldX, shell.fieldY, shell.fieldW, shell.fieldH);
 	}
 
+	/** Confirms before leaving the editor (Esc / Exit Editor) so an accidental exit can't drop work. **/
 	function leaveEditor():Void {
+		var W:Float = 380;
+		var H:Float = 160;
+		var modal:UIModal = new UIModal("Leave Chart Editor?", W, H);
+		var msg:UILabel = new UILabel("Any unsaved changes will be lost.", 12, 0);
+		msg.x = 16;
+		msg.y = 16;
+		modal.body.addChild(msg);
+		var cancel:UIButton = new UIButton("Cancel", 110, 28, function():Void modal.close());
+		cancel.x = 16;
+		cancel.y = H - 40 - 44;
+		modal.body.addChild(cancel);
+		var leave:UIButton = new UIButton("Leave", 110, 28, function():Void {
+			modal.close();
+			doLeaveEditor();
+		}, true);
+		leave.danger = true;
+		leave.x = W - 16 - 110;
+		leave.y = H - 40 - 44;
+		modal.body.addChild(leave);
+		modal.open();
+	}
+
+	function doLeaveEditor():Void {
 		FlxG.sound.playMusic(Paths.music('freakyMenu'));
 		MusicBeatState.switchState(new editors.MasterEditorMenu());
 	}
@@ -1409,10 +1452,16 @@ class ChartingState extends MusicBeatState {
 		var scroll:Float = keepScroll ? shell.leftPane.scrollY : 0;
 		clearPane(shell.leftPane);
 		if (EditorPrefs.combinedDock) {
+			// In combined-dock mode the SECT tab owns Events + the selection inspector, so null them here;
+			// in two-dock mode the right dock owns them (nulled in buildRightDock).
 			eventHead = null;
 			eventDrop = null;
 			eventVal1 = null;
 			eventVal2 = null;
+			selectedHead = null;
+			hitTimeStep = null;
+			sustainStep = null;
+			noteTypeDrop = null;
 		}
 		sectionHead = null;
 		camTargetDrop = null;
@@ -1423,10 +1472,6 @@ class ChartingState extends MusicBeatState {
 		speedStep = null;
 		velStep = null;
 		keysStep = null;
-		selectedHead = null;
-		hitTimeStep = null;
-		sustainStep = null;
-		noteTypeDrop = null;
 
 		var colW:Float = shell.leftW - UITheme.px(26);
 		var flow:DockFlow = new DockFlow(shell.leftPane, UITheme.px(12), UITheme.px(8));
@@ -1453,10 +1498,6 @@ class ChartingState extends MusicBeatState {
 			case 6:
 				flow.header(new UIAccordion("Display", colW));
 				addHintRow(flow, colW, "Quick toggles live in the right dock.");
-			case 7:
-				buildOptionsPanel(flow, colW);
-			case 8:
-				buildCharacterSection(flow, colW);
 			case 9:
 				buildStrumlinesSection(flow, colW);
 			case 10:
@@ -1557,22 +1598,8 @@ class ChartingState extends MusicBeatState {
 		denom.select(denomIndex(model.denominatorAt(0)));
 		flow.add(denom);
 
-		flow.header(new UIAccordion("Characters", colW));
-		addPickerRow(flow, colW, "Player", characterList(), chart.player1, function(v:String):Void {
-			undoStack.snapshot(model, 'Characters');
-			chart.player1 = v;
-			chart.syncPrimaryCharacters();
-		});
-		addPickerRow(flow, colW, "Opponent", characterList(), chart.player2, function(v:String):Void {
-			undoStack.snapshot(model, 'Characters');
-			chart.player2 = v;
-			chart.syncPrimaryCharacters();
-		});
-		addPickerRow(flow, colW, "Girlfriend", characterList(), chart.gfVersion, function(v:String):Void {
-			undoStack.snapshot(model, 'Characters');
-			chart.gfVersion = v;
-			chart.syncPrimaryCharacters();
-		});
+		// Characters are edited per-strumline (strumline properties modal), so the SONG tab only keeps Stage.
+		flow.header(new UIAccordion("Stage", colW));
 		var shownStage:String = (chart.stage != null && chart.stage.length > 0) ? chart.stage
 			: backend.StageData.vanillaSongStage(Paths.formatToSongPath(chart.song));
 		addPickerRow(flow, colW, "Stage", stageList(), shownStage, function(v:String):Void {
@@ -1782,7 +1809,21 @@ class ChartingState extends MusicBeatState {
 		flow.add(goEnd);
 	}
 
-	/** OPTS tab: editor preferences, metronome presets, performance and script buttons. **/
+	/** Editor options as a modal (moved off the left rail): reuses `buildOptionsPanel` in a scrolling body. **/
+	function openOptionsModal():Void {
+		var mw:Float = 540;
+		var mh:Float = 520;
+		var modal:UIModal = new UIModal("Editor Options", mw, mh);
+		var pane:UIScrollPane = new UIScrollPane(mw - 32, mh - 40 - 16);
+		pane.x = 16;
+		pane.y = 4;
+		var flow:DockFlow = new DockFlow(pane, UITheme.px(12), UITheme.px(8));
+		buildOptionsPanel(flow, mw - 32 - UITheme.px(26));
+		flow.reflow();
+		modal.body.addChild(pane);
+		modal.open();
+	}
+
 	function buildOptionsPanel(flow:DockFlow, colW:Float):Void {
 		flow.header(new UIAccordion("Editor Options", colW));
 		flow.add(new UIButton("Keybinds...", colW, UITheme.px(28), openKeybindsModal));
@@ -1947,9 +1988,9 @@ class ChartingState extends MusicBeatState {
 		var tools:UIAccordion = new UIAccordion("Section Tools", colW);
 		tools.hint = "notes + events";
 		flow.header(tools);
-		flow.add(buttonPair(colW, "Copy", copySection, "Swap Sides", swapSection));
-		flow.add(buttonPair(colW, "Paste", pasteAtSection, "Duet", duetSection));
-		flow.add(buttonPair(colW, "Copy Prev", copyLastSection, "Mirror", mirrorSection));
+		flow.add(buttonPair(colW, "Copy", copySection, "Swap Sides", swapSection, kbTip('section_copy'), kbTip('section_swap')));
+		flow.add(buttonPair(colW, "Paste", pasteAtSection, "Duet", duetSection, kbTip('paste'), kbTip('section_duet')));
+		flow.add(buttonPair(colW, "Copy Prev", copyLastSection, "Mirror", mirrorSection, kbTip('section_copy_prev'), kbTip('section_mirror')));
 		var copyFromStep:UIStepper = new UIStepper("Copy From", colW, copyFromBack, 1, function(v:Float):Void {
 			copyFromBack = (v < 1) ? 1 : Std.int(v);
 		});
@@ -1958,11 +1999,25 @@ class ChartingState extends MusicBeatState {
 		copyFromStep.max = 999;
 		copyFromStep.controlWidth = UITheme.px(80);
 		flow.add(copyFromStep);
-		flow.add(new UIButton("Copy From", colW, UITheme.px(26), copyFromNSectionsBack));
+		var copyFromBtn:UIButton = new UIButton("Copy From", colW, UITheme.px(26), copyFromNSectionsBack);
+		copyFromBtn.tooltip = kbTip('section_copy_from');
+		flow.add(copyFromBtn);
 		var clear:UIButton = new UIButton("Clear Section", colW, UITheme.px(28), clearSection);
 		clear.danger = true;
+		clear.tooltip = kbTip('section_clear');
 		flow.add(clear);
 
+		// Two-dock mode keeps the selection inspector in the right dock (beside Events); combined-dock
+		// mode folds it onto the SECT tab here.
+		if (EditorPrefs.combinedDock)
+			buildSelectionSection(flow, colW);
+
+		refreshSectionPanel();
+	}
+
+	/** The selection inspector (hit time / sustain / note type). Right dock in two-dock mode; SECT tab
+		in combined-dock mode. **/
+	function buildSelectionSection(flow:DockFlow, colW:Float):Void {
 		selectedHead = new UIAccordion("Selected - 0 Notes", colW);
 		flow.header(selectedHead);
 		hitTimeStep = new UIStepper("Hit Time (ms)", colW, 0, 0.5, function(v:Float):Void {
@@ -2006,8 +2061,6 @@ class ChartingState extends MusicBeatState {
 		noteTypeDrop.controlWidth = UITheme.px(130);
 		noteTypeDrop.setItems(noteTypesList, [for (i => n in noteTypesList) (n == '') ?'$i. Normal':'$i. $n']);
 		flow.add(noteTypeDrop);
-
-		refreshSectionPanel();
 		refreshSelectedPanel();
 	}
 
@@ -2131,15 +2184,26 @@ class ChartingState extends MusicBeatState {
 		UIToast.show('Cleared $removed items');
 	}
 
-	function buttonPair(colW:Float, leftLabel:String, leftCb:Void->Void, rightLabel:String, rightCb:Void->Void):UIComponent {
+	/** A shortcut hint for a button tooltip, e.g. "Shortcut: Alt+C" ("" when the action is unbound). **/
+	inline function kbTip(id:String):String {
+		var s:String = EditorKeybinds.bindLabel(id);
+		return (s.length > 0) ? 'Shortcut: $s' : '';
+	}
+
+	function buttonPair(colW:Float, leftLabel:String, leftCb:Void->Void, rightLabel:String, rightCb:Void->Void, ?leftTip:String,
+			?rightTip:String):UIComponent {
 		var group:UIComponent = new UIComponent(false, false);
 		var half:Float = (colW - UITheme.px(8)) / 2;
 		var bh:Float = UITheme.px(26);
 		var a:UIButton = new UIButton(leftLabel, half, bh, leftCb);
 		a.fontSize = 11;
+		if (leftTip != null && leftTip.length > 0)
+			a.tooltip = leftTip;
 		group.addChild(a);
 		var b:UIButton = new UIButton(rightLabel, half, bh, rightCb);
 		b.fontSize = 11;
+		if (rightTip != null && rightTip.length > 0)
+			b.tooltip = rightTip;
 		b.x = half + UITheme.px(8);
 		group.addChild(b);
 		group.resize(colW, bh);
@@ -2159,15 +2223,16 @@ class ChartingState extends MusicBeatState {
 		eventDrop = null;
 		eventVal1 = null;
 		eventVal2 = null;
+		selectedHead = null;
+		hitTimeStep = null;
+		sustainStep = null;
+		noteTypeDrop = null;
 
 		var colW:Float = shell.rightW - UITheme.px(26);
 		var flow:DockFlow = new DockFlow(shell.rightPane, UITheme.px(12), UITheme.px(8));
 
 		flow.header(new UIAccordion("Quick Toggles", colW));
 		buildQuickTogglesSection(flow, colW);
-
-		flow.header(new UIAccordion("Character", colW));
-		buildCharacterCard(flow, colW);
 
 		var strumHead:UIAccordion = new UIAccordion("Strumlines", colW);
 		strumHead.hint = 'visible <= $MAX_VISIBLE_LINES';
@@ -2178,6 +2243,8 @@ class ChartingState extends MusicBeatState {
 		buildSongAudioSection(flow, colW);
 
 		buildEventSection(flow, colW);
+
+		buildSelectionSection(flow, colW);
 
 		flow.reflow();
 		shell.rightPane.setScroll(keepScroll);
@@ -2210,11 +2277,6 @@ class ChartingState extends MusicBeatState {
 			}
 			flow.add(chipRow(colW, chips));
 		}
-	}
-
-	function buildCharacterSection(flow:DockFlow, colW:Float):Void {
-		flow.header(new UIAccordion("Character", colW));
-		buildCharacterCard(flow, colW);
 	}
 
 	/**
@@ -2313,13 +2375,6 @@ class ChartingState extends MusicBeatState {
 				return json.healthicon;
 		} catch (_:Dynamic) {}
 		return char;
-	}
-
-	function buildCharacterCard(flow:DockFlow, colW:Float):Void {
-		var card:UIPanel = new UIPanel(colW, UITheme.px(104), CARD);
-		card.corner = UITheme.px(10);
-		card.outline = true;
-		flow.add(card);
 	}
 
 	function buildStrumlinesSection(flow:DockFlow, colW:Float):Void {
@@ -2518,26 +2573,112 @@ class ChartingState extends MusicBeatState {
 		return items;
 	}
 
-	function openStrumlineMenu(idx:Int, mx:Float, my:Float):Void {
+	/**
+		Modal to edit all of a strumline's properties -- role, character, key count and gameplay
+		arrow-visibility -- plus reorder/remove. Opened from the line's tag chip (replaces the old
+		right-click menu). Role/key-count/character/visibility are committed together on Apply (one undo
+		step); move/remove act immediately and close.
+	**/
+	function openStrumlineModal(idx:Int):Void {
 		var line = model.chart.strumLines[idx];
-		UIContextMenu.open(mx, my, [
-			{label: 'Set Character...', onSelect: function():Void openCharacterModal(idx)},
-			{label: 'Set Key Count', onSelect: function():Void openKeyCountMenu(idx, mx, my)},
-			{label: line.visible ? 'Hide Lane' : 'Show Lane', onSelect: function():Void toggleLineVisible(idx, !line.visible)},
-			{separator: true},
-			{label: 'Move Up', disabled: idx <= 0, onSelect: function():Void moveStrumline(idx, -1)},
-			{label: 'Move Down', disabled: idx >= model.chart.strumLines.length - 1, onSelect: function():Void moveStrumline(idx, 1)},
-			{separator: true},
-			{
-				label: 'Remove Strumline',
-				disabled: model.chart.strumLines.length <= 1,
-				onSelect: function():Void {
-					undoStack.snapshot(model, 'Remove Strumline');
-					model.removeStrumLine(idx);
-					rebuildStrumlineUI();
-				}
+		var W:Float = 360;
+		var H:Float = 300;
+		var pad:Float = 16;
+		var cw:Float = W - pad * 2;
+		var modal:UIModal = new UIModal('Strumline: ${line.id}', W, H);
+
+		var curChar:String = (line.characters.length > 0) ? line.characters[0] : '';
+		var chars:Array<String> = characterList();
+		if (curChar != '' && chars.indexOf(curChar) < 0)
+			chars.unshift(curChar); // keep a custom/unscanned character selectable
+		var charDrop:UIDropdown = new UIDropdown("Character", cw, function(_:Int, _:String):Void {});
+		charDrop.controlWidth = UITheme.px(170);
+		charDrop.setItems(chars);
+		charDrop.select(Std.int(Math.max(0, chars.indexOf(curChar))));
+		charDrop.x = pad;
+		charDrop.y = 12;
+		modal.body.addChild(charDrop);
+
+		var roleDrop:UIDropdown = new UIDropdown("Role", cw, function(_:Int, _:String):Void {});
+		roleDrop.controlWidth = UITheme.px(150);
+		roleDrop.setItems(["Player", "CPU (Opponent)", "Extra"]);
+		roleDrop.select(line.type == 1 ? 0 : (line.type == 0 ? 1 : 2));
+		roleDrop.x = pad;
+		roleDrop.y = 52;
+		modal.body.addChild(roleDrop);
+
+		var kcStep:UIStepper = new UIStepper("Key Count", cw, line.keyCount, 1, function(_:Float):Void {});
+		kcStep.min = 1;
+		kcStep.max = 9;
+		kcStep.decimals = 0;
+		kcStep.controlWidth = UITheme.px(100);
+		kcStep.x = pad;
+		kcStep.y = 92;
+		modal.body.addChild(kcStep);
+
+		var visChk:UICheckbox = new UICheckbox("Render arrows in gameplay", cw, line.visible, function(_:Bool):Void {});
+		visChk.tooltip = "Off = silent auto-sing line (like GF)";
+		visChk.x = pad;
+		visChk.y = 132;
+		modal.body.addChild(visChk);
+
+		var halfW:Float = (cw - 8) / 2;
+		var moveUp:UIButton = new UIButton("Move Up", halfW, 26, function():Void {
+			if (idx > 0) {
+				moveStrumline(idx, -1);
+				modal.close();
 			}
-		]);
+		});
+		moveUp.x = pad;
+		moveUp.y = 170;
+		modal.body.addChild(moveUp);
+		var moveDown:UIButton = new UIButton("Move Down", halfW, 26, function():Void {
+			if (idx < model.chart.strumLines.length - 1) {
+				moveStrumline(idx, 1);
+				modal.close();
+			}
+		});
+		moveDown.x = pad + halfW + 8;
+		moveDown.y = 170;
+		modal.body.addChild(moveDown);
+
+		var remove:UIButton = new UIButton("Remove", 100, 28, function():Void {
+			if (model.chart.strumLines.length <= 1) {
+				UIToast.show("Can't remove the last strumline");
+				return;
+			}
+			undoStack.snapshot(model, 'Remove Strumline');
+			model.removeStrumLine(idx);
+			modal.close();
+			rebuildStrumlineUI();
+		});
+		remove.danger = true;
+		remove.x = pad;
+		remove.y = 214;
+		modal.body.addChild(remove);
+
+		var apply:UIButton = new UIButton("Apply", 110, 28, function():Void {
+			undoStack.snapshot(model, 'Strumline Properties');
+			var roleType:Int = (roleDrop.selectedIndex == 0) ? 1 : ((roleDrop.selectedIndex == 1) ? 0 : 2);
+			model.setLineRole(idx, roleType);
+			var removed:Int = model.setLineKeyCount(idx, Std.int(kcStep.value));
+			model.setLineCharacter(idx, charDrop.selectedValue);
+			if (visChk.checked != line.visible) {
+				if (visChk.checked && !line.visible && model.visibleLineCount() >= MAX_VISIBLE_LINES)
+					UIToast.show('At most $MAX_VISIBLE_LINES strumlines can be visible');
+				else
+					model.setLineVisible(idx, visChk.checked);
+			}
+			modal.close();
+			rebuildStrumlineUI();
+			if (removed > 0)
+				UIToast.show('$removed out-of-range notes removed');
+		}, true);
+		apply.x = W - pad - 110;
+		apply.y = 214;
+		modal.body.addChild(apply);
+
+		modal.open();
 	}
 
 	/** Reorders a lane in the grid (note/camera associations follow - gameplay unchanged). **/
@@ -2545,28 +2686,6 @@ class ChartingState extends MusicBeatState {
 		undoStack.snapshot(model, 'Reorder Strumlines');
 		model.swapStrumLines(idx, idx + dir);
 		rebuildStrumlineUI();
-	}
-
-	function openKeyCountMenu(idx:Int, mx:Float, my:Float):Void {
-		var items:Array<UIMenuItem> = [];
-		var line = model.chart.strumLines[idx];
-		var k:Int = 1;
-		while (k <= 9) {
-			var kc:Int = k;
-			items.push({
-				label: '${kc}K',
-				checked: line.keyCount == kc,
-				onSelect: function():Void {
-					undoStack.snapshot(model, 'Key Count');
-					var removed:Int = model.setLineKeyCount(idx, kc);
-					rebuildStrumlineUI();
-					if (removed > 0)
-						UIToast.show('$removed out-of-range notes removed');
-				}
-			});
-			k++;
-		}
-		UIContextMenu.open(mx, my, items);
 	}
 
 	/** Shows/hides a lane in the grid (enforces the visible-lines cap). **/
@@ -2579,26 +2698,6 @@ class ChartingState extends MusicBeatState {
 		undoStack.snapshot(model, 'Lane Visibility');
 		model.setLineVisible(idx, visible);
 		rebuildStrumlineUI();
-	}
-
-	function openCharacterModal(idx:Int):Void {
-		var line = model.chart.strumLines[idx];
-		var modal:UIModal = new UIModal("Set Character", 380, 150);
-		var input:UITextInput = new UITextInput("Character", 380 - 32, (line.characters.length > 0) ? line.characters[0] : '');
-		input.x = 16;
-		input.y = 12;
-		input.controlWidth = UITheme.px(180);
-		modal.body.addChild(input);
-		var ok:UIButton = new UIButton("Apply", 110, 28, function():Void {
-			undoStack.snapshot(model, 'Line Character');
-			model.setLineCharacter(idx, input.text);
-			modal.close();
-			rebuildStrumlineUI();
-		}, true);
-		ok.x = 380 - 126;
-		ok.y = 150 - 40 - 44;
-		modal.body.addChild(ok);
-		modal.open();
 	}
 
 	function applyAudioVolumes():Void {
@@ -2841,35 +2940,40 @@ class ChartingState extends MusicBeatState {
 	function strumlineRow(colW:Float, idx:Int):UIComponent {
 		var line = model.chart.strumLines[idx];
 		var charName:String = (line.characters.length > 0) ? line.characters[0] : '?';
-		var tag:String = line.isPlayer ? "PLR" : (line.id == 'gf' ? "GF" : (line.type == 0 ? "OPP" : "ADD"));
+		// Role at a glance: full word + a colour-coded accent bar (green player, red CPU, pink GF, grey extra).
+		var role:String = line.isPlayer ? "PLAYER" : (line.id == 'gf' ? "GF" : (line.type == 0 ? "CPU" : "EXTRA"));
+		var roleColor:Int = line.isPlayer ? 0x5BD16A : (line.id == 'gf' ? 0xE06FB0 : (line.type == 0 ? 0xE0655A : 0x8A8A8A));
 
 		var card:UIPanel = new UIPanel(colW, UITheme.px(46), CARD);
 		card.corner = UITheme.px(9);
 		card.outline = true;
+		var accent:openfl.display.Shape = new openfl.display.Shape();
+		accent.graphics.beginFill(roleColor);
+		accent.graphics.drawRoundRect(0, 0, UITheme.px(4), UITheme.px(34), UITheme.px(3), UITheme.px(3));
+		accent.graphics.endFill();
+		accent.x = UITheme.px(4);
+		accent.y = UITheme.px(6);
+		card.addChild(accent);
 		var nameLabel:UILabel = new UILabel(line.id, 12, 0);
-		nameLabel.x = UITheme.px(10);
+		nameLabel.x = UITheme.px(14);
 		nameLabel.y = UITheme.px(7);
 		card.addChild(nameLabel);
 		var subLabel:UILabel = new UILabel('$charName - ${line.keyCount}K', 10, 2);
-		subLabel.x = UITheme.px(10);
+		subLabel.x = UITheme.px(14);
 		subLabel.y = UITheme.px(25);
 		card.addChild(subLabel);
 		var eye:UICheckbox = new UICheckbox("", UITheme.px(20), line.visible, function(v:Bool):Void toggleLineVisible(idx, v));
-		eye.tooltip = "Show this lane in the grid";
+		eye.tooltip = "Render this lane's arrows in gameplay (off = silent auto-sing, like GF)";
 		eye.x = colW - UITheme.px(30);
 		eye.y = (UITheme.px(46) - eye.h) / 2;
 		card.addChild(eye);
-		var tagChip:UIChip = new UIChip(tag);
+		var tagChip:UIChip = new UIChip(role);
 		tagChip.fontSize = 10;
-		tagChip.tooltip = "Line options";
+		tagChip.tooltip = "Edit strumline properties";
 		tagChip.render();
 		tagChip.x = colW - UITheme.px(38) - tagChip.w;
 		tagChip.y = (UITheme.px(46) - tagChip.h) / 2;
-		tagChip.onClick = function():Void {
-			var p = tagChip.localToGlobal(new openfl.geom.Point(0, tagChip.h + 2));
-			var local = uiRoot.popupLayer.globalToLocal(p);
-			openStrumlineMenu(idx, local.x, local.y);
-		};
+		tagChip.onClick = function():Void openStrumlineModal(idx);
 		card.addChild(tagChip);
 		return card;
 	}
@@ -3324,6 +3428,23 @@ class ChartingState extends MusicBeatState {
 			gotoSection(editSection - 1);
 		else if (EditorKeybinds.justPressed('section_next'))
 			gotoSection(editSection + 1);
+
+		if (EditorKeybinds.justPressed('section_copy'))
+			copySection();
+		if (EditorKeybinds.justPressed('section_swap'))
+			swapSection();
+		if (EditorKeybinds.justPressed('section_duet'))
+			duetSection();
+		if (EditorKeybinds.justPressed('section_mirror'))
+			mirrorSection();
+		if (EditorKeybinds.justPressed('section_copy_prev'))
+			copyLastSection();
+		if (EditorKeybinds.justPressed('section_copy_from'))
+			copyFromNSectionsBack();
+		if (EditorKeybinds.justPressed('section_clear'))
+			clearSection();
+		if (EditorKeybinds.justPressed('adapt_notes'))
+			adaptNotesToSnap();
 
 		if (EditorKeybinds.justPressed('goto_start'))
 			gotoSection(0);

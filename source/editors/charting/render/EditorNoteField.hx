@@ -120,6 +120,10 @@ final class EditorNoteField {
 	/** Waveform overlay toggle (needs `waveSource`). **/
 	public var waveEnabled:Bool = false;
 
+	/** Reveal gameplay-hidden lines (e.g. GF) in the grid so they can be charted (their character icon
+		marks the column). Their saved `visible` flag is untouched, so they stay silent in gameplay. **/
+	public var showHiddenLines:Bool = false;
+
 	/** The sound sampled for the waveform (inst or a vocal track). **/
 	public var waveSource(default, set):flixel.sound.FlxSound = null;
 
@@ -530,7 +534,7 @@ final class EditorNoteField {
 		var li:Int = 0;
 		while (li < lines.length) {
 			var line:StrumLineData = lines[li];
-			if (line.visible) {
+			if (line.visible || showHiddenLines) {
 				var kc:Int = (line.keyCount == model.chart.keyCount) ? effKc : line.keyCount;
 				var c:Int = 0;
 				while (c < kc) {

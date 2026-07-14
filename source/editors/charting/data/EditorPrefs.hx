@@ -32,6 +32,10 @@ final class EditorPrefs {
 	/** Single-dock layout toggle (right dock folded into the rail). **/
 	public static var combinedDock:Bool = false;
 
+	/** Reveal gameplay-hidden lines (e.g. the GF line) in the grid so they can be charted, without
+		flipping their saved `visible` flag -- they stay silent/hidden in gameplay. **/
+	public static var showHiddenLines:Bool = false;
+
 	/** Persisted grid snap index (into `SnapGrid.SNAPS`). **/
 	public static var snapIndex:Int = 3;
 
@@ -114,6 +118,8 @@ final class EditorPrefs {
 			downscroll = d.downscroll;
 		if (d.combinedDock != null)
 			combinedDock = d.combinedDock;
+		if (d.showHiddenLines != null)
+			showHiddenLines = d.showHiddenLines;
 		if (d.snapIndex != null)
 			snapIndex = d.snapIndex;
 		if (d.zoomIndex != null)
@@ -159,6 +165,7 @@ final class EditorPrefs {
 			quantColors: quantColors,
 			downscroll: downscroll,
 			combinedDock: combinedDock,
+			showHiddenLines: showHiddenLines,
 			snapIndex: snapIndex,
 			zoomIndex: zoomIndex,
 			uiScale: uiScale,
