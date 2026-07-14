@@ -3,6 +3,12 @@ package editors;
 import backend.SongChart;
 import backend.SongChart.SongNote;
 import editors.charting.EditorShell;
+import editors.charting.render.EditorNoteField.StrumHeader;
+import objects.HealthIcon;
+import openfl.display.Bitmap;
+import openfl.display.BitmapData;
+import openfl.geom.ColorTransform;
+import openfl.geom.Rectangle;
 import editors.charting.audio.FlxChartAudio;
 import editors.charting.audio.IChartAudio;
 import editors.charting.data.ChartEditorModel;
@@ -146,6 +152,16 @@ class ChartingState extends MusicBeatState {
 	var metronomeChip:UIChip;
 	var hitsoundsChip:UIChip;
 	var vortexChip:UIChip;
+
+	/** UI-layer health-icon bitmaps drawn over each strumline header (pooled), + a name->bitmap cache. **/
+	static inline var STRUM_ICON_SIZE:Float = 44;
+
+	static var ICON_ACTIVE:ColorTransform = new ColorTransform(1, 1, 1); // camera target -> full brightness
+	static var ICON_DIMMED:ColorTransform = new ColorTransform(0.4, 0.4, 0.4); // others -> darkened
+
+	var strumIconBitmaps:Array<Bitmap> = [];
+
+	var iconBitmapCache:Map<String, BitmapData> = new Map();
 	var quantChip:UIChip;
 	var downscrollChip:UIChip;
 
@@ -2203,15 +2219,108 @@ class ChartingState extends MusicBeatState {
 		buildCharacterCard(flow, colW);
 	}
 
+	/**
+		Draws one UI-layer health-icon bitmap over each strumline header. The area above the strumlines
+		is the SmidrUI menu bar, so a flixel icon there would be hidden; these live in the UI layer, and
+		field game-pixels map 1:1 to UI units (the root is scaled by the same scale mode).
+	**/
+	function syncStrumIcons():Void {
+		if (noteField == null || uiRoot == null)
+			return;
+
+		var headers:Array<StrumHeader> = noteField.strumlineHeaders();
+		var topY:Float = noteField.topEdge();
+		var camTarget:Int = model.cameraTargetAt(editSection);
+
+		var i:Int = 0;
+		for (h in headers) {
+			var bd:BitmapData = iconBitmap(h.char);
+			var bmp:Bitmap = strumIcon(i);
+			i++;
+			if (bd == null) {
+				bmp.visible = false;
+				continue;
+			}
+			bmp.bitmapData = bd;
+			uiRoot.content.addChild(bmp); // keep it in the display list, above the field
+
+			// The sheet may be a 2-frame icon (normal | losing); show only the first square frame.
+			var frames:Int = (bd.height > 0) ? Math.round(bd.width / bd.height) : 1;
+			if (frames < 1)
+				frames = 1;
+			var frameW:Float = bd.width / frames;
+			bmp.scrollRect = new Rectangle(0, 0, frameW, bd.height);
+
+			var scale:Float = STRUM_ICON_SIZE / bd.height;
+			bmp.scaleX = bmp.scaleY = scale;
+			bmp.x = h.cx - (frameW * scale) * 0.5;
+			bmp.y = topY + 8; // header row at the top INSIDE the field (no room above it -- that's the menu bar)
+			// Camera-target cue: the current target strumline stays bright, the rest are darkened.
+			bmp.transform.colorTransform = (h.line == camTarget) ? ICON_ACTIVE : ICON_DIMMED;
+			bmp.visible = true;
+		}
+		while (i < strumIconBitmaps.length)
+			strumIconBitmaps[i++].visible = false;
+	}
+
+	function strumIcon(idx:Int):Bitmap {
+		while (idx >= strumIconBitmaps.length) {
+			var b:Bitmap = new Bitmap();
+			b.smoothing = true;
+			uiRoot.content.addChild(b);
+			strumIconBitmaps.push(b);
+		}
+		return strumIconBitmaps[idx];
+	}
+
+	/**
+		A character's health-icon bitmap (its first/normal frame), cached by character name. Loaded
+		straight from the icon asset and cropped -- `updateFramePixels()` is unreliable on the hxcpp
+		tile renderer for an undrawn sprite.
+	**/
+	function iconBitmap(char:String):BitmapData {
+		if (char == null || char == '')
+			char = model.chart.player1;
+		if (char == null || char == '')
+			return null;
+		if (iconBitmapCache.exists(char))
+			return iconBitmapCache.get(char);
+
+		var bd:BitmapData = null;
+		try {
+			// HealthIcon resolves the icon (icon-$name / icon-face fallbacks) and loads the sheet. Use its
+			// texture DIRECTLY -- a GPU texture displays fine; only CPU read-back (copyPixels) comes out
+			// blank on the hxcpp tile renderer. The sheet is Paths-cached, so it stays valid.
+			var icon:HealthIcon = new HealthIcon(resolveIconName(char));
+			if (icon.graphic != null)
+				bd = icon.graphic.bitmap;
+		} catch (_:Dynamic) {}
+		iconBitmapCache.set(char, bd);
+		return bd;
+	}
+
+	/** Resolves a character's health-icon name from its json (`healthicon`), falling back to the name. **/
+	function resolveIconName(char:String):String {
+		if (char == null || char == '')
+			return 'face';
+		try {
+			var path:String = Paths.getPath('characters/$char.json');
+			#if MODS_ALLOWED
+			var raw:String = File.getContent(path);
+			#else
+			var raw:String = openfl.utils.Assets.getText(path);
+			#end
+			var json:Dynamic = haxe.Json.parse(raw);
+			if (json != null && json.healthicon != null)
+				return json.healthicon;
+		} catch (_:Dynamic) {}
+		return char;
+	}
+
 	function buildCharacterCard(flow:DockFlow, colW:Float):Void {
 		var card:UIPanel = new UIPanel(colW, UITheme.px(104), CARD);
 		card.corner = UITheme.px(10);
 		card.outline = true;
-		var charChip:UIChip = new UIChip("PLAYER - " + model.chart.player1);
-		charChip.x = UITheme.px(10);
-		charChip.y = UITheme.px(10);
-		charChip.onClick = todo("Character preview isn't implemented yet");
-		card.addChild(charChip);
 		flow.add(card);
 	}
 
@@ -2835,6 +2944,8 @@ class ChartingState extends MusicBeatState {
 	override function update(elapsed:Float):Void {
 		super.update(elapsed);
 
+		syncStrumIcons();
+
 		if (!fileDialog.completed)
 			return;
 
@@ -3276,6 +3387,10 @@ class ChartingState extends MusicBeatState {
 			audio.destroy();
 		if (noteField != null)
 			noteField.dispose();
+		for (b in strumIconBitmaps)
+			if (b.parent != null)
+				b.parent.removeChild(b);
+		strumIconBitmaps = [];
 		FlxG.mouse.useSystemCursor = false;
 		FlxG.signals.gameResized.remove(onGameResized);
 		UIToast.reset();

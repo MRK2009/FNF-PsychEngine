@@ -642,6 +642,30 @@ final class EditorNoteField {
 		}
 	}
 
+	/** The field's top edge in game pixels (where the host parks the strumline icon headers). **/
+	public function topEdge():Float
+		return fy;
+
+	/**
+		One entry per visible strumline: the game-pixel center-x of its lanes and its primary character
+		name. The host renders a UI-layer health-icon bitmap over each (the area above the strumlines is
+		the SmidrUI menu bar, so a flixel sprite there would be hidden).
+	**/
+	public function strumlineHeaders():Array<StrumHeader> {
+		var out:Array<StrumHeader> = [];
+		var lane:Int = 1; // skip the event lane
+		while (lane < laneLine.length) {
+			var li:Int = laneLine[lane];
+			var start:Int = lane;
+			while (lane < laneLine.length && laneLine[lane] == li)
+				lane++;
+			var last:Int = lane - 1;
+			var chars:Array<String> = (li >= 0 && li < model.chart.strumLines.length) ? model.chart.strumLines[li].characters : null;
+			out.push({cx: (laneX[start] + laneX[last] + cell) / 2, char: (chars != null && chars.length > 0) ? chars[0] : '', line: li});
+		}
+		return out;
+	}
+
 	function countGaps():Int {
 		var gaps:Int = 0;
 		var i:Int = 1;
@@ -1470,3 +1494,5 @@ final class EditorNoteField {
 		releaseAll();
 	}
 }
+
+typedef StrumHeader = {cx:Float, char:String, line:Int};
