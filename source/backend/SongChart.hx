@@ -51,6 +51,11 @@ typedef ChartSection = {
 	var changeBPM:Bool;
 	var beats:Float;
 	var denominator:Int;
+
+	/** The section's effective (absolute) base scroll speed. Carries the running value like `bpm`;
+		`changeSpeed` marks the sections that actually override it (inherited otherwise). **/
+	@:optional var speed:Float;
+	@:optional var changeSpeed:Bool;
 }
 
 /**
@@ -184,6 +189,7 @@ class SongChart {
 
 		var baseKeyCount:Int = Mania.resolveKeyCount(song.keyCount);
 		var daBpm:Float = song.bpm;
+		var daSpeed:Float = song.speed;
 		var curKeyCount:Int = baseKeyCount;
 		var sectionStartTime:Float = 0;
 		var secIndex:Int = 0;
@@ -191,6 +197,9 @@ class SongChart {
 		for (section in song.notes) {
 			if (section.changeBPM == true && section.bpm != null && daBpm != section.bpm)
 				daBpm = section.bpm;
+
+			if (section.changeScrollSpeed == true && section.scrollSpeed != null)
+				daSpeed = section.scrollSpeed;
 
 			// Step length (16th) for this section's BPM; sustains quantise to whole steps.
 			var stepMs:Float = (60 / daBpm * 1000) / 4;
@@ -246,7 +255,9 @@ class SongChart {
 				bpm: daBpm,
 				changeBPM: (section.changeBPM == true),
 				beats: beats,
-				denominator: denom
+				denominator: denom,
+				speed: daSpeed,
+				changeSpeed: (section.changeScrollSpeed == true && section.scrollSpeed != null)
 			});
 
 			sectionStartTime += (beats * Conductor.stepsPerBeat(denom)) * stepMs;
@@ -345,19 +356,25 @@ class SongChart {
 		}
 
 		var daBpm:Float = chart.bpm;
+		var daSpeed:Float = chart.speed;
 		var rawSecs:Array<Dynamic> = json.sections;
 		if (rawSecs != null) {
 			for (s in rawSecs) {
 				var changeBPM:Bool = (s.changeBPM == true);
 				if (changeBPM && s.bpm != null)
 					daBpm = s.bpm;
+				var changeSpeed:Bool = (s.changeSpeed == true && s.speed != null);
+				if (changeSpeed)
+					daSpeed = s.speed;
 				var ts:Array<Dynamic> = s.timeSignature;
 				chart.sections.push({
 					cameraTarget: (s.cameraTarget != null) ? Std.int(s.cameraTarget) : 0,
 					bpm: daBpm,
 					changeBPM: changeBPM,
 					beats: (ts != null && ts.length > 0) ? ts[0] : 4,
-					denominator: (ts != null && ts.length > 1) ? ts[1] : 4
+					denominator: (ts != null && ts.length > 1) ? ts[1] : 4,
+					speed: daSpeed,
+					changeSpeed: changeSpeed
 				});
 			}
 		}
@@ -442,6 +459,10 @@ class SongChart {
 			if (sc.changeBPM) {
 				sec.changeBPM = true;
 				sec.bpm = sc.bpm;
+			}
+			if (sc.changeSpeed == true && sc.speed != null) {
+				sec.changeScrollSpeed = true;
+				sec.scrollSpeed = sc.speed;
 			}
 			if (sc.denominator != 4) {
 				sec.sectionDenominator = sc.denominator;

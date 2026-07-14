@@ -278,7 +278,7 @@ class MobileChartingState extends MusicBeatState {
 
 			var speed:UIStepper = new UIStepper('Scroll Speed', w, model.chart.speed, 0.1, function(v:Float):Void {
 				undoStack.snapshotCoalesced(model, 'Speed');
-				model.chart.speed = v;
+				model.setScrollSpeed(0, v);
 			});
 			speed.min = 0.1;
 			speed.max = 10;

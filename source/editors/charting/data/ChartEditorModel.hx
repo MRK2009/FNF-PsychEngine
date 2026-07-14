@@ -157,6 +157,14 @@ final class ChartEditorModel {
 		return chart.sections[clampSec(sec)].bpm;
 	}
 
+	/** The section's effective (absolute) base scroll speed -- the running value, inherited like BPM. **/
+	public function scrollSpeedAt(sec:Int):Float {
+		if (chart == null || chart.sections.length == 0)
+			return (chart != null) ? chart.speed : 1;
+		var s:Null<Float> = chart.sections[clampSec(sec)].speed;
+		return (s != null) ? s : chart.speed;
+	}
+
 	/** The section's beats-per-section (time signature numerator). **/
 	public function beatsAt(sec:Int):Float {
 		return (sectionCount() > 0) ? chart.sections[clampSec(sec)].beats : 4;
@@ -269,6 +277,31 @@ final class ChartEditorModel {
 			restorePositions(positions);
 		if (adapt == ADAPT_SNAP)
 			snapAllNotes(16);
+		markDirty();
+	}
+
+	/**
+		Sets the section's base scroll speed, propagating through inheriting sections (like `setBpm`,
+		but scroll speed doesn't affect timing so no note adaptation/rebuild is needed). Section 0 is the
+		song base (`chart.speed`); later sections become explicit overrides that inherit forward.
+	**/
+	public function setScrollSpeed(sec:Int, v:Float):Void {
+		if (sectionCount() == 0 || v <= 0)
+			return;
+		sec = clampSec(sec);
+		var secs:Array<ChartSection> = chart.sections;
+
+		if (sec == 0)
+			chart.speed = v;
+		var i:Int = sec;
+		var n:Int = secs.length;
+		while (i < n) {
+			if (i > sec && secs[i].changeSpeed == true)
+				break;
+			secs[i].speed = v;
+			i++;
+		}
+		secs[sec].changeSpeed = (sec > 0 && secs[sec].speed != scrollSpeedAt(sec - 1));
 		markDirty();
 	}
 
@@ -477,7 +510,9 @@ final class ChartEditorModel {
 				bpm: (last != null) ? last.bpm : chart.bpm,
 				changeBPM: false,
 				beats: (last != null) ? last.beats : 4,
-				denominator: (last != null) ? last.denominator : 4
+				denominator: (last != null) ? last.denominator : 4,
+				speed: (last != null && last.speed != null) ? last.speed : chart.speed,
+				changeSpeed: false
 			});
 			grew = true;
 		}

@@ -491,7 +491,7 @@ class ChartingState extends MusicBeatState {
 		bpmStep.value = model.bpmAt(sec);
 		beatsStep.value = model.beatsAt(sec);
 		denomDrop.select(denomIndex(model.denominatorAt(sec)));
-		speedStep.value = model.chart.speed;
+		speedStep.value = model.scrollSpeedAt(sec);
 		velStep.value = model.velocityAt(sec);
 		keysStep.value = model.keyCountAt(sec);
 	}
@@ -1500,8 +1500,7 @@ class ChartingState extends MusicBeatState {
 
 		var speed:UIStepper = new UIStepper("Scroll Speed", colW, chart.speed, 0.1, function(v:Float):Void {
 			undoStack.snapshotCoalesced(model, 'Scroll Speed');
-			chart.speed = v;
-			model.markDirty();
+			model.setScrollSpeed(0, v);
 		});
 		speed.min = 0.1;
 		speed.max = 10;
@@ -1918,10 +1917,9 @@ class ChartingState extends MusicBeatState {
 
 		speedStep = new UIStepper("Scroll Speed", colW, 1.0, 0.1, function(v:Float):Void {
 			undoStack.snapshotCoalesced(model, 'Scroll Speed');
-			model.chart.speed = v;
-			model.markDirty();
+			model.setScrollSpeed(editSection, v);
 		});
-		speedStep.tooltip = "Song-level scroll speed";
+		speedStep.tooltip = "Base scroll speed, inherited from the previous section until changed";
 		speedStep.min = 0.1;
 		speedStep.max = 10;
 		speedStep.decimals = 1;

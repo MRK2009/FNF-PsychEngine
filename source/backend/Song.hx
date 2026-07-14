@@ -45,7 +45,7 @@ class Song {
 		'id', 'type', 'characters', 'keyCount', 'visible', 'vocalsSuffix', // strumline
 		'song', 'speed', 'needsVoices', 'offset', 'player1', 'player2', 'gfVersion', 'stage', // metadata
 		'arrowSkin', 'splashSkin', 'disableNoteRGB', 'gameOverChar', 'gameOverSound', 'gameOverLoop', 'gameOverEnd',
-		'timeSignature', 'changeBPM', 'bpm' // shared (metadata + section)
+		'timeSignature', 'changeBPM', 'bpm', 'changeSpeed', // shared (metadata + section)
 	];
 
 	public static function loadFromJson(jsonInput:String, ?folder:String):SongChart {
@@ -239,6 +239,10 @@ class Song {
 			if (sc.changeBPM) {
 				o.changeBPM = true;
 				o.bpm = sc.bpm;
+			}
+			if (sc.changeSpeed == true && sc.speed != null) {
+				o.changeSpeed = true;
+				o.speed = sc.speed;
 			}
 			sections.push(o);
 		}

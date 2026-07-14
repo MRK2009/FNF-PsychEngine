@@ -3999,12 +3999,14 @@ class PlayState extends MusicBeatState {
 				setOnScripts('stepCrochet', Conductor.stepCrochet);
 			}
 
-			// Per-section scroll speed override (gated by changeScrollSpeed). Skipped
-			// under the constant-speed mod, matching the Change Scroll Speed event.
+			// Per-section scroll speed override (gated by changeScrollSpeed). `scrollSpeed` is the section's
+			// absolute base speed (like the song `speed`), so it replaces the base, scaled by the player's
+			// scroll-speed modifier -- mirroring the initial multiplicative setup. Skipped under the
+			// constant-speed mod, matching the Change Scroll Speed event.
 			if (SONG.notes[curSection].changeScrollSpeed == true
 				&& SONG.notes[curSection].scrollSpeed != null
 				&& songSpeedType != "constant") {
-				songSpeed = SONG.speed * ClientPrefs.getGameplaySetting('scrollspeed') * SONG.notes[curSection].scrollSpeed;
+				songSpeed = SONG.notes[curSection].scrollSpeed * ClientPrefs.getGameplaySetting('scrollspeed');
 			}
 			setOnScripts('mustHitSection', SONG.notes[curSection].mustHitSection);
 			setOnScripts('altAnim', SONG.notes[curSection].altAnim);
