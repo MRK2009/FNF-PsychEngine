@@ -33,7 +33,7 @@ class MobileEditorShell {
 
 	// Layout constants (logical px on the 1280x720 game surface).
 	public static inline var RAIL_W:Float = 150;
-	public static inline var RAIL_BTN_H:Float = 62;
+	public static inline var RAIL_BTN_H:Float = 56;
 	public static inline var STRIP_H:Float = 36;
 
 	final mainUI:Sprite;
@@ -137,7 +137,7 @@ class MobileEditorShell {
 	}
 
 	/** Vertical breathing room before the next rail button (visual grouping). **/
-	public function railGap(left:Bool, h:Float = 18):Void {
+	public function railGap(left:Bool, h:Float = 12):Void {
 		if (left)
 			leftY += h;
 		else
@@ -146,14 +146,16 @@ class MobileEditorShell {
 
 	function railButton(rail:Sprite, label:String, cb:Void->Void, accent:Bool, left:Bool):UIButton {
 		var b:UIButton = new UIButton(label, RAIL_W - 16, RAIL_BTN_H, cb, accent);
-		b.fontSize = 15;
+		// The mobile preset scales button fonts ~1.4x; 15 overflows the fixed rail width and clips
+		// ("SETTINGS", "MULTI: OFF"). 12 lands at ~17 effective, which fits the longest labels.
+		b.fontSize = 12;
 		b.x = 8;
 		if (left) {
 			b.y = leftY;
-			leftY += RAIL_BTN_H + 10;
+			leftY += RAIL_BTN_H + 6;
 		} else {
 			b.y = rightY;
-			rightY += RAIL_BTN_H + 10;
+			rightY += RAIL_BTN_H + 6;
 		}
 		rail.addChild(b);
 		return b;
@@ -227,7 +229,7 @@ class MobileEditorShell {
 			var b:UIButton = new UIButton(item.label, btnW, btnH, item.cb, !danger);
 			if (danger)
 				b.danger = true;
-			b.fontSize = 15;
+			b.fontSize = 12;
 			b.x = actionX;
 			b.y = pad;
 			actionBar.addChild(b);

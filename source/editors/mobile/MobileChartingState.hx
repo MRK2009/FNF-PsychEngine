@@ -53,6 +53,7 @@ class MobileChartingState extends MusicBeatState {
 	var undoStack:UndoStack;
 	var selection:SelectionModel;
 	var clipboard:ClipboardModel;
+	final fileDialog:editors.content.FileDialogHandler = new editors.content.FileDialogHandler();
 	var audio:IChartAudio;
 	var noteField:EditorNoteField;
 
@@ -96,13 +97,7 @@ class MobileChartingState extends MusicBeatState {
 
 		var chart:SongChart = PlayState.SONG;
 		if (chart == null || chart.sections.length == 0) {
-			chart = new SongChart();
-			chart.song = 'Test';
-			chart.bpm = 150;
-			chart.speed = 1;
-			chart.keyCount = 4;
-			chart.strumLines.push({index: 0, id: 'opponent', type: 0, isPlayer: false, visible: true, characters: ['dad'], keyCount: 4});
-			chart.strumLines.push({index: 1, id: 'player', type: 1, isPlayer: true, visible: true, characters: ['bf'], keyCount: 4});
+			chart = editors.ChartingState.makeBlankChart();
 			model.load(chart);
 			model.ensureSectionCount(16);
 			PlayState.SONG = chart;
@@ -128,6 +123,7 @@ class MobileChartingState extends MusicBeatState {
 		// The grid: full-screen logical field on its own magnifying camera.
 		noteField = new EditorNoteField(model, selection, 0, 0, FlxG.width, FlxG.height);
 		noteField.setDownscroll(EditorPrefs.downscroll);
+		noteField.typeIndexOf = function(t:String):Int return noteTypes.indexOf(t);
 		noteField.maxTime = audio.loaded ? audio.length : -1;
 		noteField.vortexEnabled = false;
 		noteField.waveEnabled = EditorPrefs.waveform;
@@ -163,11 +159,22 @@ class MobileChartingState extends MusicBeatState {
 		super.create();
 	}
 
+	/** Same list, same ORDER as the desktop editor: badge numbers must mean the same type in both. **/
 	function buildNoteTypes():Void {
-		noteTypes = [''];
+		noteTypes = [];
+		#if MODS_ALLOWED
+		var exts:Array<String> = ['.txt'];
+		#if LUA_ALLOWED
+		exts.push('.lua');
+		#end
+		#if HSCRIPT_ALLOWED
+		exts.push('.hx');
+		#end
+		noteTypes = editors.ChartingState.listEditorFiles('custom_notetypes/', exts);
+		#end
 		for (id => t in NoteDefaults.defaultNoteTypes)
 			if (!noteTypes.contains(t))
-				noteTypes.push(t);
+				noteTypes.insert(id, t);
 	}
 
 	function buildEvents():Void {
@@ -193,12 +200,15 @@ class MobileChartingState extends MusicBeatState {
 		shell.addLeft('UNDO', doUndo);
 		shell.addLeft('REDO', doRedo);
 		shell.addLeft('PASTE', pasteClipboard);
+		shell.railGap(true);
+		shell.addLeft('SAVE', saveChart, true);
 
 		typeBtn = shell.addRight(typeLabel(), openTypePage);
 		snapBtn = shell.addRight('SNAP ${snap.label()}', openSnapPage);
 		shell.addRight('EVENTS', openEventsPage);
 		shell.railGap(false);
 		multiBtn = shell.addRight('MULTI: OFF', toggleMulti);
+		shell.addRight('SEL SECT', selectCurrentSection);
 		shell.addRight('SECTION', openSectionPage);
 		shell.addRight('SETTINGS', openSettingsPage);
 		shell.railGap(false);
@@ -209,6 +219,7 @@ class MobileChartingState extends MusicBeatState {
 			{label: 'DELETE', cb: deleteSelection, danger: true},
 			{label: 'SUS -', cb: function() bumpSelectedSustains(-1)},
 			{label: 'SUS +', cb: function() bumpSelectedSustains(1)},
+			{label: 'TYPE', cb: applyTypeToSelection},
 			{label: 'DONE', cb: function() selection.clear()}
 		]);
 		refreshActionBar();
@@ -224,7 +235,7 @@ class MobileChartingState extends MusicBeatState {
 			'DRAG EMPTY    scroll the chart (flick to fling)',
 			'PINCH         zoom the grid bigger / smaller',
 			'TAP           place a note / select a note',
-			'DRAG A NOTE   move it -- drag its tail to set the sustain',
+			'DRAG A NOTE   top half moves it -- bottom half or its hold bar stretches the sustain',
 			'HOLD A NOTE   delete it',
 			'EVENT LANE    tap to place / edit, hold to remove',
 			'MULTI         tap-add notes, then copy / delete / retype',
@@ -537,6 +548,32 @@ class MobileChartingState extends MusicBeatState {
 			pane.content.addChild(hits);
 			y += 60;
 
+			var rate:UIStepper = new UIStepper('Playback Rate', w, playRate, 0.25, function(v:Float):Void {
+				playRate = v;
+				audio.setRate(playRate);
+			});
+			rate.min = 0.25;
+			rate.max = 2;
+			rate.y = y;
+			pane.content.addChild(rate);
+			y += 60;
+
+			var mInst:UICheckbox = new UICheckbox('Mute Instrumental', w, muteInst, function(checked:Bool):Void {
+				muteInst = checked;
+				applyVolumes();
+			});
+			mInst.y = y;
+			pane.content.addChild(mInst);
+			y += 60;
+
+			var mVox:UICheckbox = new UICheckbox('Mute Vocals', w, muteVox, function(checked:Bool):Void {
+				muteVox = checked;
+				applyVolumes();
+			});
+			mVox.y = y;
+			pane.content.addChild(mVox);
+			y += 60;
+
 			// Characters: one row per strumline (name + lane count).
 			var charsHead:UILabel = new UILabel('Characters', 14, 0);
 			charsHead.y = y;
@@ -571,6 +608,25 @@ class MobileChartingState extends MusicBeatState {
 			save.fontSize = 16;
 			save.y = y;
 			pane.content.addChild(save);
+			y += 70;
+
+			var saveAs:UIButton = new UIButton('SAVE AS... (file browser)', w, 60, saveChartAs);
+			saveAs.fontSize = 16;
+			saveAs.y = y;
+			pane.content.addChild(saveAs);
+			y += 70;
+
+			var openBtn:UIButton = new UIButton('OPEN CHART... (file browser)', w, 60, openChart);
+			openBtn.fontSize = 16;
+			openBtn.y = y;
+			pane.content.addChild(openBtn);
+			y += 70;
+
+			var fresh:UIButton = new UIButton('NEW CHART (clears everything)', w, 60, newChart);
+			fresh.danger = true;
+			fresh.fontSize = 16;
+			fresh.y = y;
+			pane.content.addChild(fresh);
 			y += 70;
 
 			return y + 8;
@@ -744,24 +800,35 @@ class MobileChartingState extends MusicBeatState {
 		}
 	}
 
+	// ---- Playback audio ----
+
+	var playRate:Float = 1;
+	var muteInst:Bool = false;
+	var muteVox:Bool = false;
+
+	function applyVolumes():Void {
+		audio.setVolumes(muteInst ? 0 : 1, muteVox ? 0 : 1, muteVox ? 0 : 1);
+	}
+
 	// ---- Note drag (move / set sustain) ----
 
 	var dragNote:SongNote = null;
 	var dragSustain:Bool = false; // grabbed near the tail -> resize the hold instead of moving the note
 
-	/** A press that lands on a note is claimed as a drag: grab the head to move it, the tail to resize. **/
+	/**
+	 * A press that lands on a note is claimed as a drag. The grip decides the mode: the tail-side
+	 * half of the head (or anywhere on the hold bar) stretches the sustain, the rest moves the note.
+	 */
 	function onDragStart(x:Float, y:Float):Bool {
 		if (audio.playing)
 			return false;
-		var hit:SongNote = noteField.noteUnder(worldX(x), worldY(y));
+		var hit:SongNote = noteField.grabUnder(worldX(x), worldY(y));
 		if (hit == null)
 			return false;
 		if (!selection.notes.contains(hit))
 			selection.setAll([hit]);
 		dragNote = hit;
-		// Time under the finger vs the note's head/tail: closer to the tail (and it has length) => resize.
-		var grabT:Float = noteField.timeAtY(worldY(y));
-		dragSustain = (hit.length > 0 && Math.abs(grabT - (hit.time + hit.length)) < Math.abs(grabT - hit.time));
+		dragSustain = noteField.grabbedTail;
 		undoStack.snapshot(model, dragSustain ? 'Sustain' : 'Move Note');
 		return true;
 	}
@@ -794,6 +861,27 @@ class MobileChartingState extends MusicBeatState {
 
 	function refreshActionBar():Void {
 		shell.showActionBar(selection.count > 0);
+	}
+
+	/** Selects every note in the section under the playhead, for bulk action-bar edits. **/
+	function selectCurrentSection():Void {
+		var sec:Int = model.sectionAt(noteField.viewTime);
+		var start:Float = model.sectionStart(sec);
+		var end:Float = model.sectionEnd(sec);
+		var picked:Array<SongNote> = [];
+		var list:Array<SongNote> = model.chart.noteList;
+		var i:Int = model.firstNoteIndex(start);
+		var n:Int = list.length;
+		while (i < n) {
+			var note:SongNote = list[i];
+			if (note.time >= end)
+				break;
+			picked.push(note);
+			i++;
+		}
+		selection.setAll(picked);
+		refreshActionBar();
+		UIToast.show(picked.length > 0 ? 'Selected ${picked.length} notes' : 'Section is empty');
 	}
 
 	function deleteSelection():Void {
@@ -913,10 +1001,73 @@ class MobileChartingState extends MusicBeatState {
 	}
 
 	/** Launches the edited chart in gameplay (charting mode), like the desktop editor's playtest. **/
+	/** Blanks the chart in place, keeping the loaded song's audio (mirrors the desktop New Chart). **/
+	function newChart():Void {
+		backend.Song.chartPath = null;
+		adoptChart(editors.ChartingState.makeBlankChart());
+		UIToast.show('New chart');
+	}
+
+	/** Swaps the whole editor onto a different chart (new/open), reloading its song's audio. **/
+	function adoptChart(chart:SongChart):Void {
+		if (audio.playing)
+			audio.pause();
+		undoStack.reset();
+		selection.clear();
+		PlayState.SONG = chart;
+		model.load(chart);
+		model.ensureSectionCount(16);
+		audio.load(backend.Song.loadedSongName, chart.needsVoices);
+		audio.setVolumes(EditorPrefs.instVol, EditorPrefs.mainVol, EditorPrefs.oppVol);
+		audio.setRate(playRate);
+		if (audio.loaded) {
+			var guard:Int = 0;
+			while (model.endTime < audio.length && guard++ < 4000)
+				model.ensureSectionCount(model.sectionCount() + 1);
+			noteField.waveSource = audio.waveformSound(0);
+		}
+		noteField.maxTime = audio.loaded ? audio.length : -1;
+		noteField.onModelChanged();
+		noteField.setViewTime(0);
+		refreshActionBar();
+		updateStatus();
+		shell.closeDrawer();
+	}
+
+	/** Opens a chart through the system file picker (any browsable location). **/
+	function openChart():Void {
+		fileDialog.open('chart.json', 'Open a chart', null, function():Void {
+			try {
+				var loaded:SongChart = backend.Song.parseJSON(fileDialog.data, fileDialog.path);
+				if (loaded == null || loaded.sections.length == 0) {
+					UIToast.show('Not a valid chart file');
+					return;
+				}
+				// A picked document has no filesystem path; the rail SAVE keeps writing charts/<song>.json.
+				backend.Song.chartPath = null;
+				backend.Song.loadedSongName = loaded.song;
+				adoptChart(loaded);
+				UIToast.show('Loaded: ${loaded.song}');
+			} catch (e:Dynamic)
+				UIToast.show('Error loading chart: $e');
+		});
+	}
+
+	/** Saves the chart through the system file picker (Downloads, Drive, anywhere browsable). **/
+	function saveChartAs():Void {
+		var data:String = PsychJsonPrinter.print(backend.Song.buildPsychV2(cast model.chart, model.chart), backend.Song.PSYCH_V2_INLINE,
+			backend.Song.PSYCH_V2_KEY_ORDER);
+		fileDialog.save(Paths.formatToSongPath(model.chart.song) + '.json', data,
+			function():Void UIToast.show('Saved: ${fileDialog.path}'),
+			null,
+			function():Void UIToast.show('Save failed'));
+	}
+
 	function playtest():Void {
 		if (audio.playing)
 			audio.pause();
 		PlayState.chartingMode = true;
+		PlayState.chartingFromMobile = true;
 		FlxG.mouse.visible = false;
 		backend.StageData.loadDirectory(PlayState.SONG);
 		states.LoadingState.loadAndSwitchState(new PlayState());
@@ -1025,6 +1176,7 @@ class MobileChartingState extends MusicBeatState {
 	}
 
 	override function destroy():Void {
+		fileDialog.destroy();
 		if (gestures != null)
 			gestures.enabled = false;
 		if (audio != null)

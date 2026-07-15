@@ -344,7 +344,7 @@ class ChartingState extends MusicBeatState {
 		A minimal empty chart: opponent/player/gf strumlines and four default 4/4 sections.
 		@return the chart, ready for `model.load`
 	**/
-	static function makeBlankChart():SongChart {
+	public static function makeBlankChart():SongChart {
 		var chart:SongChart = new SongChart();
 		chart.song = 'Test';
 		chart.bpm = 150;
@@ -620,6 +620,7 @@ class ChartingState extends MusicBeatState {
 		persistentUpdate = false;
 		FlxG.mouse.visible = false;
 		PlayState.chartingMode = true;
+		PlayState.chartingFromMobile = false;
 		backend.StageData.loadDirectory(PlayState.SONG);
 		LoadingState.loadAndSwitchState(new PlayState());
 	}
@@ -2785,7 +2786,7 @@ class ChartingState extends MusicBeatState {
 		@param exts accepted extensions (with dots)
 		@return the deduplicated names
 	**/
-	static function listEditorFiles(folder:String, exts:Array<String>):Array<String> {
+	public static function listEditorFiles(folder:String, exts:Array<String>):Array<String> {
 		var out:Array<String> = [];
 		for (directory in Mods.directoriesWithFile(Paths.getSharedPath(), folder)) {
 			if (!sys.FileSystem.exists(directory))

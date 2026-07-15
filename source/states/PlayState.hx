@@ -213,6 +213,9 @@ class PlayState extends MusicBeatState {
 	public static var changedDifficulty:Bool = false;
 	public static var chartingMode:Bool = false;
 
+	/** Which chart editor launched the playtest, so End Song returns to the same one. **/
+	public static var chartingFromMobile:Bool = false;
+
 	// Gameplay settings
 	public var healthGain:Float = 1;
 	public var healthLoss:Float = 1;
@@ -1883,7 +1886,10 @@ class PlayState extends MusicBeatState {
 		DiscordClient.resetClientID();
 		#end
 
-		MusicBeatState.switchState(new editors.ChartingState());
+		if (chartingFromMobile)
+			MusicBeatState.switchState(new editors.mobile.MobileChartingState());
+		else
+			MusicBeatState.switchState(new editors.ChartingState());
 	}
 
 	function openCharacterEditor() {

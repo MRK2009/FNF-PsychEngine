@@ -816,6 +816,44 @@ final class EditorNoteField {
 		return null;
 	}
 
+	/** Which grip the last `grabUnder` hit landed on: `true` = stretch the sustain, `false` = move. **/
+	public var grabbedTail(default, null):Bool = false;
+
+	/**
+		The note under a drag press, distinguishing grips (`grabbedTail`): the tail-side half of the
+		head cell and anywhere along the hold bar stretch the sustain -- so a fresh tap note can be
+		pulled into a hold -- while the rest of the head moves the note. The hold bar counts across
+		the full lane width, not just its own few pixels.
+	**/
+	public function grabUnder(gx:Float, gy:Float):SongNote {
+		grabbedTail = false;
+
+		// Heads first, in a pass of their own: a head press must win even when it overlaps some
+		// other note's hold bar.
+		var i:Int = active.length;
+		while (--i >= 0) {
+			var head:NoteSprite = active[i].head;
+			if (head.visible && gx >= head.x && gx < head.x + head.width && gy >= head.y && gy < head.y + head.height) {
+				var mid:Float = head.y + head.height * 0.5;
+				grabbedTail = downscroll ? (gy < mid) : (gy >= mid);
+				return active[i].note;
+			}
+		}
+
+		i = active.length;
+		while (--i >= 0) {
+			var bar:FlxSprite = active[i].sustain;
+			if (bar != null && bar.visible) {
+				var pad:Float = (cell - bar.width) * 0.5;
+				if (gx >= bar.x - pad && gx < bar.x + bar.width + pad && gy >= bar.y && gy < bar.y + bar.height) {
+					grabbedTail = true;
+					return active[i].note;
+				}
+			}
+		}
+		return null;
+	}
+
 	function isRealized(note:SongNote):Bool {
 		var i:Int = active.length;
 		while (--i >= 0)
