@@ -40,10 +40,14 @@ class MediaConverter {
 		var proc:sys.io.Process = currentProc;
 		procMutex.release();
 		if (proc != null) {
-			try
-				Sys.command('taskkill', ['/F', '/T', '/PID', Std.string(proc.getPid())])
-			catch (error:Dynamic)
-				trace('cancel/taskkill failed: $error');
+			try {
+				#if windows
+				Sys.command('taskkill', ['/F', '/T', '/PID', Std.string(proc.getPid())]);
+				#else // macOS / Linux: taskkill doesn't exist
+				Sys.command('kill', ['-9', Std.string(proc.getPid())]);
+				#end
+			} catch (error:Dynamic)
+				trace('cancel/kill failed: $error');
 		}
 		#end
 	}
