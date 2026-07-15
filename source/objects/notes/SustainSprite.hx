@@ -295,7 +295,7 @@ final class SustainSprite extends FlxSprite {
 		var tailCenter:Float = tipAlong - dir * (tailLen * 0.5);
 		var tcx:Float = strum.x + uX * tailCenter + uY * tperp;
 		var tcy:Float = strum.y + uY * tailCenter - uX * tperp;
-		tail.angle = copyAngle ? strum.axisAngle : tail.angle;
+		tail.angle = copyAngle ? strum.axisAngle + offsetAngle : tail.angle;
 		tail.x = tcx - tail.width / 2;
 		tail.y = tcy - tail.height / 2;
 
@@ -326,7 +326,10 @@ final class SustainSprite extends FlxSprite {
 	**/
 	public function clip(consumed:Float, bodyLen:Float):Void {
 		if (data == null || !data.hit || data.length <= 0 || bodyLen <= 0 || consumed <= 0) {
-			clipRect = null;
+			// Only touch clipRect when it's actually set -- assigning it (even null) fires the overridden
+			// set_clipRect, which re-derives `frame` every frame for every un-held hold otherwise.
+			if (clipRect != null)
+				clipRect = null;
 			return;
 		}
 		var frac:Float = consumed / bodyLen;
