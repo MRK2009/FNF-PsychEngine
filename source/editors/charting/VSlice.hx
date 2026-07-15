@@ -359,7 +359,7 @@ class VSlice {
 
 		var charter:String = 'Unknown';
 		if (Reflect.hasField(songData, 'charter'))
-			composer = Reflect.field(songData, 'charter');
+			charter = Reflect.field(songData, 'charter');
 
 		// Has to add all difficulties or it might crash on V-Slice's Freeplay
 		var diffs:Array<String> = null;
@@ -368,7 +368,7 @@ class VSlice {
 		var notesMap:Map<String, Array<VSliceNote>> = [];
 		if (difficultyName == null) // Fill all difficulties to attempt to prevent the song from not showing up on Base Game
 		{
-			var diffs:Array<String> = Difficulty.list.copy();
+			diffs = Difficulty.list.copy();
 			for (num => diff in diffs) {
 				diffs[num] = diff = Paths.formatToSongPath(diff);
 				scrollSpeed.set(diff, songData.speed);
