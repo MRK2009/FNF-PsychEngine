@@ -265,8 +265,7 @@ class MobileChartingState extends MusicBeatState {
 
 			var bpm:UIStepper = new UIStepper('BPM', w, model.chart.bpm, 1, function(v:Float):Void {
 				undoStack.snapshotCoalesced(model, 'BPM');
-				model.chart.bpm = v;
-				model.rebuildTiming();
+				model.setBpm(0, v, EditorPrefs.bpmAdapt);
 				noteField.refreshTiming();
 			});
 			bpm.min = 1;
