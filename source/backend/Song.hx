@@ -46,6 +46,7 @@ class Song {
 		'song', 'speed', 'needsVoices', 'offset', 'player1', 'player2', 'gfVersion', 'stage', // metadata
 		'arrowSkin', 'splashSkin', 'disableNoteRGB', 'gameOverChar', 'gameOverSound', 'gameOverLoop', 'gameOverEnd',
 		'timeSignature', 'changeBPM', 'bpm', 'changeSpeed', // shared (metadata + section)
+		'changeScrollVelocity', 'scrollVelocity', 'changeKeyCount', // section (SV + key-count changes)
 	];
 
 	public static function loadFromJson(jsonInput:String, ?folder:String):SongChart {
@@ -229,6 +230,14 @@ class Song {
 			notes.push(o);
 		}
 
+		// Section start times, to match the time-indexed SV / key-count change lists back onto sections.
+		var starts:Array<Float> = [];
+		var acc:Float = 0.0;
+		for (sc in chart.sections) {
+			starts.push(acc);
+			acc += (sc.beats * Conductor.stepsPerBeat(sc.denominator)) * ((60 / sc.bpm * 1000) / 4);
+		}
+
 		var sections:Array<Dynamic> = [];
 		for (i in 0...chart.sections.length) {
 			var sc:backend.SongChart.ChartSection = chart.sections[i];
@@ -244,6 +253,21 @@ class Song {
 				o.changeSpeed = true;
 				o.speed = sc.speed;
 			}
+			// A scroll-velocity point / key-count change that lands on this section's start is emitted here so
+			// the psych_v2 save round-trips them (fromV2 reads them back into scrollPoints/keyCountChanges).
+			var st:Float = starts[i];
+			for (sp in chart.scrollPoints)
+				if (Math.abs(sp.time - st) <= 1.0) {
+					o.changeScrollVelocity = true;
+					o.scrollVelocity = sp.vel;
+					break;
+				}
+			for (kcc in chart.keyCountChanges)
+				if (Math.abs(kcc.time - st) <= 1.0) {
+					o.changeKeyCount = true;
+					o.keyCount = kcc.count;
+					break;
+				}
 			sections.push(o);
 		}
 

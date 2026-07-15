@@ -366,6 +366,7 @@ class SongChart {
 
 		var daBpm:Float = chart.bpm;
 		var daSpeed:Float = chart.speed;
+		var secStart:Float = 0.0;
 		var rawSecs:Array<Dynamic> = json.sections;
 		if (rawSecs != null) {
 			for (s in rawSecs) {
@@ -376,15 +377,24 @@ class SongChart {
 				if (changeSpeed)
 					daSpeed = s.speed;
 				var ts:Array<Dynamic> = s.timeSignature;
+				var beats:Float = (ts != null && ts.length > 0) ? ts[0] : 4;
+				var denom:Int = (ts != null && ts.length > 1) ? ts[1] : 4;
 				chart.sections.push({
 					cameraTarget: (s.cameraTarget != null) ? Std.int(s.cameraTarget) : 0,
 					bpm: daBpm,
 					changeBPM: changeBPM,
-					beats: (ts != null && ts.length > 0) ? ts[0] : 4,
-					denominator: (ts != null && ts.length > 1) ? ts[1] : 4,
+					beats: beats,
+					denominator: denom,
 					speed: daSpeed,
 					changeSpeed: changeSpeed
 				});
+				// Per-section SV / mid-song key-count changes round-trip through the time-indexed lists
+				// (mirrors fromLegacy), keyed on the section's start time.
+				if (s.changeScrollVelocity == true && s.scrollVelocity != null)
+					chart.scrollPoints.push(new ScrollPoint(secStart, s.scrollVelocity));
+				if (s.changeKeyCount == true && s.keyCount != null)
+					chart.keyCountChanges.push({time: secStart, count: Mania.clamp(Std.int(s.keyCount))});
+				secStart += (beats * Conductor.stepsPerBeat(denom)) * ((60 / daBpm * 1000) / 4);
 			}
 		}
 		// Legacy section view for scripts/editor (native `noteList`/`sections` remain authoritative for play).
