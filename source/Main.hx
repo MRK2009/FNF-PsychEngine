@@ -114,6 +114,7 @@ class Main extends Sprite {
 		// consumed at the activity level (art/android/MainActivity.java) and polled
 		// into a per-frame flag here instead of going through FlxG.android.
 		FlxG.signals.preUpdate.add(mobile.backend.BackButton.poll);
+		FlxG.signals.preUpdate.add(mobile.backend.DocumentPicker.poll);
 		smidr.UIRoot.onLongPress = (_) -> if (ClientPrefs.data.vibration) Haptic.vibrateOneShot(0.03, 1, 0.4);
 		// Game Mode (Battery/Performance) is flipped from the Game Dashboard while we're
 		// backgrounded -- re-apply the framerate policy every time focus comes back.

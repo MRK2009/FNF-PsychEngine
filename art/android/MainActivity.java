@@ -29,6 +29,144 @@ public class MainActivity extends org.haxe.lime.GameActivity {
 	// corner, so folding it into all four insets would cost every edge a radius it doesn't need.
 	public static volatile int cornerRadius = 0;
 
+	// ---- Storage Access Framework (system file picker) ----
+	//
+	// Open/save through Android's document picker, driven from Haxe by mobile.backend.DocumentPicker.
+	// The document arrives as a content:// URI, so all I/O happens here through the ContentResolver;
+	// Haxe polls safCounter (like backCount) and reads the result from these statics. Text-only:
+	// charts are JSON, and JNI strings are far more dependable than byte arrays.
+
+	private static final int REQ_SAF_OPEN = 0x5AF0;
+	private static final int REQ_SAF_SAVE = 0x5AF1;
+
+	/** 1 = done, 2 = cancelled, 3 = error. Valid once safCounter bumps. */
+	public static volatile int safStatus = 0;
+
+	public static volatile int safCounter = 0;
+	public static String safName = "";
+	public static String safData = "";
+	private static String pendingSaveData = null;
+
+	public static void openDocument (final String mimeType) {
+
+		final android.app.Activity activity = org.haxe.extension.Extension.mainActivity;
+		if (activity == null) { safStatus = 3; safCounter++; return; }
+
+		activity.runOnUiThread (new Runnable () { public void run () {
+
+			try {
+
+				Intent intent = new Intent (Intent.ACTION_OPEN_DOCUMENT);
+				intent.addCategory (Intent.CATEGORY_OPENABLE);
+				intent.setType (mimeType == null ? "*/*" : mimeType);
+				activity.startActivityForResult (intent, REQ_SAF_OPEN);
+
+			} catch (Throwable t) { safStatus = 3; safCounter++; }
+
+		}});
+
+	}
+
+	public static void createDocument (final String suggestedName, final String mimeType, final String data) {
+
+		final android.app.Activity activity = org.haxe.extension.Extension.mainActivity;
+		if (activity == null) { safStatus = 3; safCounter++; return; }
+
+		pendingSaveData = data;
+
+		activity.runOnUiThread (new Runnable () { public void run () {
+
+			try {
+
+				Intent intent = new Intent (Intent.ACTION_CREATE_DOCUMENT);
+				intent.addCategory (Intent.CATEGORY_OPENABLE);
+				intent.setType (mimeType == null ? "application/octet-stream" : mimeType);
+				intent.putExtra (Intent.EXTRA_TITLE, suggestedName == null ? "file" : suggestedName);
+				activity.startActivityForResult (intent, REQ_SAF_SAVE);
+
+			} catch (Throwable t) { pendingSaveData = null; safStatus = 3; safCounter++; }
+
+		}});
+
+	}
+
+	private String displayNameOf (android.net.Uri uri) {
+
+		try {
+
+			android.database.Cursor cursor = getContentResolver ().query (uri, null, null, null, null);
+			if (cursor != null) {
+
+				try {
+
+					int index = cursor.getColumnIndex (android.provider.OpenableColumns.DISPLAY_NAME);
+					if (index >= 0 && cursor.moveToFirst ()) return cursor.getString (index);
+
+				} finally { cursor.close (); }
+
+			}
+
+		} catch (Throwable t) {}
+
+		return uri.getLastPathSegment ();
+
+	}
+
+	@Override protected void onActivityResult (int requestCode, int resultCode, Intent data) {
+
+		super.onActivityResult (requestCode, resultCode, data);
+
+		if (requestCode != REQ_SAF_OPEN && requestCode != REQ_SAF_SAVE) return;
+
+		android.net.Uri uri = (resultCode == RESULT_OK && data != null) ? data.getData () : null;
+		if (uri == null) {
+
+			pendingSaveData = null;
+			safStatus = 2;
+			safCounter++;
+			return;
+
+		}
+
+		try {
+
+			if (requestCode == REQ_SAF_OPEN) {
+
+				java.io.InputStream in = getContentResolver ().openInputStream (uri);
+				java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream ();
+				byte[] buffer = new byte[65536];
+				int read;
+				while ((read = in.read (buffer)) > 0) out.write (buffer, 0, read);
+				in.close ();
+				safData = new String (out.toByteArray (), java.nio.charset.StandardCharsets.UTF_8);
+
+			} else {
+
+				// "wt" truncates: without it, overwriting a longer existing file leaves its tail behind.
+				java.io.OutputStream out = getContentResolver ().openOutputStream (uri, "wt");
+				out.write (pendingSaveData == null ? new byte[0] : pendingSaveData.getBytes (java.nio.charset.StandardCharsets.UTF_8));
+				out.flush ();
+				out.close ();
+				pendingSaveData = null;
+				safData = "";
+
+			}
+
+			safName = displayNameOf (uri);
+			safStatus = 1;
+
+		} catch (Throwable t) {
+
+			android.util.Log.e ("PsychEngine", "SAF operation failed", t);
+			pendingSaveData = null;
+			safStatus = 3;
+
+		}
+
+		safCounter++;
+
+	}
+
 	// Insets change with rotation and with the multi-window/cutout mode, and the first layout pass
 	// may land after onAttachedToWindow, so listen rather than sample once.
 	@Override public void onAttachedToWindow () {

@@ -29,14 +29,10 @@ class FileDialogHandler extends FlxBasic {
 
 	var _currentEvent:openfl.events.Event->Void;
 
-	#if mobile
+	#if (mobile && !android)
 	// lime has no mobile FileDialog backend and FileReference.save is a no-op there;
 	// bail before _startUp so `completed` stays true and the editor never locks up.
 	function unsupported(onCancel:Void->Void):Void {
-		#if android
-		try extension.androidtools.widget.Toast.makeText('File dialogs are not supported on this device.',
-			extension.androidtools.widget.Toast.LENGTH_SHORT) catch (_:Dynamic) {}
-		#end
 		flixel.FlxG.log.warn('File dialogs are not supported on mobile.');
 		if (onCancel != null)
 			onCancel();
@@ -44,7 +40,24 @@ class FileDialogHandler extends FlxBasic {
 	#end
 
 	public function save(?fileName:String = '', ?dataToSave:String = '', ?onComplete:Void->Void, ?onCancel:Void->Void, ?onError:Void->Void) {
-		#if mobile
+		#if android
+		// SAF: the system picker writes through the ContentResolver. `path` carries only the
+		// document's display name -- content:// documents have no filesystem path.
+		if (!completed)
+			throw new Exception('You must finish previous operation before starting a new one.');
+		_startUp(onComplete, onCancel, onError);
+		mobile.backend.DocumentPicker.saveText(fileName, mimeFor(fileName), dataToSave, function(name:String, _:String):Void {
+			this.path = name;
+			this.completed = true;
+			if (this.onComplete != null)
+				this.onComplete();
+		}, function():Void {
+			this.completed = true;
+			if (this.onCancel != null)
+				this.onCancel();
+		});
+		return;
+		#elseif mobile
 		unsupported(onCancel);
 		return;
 		#end
@@ -61,9 +74,33 @@ class FileDialogHandler extends FlxBasic {
 		_fileRef.save(dataToSave, fileName);
 	}
 
+	#if android
+	static function mimeFor(fileName:String):String {
+		return (fileName != null && fileName.endsWith('.json')) ? 'application/json' : 'application/octet-stream';
+	}
+	#end
+
 	public function open(?defaultName:String = null, ?title:String = null, ?filter:Array<FileFilter> = null, ?onComplete:Void->Void, ?onCancel:Void->Void,
 			?onError:Void->Void) {
-		#if mobile
+		#if android
+		if (!completed)
+			throw new Exception('You must finish previous operation before starting a new one.');
+		_startUp(onComplete, onCancel, onError);
+		// */* rather than application/json: many file managers tag .json as text/plain or octet-stream,
+		// and a strict filter would grey those files out entirely.
+		mobile.backend.DocumentPicker.openText('*/*', function(name:String, contents:String):Void {
+			this.path = name;
+			this.data = contents;
+			this.completed = true;
+			if (this.onComplete != null)
+				this.onComplete();
+		}, function():Void {
+			this.completed = true;
+			if (this.onCancel != null)
+				this.onCancel();
+		});
+		return;
+		#elseif mobile
 		unsupported(onCancel);
 		return;
 		#end
@@ -86,7 +123,13 @@ class FileDialogHandler extends FlxBasic {
 	}
 
 	public function openDirectory(?title:String = null, ?onComplete:Void->Void, ?onCancel:Void->Void, ?onError:Void->Void) {
-		#if mobile
+		#if android
+		// SAF tree access (persistable directory grants) is a different beast; not worth it yet.
+		flixel.FlxG.log.warn('Directory dialogs are not supported on Android.');
+		if (onCancel != null)
+			onCancel();
+		return;
+		#elseif mobile
 		unsupported(onCancel);
 		return;
 		#end
