@@ -83,10 +83,14 @@ class OszArchive {
 
 		var bytes = File.getBytes(oszPath);
 		var entries = haxe.zip.Reader.readZip(new haxe.io.BytesInput(bytes));
+		var dirNorm:String = Path.normalize(dir);
 		for (entry in entries) {
 			if (entry.fileName.endsWith('/'))
 				continue;
-			var outPath:String = Path.join([dir, entry.fileName]);
+			var outPath:String = Path.normalize(Path.join([dir, entry.fileName]));
+			// Zip-slip guard: reject any entry whose path escapes the extraction dir (crafted `../` names).
+			if (outPath != dirNorm && !StringTools.startsWith(outPath, dirNorm + '/'))
+				continue;
 			ensureDir(Path.directory(outPath));
 			File.saveBytes(outPath, haxe.zip.Reader.unzip(entry));
 		}
