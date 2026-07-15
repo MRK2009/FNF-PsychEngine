@@ -294,7 +294,12 @@ class OsuStoryboardPlayer extends FlxTypedGroup<OsuSbRuntimeSprite> {
 		var file:String = resolveFile(soundDir, osuPath);
 		if (file != null) {
 			try {
+				// Sound.fromFile returns null for external-storage files on Android; AssetUtil decodes bytes.
+				#if mobile
+				snd = mobile.backend.AssetUtil.getSound(file);
+				#else
 				snd = Sound.fromFile(file);
+				#end
 			} catch (e:Dynamic) {
 				snd = null;
 			}
@@ -482,7 +487,12 @@ class OsuStoryboardPlayer extends FlxTypedGroup<OsuSbRuntimeSprite> {
 		var file:String = resolveFile(imageDir, osuPath);
 		if (file != null) {
 			try {
+				// BitmapData.fromFile returns null for external-storage files on Android; AssetUtil decodes bytes.
+				#if mobile
+				var bmp:BitmapData = mobile.backend.AssetUtil.getBitmap(file);
+				#else
 				var bmp:BitmapData = BitmapData.fromFile(file);
+				#end
 				if (bmp != null) {
 					graphic = FlxGraphic.fromBitmapData(bmp, false, key, false);
 					graphic.destroyOnNoUse = false;

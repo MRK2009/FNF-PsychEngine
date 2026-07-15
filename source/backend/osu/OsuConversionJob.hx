@@ -1004,6 +1004,8 @@ class OsuConversionJob {
 local ClientPrefs = import('backend.ClientPrefs')
 local Sound = import('openfl.media.Sound')
 local SoundTransform = import('openfl.media.SoundTransform')
+-- Mobile builds ship AssetUtil; Sound.fromFile returns nil for external-storage files there.
+local AssetUtil = import('mobile.backend.AssetUtil')
 
 local hitMap = {}
 local cache = {}
@@ -1037,7 +1039,8 @@ local function playHits(data)
 		if file ~= nil then
 			local snd = cache[file]
 			if snd == nil then
-				local ok, s = pcall(function() return Sound.fromFile(hitDir .. file) end)
+				local loader = (AssetUtil ~= nil) and AssetUtil.getSound or Sound.fromFile
+				local ok, s = pcall(function() return loader(hitDir .. file) end)
 				snd = (ok and s) or false
 				cache[file] = snd
 			end

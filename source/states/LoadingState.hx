@@ -739,10 +739,16 @@ class LoadingState extends MusicBeatState {
 		// trace('precaching sound: $file');
 		if (!Paths.currentTrackedSounds.exists(file)) {
 			if (#if sys FileSystem.exists(file) || #end OpenFlAssets.exists(file, SOUND)) {
-				var sound:Sound = #if sys Sound.fromFile(file) #else OpenFlAssets.getSound(file, false) #end;
-				mutex.acquire();
-				Paths.currentTrackedSounds.set(file, sound);
-				mutex.release();
+				// Mobile: Sound.fromFile returns null for external-storage files, and caching that
+				// null would poison the map -- Paths.returnSound sees the key and never retries.
+				var sound:Sound = #if mobile mobile.backend.AssetUtil.getSound(file)
+					#elseif sys Sound.fromFile(file)
+					#else OpenFlAssets.getSound(file, false) #end;
+				if (sound != null) {
+					mutex.acquire();
+					Paths.currentTrackedSounds.set(file, sound);
+					mutex.release();
+				}
 			} else if (beepOnNull) {
 				trace('SOUND NOT FOUND: $key, PATH: $path');
 				FlxG.log.error('SOUND NOT FOUND: $key, PATH: $path');
@@ -767,17 +773,23 @@ class LoadingState extends MusicBeatState {
 			if (!Paths.currentTrackedAssets.exists(requestKey)) {
 				var file:String = Paths.getPath(requestKey, IMAGE);
 				if (#if sys FileSystem.exists(file) || #end OpenFlAssets.exists(file, IMAGE)) {
-					#if sys
+					// Mobile: BitmapData.fromFile returns null for external-storage files; AssetUtil decodes bytes.
+					#if mobile
+					var bitmap:BitmapData = mobile.backend.AssetUtil.getBitmap(file);
+					#elseif sys
 					var bitmap:BitmapData = BitmapData.fromFile(file);
 					#else
 					var bitmap:BitmapData = OpenFlAssets.getBitmapData(file, false);
 					#end
 
-					mutex.acquire();
-					requestedBitmaps.set(file, bitmap);
-					originalBitmapKeys.set(file, requestKey);
-					mutex.release();
-					return bitmap;
+					if (bitmap != null) {
+						mutex.acquire();
+						requestedBitmaps.set(file, bitmap);
+						originalBitmapKeys.set(file, requestKey);
+						mutex.release();
+						return bitmap;
+					}
+					trace('image failed to decode: $key');
 				} else
 					trace('no such image $key exists');
 			}
