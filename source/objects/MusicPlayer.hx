@@ -225,7 +225,9 @@ class MusicPlayer extends FlxGroup {
 	}
 
 	public function switchPlayMusic() {
-		FlxG.autoPause = (!playingMusic && ClientPrefs.data.autoPause);
+		// Desktop suppresses auto-pause while previewing so an alt-tab doesn't cut the song; mobile
+		// can't, since backgrounding the app is expected to silence it.
+		FlxG.autoPause = #if mobile ClientPrefs.data.autoPause #else (!playingMusic && ClientPrefs.data.autoPause) #end;
 		active = visible = playingMusic;
 
 		instance.scoreBG.visible = instance.diffText.visible = instance.scoreText.visible = !playingMusic; // Hide Freeplay texts and boxes if playingMusic is true
