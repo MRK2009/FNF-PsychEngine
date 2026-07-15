@@ -91,9 +91,8 @@ class Difficulty {
 		// Discover undeclared charts on disk (e.g. a song-only "Insane").
 		#if sys
 		for (dir in songChartDirs(key)) {
-			if (!FileSystem.exists(dir) || !FileSystem.isDirectory(dir))
-				continue;
-			for (file in FileSystem.readDirectory(dir)) {
+			// listDirectory folds in the exists/isDirectory checks; this runs per song, per candidate dir.
+			for (file in Paths.listDirectory(dir)) {
 				if (!file.endsWith('.json'))
 					continue;
 				var name:String = file.substr(0, file.length - 5);

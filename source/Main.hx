@@ -182,6 +182,10 @@ class Main extends Sprite {
 				resetSpriteCache(FlxG.game);
 		});
 
+	
+		// Bounds a bulk scan that threw before closing to the state that caused it.
+		FlxG.signals.preStateCreate.add(function(_) Paths.resetBulkScan());
+
 		// Scripted-state setup: runs right BEFORE a scripted state's create(), so
 		// the state is mod-sandboxed and has a camera even if the script never calls
 		// super.create(). A scripted state carries the mod it was loaded from in

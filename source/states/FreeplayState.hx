@@ -83,6 +83,8 @@ class FreeplayState extends MusicBeatState {
 		PlayState.isStoryMode = false;
 		WeekData.reloadWeekFiles(false);
 
+		Paths.beginBulkScan();
+
 		#if DISCORD_ALLOWED
 		// Updating Discord Rich Presence
 		DiscordClient.changePresence("In the Menus", null);
@@ -116,10 +118,12 @@ class FreeplayState extends MusicBeatState {
 			}
 		}
 
+
 		// Freeplay no longer needs a week file: also list any song with charts on disk
 		// (data/<song>/<song>.json) that no week declared. Weeks remain for Story mode
 		// and for setting a custom icon/order without a metadata.json.
 		discoverFreeplaySongs(WeekData.weeksList.length);
+		Paths.endBulkScan();
 
 		if (allSongs.length < 1) {
 			FlxTransitionableState.skipNextTransIn = true;
@@ -291,16 +295,14 @@ class FreeplayState extends MusicBeatState {
 		for (root in roots) {
 			var modFolder:String = root[0];
 			var dataDir:String = root[1];
-			if (!FileSystem.exists(dataDir) || !FileSystem.isDirectory(dataDir))
-				continue;
 
-			for (entry in FileSystem.readDirectory(dataDir)) {
+			for (entry in Paths.listDirectory(dataDir)) {
 				var songDir:String = '$dataDir/$entry';
-				if (!FileSystem.isDirectory(songDir))
-					continue;
 				var key:String = Paths.formatToSongPath(entry);
 				if (seen.exists('$modFolder|$key'))
 					continue;
+
+				// A non-directory entry lists as empty, so it falls out here without a stat of its own.
 				var chart:String = representativeChart(songDir, key);
 				if (chart == null)
 					continue;
@@ -322,10 +324,12 @@ class FreeplayState extends MusicBeatState {
 
 	#if sys
 	function representativeChart(songDir:String, key:String):String {
-		var bare:String = '$songDir/$key.json';
-		if (FileSystem.exists(bare))
-			return bare;
-		for (file in FileSystem.readDirectory(songDir))
+		var listing:Array<String> = Paths.listDirectory(songDir);
+		var bare:String = '$key.json';
+		for (file in listing)
+			if (file == bare)
+				return '$songDir/$bare';
+		for (file in listing)
 			if (file.startsWith('$key-') && file.endsWith('.json'))
 				return '$songDir/$file';
 		return null;

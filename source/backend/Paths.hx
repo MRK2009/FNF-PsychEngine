@@ -135,6 +135,91 @@ class Paths {
 	static public function setCurrentLevel(name:String)
 		currentLevel = name.toLowerCase();
 
+	static var scanDepth:Int = 0;
+	static var scanListings:Map<String, Map<String, Bool>> = null;
+
+	/**
+	 * Opens a scan window, in which each directory is listed once and existence is answered from that
+	 * listing instead of a stat per candidate path.
+	 *
+	 * Only valid around a READ-ONLY scan: assets written at runtime (chart editor, converters,
+	 * updater) won't be seen until the window closes. Scoped rather than always-on for that reason.
+	 * Nests; only the outermost pair allocates and drops the index.
+	 */
+	public static function beginBulkScan():Void {
+		if (scanDepth++ == 0)
+			scanListings = new Map();
+	}
+
+	/** Closes the window opened by `beginBulkScan` and drops the index. **/
+	public static function endBulkScan():Void {
+		if (scanDepth > 0 && --scanDepth == 0)
+			scanListings = null;
+	}
+
+	/**
+	 * Force-closes any open scan window.
+	 *
+	 * Haxe has no `finally`, so a scan that throws before its `endBulkScan` would leak the index and
+	 * serve stale answers for the rest of the session. Main hooks this to state switches.
+	 */
+	public static function resetBulkScan():Void {
+		scanDepth = 0;
+		scanListings = null;
+	}
+
+	#if sys
+	/** The entry names of `dir`, cached for the duration of a bulk scan. Empty when unreadable. **/
+	static function listingOf(dir:String):Map<String, Bool> {
+		var listing:Map<String, Bool> = scanListings.get(dir);
+		if (listing != null)
+			return listing;
+
+		listing = new Map();
+		try {
+			if (FileSystem.exists(dir) && FileSystem.isDirectory(dir))
+				for (entry in FileSystem.readDirectory(dir))
+					listing.set(entry, true);
+		} catch (e:Dynamic) {}
+		scanListings.set(dir, listing);
+		return listing;
+	}
+	#end
+
+	/**
+	 * `FileSystem.exists`, served from the scan index while a bulk scan is open.
+	 *
+	 * Answers a file OR a directory: both appear as an entry in the parent's listing. Case-sensitive
+	 * either way, matching the real filesystem on Android.
+	 */
+	static function existsCached(path:String):Bool {
+		#if sys
+		if (scanListings == null)
+			return FileSystem.exists(path);
+
+		var slash:Int = path.lastIndexOf('/');
+		if (slash < 0)
+			return FileSystem.exists(path); // no parent to list against
+		return listingOf(path.substr(0, slash)).exists(path.substr(slash + 1));
+		#else
+		return false;
+		#end
+	}
+
+	#if sys
+	/** `FileSystem.readDirectory`, cached for the duration of a bulk scan. Empty when unreadable. **/
+	public static function listDirectory(dir:String):Array<String> {
+		if (scanListings == null) {
+			try {
+				if (FileSystem.exists(dir) && FileSystem.isDirectory(dir))
+					return FileSystem.readDirectory(dir);
+			} catch (e:Dynamic) {}
+			return [];
+		}
+		return [for (entry in listingOf(dir).keys()) entry];
+	}
+	#end
+
 	public static function getPath(file:String, ?type:AssetType = TEXT, ?parentfolder:String, ?modsAllowed:Bool = true):String {
 		#if MODS_ALLOWED
 		if (modsAllowed) {
@@ -143,7 +228,7 @@ class Paths {
 				customFile = '$parentfolder/$file';
 
 			var modded:String = modFolders(customFile);
-			if (FileSystem.exists(modded))
+			if (existsCached(modded))
 				return modded;
 		}
 		#end
@@ -332,15 +417,15 @@ class Paths {
 				modKey = 'songs/$key';
 
 			if (pinModRoot != null) {
-				if (pinModRoot.length > 0 && FileSystem.exists(mods('$pinModRoot/$modKey')))
+				if (pinModRoot.length > 0 && existsCached(mods('$pinModRoot/$modKey')))
 					return true;
 				// pinned source lacks it -> fall through to the base OpenFlAssets check below
 			} else {
 				for (mod in Mods.getGlobalMods())
-					if (FileSystem.exists(mods('$mod/$modKey')))
+					if (existsCached(mods('$mod/$modKey')))
 						return true;
 
-				if ((Mods.allowCurrentModAssets && FileSystem.exists(mods(Mods.currentModDirectory + '/' + modKey))) || FileSystem.exists(mods(modKey)))
+				if ((Mods.allowCurrentModAssets && existsCached(mods(Mods.currentModDirectory + '/' + modKey))) || existsCached(mods(modKey)))
 					return true;
 			}
 		}
@@ -543,7 +628,7 @@ class Paths {
 		if (pinModRoot != null) {
 			if (pinModRoot.length > 0) {
 				var pinned:String = mods(pinModRoot + '/' + key);
-				if (FileSystem.exists(pinned))
+				if (existsCached(pinned))
 					return pinned;
 			}
 			return 'mods/' + key; // not in the pinned source -> fall through to the base asset
@@ -551,13 +636,13 @@ class Paths {
 
 		if (Mods.allowCurrentModAssets && Mods.currentModDirectory != null && Mods.currentModDirectory.length > 0) {
 			var fileToCheck:String = mods(Mods.currentModDirectory + '/' + key);
-			if (FileSystem.exists(fileToCheck))
+			if (existsCached(fileToCheck))
 				return fileToCheck;
 		}
 
 		for (mod in Mods.getGlobalMods()) {
 			var fileToCheck:String = mods(mod + '/' + key);
-			if (FileSystem.exists(fileToCheck))
+			if (existsCached(fileToCheck))
 				return fileToCheck;
 		}
 		return 'mods/' + key;
