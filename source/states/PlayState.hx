@@ -2813,6 +2813,9 @@ class PlayState extends MusicBeatState {
 		// for mutating `unspawnNotes` in createPost) before the fields take ownership of it.
 		for (st in stages)
 			st.notesGenerated(chart.notes);
+		// Same window for Lua/HScript: a script can reassign/reorder/retag the typed note list (e.g. the
+		// double-chart mod flipping `strumLine`/`mustPress`) before the fields bucket it by strumline.
+		callOnScripts('onNotesGenerated', [chart.notes]);
 
 		receptorGroup = new flixel.group.FlxGroup.FlxTypedGroup<Receptor>();
 
