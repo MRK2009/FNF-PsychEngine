@@ -18,6 +18,102 @@ public class MainActivity extends org.haxe.lime.GameActivity {
 
 	public static volatile int backCount = 0;
 
+	// Safe-area insets in device pixels, read from Haxe by mobile.backend.SafeArea.
+	//
+	// project.xml opts into layoutInDisplayCutoutMode="shortEdges", so the game surface spans the
+	// whole panel -- underneath the notch and the rounded corners. Nothing letterboxes it away for
+	// us, so the UI has to inset itself, and to do that it needs these numbers. getRootWindowInsets
+	// is UI-thread-only, hence caching here instead of an on-demand JNI call off the render thread.
+	public static volatile int safeLeft = 0;
+	public static volatile int safeTop = 0;
+	public static volatile int safeRight = 0;
+	public static volatile int safeBottom = 0;
+
+	// Insets change with rotation and with the multi-window/cutout mode, and the first layout pass
+	// may land after onAttachedToWindow, so listen rather than sample once.
+	@Override public void onAttachedToWindow () {
+
+		super.onAttachedToWindow ();
+
+		if (android.os.Build.VERSION.SDK_INT < 28) return;
+
+		try {
+
+			final android.view.View decor = getWindow ().getDecorView ();
+
+			decor.setOnApplyWindowInsetsListener (new android.view.View.OnApplyWindowInsetsListener () {
+
+				public android.view.WindowInsets onApplyWindowInsets (android.view.View view, android.view.WindowInsets insets) {
+
+					captureSafeInsets (insets);
+					return view.onApplyWindowInsets (insets);
+
+				}
+
+			});
+
+			decor.post (new Runnable () { public void run () {
+
+				captureSafeInsets (decor.getRootWindowInsets ());
+
+			}});
+
+		} catch (Throwable t) {}
+
+	}
+
+	// Combines the notch's safe insets with the rounded-corner radii. A corner radius is applied to
+	// both edges it touches: full-height/full-width UI (the editor's thumb rails, the drawer) runs
+	// straight into the curve otherwise, which is what clips it on round-cornered phones.
+	private static void captureSafeInsets (final android.view.WindowInsets insets) {
+
+		if (insets == null) return;
+
+		try {
+
+			int left = 0, top = 0, right = 0, bottom = 0;
+
+			android.view.DisplayCutout cutout = insets.getDisplayCutout ();
+
+			if (cutout != null) {
+
+				left = cutout.getSafeInsetLeft ();
+				top = cutout.getSafeInsetTop ();
+				right = cutout.getSafeInsetRight ();
+				bottom = cutout.getSafeInsetBottom ();
+
+			}
+
+			if (android.os.Build.VERSION.SDK_INT >= 31) {
+
+				int tl = cornerRadius (insets, android.view.RoundedCorner.POSITION_TOP_LEFT);
+				int tr = cornerRadius (insets, android.view.RoundedCorner.POSITION_TOP_RIGHT);
+				int bl = cornerRadius (insets, android.view.RoundedCorner.POSITION_BOTTOM_LEFT);
+				int br = cornerRadius (insets, android.view.RoundedCorner.POSITION_BOTTOM_RIGHT);
+
+				left = Math.max (left, Math.max (tl, bl));
+				top = Math.max (top, Math.max (tl, tr));
+				right = Math.max (right, Math.max (tr, br));
+				bottom = Math.max (bottom, Math.max (bl, br));
+
+			}
+
+			safeLeft = left;
+			safeTop = top;
+			safeRight = right;
+			safeBottom = bottom;
+
+		} catch (Throwable t) {}
+
+	}
+
+	private static int cornerRadius (final android.view.WindowInsets insets, final int position) {
+
+		android.view.RoundedCorner corner = insets.getRoundedCorner (position);
+		return corner == null ? 0 : corner.getRadius ();
+
+	}
+
 	// Self-update: streams a downloaded release APK into a PackageInstaller session and commits it.
 	// Android can't hot-swap its own running APK, so mobile.backend.UpdateInstaller downloads the
 	// APK and calls this. Uses the framework PackageInstaller (no androidx/FileProvider dependency);

@@ -15,6 +15,7 @@ import editors.charting.data.SnapGrid;
 import editors.charting.data.UndoStack;
 import editors.charting.render.EditorNoteField;
 import editors.content.PsychJsonPrinter;
+import mobile.backend.SafeArea;
 import mobile.input.EditorCanvasGestures;
 import objects.notes.NoteDefaults;
 import smidr.UIFonts;
@@ -602,7 +603,7 @@ class MobileChartingState extends MusicBeatState {
 		var gridW:Float = b.right - b.left + 60;
 		if (gridW <= 0)
 			return 2.0;
-		var usable:Float = FlxG.width - MobileEditorShell.RAIL_W * 2 - 30;
+		var usable:Float = FlxG.width - SafeArea.left - SafeArea.right - MobileEditorShell.RAIL_W * 2 - 30;
 		var z:Float = usable / gridW;
 		return (z < ZOOM_MIN) ? ZOOM_MIN : (z > 2.6 ? 2.6 : z);
 	}

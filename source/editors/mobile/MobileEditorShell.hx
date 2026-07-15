@@ -1,6 +1,7 @@
 package editors.mobile;
 
 import flixel.FlxG;
+import mobile.backend.SafeArea;
 import openfl.display.Sprite;
 import smidr.UIComponent;
 import smidr.UIRoot;
@@ -41,6 +42,12 @@ class MobileEditorShell {
 	var leftY:Float = 8;
 	var rightY:Float = 8;
 
+	// Screen edges the chrome must keep clear of (notch / rounded corners); 0 on a plain screen.
+	final safeL:Float;
+	final safeT:Float;
+	final safeR:Float;
+	final safeB:Float;
+
 	final statusLabel:UILabel;
 
 	final drawer:UIDrawer;
@@ -56,31 +63,43 @@ class MobileEditorShell {
 	public function new() {
 		UITheme.applyMobilePreset();
 
+		// The game surface spans the whole panel on notched phones (see SafeArea), so every piece of
+		// chrome below is placed against the safe box rather than against 0/FlxG.width.
+		SafeArea.refresh();
+		safeL = SafeArea.left;
+		safeT = SafeArea.top;
+		safeR = SafeArea.right;
+		safeB = SafeArea.bottom;
+
 		root = FlxSmidr.init();
 		FlxSmidr.autoBlockMouse = true;
 		mainUI = new Sprite();
 		root.content.addChild(mainUI);
 
 		// Status strip: translucent, centered between the rails.
-		var stripW:Float = FlxG.width - RAIL_W * 2 - 20;
+		var stripW:Float = FlxG.width - safeL - safeR - RAIL_W * 2 - 20;
 		var strip:UIPanel = new UIPanel(stripW, STRIP_H, 0xB4141419);
-		strip.x = RAIL_W + 10;
-		strip.y = 0;
+		strip.x = safeL + RAIL_W + 10;
+		strip.y = safeT;
 		mainUI.addChild(strip);
 
 		statusLabel = new UILabel('', 15, 0);
 		statusLabel.x = strip.x + 14;
-		statusLabel.y = (STRIP_H - 20) / 2;
+		statusLabel.y = safeT + (STRIP_H - 20) / 2;
 		mainUI.addChild(statusLabel);
 
 		// Thumb rails (slightly translucent so the grid reads as full-screen).
+		var railH:Float = FlxG.height - safeT - safeB;
 		leftRail = new Sprite();
 		rightRail = new Sprite();
-		var lp:UIPanel = new UIPanel(RAIL_W, FlxG.height, 0xE0191920);
+		var lp:UIPanel = new UIPanel(RAIL_W, railH, 0xE0191920);
 		leftRail.addChild(lp);
-		var rp:UIPanel = new UIPanel(RAIL_W, FlxG.height, 0xE0191920);
+		var rp:UIPanel = new UIPanel(RAIL_W, railH, 0xE0191920);
 		rightRail.addChild(rp);
-		rightRail.x = FlxG.width - RAIL_W;
+		leftRail.x = safeL;
+		leftRail.y = safeT;
+		rightRail.x = FlxG.width - safeR - RAIL_W;
+		rightRail.y = safeT;
 		mainUI.addChild(leftRail);
 		mainUI.addChild(rightRail);
 
@@ -88,13 +107,14 @@ class MobileEditorShell {
 		// the screen edges, so panels open from explicit buttons only.
 		drawer = new UIDrawer(UIDrawerSide.RIGHT, 460);
 		drawer.edgeSwipeEnabled = false;
+		drawer.edgeInset = safeR;
 		drawerTitle = new UILabel('', 18, 0);
 		drawerTitle.x = 18;
-		drawerTitle.y = 14;
+		drawerTitle.y = safeT + 14;
 		drawer.content.addChild(drawerTitle);
-		drawerPane = new UIScrollPane(460 - 28, FlxG.height - 60);
+		drawerPane = new UIScrollPane(460 - 28, FlxG.height - safeT - safeB - 60);
 		drawerPane.x = 14;
-		drawerPane.y = 48;
+		drawerPane.y = safeT + 48;
 		drawer.content.addChild(drawerPane);
 
 		// Floating contextual action bar (bottom center, shown while something is selected).
@@ -213,8 +233,8 @@ class MobileEditorShell {
 			actionX += btnW + pad;
 		}
 
-		actionBar.x = (FlxG.width - totalW) / 2;
-		actionBar.y = FlxG.height - (btnH + pad * 2) - 14;
+		actionBar.x = safeL + (FlxG.width - safeL - safeR - totalW) / 2;
+		actionBar.y = FlxG.height - safeB - (btnH + pad * 2) - 14;
 	}
 
 	public function showActionBar(show:Bool):Void {
