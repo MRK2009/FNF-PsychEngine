@@ -76,8 +76,9 @@ class FreeplayState extends MusicBeatState {
 	var groupTxt:FlxText;
 
 	override function create() {
-		// Paths.clearStoredMemory();
-		// Paths.clearUnusedMemory();
+		// PlayState exits straight here, so without this a song's assets stay resident.
+		Paths.clearStoredMemory();
+		Paths.clearUnusedMemory();
 
 		persistentUpdate = true;
 		PlayState.isStoryMode = false;
