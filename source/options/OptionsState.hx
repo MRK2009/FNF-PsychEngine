@@ -47,12 +47,15 @@ import smidr.flixel.FlxSmidr;
 class OptionsState extends MusicBeatState {
 	public static var onPlayState:Bool = false;
 
-	static inline var RAIL_X:Int = 24;
 	static inline var RAIL_W:Int = 250;
-	static inline var CONTENT_X:Int = 290;
-	static inline var CONTENT_W:Int = 966;
-	static inline var PANEL_Y:Int = 72;
-	static inline var PANEL_H:Int = 596;
+
+	// Computed in buildChrome: the panels track the real surface instead of assuming the 1280x720
+	// baseline -- widescreen fill widens FlxG.width and phones add cutout/corner insets.
+	var railX:Float = 24;
+	var contentX:Float = 290;
+	var contentW:Float = 966;
+	var panelY:Float = 72;
+	var panelH:Float = 596;
 	static inline var ROW_H:Int = 52;
 	static inline var ROW_FONT:Int = 16;
 	static inline var RAIL_FONT:Int = 17;
@@ -123,6 +126,9 @@ class OptionsState extends MusicBeatState {
 		// FlxSmidr drives the root each postUpdate and keeps it above camera-layer resets (which is
 		// what left the UI hidden until a resize under the old manual attach). super.create() below
 		// triggers such a reset, and FlxSmidr's cameraAdded hook re-raises the root immediately.
+		#if mobile
+		UITheme.applyMobilePreset();
+		#end
 		uiRoot = FlxSmidr.init();
 		FlxSmidr.autoBlockMouse = true;
 		UITooltip.install();
@@ -134,46 +140,64 @@ class OptionsState extends MusicBeatState {
 
 	/** Builds the static chrome: panels, title/header/hint labels, category rail and the scroll pane. **/
 	function buildChrome():Void {
-		var railPanel:UIPanel = new UIPanel(RAIL_W, PANEL_H, PANEL);
-		railPanel.x = RAIL_X;
-		railPanel.y = PANEL_Y;
+		var insetL:Float = 24;
+		var insetR:Float = 24;
+		var insetT:Float = 0;
+		var insetB:Float = 0;
+		#if mobile
+		// The rail and hint hug screen edges, so they clear the cutout and the corner curve.
+		var corner:Float = mobile.backend.SafeArea.cornerRadius;
+		insetL = Math.max(24, Math.max(mobile.backend.SafeArea.left, corner) + 8);
+		insetR = Math.max(24, Math.max(mobile.backend.SafeArea.right, corner) + 8);
+		insetT = mobile.backend.SafeArea.top;
+		insetB = mobile.backend.SafeArea.bottom;
+		#end
+		railX = insetL;
+		panelY = 72 + insetT;
+		panelH = FlxG.height - panelY - 52 - insetB;
+		contentX = railX + RAIL_W + 16;
+		contentW = FlxG.width - contentX - insetR;
+
+		var railPanel:UIPanel = new UIPanel(RAIL_W, panelH, PANEL);
+		railPanel.x = railX;
+		railPanel.y = panelY;
 		uiRoot.content.addChild(railPanel);
 
-		var contentPanel:UIPanel = new UIPanel(CONTENT_W, PANEL_H, PANEL);
-		contentPanel.x = CONTENT_X;
-		contentPanel.y = PANEL_Y;
+		var contentPanel:UIPanel = new UIPanel(contentW, panelH, PANEL);
+		contentPanel.x = contentX;
+		contentPanel.y = panelY;
 		uiRoot.content.addChild(contentPanel);
 
 		var title:UILabel = new UILabel('OPTIONS', 30, 0);
-		title.x = RAIL_X;
-		title.y = 18;
+		title.x = railX;
+		title.y = 18 + insetT;
 		uiRoot.content.addChild(title);
 
 		var searchW:Int = 340;
 		searchInput = new UITextInput('', searchW, '', onSearchChanged);
 		searchInput.fontSize = 15;
-		searchInput.x = FlxG.width - 24 - searchW;
-		searchInput.y = 22;
+		searchInput.x = FlxG.width - insetR - searchW;
+		searchInput.y = 22 + insetT;
 		uiRoot.content.addChild(searchInput);
 
 		headerLabel = new UILabel('', 26, 0);
-		headerLabel.x = CONTENT_X + 16;
-		headerLabel.y = PANEL_Y + 12;
+		headerLabel.x = contentX + 16;
+		headerLabel.y = panelY + 12;
 		uiRoot.content.addChild(headerLabel);
 
 		descLabel = new UILabel('', 14, 2);
-		descLabel.x = CONTENT_X + 16;
-		descLabel.y = PANEL_Y + 46;
+		descLabel.x = contentX + 16;
+		descLabel.y = panelY + 46;
 		uiRoot.content.addChild(descLabel);
 
 		hintLabel = new UILabel('', 14, 2);
-		hintLabel.x = RAIL_X;
-		hintLabel.y = FlxG.height - 28;
+		hintLabel.x = railX;
+		hintLabel.y = FlxG.height - 28 - insetB;
 		uiRoot.content.addChild(hintLabel);
 
-		pane = new UIScrollPane(CONTENT_W - 16, PANEL_H - 84);
-		pane.x = CONTENT_X + 8;
-		pane.y = PANEL_Y + 72;
+		pane = new UIScrollPane(contentW - 16, panelH - 84);
+		pane.x = contentX + 8;
+		pane.y = panelY + 72;
 		uiRoot.content.addChild(pane);
 
 		railButtons = [];
@@ -181,8 +205,8 @@ class OptionsState extends MusicBeatState {
 			var idx:Int = i;
 			var btn:UIButton = new UIButton(categories[i].name, RAIL_W - 20, 50, function() selectCategory(idx));
 			btn.fontSize = RAIL_FONT;
-			btn.x = RAIL_X + 10;
-			btn.y = PANEL_Y + 16 + i * 58;
+			btn.x = railX + 10;
+			btn.y = panelY + 16 + i * 58;
 			uiRoot.content.addChild(btn);
 			railButtons.push(btn);
 		}
@@ -962,6 +986,9 @@ class OptionsState extends MusicBeatState {
 		FlxG.mouse.visible = false;
 		UITooltip.reset();
 		FlxSmidr.dispose();
+		#if mobile
+		UITheme.clearMobilePreset();
+		#end
 		uiRoot = null;
 		if (changedMusic && !onPlayState && FlxG.sound.music != null)
 			FlxG.sound.playMusic(Paths.music('freakyMenu'), 1, true);
