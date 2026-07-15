@@ -261,7 +261,9 @@ class ShaderFunctions {
 			FunkinLua.luaTrace('Error on getting shader: Object $obj not found', false, false, FlxColor.RED);
 			return null;
 		}
-		return cast(target.shader, FlxRuntimeShader);
+		// downcast, not a checked cast: a sprite carrying some other shader type (a stage effect)
+		// should hit the callers' "not FlxRuntimeShader" path, not throw out of the Lua callback.
+		return Std.downcast(target.shader, FlxRuntimeShader);
 	}
 	#end
 }
