@@ -221,7 +221,7 @@ final class NoteData {
 			note.gfNote = sn.gfNote;
 			note.applyType(sn.type);
 
-			var key:String = Std.string(Math.round(note.time)) + '|' + note.column + '|' + note.strumLine + '|' + note.type;
+			var key:String = Std.string(Math.round(note.time)) + '|' + note.column + '|' + note.strumLine + '|' + note.type + '|' + note.length;
 			if (seen.exists(key))
 				continue;
 			seen.set(key, true);
