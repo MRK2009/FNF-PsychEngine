@@ -227,7 +227,16 @@ class SongChart {
 				if (holdLength > 0 && stepMs > 0)
 					holdLength = Math.floor(holdLength / stepMs + 0.0001) * stepMs;
 
-				var typeName:String = !Std.isOfType(songNotes[3], String) ? NoteDefaults.defaultNoteTypes[songNotes[3]] : songNotes[3];
+				var rawType:Dynamic = (songNotes.length > 3) ? songNotes[3] : null;
+				var typeName:String;
+				if (rawType == null || rawType == '')
+					typeName = '';
+				else if (Std.isOfType(rawType, String))
+					typeName = rawType;
+				else {
+					var ti:Int = Std.int(rawType); // legacy int type-index
+					typeName = (ti >= 0 && ti < NoteDefaults.defaultNoteTypes.length) ? NoteDefaults.defaultNoteTypes[ti] : '';
+				}
 				var gfNote:Bool = (section.gfSection == true && mustPress == section.mustHitSection);
 
 				chart.noteList.push({
