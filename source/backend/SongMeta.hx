@@ -32,7 +32,7 @@ class SongMeta {
 		if (raw == null || raw.trim().length < 1)
 			return null;
 		try
-			return cast tjson.TJSON.parse(raw)
+			return cast CoolUtil.parseJson(raw)
 		catch (error:Dynamic)
 			trace('SongMeta.load failed for "$songKey": $error');
 		return null;

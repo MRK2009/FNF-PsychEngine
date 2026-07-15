@@ -190,7 +190,7 @@ class PauseSubState extends MusicBeatSubstate {
 			return;
 
 		try {
-			var parsed:Array<Dynamic> = tjson.TJSON.parse(File.getContent(path));
+			var parsed:Array<Dynamic> = CoolUtil.parseJson(File.getContent(path));
 			if (parsed == null || parsed.length < 1)
 				return;
 			var pack:Dynamic = Mods.getPack(folder);

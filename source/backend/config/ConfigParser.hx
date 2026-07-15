@@ -17,7 +17,7 @@ class ConfigParser {
 				case 'tcfg':
 					(kind == 'ui') ? UiTcfgParser.parse(text) : TcfgParser.parse(text);
 				default: // json (and any unknown extension) -> tolerant JSON
-					tjson.TJSON.parse(text);
+					CoolUtil.parseJson(text);
 			}
 		} catch (e:Dynamic) {
 			FlxG.log.error('ConfigParser: failed to parse .$ext config -- $e');

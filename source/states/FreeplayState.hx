@@ -339,7 +339,7 @@ class FreeplayState extends MusicBeatState {
 		// cache-first by file signature: an unchanged chart skips the whole-file parse below
 		return backend.difficulty.ChartScanCache.songName(chartPath, function():String {
 			try {
-				var data:Dynamic = tjson.TJSON.parse(File.getContent(chartPath));
+				var data:Dynamic = CoolUtil.parseJson(File.getContent(chartPath));
 				var sub:Dynamic = Reflect.field(data, 'song');
 				if (sub != null) {
 					if (Std.isOfType(sub, String))

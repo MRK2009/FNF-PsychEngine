@@ -231,7 +231,7 @@ class CreditsData {
 	**/
 	static function parseModJson(path:String, folder:String, modName:String):Array<CreditSection> {
 		try {
-			var data:Dynamic = tjson.TJSON.parse(File.getContent(path));
+			var data:Dynamic = CoolUtil.parseJson(File.getContent(path));
 			if (data == null)
 				return [];
 

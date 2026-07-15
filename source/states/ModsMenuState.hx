@@ -938,7 +938,7 @@ class ModItem extends FlxSpriteGroup {
 		var path:String = Paths.mods('$folder/data/settings.json');
 		if (FileSystem.exists(path)) {
 			try {
-				settings = cast tjson.TJSON.parse(File.getContent(path));
+				settings = cast CoolUtil.parseJson(File.getContent(path));
 			} catch (e:Dynamic) {
 				var errorTitle = 'Mod name: ' + Mods.currentModDirectory;
 				var errorMsg = 'An error occurred: $e';
