@@ -18,16 +18,16 @@ public class MainActivity extends org.haxe.lime.GameActivity {
 
 	public static volatile int backCount = 0;
 
-	// Safe-area insets in device pixels, read from Haxe by mobile.backend.SafeArea.
-	//
-	// project.xml opts into layoutInDisplayCutoutMode="shortEdges", so the game surface spans the
-	// whole panel -- underneath the notch and the rounded corners. Nothing letterboxes it away for
-	// us, so the UI has to inset itself, and to do that it needs these numbers. getRootWindowInsets
-	// is UI-thread-only, hence caching here instead of an on-demand JNI call off the render thread.
+	// Display-cutout insets in device pixels, read from Haxe by mobile.backend.SafeArea. Cached here
+	// because getRootWindowInsets is UI-thread-only, and the render thread is what needs them.
 	public static volatile int safeLeft = 0;
 	public static volatile int safeTop = 0;
 	public static volatile int safeRight = 0;
 	public static volatile int safeBottom = 0;
+
+	// Largest rounded-corner radius, kept separate from the cutout: it only clips content in a
+	// corner, so folding it into all four insets would cost every edge a radius it doesn't need.
+	public static volatile int cornerRadius = 0;
 
 	// Insets change with rotation and with the multi-window/cutout mode, and the first layout pass
 	// may land after onAttachedToWindow, so listen rather than sample once.
@@ -62,46 +62,36 @@ public class MainActivity extends org.haxe.lime.GameActivity {
 
 	}
 
-	// Combines the notch's safe insets with the rounded-corner radii. A corner radius is applied to
-	// both edges it touches: full-height/full-width UI (the editor's thumb rails, the drawer) runs
-	// straight into the curve otherwise, which is what clips it on round-cornered phones.
 	private static void captureSafeInsets (final android.view.WindowInsets insets) {
 
 		if (insets == null) return;
 
 		try {
 
-			int left = 0, top = 0, right = 0, bottom = 0;
-
 			android.view.DisplayCutout cutout = insets.getDisplayCutout ();
 
 			if (cutout != null) {
 
-				left = cutout.getSafeInsetLeft ();
-				top = cutout.getSafeInsetTop ();
-				right = cutout.getSafeInsetRight ();
-				bottom = cutout.getSafeInsetBottom ();
+				safeLeft = cutout.getSafeInsetLeft ();
+				safeTop = cutout.getSafeInsetTop ();
+				safeRight = cutout.getSafeInsetRight ();
+				safeBottom = cutout.getSafeInsetBottom ();
+
+			} else {
+
+				safeLeft = safeTop = safeRight = safeBottom = 0;
 
 			}
 
 			if (android.os.Build.VERSION.SDK_INT >= 31) {
 
-				int tl = cornerRadius (insets, android.view.RoundedCorner.POSITION_TOP_LEFT);
-				int tr = cornerRadius (insets, android.view.RoundedCorner.POSITION_TOP_RIGHT);
-				int bl = cornerRadius (insets, android.view.RoundedCorner.POSITION_BOTTOM_LEFT);
-				int br = cornerRadius (insets, android.view.RoundedCorner.POSITION_BOTTOM_RIGHT);
-
-				left = Math.max (left, Math.max (tl, bl));
-				top = Math.max (top, Math.max (tl, tr));
-				right = Math.max (right, Math.max (tr, br));
-				bottom = Math.max (bottom, Math.max (bl, br));
+				cornerRadius = Math.max (
+					Math.max (cornerRadius (insets, android.view.RoundedCorner.POSITION_TOP_LEFT),
+						cornerRadius (insets, android.view.RoundedCorner.POSITION_TOP_RIGHT)),
+					Math.max (cornerRadius (insets, android.view.RoundedCorner.POSITION_BOTTOM_LEFT),
+						cornerRadius (insets, android.view.RoundedCorner.POSITION_BOTTOM_RIGHT)));
 
 			}
-
-			safeLeft = left;
-			safeTop = top;
-			safeRight = right;
-			safeBottom = bottom;
 
 		} catch (Throwable t) {}
 

@@ -63,13 +63,14 @@ class MobileEditorShell {
 	public function new() {
 		UITheme.applyMobilePreset();
 
-		// The game surface spans the whole panel on notched phones (see SafeArea), so every piece of
-		// chrome below is placed against the safe box rather than against 0/FlxG.width.
+		// Chrome is placed against the safe box, not 0/FlxG.width -- the surface spans the whole panel.
+		// The rails and bars span a full edge each, so they take the corner radius on top of the cutout.
 		SafeArea.refresh();
-		safeL = SafeArea.left;
-		safeT = SafeArea.top;
-		safeR = SafeArea.right;
-		safeB = SafeArea.bottom;
+		final corner:Float = SafeArea.cornerRadius;
+		safeL = Math.max(SafeArea.left, corner);
+		safeT = Math.max(SafeArea.top, corner);
+		safeR = Math.max(SafeArea.right, corner);
+		safeB = Math.max(SafeArea.bottom, corner);
 
 		root = FlxSmidr.init();
 		FlxSmidr.autoBlockMouse = true;

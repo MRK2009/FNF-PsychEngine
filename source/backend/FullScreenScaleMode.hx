@@ -1,5 +1,10 @@
 package backend;
 
+#if android
+import extension.androidtools.Tools;
+import extension.androidtools.os.Build.VERSION;
+import extension.androidtools.os.Build.VERSION_CODES;
+#end
 import flixel.math.FlxPoint;
 import flixel.util.FlxAxes;
 import flixel.util.FlxHorizontalAlign;
@@ -23,7 +28,11 @@ import flixel.system.scaleModes.BaseScaleMode;
 	```
 	Toggle at runtime by assigning `FullScreenScaleMode.enabled`; content anchored to `FlxG.width`
 	re-centers, content at fixed coordinates stays put, and the 1280x720 baseline is untouched on
-	standard displays -- so it is safe to ship off by default.
+	standard displays -- so it is safe to ship off by default, and it is (the desktop-only Widescreen
+	option). Mobile ignores the toggle and always fills where safe: see `set_enabled`.
+
+	A filled screen means `FlxG.width`/`FlxG.height` are NOT 1280x720, so edge-anchored UI must
+	measure from them rather than assume the baseline (and on mobile, clear `mobile.backend.SafeArea`).
 
 	`FlxG.width`/`FlxG.height` are written through `untyped` on purpose: flixel declares them
 	`(default, null)`, so the widen is only reachable that way from outside the flixel package.
@@ -233,10 +242,20 @@ class FullScreenScaleMode extends BaseScaleMode {
 	}
 
 	@:noCompletion static function set_enabled(value:Bool):Bool {
+		#if mobile
+		// Mobile ignores `value` and always requests fill (Widescreen is a desktop-only option); this
+		// decides whether filling is safe. Only a screen WIDER than the game qualifies: widening X
+		// reveals more stage, which stages are drawn for, where a narrower screen (a 4:3 tablet,
+		// barred on Y) would reveal the empty space above and below it.
+		var allowed:Bool = (ratioAxis == FlxAxes.X);
+
 		#if android
-		// Widening only helps on devices that are actually wider than the game on the X axis
-		// (phones in landscape / tablets); on a taller-than-game screen it would do nothing useful.
-		enabled = (ratioAxis == FlxAxes.X) ? value : false;
+		// Below API 28 the cutout can't be queried (see mobile.backend.SafeArea), so filling could put
+		// gameplay under a notch we can't measure. Tablets have no cutout either way.
+		allowed = allowed && (VERSION.SDK_INT >= VERSION_CODES.P || Tools.isTablet());
+		#end
+
+		enabled = allowed;
 		#else
 		enabled = value;
 		#end

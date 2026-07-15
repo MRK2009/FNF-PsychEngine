@@ -121,10 +121,10 @@ class Main extends Sprite {
 		#end
 
 		#if mobile
-		// The counter lives in raw stage pixels: scale it to the game's logical 720p so it's
-		// readable on high-density screens, and inset it clear of curved corners/cutouts.
+		// The counter lives in raw stage pixels: scale it to the game's logical 720p so it's readable
+		// on high-density screens. Positioned in preGameStart, once SafeArea knows the real insets.
 		final fpsScale:Float = Lib.current.stage.stageHeight / 720;
-		fpsVar = new FPSCounter(Std.int(45 * fpsScale), Std.int(12 * fpsScale), 0xFFFFFF);
+		fpsVar = new FPSCounter(0, 0, 0xFFFFFF);
 		fpsVar.scaleX = fpsVar.scaleY = fpsScale;
 		#else
 		fpsVar = new FPSCounter(10, 3, 0xFFFFFF);
@@ -136,15 +136,21 @@ class Main extends Sprite {
 		Lib.current.stage.scaleMode = StageScaleMode.NO_SCALE;
 		#end
 
-		// Widescreen ("no black bars") fill when game is windowed or running on a display wider than 16:9. 
-		//Off by default -- a standard
-		// 16:9 display renders identically to the letterbox fit. Desktop-only for now; the mobile path
-		// needs a notch/cutout API before it can widen safely.
+		// Widescreen ("no black bars") fill when windowed or on a display wider than 16:9. Off by
+		// default on desktop (a 16:9 display renders identically either way); mobile ignores the
+		// preference and fills where the device allows it -- see FullScreenScaleMode.set_enabled.
 		// Deferred to preGameStart: assigning FlxG.scaleMode fires flixel's setter -> game.onResize(null)
 		// -> FlxG.stage.stageWidth, and the stage is still null this early in Main's constructor.
-		#if desktop
-		FlxG.signals.preGameStart.addOnce(() -> FlxG.scaleMode = new FullScreenScaleMode(ClientPrefs.data.widescreen));
-		#end
+		FlxG.signals.preGameStart.addOnce(function() {
+			FlxG.scaleMode = new FullScreenScaleMode(ClientPrefs.data.widescreen);
+			#if mobile
+			mobile.backend.SafeArea.refresh();
+			// SafeArea is in the game's 720-high space, so fpsScale maps it to the stage pixels the
+			// counter is positioned in. It sits in a corner, so it clears the radius as well as the cutout.
+			fpsVar.x = (Math.max(mobile.backend.SafeArea.left, mobile.backend.SafeArea.cornerRadius) + 10) * fpsScale;
+			fpsVar.y = (Math.max(mobile.backend.SafeArea.top, mobile.backend.SafeArea.cornerRadius) + 4) * fpsScale;
+			#end
+		});
 
 		#if (linux || mac) // fix the app icon not showing up on the Linux Panel / Mac Dock
 		var icon = Image.fromFile("icon.png");
