@@ -43,6 +43,20 @@ class ProxyState {
  *    no map/cache/env work, and they GC normally instead of being pinned.
  */
 class LuaProxy {
+	/**
+	 * Anchors runtime classes that scripts reach ONLY through `import()`.
+	 *
+	 * `import()` resolves by name at runtime, which is not a Haxe reference, so the compiler never
+	 * loads the module and the lookup returns nil. `@:keep` on the class does not help: it stops DCE
+	 * dropping a compiled type, it does not pull one in — and neither does `--macro keep()`, which
+	 * only adds that same metadata. Only a hard reference like this one does.
+	 *
+	 * It lives here, beside the `import` binding, because that is the exact feature it serves. The
+	 * storyboard runtime previously anchored off the osu CONVERTER, which is desktop-only, so mobile
+	 * silently shipped without it.
+	 */
+	@:keep static var _importAnchors:Array<Class<Dynamic>> = [backend.osu.OsuStoryboardPlayer];
+
 	static inline final INST_META:String = "hxproxy_instance";
 	static inline final CLASS_META:String = "hxproxy_class";
 	static inline final CACHE_KEY:String = "hxproxy_cache"; // registry: { [handle] = userdata }

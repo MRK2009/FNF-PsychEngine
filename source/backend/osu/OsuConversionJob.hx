@@ -21,14 +21,6 @@ using StringTools;
  * possible (a missing ffmpeg skips audio/video but still writes charts).
  */
 class OsuConversionJob {
-	/**
-	 * The play-time storyboard runtime is only ever invoked from a generated Lua `import()`
-	 * string -- not a Haxe reference -- so without this it would never be compiled into the
-	 * engine and the import would return nil at runtime. Touching the type here forces it in
-	 * (with `@:keep` on the class so DCE keeps it).
-	 */
-	@:keep static var _forceStoryboardRuntime:Class<OsuStoryboardPlayer> = OsuStoryboardPlayer;
-
 	var log:String->Void;
 	var progress:Float->String->Void;
 	var isCancelled:Void->Bool;
