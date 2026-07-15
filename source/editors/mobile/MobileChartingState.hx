@@ -995,8 +995,11 @@ class MobileChartingState extends MusicBeatState {
 			if (audio.time >= audio.length)
 				togglePlayback();
 		}
-		noteField.updateHot(elapsed);
+		// Gestures FIRST: a pan/drag re-times the field and a note drag re-lays it out (releasing every
+		// drawable). Running them after updateHot would leave the notes released at render time -- i.e.
+		// invisible for the whole drag -- and pan a frame stale.
 		gestures.update(elapsed);
+		noteField.updateHot(elapsed);
 
 		statusTick += elapsed;
 		if (statusTick >= 0.25) {
