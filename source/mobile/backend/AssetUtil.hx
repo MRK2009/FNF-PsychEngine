@@ -84,4 +84,89 @@ class AssetUtil
 		#end
 		return Assets.exists(path);
 	}
+
+	/** The APK asset manifest ids, listed once: fixed at build time, and Assets.list walks it all. */
+	static var apkIds:Array<String> = null;
+
+	static function apkList():Array<String>
+	{
+		if (apkIds == null)
+		{
+			try
+			{
+				apkIds = Assets.list();
+			}
+			catch (e:Dynamic)
+			{
+				apkIds = [];
+			}
+		}
+		return apkIds;
+	}
+
+	/**
+	 * Like FileSystem.isDirectory, but never throws and also true for APK-bundled directories
+	 * (any asset id under `path/`). Raw isDirectory throws on a missing path, and `exists` being
+	 * rewritten APK-aware means the usual `exists && isDirectory` guard no longer protects it.
+	 */
+	public static function isDirectory(path:String):Bool
+	{
+		#if sys
+		try
+		{
+			if (sys.FileSystem.exists(path))
+				return sys.FileSystem.isDirectory(path);
+		}
+		catch (e:Dynamic) {}
+		#end
+		final prefix:String = StringTools.endsWith(path, '/') ? path : path + '/';
+		for (id in apkList())
+			if (StringTools.startsWith(id, prefix))
+				return true;
+		return false;
+	}
+
+	/**
+	 * Like FileSystem.readDirectory, but never throws (missing/denied/not-a-dir list as empty) and
+	 * merges in APK-bundled entries, which live in the asset manifest rather than on the real
+	 * filesystem -- a raw readDirectory cannot see a bundled folder at all.
+	 */
+	public static function readDirectory(path:String):Array<String>
+	{
+		var out:Array<String> = [];
+		#if sys
+		try
+		{
+			if (sys.FileSystem.exists(path) && sys.FileSystem.isDirectory(path))
+				out = sys.FileSystem.readDirectory(path);
+		}
+		catch (e:Dynamic) {}
+		#end
+
+		final prefix:String = StringTools.endsWith(path, '/') ? path : path + '/';
+		var seen:Map<String, Bool> = null;
+		for (id in apkList())
+		{
+			if (!StringTools.startsWith(id, prefix))
+				continue;
+			var rest:String = id.substr(prefix.length);
+			final slash:Int = rest.indexOf('/');
+			if (slash >= 0)
+				rest = rest.substr(0, slash);
+			if (rest.length < 1)
+				continue;
+			if (seen == null)
+			{
+				seen = new Map();
+				for (entry in out)
+					seen.set(entry, true);
+			}
+			if (!seen.exists(rest))
+			{
+				seen.set(rest, true);
+				out.push(rest);
+			}
+		}
+		return out;
+	}
 }

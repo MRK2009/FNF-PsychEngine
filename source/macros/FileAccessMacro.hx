@@ -81,6 +81,10 @@ class FileAccessMacro
 						return macro @:pos(e.pos) mobile.backend.AssetUtil.getBytes(${remap(args[0])});
 					case 'FileSystem.exists' | 'sys.FileSystem.exists':
 						return macro @:pos(e.pos) mobile.backend.AssetUtil.exists(${remap(args[0])});
+					case 'FileSystem.isDirectory' | 'sys.FileSystem.isDirectory':
+						return macro @:pos(e.pos) mobile.backend.AssetUtil.isDirectory(${remap(args[0])});
+					case 'FileSystem.readDirectory' | 'sys.FileSystem.readDirectory':
+						return macro @:pos(e.pos) mobile.backend.AssetUtil.readDirectory(${remap(args[0])});
 					default:
 				}
 			default:
