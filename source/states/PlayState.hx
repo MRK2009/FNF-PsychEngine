@@ -1642,7 +1642,7 @@ class PlayState extends MusicBeatState {
 
 		var checkVocals = [vocals, opponentVocals];
 		for (voc in checkVocals) {
-			if (FlxG.sound.music.time < vocals.length) {
+			if (FlxG.sound.music.time < voc.length) {
 				voc.time = FlxG.sound.music.time;
 				#if FLX_PITCH voc.pitch = playbackRate; #end
 				voc.play();
