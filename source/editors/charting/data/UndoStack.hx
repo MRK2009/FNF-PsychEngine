@@ -188,7 +188,9 @@ private final class ChartSnapshot {
 				bpm: e.bpm,
 				changeBPM: e.changeBPM,
 				beats: e.beats,
-				denominator: e.denominator
+				denominator: e.denominator,
+				speed: e.speed,
+				changeSpeed: e.changeSpeed
 			});
 			i++;
 		}
