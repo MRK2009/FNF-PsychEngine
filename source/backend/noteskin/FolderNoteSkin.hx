@@ -123,7 +123,7 @@ class FolderNoteSkin implements INoteSkin {
 		var endsSupported:Bool = NoteSkinConfig.colorableFor(cfg, 'ends');
 		var linked:Bool = ClientPrefs.data.linkSustainColor;
 		tintElement(bodyRGB, 'holds', holdsSupported, linked, col, kc);
-		tintElement(tailRGB, 'holds', endsSupported, linked, col, kc);
+		tintElement(tailRGB, 'ends', endsSupported, linked, col, kc);
 
 		var aa:Bool = (cfg.pixel == true
 			|| NoteSkinConfig.pixelMode) ? false : NoteSkinConfig.boolForColumn(cfg.antialiasing, col, ClientPrefs.data.antialiasing);
