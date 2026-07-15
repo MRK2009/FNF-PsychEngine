@@ -6,7 +6,6 @@ import smidr.UIComponent;
 import smidr.UIRoot;
 import smidr.UITheme;
 import smidr.flixel.FlxSmidr;
-import smidr.types.UISurface;
 import smidr.widgets.UIButton;
 import smidr.widgets.UIDrawer;
 import smidr.widgets.UILabel;
@@ -64,7 +63,7 @@ class MobileEditorShell {
 
 		// Status strip: translucent, centered between the rails.
 		var stripW:Float = FlxG.width - RAIL_W * 2 - 20;
-		var strip:UIPanel = UIPanel.solid(stripW, STRIP_H, 0xB4141419);
+		var strip:UIPanel = new UIPanel(stripW, STRIP_H, 0xB4141419);
 		strip.x = RAIL_W + 10;
 		strip.y = 0;
 		mainUI.addChild(strip);
@@ -77,9 +76,9 @@ class MobileEditorShell {
 		// Thumb rails (slightly translucent so the grid reads as full-screen).
 		leftRail = new Sprite();
 		rightRail = new Sprite();
-		var lp:UIPanel = UIPanel.solid(RAIL_W, FlxG.height, 0xE0191920);
+		var lp:UIPanel = new UIPanel(RAIL_W, FlxG.height, 0xE0191920);
 		leftRail.addChild(lp);
-		var rp:UIPanel = UIPanel.solid(RAIL_W, FlxG.height, 0xE0191920);
+		var rp:UIPanel = new UIPanel(RAIL_W, FlxG.height, 0xE0191920);
 		rightRail.addChild(rp);
 		rightRail.x = FlxG.width - RAIL_W;
 		mainUI.addChild(leftRail);
@@ -198,7 +197,7 @@ class MobileEditorShell {
 		var pad:Float = 10;
 		var totalW:Float = items.length * (btnW + pad) + pad;
 
-		actionBarBg = UIPanel.solid(totalW, btnH + pad * 2, 0xE61E1E26);
+		actionBarBg = new UIPanel(totalW, btnH + pad * 2, 0xE61E1E26);
 		actionBar.addChild(actionBarBg);
 
 		actionX = pad;
