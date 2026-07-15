@@ -148,6 +148,8 @@
 		     mobile.backend.BackButton polls the counter. Same file+rename rule as the
 		     manifest above; the rename path must track the app package. -->
 		<template path="art/android/MainActivity.java" rename="app/src/main/java/com/lulu/psychengine/MainActivity.java" />
+		<!-- Raises the Gradle daemon heap: the stock template's default OOMs packaging our ~350MB APK. -->
+		<template path="art/android/gradle.properties" rename="gradle.properties" />
 	</section>
 
 	<!-- ============================== Libraries =============================== -->
