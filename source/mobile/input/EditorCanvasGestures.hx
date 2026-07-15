@@ -34,6 +34,17 @@ class EditorCanvasGestures {
 	/** A long-press at (x, y) in game px. **/
 	public var onLongPress:Float->Float->Void = null;
 
+	/** Called on press-down at (x, y); return `true` to claim the press as an object DRAG (routed to
+		`onDragMove`/`onDragEnd`) instead of the pan/tap/long-press flow -- e.g. the finger landed on a
+		note. `null` (or returning `false`) keeps the normal canvas behavior. **/
+	public var onDragStart:Float->Float->Bool = null;
+
+	/** While a claimed drag is in progress: delta since last frame + absolute pos, all in game px. **/
+	public var onDragMove:Float->Float->Float->Float->Void = null;
+
+	/** A claimed drag released. **/
+	public var onDragEnd:Void->Void = null;
+
 	// Tuning (seconds / px).
 	public var tapMaxMovePx:Float = 14;
 	public var tapMaxSec:Float = 0.3;
@@ -42,6 +53,7 @@ class EditorCanvasGestures {
 	public var wheelZoomStep:Float = 0.12; // desktop wheel -> zoom factor per notch
 
 	var active:Bool = false; // a one-finger gesture is in progress
+	var dragging:Bool = false; // the active gesture is a claimed object drag (onDragStart returned true)
 	var pinching:Bool = false;
 	var suppressUntilRelease:Bool = false; // set after a pinch so a lingering finger doesn't tap/pan
 	var startX:Float = 0;
@@ -100,6 +112,8 @@ class EditorCanvasGestures {
 			startX = lastX = x;
 			startY = lastY = y;
 			stopFling();
+			// Let the owner claim this press as an object drag (finger on a note); else it's a normal gesture.
+			dragging = (onDragStart != null && onDragStart(x, y));
 			return;
 		}
 		if (suppressUntilRelease)
@@ -110,6 +124,12 @@ class EditorCanvasGestures {
 		lastX = x;
 		lastY = y;
 		heldSec += elapsed;
+
+		if (dragging) {
+			if (onDragMove != null)
+				onDragMove(dx, dy, x, y);
+			return;
+		}
 
 		if (!moved && (Math.abs(x - startX) > tapMaxMovePx || Math.abs(y - startY) > tapMaxMovePx))
 			moved = true;
@@ -131,7 +151,10 @@ class EditorCanvasGestures {
 
 	function handleRelease(elapsed:Float):Void {
 		if (active && !suppressUntilRelease) {
-			if (!moved && !longFired && heldSec <= tapMaxSec) {
+			if (dragging) {
+				if (onDragEnd != null)
+					onDragEnd();
+			} else if (!moved && !longFired && heldSec <= tapMaxSec) {
 				if (onTap != null)
 					onTap(startX, startY);
 			} else if (moved && flingEnabled && (Math.abs(velX) > 40 || Math.abs(velY) > 40)) {
@@ -139,6 +162,7 @@ class EditorCanvasGestures {
 			}
 		}
 		active = false;
+		dragging = false;
 		suppressUntilRelease = false;
 		updateFling(elapsed);
 	}
@@ -146,7 +170,10 @@ class EditorCanvasGestures {
 	function handlePinch():Void {
 		// Two fingers down: cancel any single-finger gesture and suppress it until full release so a
 		// lingering finger after the pinch doesn't tap or jump the pan.
+		if (dragging && onDragEnd != null)
+			onDragEnd();
 		active = false;
+		dragging = false;
 		suppressUntilRelease = true;
 		stopFling();
 
@@ -195,7 +222,7 @@ class EditorCanvasGestures {
 	}
 
 	function reset():Void {
-		active = pinching = suppressUntilRelease = false;
+		active = pinching = dragging = suppressUntilRelease = false;
 		stopFling();
 	}
 
