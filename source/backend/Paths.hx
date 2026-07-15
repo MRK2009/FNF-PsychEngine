@@ -351,6 +351,11 @@ class Paths {
 	static public function getAtlas(key:String, ?parentFolder:String = null, ?allowGPU:Bool = true):FlxAtlasFrames {
 		var useMod = false;
 		var imageLoaded:FlxGraphic = image(key, parentFolder, allowGPU);
+		if (imageLoaded == null) return null; // every path below resolves to null frames anyway
+
+		// See getSparrowAtlas.
+		var cached:FlxAtlasFrames = FlxAtlasFrames.findFrame(imageLoaded);
+		if (cached != null) return cached;
 
 		var myXml:Dynamic = getPath('images/$key.xml', TEXT, parentFolder, true);
 		if (OpenFlAssets.exists(myXml) #if MODS_ALLOWED || (FileSystem.exists(myXml) && (useMod = true)) #end) {
@@ -391,6 +396,11 @@ class Paths {
 		var imageLoaded:FlxGraphic = image(key, parentFolder, allowGPU);
 		if (imageLoaded == null) return null; // missing image -> avoid openfl spamming "null" asset-id errors
 
+		// The from* parsers reuse an atlas already parsed for this graphic, but only once handed the
+		// description -- so reading it off disk first is wasted on every call after the first.
+		var cached:FlxAtlasFrames = FlxAtlasFrames.findFrame(imageLoaded);
+		if (cached != null) return cached;
+
 		var xmlData:String = null;
 		#if MODS_ALLOWED
 		var modXml:String = modsXml(key);
@@ -420,6 +430,11 @@ class Paths {
 	inline static public function getPackerAtlas(key:String, ?parentFolder:String = null, ?allowGPU:Bool = true):FlxAtlasFrames {
 		var imageLoaded:FlxGraphic = image(key, parentFolder, allowGPU);
 		if (imageLoaded == null) return null;
+
+		// See getSparrowAtlas.
+		var cached:FlxAtlasFrames = FlxAtlasFrames.findFrame(imageLoaded);
+		if (cached != null) return cached;
+
 		#if MODS_ALLOWED
 		var txtExists:Bool = false;
 
@@ -437,6 +452,11 @@ class Paths {
 	inline static public function getAsepriteAtlas(key:String, ?parentFolder:String = null, ?allowGPU:Bool = true):FlxAtlasFrames {
 		var imageLoaded:FlxGraphic = image(key, parentFolder, allowGPU);
 		if (imageLoaded == null) return null;
+
+		// See getSparrowAtlas.
+		var cached:FlxAtlasFrames = FlxAtlasFrames.findFrame(imageLoaded);
+		if (cached != null) return cached;
+
 		#if MODS_ALLOWED
 		var jsonExists:Bool = false;
 
