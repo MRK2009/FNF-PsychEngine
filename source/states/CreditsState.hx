@@ -182,12 +182,14 @@ class CreditsState extends MusicBeatState {
 		hintText = mkText(0, FlxG.height - 32, FlxG.width, 'ARROWS Navigate   Q/E Section   ENTER Open link   / Search   ESC Back', 16, CENTER);
 		add(hintText);
 
+		selectSection(0, false);
+		super.create();
+
+		// After super.create(): it runs initPsychCamera, whose FlxG.cameras.reset() would destroy the
+		// controls camera this adds.
 		#if mobile
 		addTouchPad('FULL', 'A_B');
 		#end
-
-		selectSection(0, false);
-		super.create();
 	}
 
 	override function update(elapsed:Float) {

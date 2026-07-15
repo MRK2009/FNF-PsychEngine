@@ -236,9 +236,18 @@ class MusicBeatState extends FlxState {
 	function keepControlsCameraOnTop():Void {
 		if (mobileControlsCamera == null)
 			return;
-		final list = FlxG.cameras.list;
-		if (list.length == 0 || list[list.length - 1] == mobileControlsCamera)
+
+		// Absent from the list means a FlxG.cameras.reset() destroyed it and left this field pointing
+		// at the corpse -- re-adding one null-derefs on its flashSprite inside FlxG.cameras.add, since
+		// remove() only warns for a camera it doesn't own and returns.
+		final index:Int = FlxG.cameras.list.indexOf(mobileControlsCamera);
+		if (index < 0) {
+			mobileControlsCamera = null;
 			return;
+		}
+		if (index == FlxG.cameras.list.length - 1)
+			return;
+
 		FlxG.cameras.remove(mobileControlsCamera, false);
 		FlxG.cameras.add(mobileControlsCamera, false);
 	}
