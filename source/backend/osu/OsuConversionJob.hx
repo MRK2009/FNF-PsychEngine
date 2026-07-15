@@ -549,7 +549,7 @@ class OsuConversionJob {
 				report('Writing chart ${++index}/$total...');
 
 				var hsOut:Array<{time:Float, sounds:Array<{file:String, volume:Float}>}> = opts.convertHitsounds ? [] : null;
-				var song:SwagSong = OsuChartConverter.convert(map, display, stageName, opts.quantize, keys, hsOut);
+				var song:SwagSong = OsuChartConverter.convert(map, display, stageName, opts.mimicSV, opts.quantize, keys, hsOut);
 				if (song == null) {
 					log('Chart conversion failed for version "${map.version}" (${keys}K).');
 					stepDone();
