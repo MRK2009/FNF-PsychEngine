@@ -84,7 +84,7 @@ class MusicPlayer extends FlxGroup {
 			return;
 		}
 
-		var songName:String = instance.songs[FreeplayState.curSelected].songName;
+		var songName:String = instance.currentSongName();
 		if (playing && !wasPlaying)
 			songTxt.text = Language.getPhrase('musicplayer_playing', 'PLAYING: {1}', [songName]);
 		else
@@ -230,7 +230,7 @@ class MusicPlayer extends FlxGroup {
 		FlxG.autoPause = #if mobile ClientPrefs.data.autoPause #else (!playingMusic && ClientPrefs.data.autoPause) #end;
 		active = visible = playingMusic;
 
-		instance.scoreBG.visible = instance.diffText.visible = instance.scoreText.visible = !playingMusic; // Hide Freeplay texts and boxes if playingMusic is true
+		instance.setInfoVisible(!playingMusic); // Hide the Smidr info panel while previewing
 		songTxt.visible = timeTxt.visible = songBG.visible = playbackTxt.visible = playbackBG.visible = progressBar.visible = playingMusic; // Show Music Player texts and boxes if playingMusic is true
 
 		for (i in playbackSymbols)
@@ -242,7 +242,7 @@ class MusicPlayer extends FlxGroup {
 		updatePlaybackTxt();
 
 		if (playingMusic) {
-			instance.bottomText.text = Language.getPhrase('musicplayer_tip', 'Press SPACE to Pause / Press ESCAPE to Exit / Press R to Reset the Song');
+			instance.setHint(Language.getPhrase('musicplayer_tip', 'Press SPACE to Pause / Press ESCAPE to Exit / Press R to Reset the Song'));
 			positionSong();
 
 			progressBar.setRange(0, FlxG.sound.music.length);
@@ -255,8 +255,7 @@ class MusicPlayer extends FlxGroup {
 			progressBar.setParent(null, "");
 			progressBar.numDivisions = 0;
 
-			instance.bottomText.text = instance.bottomString;
-			instance.positionHighscore();
+			instance.setHint(instance.defaultHint());
 		}
 		progressBar.updateBar();
 	}
@@ -280,7 +279,7 @@ class MusicPlayer extends FlxGroup {
 	}
 
 	function positionSong() {
-		var length:Int = instance.songs[FreeplayState.curSelected].songName.length;
+		var length:Int = instance.currentSongName().length;
 		var shortName:Bool = length < 5; // Fix for song names like Ugh, Guns
 		songTxt.x = FlxG.width - songTxt.width - 6;
 		if (shortName)
