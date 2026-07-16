@@ -10,6 +10,15 @@ import haxe.crypto.Md5;
  * Derived stats + every provider's rating for one chart (song at one difficulty).
  * `results` is keyed by `RatingProvider.id()`.
  */
+/** Etterna-style note-pattern tallies for the Freeplay "Insights" tab. `@:optional` on `ChartRatings`
+    so entries cached before this field existed still deserialize (treated as "not computed"). */
+typedef PatternStats = {
+	var jumps:Int; // 2-note rows
+	var hands:Int; // 3+-note rows
+	var holds:Int; // notes with a sustain
+	var avgNps:Float; // player notes per second over the chart
+}
+
 typedef ChartRatings = {
 	var md5:String;
 	var keyCount:Int;
@@ -21,6 +30,7 @@ typedef ChartRatings = {
 	var opponentNotes:Int;
 	var lengthMs:Float;
 	var results:Map<String, RatingResult>;
+	@:optional var patterns:PatternStats;
 }
 
 /**
@@ -37,7 +47,18 @@ typedef ChartRatings = {
  * (FreeplayState.changeSelection already does this before refreshing the flyout).
  */
 class DifficultyRating {
-	public static var providers:Array<RatingProvider> = [new OsuManiaStarCalc()];
+	/**
+	 * A FRESH set of provider instances. Some providers (e.g. `OsuManiaStarCalc`) keep rolling scratch
+	 * state in instance fields, so they are NOT reentrant — the background Freeplay scan must give each
+	 * worker call its own instances (via this factory) rather than sharing `providers` across threads,
+	 * or concurrent `compute` calls race the scratch arrays and crash hxcpp. Also the single source of
+	 * truth for which providers exist.
+	 */
+	public static function freshProviders():Array<RatingProvider>
+		return [new OsuManiaStarCalc(), new EtternaMsdCalc()];
+
+	/** Shared instances for main-thread (single-threaded) callers only. Never touch these off-thread. */
+	public static var providers:Array<RatingProvider> = freshProviders();
 
 	/**
 	 * Ratings + stats for `songName` at difficulty index `diff`, cache-first by chart-file

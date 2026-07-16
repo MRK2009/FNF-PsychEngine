@@ -99,6 +99,39 @@ class ChartScanCache {
 		return data;
 	}
 
+	/**
+	 * Low-level read: the cached `ChartRatings` for a chart file, or null on a signature miss / no
+	 * filesystem. Unlike `ratingsFor`, this never computes — it's for the Freeplay scan, which wants to
+	 * know "is this already cached?" (serve instantly) vs. "must I dispatch a background compute?".
+	 * @param path the chart file path
+	 */
+	public static function getCachedRatings(path:String):Null<ChartRatings> {
+		var sig:String = signatureOf(path);
+		if (sig == null)
+			return null;
+		ensureLoaded();
+		var e = ratings.get(path);
+		return (e != null && e.sig == sig) ? e.data : null;
+	}
+
+	/**
+	 * Low-level write: stores a `ChartRatings` computed elsewhere (e.g. off the main thread by the
+	 * Freeplay scan worker) against the file's current signature. Batched — call `commit()` after a
+	 * scan batch. No-op if the file can't be statted.
+	 * @param path the chart file path
+	 * @param data the freshly computed ratings
+	 */
+	public static function putRatings(path:String, data:ChartRatings):Void {
+		if (data == null)
+			return;
+		var sig:String = signatureOf(path);
+		if (sig == null)
+			return;
+		ensureLoaded();
+		ratings.set(path, {sig: sig, data: data});
+		dirty = true;
+	}
+
 	/** Persists any pending changes (call once after a scan batch). No-op when nothing changed. */
 	public static function commit():Void {
 		if (!dirty)
