@@ -253,6 +253,7 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 		undoStack = new ChartUndoStack(this);
 
 		bg = new FlxSprite().loadGraphic(Paths.image('menuDesat'));
+		CoolUtil.fillScreen(bg);
 		bg.antialiasing = ClientPrefs.data.antialiasing;
 		bg.scrollFactor.set();
 		add(bg);

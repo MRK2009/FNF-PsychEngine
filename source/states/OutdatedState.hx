@@ -32,6 +32,7 @@ class OutdatedState extends MusicBeatState {
 		super.create();
 
 		bg = new FlxSprite().loadGraphic(Paths.image('menuDesat'));
+		CoolUtil.fillScreen(bg);
 		bg.color = 0xFF1A1A2E;
 		bg.screenCenter();
 		add(bg);

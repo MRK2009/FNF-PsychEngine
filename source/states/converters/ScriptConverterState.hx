@@ -86,6 +86,7 @@ class ScriptConverterState extends MusicBeatState {
 		modFolders = backend.Mods.getModDirectories();
 
 		var bg:FlxSprite = new FlxSprite().loadGraphic(Paths.image('menuDesat'));
+		CoolUtil.fillScreen(bg);
 		bg.color = 0xFF1A1A2E;
 		bg.antialiasing = ClientPrefs.data.antialiasing;
 		bg.screenCenter();

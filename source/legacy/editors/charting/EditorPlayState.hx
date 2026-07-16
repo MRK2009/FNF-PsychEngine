@@ -96,6 +96,7 @@ class EditorPlayState extends MusicBeatSubstate {
 
 		/* setting up Editor PlayState stuff */
 		var bg:FlxSprite = new FlxSprite().loadGraphic(Paths.image('menuDesat'));
+		CoolUtil.fillScreen(bg);
 		bg.antialiasing = ClientPrefs.data.antialiasing;
 		bg.scrollFactor.set();
 		bg.color = 0xFF101010;

@@ -40,8 +40,7 @@ class AchievementsMenuState extends MusicBeatState {
 
 		var menuBG:FlxSprite = new FlxSprite().loadGraphic(Paths.image('menuBGBlue'));
 		menuBG.antialiasing = ClientPrefs.data.antialiasing;
-		menuBG.setGraphicSize(Std.int(menuBG.width * 1.1));
-		menuBG.updateHitbox();
+		CoolUtil.fillScreen(menuBG);
 		menuBG.screenCenter();
 		menuBG.scrollFactor.set();
 		add(menuBG);

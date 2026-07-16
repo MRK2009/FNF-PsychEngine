@@ -20,6 +20,23 @@ class CoolUtil {
 		}
 	}
 
+	/**
+	 * Cover-fits a full-screen background sprite: uniformly scales it so it always fills the whole
+	 * screen (cropping the overflow) at any aspect ratio, then re-centers it. Use for menu/UI
+	 * backgrounds that would otherwise leave gaps at wide resolutions. Not for gameplay (PlayState).
+	 * @param spr the loaded background sprite
+	 * @return the same sprite, for chaining
+	 */
+	public static function fillScreen(spr:flixel.FlxSprite):flixel.FlxSprite {
+		if (spr == null || spr.frameWidth <= 0 || spr.frameHeight <= 0)
+			return spr;
+		var cover:Float = Math.max(flixel.FlxG.width / spr.frameWidth, flixel.FlxG.height / spr.frameHeight);
+		spr.scale.set(cover, cover);
+		spr.updateHitbox();
+		spr.screenCenter();
+		return spr;
+	}
+
 	public static function checkForUpdates(url:String = null):String {
 		if (url == null || url.length == 0)
 			url = "https://raw.githubusercontent.com/MeguminBOT/FNF-PsychEngine/master/gitVersion.txt";

@@ -91,6 +91,7 @@ class OsuConverterState extends MusicBeatState {
 		FlxG.mouse.useSystemCursor = true;
 
 		var bg:FlxSprite = new FlxSprite().loadGraphic(Paths.image('menuDesat'));
+		CoolUtil.fillScreen(bg);
 		bg.scrollFactor.set();
 		bg.color = 0xFF15151F;
 		add(bg);

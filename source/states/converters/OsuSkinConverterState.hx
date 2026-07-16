@@ -45,6 +45,7 @@ class OsuSkinConverterState extends MusicBeatState {
 		fileDialog = new FileDialogHandler();
 
 		var bg:FlxSprite = new FlxSprite().loadGraphic(Paths.image('menuDesat'));
+		CoolUtil.fillScreen(bg);
 		bg.scrollFactor.set();
 		bg.color = 0xFF20202A;
 		add(bg);

@@ -39,6 +39,7 @@ class BaseOptionsMenu extends MusicBeatSubstate {
 		#end
 
 		bg = new FlxSprite().loadGraphic(Paths.image('menuDesat'));
+		CoolUtil.fillScreen(bg);
 		bg.color = 0xFFea71fd;
 		bg.screenCenter();
 		bg.antialiasing = ClientPrefs.data.antialiasing;

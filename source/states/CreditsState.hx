@@ -97,6 +97,7 @@ class CreditsState extends MusicBeatState {
 		add(bgImage);
 
 		bgTint = new FlxSprite().loadGraphic(Paths.image('menuDesat'));
+		CoolUtil.fillScreen(bgTint);
 		bgTint.color = intendedColor;
 		bgTint.scrollFactor.set();
 		bgTint.screenCenter();

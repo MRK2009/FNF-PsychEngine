@@ -86,6 +86,7 @@ class UISkinEditorState extends MusicBeatState {
 		#end
 
 		var bg:FlxSprite = new FlxSprite().loadGraphic(Paths.image('menuDesat'));
+		CoolUtil.fillScreen(bg);
 		bg.scrollFactor.set();
 		bg.color = 0xFF1B1B26;
 		add(bg);

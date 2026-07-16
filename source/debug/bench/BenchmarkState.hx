@@ -14,6 +14,7 @@ class BenchmarkState extends MusicBeatState {
 		FlxG.camera.bgColor = FlxColor.BLACK;
 
 		var bg:FlxSprite = new FlxSprite().loadGraphic(Paths.image('menuDesat'));
+		CoolUtil.fillScreen(bg);
 		bg.scrollFactor.set();
 		bg.color = 0xFF303030;
 		add(bg);
