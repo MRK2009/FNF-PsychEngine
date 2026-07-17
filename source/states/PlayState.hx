@@ -203,6 +203,39 @@ class PlayState extends MusicBeatState {
 
 	public var ratingsData:Array<Rating> = Rating.loadDefault();
 
+	/**
+		The scoring orchestrator: the one active scoring system (per `ClientPrefs.data.scoreSystem`)
+		plus the session judgement log. With the default Psych system the classic inline arithmetic
+		below stays the display/script authority and this runs in parallel for records; any other
+		system owns the displayed score/accuracy/grade and the fields here mirror it.
+	**/
+	public var scoring:backend.scoring.ScoreController = new backend.scoring.ScoreController(ClientPrefs.data.scoreSystem);
+
+	/** Highest combo reached this run. */
+	public var maxCombo:Int = 0;
+
+	/** Set before switching to PlayState to watch a replay; consumed (not cleared) by create. */
+	public static var startReplay:backend.replay.ReplayData = null;
+
+	/** True while a replay drives the inputs; real input is blocked and nothing is recorded. */
+	public var replayMode(default, null):Bool = false;
+
+	var replayPlayer:backend.replay.ReplayPlayer = null;
+	var replayRecorder:backend.replay.ReplayRecorder = null;
+	var replayInjecting:Bool = false;
+	var replayPrefs:{
+		sick:Float, good:Float, bad:Float, safe:Float, ratingOff:Int, noteOff:Int,
+		ghost:Bool, gh:Bool, judge:Int, od:Float, speed:Float
+	} = null;
+
+	/** Optional hit-error bar HUD element, null when the option is Off. */
+	public var hitErrorBar:objects.HitErrorBar = null;
+
+	/** Optional per-hit millisecond readout, null when the option is off. */
+	public var msTimingTxt:FlxText = null;
+
+	var msTimingLife:Float = 0;
+
 	private var generatedMusic:Bool = false;
 
 	public var endingSong:Bool = false;
@@ -333,7 +366,11 @@ class PlayState extends MusicBeatState {
 		instance = this;
 
 		PauseSubState.songName = null; // Reset to default
+		if (startReplay != null)
+			enterReplayMode(startReplay);
 		playbackRate = ClientPrefs.getGameplaySetting('songspeed');
+		scoring.begin(0, playbackRate);
+		replayRecorder = new backend.replay.ReplayRecorder();
 
 		// Multikey: derive the column count from the chart (absent == 4K) and feed
 		// every keycount-dependent global from the Mania tables. 4K resolves to the
@@ -619,7 +656,28 @@ class PlayState extends MusicBeatState {
 		botplayTxt.scrollFactor.set();
 		botplayTxt.borderSize = 1.25;
 		botplayTxt.visible = cpuControlled;
+		if (replayMode) {
+			botplayTxt.text = Language.getPhrase('Replay', 'REPLAY');
+			botplayTxt.visible = true;
+		}
 		uiGroup.add(botplayTxt);
+
+		if (ClientPrefs.data.hitErrorBar != 'Off') {
+			hitErrorBar = new objects.HitErrorBar(scoring, ClientPrefs.data.hitErrorBar, FlxG.width * 0.5,
+				ClientPrefs.data.downScroll ? 84 : FlxG.height - 84);
+			hitErrorBar.visible = !ClientPrefs.data.hideHud;
+			uiGroup.add(hitErrorBar);
+		}
+		if (ClientPrefs.data.hitMsDisplay) {
+			msTimingTxt = new FlxText(0, 0, 220, '', 20);
+			msTimingTxt.setFormat(Paths.font('vcr.ttf'), 20, FlxColor.WHITE, CENTER, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+			msTimingTxt.scrollFactor.set();
+			msTimingTxt.borderSize = 1.25;
+			msTimingTxt.screenCenter();
+			msTimingTxt.y += 130;
+			msTimingTxt.visible = false;
+			uiGroup.add(msTimingTxt);
+		}
 		if (ClientPrefs.data.downScroll)
 			botplayTxt.y = healthBar.y + 70;
 
@@ -1054,6 +1112,13 @@ class PlayState extends MusicBeatState {
 			canPause = true;
 			// NoteSystem V2
 			buildNoteFields();
+
+			// Always arm the recorder (recording is two array pushes per press) — whether the run
+			// PERSISTS a replay is decided once at endSong, where ranked/saveReplays are evaluated.
+			// Deciding here is fragile: botplay/practice can be toggled mid-song from the pause menu.
+			if (!replayMode && !chartingMode && replayRecorder != null)
+				replayRecorder.begin(Highscore.formatSong(Song.loadedSongName, storyDifficulty) + '_' + totalColumns + 'k', Song.loadedSongName,
+					(Mods.currentModDirectory != null) ? Mods.currentModDirectory : '', storyDifficulty, totalColumns, playbackRate, scoring.system.id());
 
 			startedCountdown = true;
 			Conductor.songPosition = -Conductor.crochet * 5 + Conductor.offset;
@@ -1720,7 +1785,16 @@ class PlayState extends MusicBeatState {
 		updateIconsScale(elapsed);
 		updateIconsPosition();
 
+		if (msTimingLife > 0) {
+			msTimingLife -= elapsed;
+			if (msTimingLife <= 0)
+				msTimingTxt.visible = false;
+			else if (msTimingLife < 0.3)
+				msTimingTxt.alpha = msTimingLife / 0.3;
+		}
+
 		if (startedCountdown && !paused) {
+			backend.profiles.ProfileManager.notePlaytime(elapsed);
 			Conductor.songPosition += elapsed * 1000 * playbackRate;
 			if (Conductor.songPosition >= Conductor.offset) {
 				Conductor.songPosition = FlxMath.lerp(FlxG.sound.music.time + Conductor.offset, Conductor.songPosition, Math.exp(-elapsed * 5));
@@ -2478,11 +2552,14 @@ class PlayState extends MusicBeatState {
 		var ret:Dynamic = callOnScripts('onEndSong', null, true);
 		if (ret != LuaUtils.Function_Stop && !transitioning) {
 			#if !switch
-			var percent:Float = ratingPercent;
-			if (Math.isNaN(percent))
-				percent = 0;
-			Highscore.saveScore(Song.loadedSongName, songScore, storyDifficulty, percent);
+			if (!scoring.ownsDisplay && !replayMode) {
+				var percent:Float = ratingPercent;
+				if (Math.isNaN(percent))
+					percent = 0;
+				Highscore.saveScore(Song.loadedSongName, songScore, storyDifficulty, percent);
+			}
 			#end
+			recordPlayResult();
 			playbackRate = 1;
 
 			if (chartingMode) {
@@ -2535,6 +2612,11 @@ class PlayState extends MusicBeatState {
 				canResync = false;
 				if (exitToScriptedStateIfNeeded()) {
 					changedDifficulty = false;
+				} else if (playResult != null) {
+					// Keep the song's mod context so the results screen can Retry in place.
+					MusicBeatState.switchState(new ResultsState(playResult, scoring.stats, true));
+					FlxG.sound.playMusic(Paths.music('freakyMenu'));
+					changedDifficulty = false;
 				} else {
 					trace('WENT BACK TO FREEPLAY??');
 					Mods.loadTopMod();
@@ -2548,6 +2630,84 @@ class PlayState extends MusicBeatState {
 		return true;
 	}
 
+	/**
+		Switches this run into replay playback: blocks real input, swaps the judgement-relevant
+		ClientPrefs for the replay header's snapshot (restored in destroy), rebuilds the scoring
+		controller on the replay's system and prepares the edge player.
+		@param data the replay to play
+	**/
+	function enterReplayMode(data:backend.replay.ReplayData):Void {
+		replayMode = true;
+		replayPlayer = new backend.replay.ReplayPlayer(data);
+		replayPrefs = {
+			sick: ClientPrefs.data.sickWindow,
+			good: ClientPrefs.data.goodWindow,
+			bad: ClientPrefs.data.badWindow,
+			safe: ClientPrefs.data.safeFrames,
+			ratingOff: ClientPrefs.data.ratingOffset,
+			noteOff: ClientPrefs.data.noteOffset,
+			ghost: ClientPrefs.data.ghostTapping,
+			gh: ClientPrefs.data.guitarHeroSustains,
+			judge: ClientPrefs.data.etternaJudge,
+			od: ClientPrefs.data.osuOD,
+			speed: ClientPrefs.getGameplaySetting('songspeed')
+		};
+		ClientPrefs.data.sickWindow = data.sickWindow;
+		ClientPrefs.data.goodWindow = data.goodWindow;
+		ClientPrefs.data.badWindow = data.badWindow;
+		ClientPrefs.data.safeFrames = data.safeFrames;
+		ClientPrefs.data.ratingOffset = data.ratingOffset;
+		ClientPrefs.data.noteOffset = data.noteOffset;
+		ClientPrefs.data.ghostTapping = data.ghostTapping;
+		ClientPrefs.data.guitarHeroSustains = data.guitarHeroSustains;
+		ClientPrefs.data.etternaJudge = data.etternaJudge;
+		ClientPrefs.data.osuOD = data.osuOD;
+		ClientPrefs.data.gameplaySettings.set('songspeed', data.playbackRate);
+		scoring = new backend.scoring.ScoreController(data.systemId);
+	}
+
+	/** Restores the ClientPrefs a replay temporarily overrode. */
+	function exitReplayMode():Void {
+		if (replayPrefs == null)
+			return;
+		ClientPrefs.data.sickWindow = replayPrefs.sick;
+		ClientPrefs.data.goodWindow = replayPrefs.good;
+		ClientPrefs.data.badWindow = replayPrefs.bad;
+		ClientPrefs.data.safeFrames = replayPrefs.safe;
+		ClientPrefs.data.ratingOffset = replayPrefs.ratingOff;
+		ClientPrefs.data.noteOffset = replayPrefs.noteOff;
+		ClientPrefs.data.ghostTapping = replayPrefs.ghost;
+		ClientPrefs.data.guitarHeroSustains = replayPrefs.gh;
+		ClientPrefs.data.etternaJudge = replayPrefs.judge;
+		ClientPrefs.data.osuOD = replayPrefs.od;
+		ClientPrefs.data.gameplaySettings.set('songspeed', replayPrefs.speed);
+		replayPrefs = null;
+	}
+
+	/**
+		Fires every replay edge due at the current song position: presses re-enter `keyPressed`
+		with the song position forced to the recorded value (bit-identical judgement offsets),
+		releases go through `keyReleased`, and the virtual hold state feeds `keysCheck`.
+	**/
+	function updateReplayInput():Void {
+		var rp:backend.replay.ReplayPlayer = replayPlayer;
+		while (rp.due(Conductor.songPosition)) {
+			var col:Int = rp.nextColumn();
+			var down:Bool = rp.nextDown();
+			var t:Float = rp.nextTime();
+			rp.advance();
+			if (down) {
+				var last:Float = Conductor.songPosition;
+				Conductor.songPosition = t;
+				replayInjecting = true;
+				keyPressed(col);
+				replayInjecting = false;
+				Conductor.songPosition = last;
+			} else
+				keyReleased(col);
+		}
+	}
+
 	public function KillNotes() {
 		// NoteSystem V2
 		if (playerField != null)
@@ -2555,6 +2715,114 @@ class PlayState extends MusicBeatState {
 		if (opponentField != null)
 			opponentField.clear();
 		eventNotes = [];
+	}
+
+	/** The finished play's record, built by `recordPlayResult` for the results screen. */
+	public var playResult:backend.profiles.ScoreRecord = null;
+
+	/**
+		Persists the finished play into the active profile: commits the session counters (playtime,
+		keypresses), builds a `ScoreRecord` from what the player saw on the HUD (kept in
+		`playResult` for the results screen even when unranked), and -- for real plays only, never
+		practice/botplay/charting/opponent mode -- grades Etterna skills from the play's
+		Wife3-at-J4 percent through the MinaCalc port and stores the record in the score DB.
+	**/
+	function recordPlayResult():Void {
+		backend.profiles.ProfileManager.commitSession();
+
+		var stats:backend.scoring.SessionStats = scoring.stats;
+		var totalNotes:Int = stats.hitCount + stats.misses;
+		if (totalNotes <= 0)
+			return;
+		stats.maxCombo = maxCombo;
+
+		var ranked:Bool = !(chartingMode || cpuControlled || practiceMode || replayMode
+			|| ClientPrefs.getGameplaySetting('practice')
+			|| ClientPrefs.getGameplaySetting('botplay')
+			|| ClientPrefs.getGameplaySetting('opponentplay'));
+
+		var wifeJ4:Float = scoring.wifeJ4Percent();
+		var ssr:Array<Float> = ranked ? backend.profiles.SkillRating.ssrForPlay(buildMsdRows(), playbackRate, totalColumns, wifeJ4) : [];
+
+		var acc:Float = ratingPercent;
+		if (Math.isNaN(acc))
+			acc = 0;
+
+		var rec:backend.profiles.ScoreRecord = {
+			id: 0,
+			songKey: Highscore.formatSong(Song.loadedSongName, storyDifficulty) + '_' + totalColumns + 'k',
+			songName: Song.loadedSongName,
+			folder: (Mods.currentModDirectory != null) ? Mods.currentModDirectory : '',
+			diff: storyDifficulty,
+			diffName: Difficulty.getString(storyDifficulty, false),
+			keyCount: totalColumns,
+			systemId: scoring.system.id(),
+			score: songScore,
+			accuracy: acc,
+			grade: ratingName,
+			fc: (ratingFC != null) ? ratingFC : '',
+			counts: scoring.counts().copy(),
+			judgementNames: scoring.system.judgementNames(),
+			misses: songMisses,
+			maxCombo: maxCombo,
+			totalNotes: totalNotes,
+			playbackRate: playbackRate,
+			dateSec: Date.now().getTime() / 1000,
+			wifePercent: wifeJ4,
+			ssr: ssr
+		};
+		playResult = rec;
+		if (ranked) {
+			backend.profiles.ProfileManager.recordPlay(rec);
+			if (ClientPrefs.data.saveReplays && replayRecorder != null && replayRecorder.data.length() > 0) {
+				replayRecorder.active = false;
+				var pid:Int = backend.profiles.ProfileManager.active().id;
+				backend.profiles.ProfileManager.ensureReplaysDir(pid);
+				var fname:String = rec.id + '.psr';
+				if (replayRecorder.data.save(backend.profiles.ProfileManager.replaysDir(pid) + '/' + fname)) {
+					rec.replayFile = fname;
+					backend.profiles.ProfileManager.scores().save();
+				} else
+					trace('replay save FAILED for ' + fname);
+			}
+		}
+	}
+
+	/**
+		Flattens the player field's chart notes into strictly-increasing MinaCalc rows (column
+		bitmask + time in seconds), folding chord notes within 1 ms into one row -- the same
+		grouping `EtternaMsdCalc` uses, so per-play SSRs match the freeplay MSD's view of the chart.
+		@return the rows, empty when there is no player field
+	**/
+	function buildMsdRows():Array<backend.difficulty.minacalc.NoteData.NoteInfo> {
+		var out:Array<backend.difficulty.minacalc.NoteData.NoteInfo> = [];
+		if (playerField == null)
+			return out;
+		var notes:Array<NoteData> = playerField.notes;
+		var i:Int = 0;
+		var count:Int = notes.length;
+		var lastTime:Float = Math.NEGATIVE_INFINITY;
+		while (i < count) {
+			var t0:Float = notes[i].time;
+			var mask:Int = 0;
+			var j:Int = i;
+			while (j < count && notes[j].time - t0 <= 1.0) {
+				var lane:Int = notes[j].column;
+				if (lane >= 0 && lane < totalColumns && !notes[j].ignore)
+					mask |= 1 << lane;
+				j++;
+			}
+			var sec:Float = t0 / 1000.0;
+			if (mask != 0) {
+				if (sec > lastTime) {
+					out.push(new backend.difficulty.minacalc.NoteData.NoteInfo(mask, sec));
+					lastTime = sec;
+				} else if (out.length > 0)
+					out[out.length - 1].notes |= mask;
+			}
+			i = j;
+		}
+		return out;
 	}
 
 	public var totalPlayed:Int = 0;
@@ -2630,6 +2898,8 @@ class PlayState extends MusicBeatState {
 	public var strumsBlocked:Array<Bool> = [];
 
 	private function onKeyPress(event:KeyboardEvent):Void {
+		if (replayMode)
+			return;
 		var eventKey:FlxKey = event.keyCode;
 		var key:Int = getStrumFromKey(eventKey);
 
@@ -2646,6 +2916,8 @@ class PlayState extends MusicBeatState {
 	}
 
 	private function onKeyRelease(event:KeyboardEvent):Void {
+		if (replayMode)
+			return;
 		var eventKey:FlxKey = event.keyCode;
 		var key:Int = getStrumFromKey(eventKey);
 		if (!controls.controllerMode && key > -1)
@@ -3159,6 +3431,8 @@ class PlayState extends MusicBeatState {
 						rec.playAnim('static');
 						rec.resetAnim = 0;
 					}
+					if (!cpuControlled && !data.missed)
+						scoring.sustainComplete();
 					playerField.remove(note);
 				} else {
 					resingHold(data.gfNote ? gf : boyfriend, data, songPos); // keep singing through the hold (per-step)
@@ -3206,15 +3480,22 @@ class PlayState extends MusicBeatState {
 			releaseArray = _releaseArray = [for (_ in 0...klen) false];
 		}
 
+		// Replay playback: fire due edges first, then sample the virtual key state instead of
+		// Controls -- it flips exactly at the recorded edges, like real event-driven keys.
+		// Never drain while paused: keyPressed would early-return and the edge would be lost.
+		if (replayMode && replayPlayer != null && !paused)
+			updateReplayInput();
+
 		final ctrl = controls;
 		var anyHeld:Bool = false;
 		var anyPressed:Bool = false;
 		var anyReleased:Bool = false;
+		final rHeld = replayMode ? replayPlayer.held : null;
 		for (i in 0...klen) {
 			final k = keys[i];
-			final h = ctrl.pressed(k);
-			final p = ctrl.justPressed(k);
-			final r = ctrl.justReleased(k);
+			final h = (rHeld != null) ? (i < rHeld.length && rHeld[i]) : ctrl.pressed(k);
+			final p = (rHeld != null) ? false : ctrl.justPressed(k);
+			final r = (rHeld != null) ? false : ctrl.justReleased(k);
 			holdArray[i] = h;
 			pressArray[i] = p;
 			releaseArray[i] = r;
@@ -3227,7 +3508,7 @@ class PlayState extends MusicBeatState {
 		}
 
 		#if mobile
-		if (hitbox != null) {
+		if (hitbox != null && !replayMode) {
 			final hlen:Int = (klen < hitbox.buttons.length) ? klen : hitbox.buttons.length;
 			for (i in 0...hlen) {
 				final btn = hitbox.buttons[i];
@@ -3243,7 +3524,7 @@ class PlayState extends MusicBeatState {
 		}
 		#end
 
-		if (ctrl.controllerMode && anyPressed)
+		if (ctrl.controllerMode && anyPressed && !replayMode)
 			for (i in 0...klen)
 				if (pressArray[i] && strumsBlocked[i] != true)
 					keyPressed(i);
@@ -3278,7 +3559,7 @@ class PlayState extends MusicBeatState {
 			}
 		}
 
-		if (anyReleased && (ctrl.controllerMode || anyStrumBlocked()))
+		if (anyReleased && !replayMode && (ctrl.controllerMode || anyStrumBlocked()))
 			for (i in 0...klen)
 				if (releaseArray[i] || strumsBlocked[i] == true)
 					keyReleased(i);
@@ -3289,13 +3570,17 @@ class PlayState extends MusicBeatState {
 		if (cpuControlled || paused || inCutscene || key < 0 || key >= playerReceptors.length || !generatedMusic || endingSong || boyfriend.stunned)
 			return;
 
+		if (!replayMode)
+			backend.profiles.ProfileManager.noteKeypress();
 		var ret:Dynamic = callOnScripts('onKeyPressPre', [key]);
 		if (ret == LuaUtils.Function_Stop)
 			return;
 
 		var lastTime:Float = Conductor.songPosition;
-		if (Conductor.songPosition >= 0)
+		if (!replayInjecting && Conductor.songPosition >= 0)
 			Conductor.songPosition = FlxG.sound.music.time + Conductor.offset;
+		if (replayRecorder != null && replayRecorder.active)
+			replayRecorder.notePress(key, Conductor.songPosition);
 
 		playerField.pickHit(key, strumsBlocked[key] == true);
 		var funny:ActiveNote = playerField.hitBest;
@@ -3332,6 +3617,8 @@ class PlayState extends MusicBeatState {
 		if (cpuControlled || !startedCountdown || paused || key < 0 || key >= playerReceptors.length)
 			return;
 
+		if (replayRecorder != null && replayRecorder.active)
+			replayRecorder.noteRelease(key, Conductor.songPosition);
 		var ret:Dynamic = callOnScripts('onKeyReleasePre', [key]);
 		if (ret == LuaUtils.Function_Stop)
 			return;
@@ -3556,6 +3843,7 @@ class PlayState extends MusicBeatState {
 		data.missed = true;
 		lastJudgedNote = data;
 
+		scoring.miss(!endingSong);
 		noteMissCommon(data.column, data);
 		var result:Dynamic = callOnLuas('noteMiss', [-1, data.column, data.type, data.isSustain()]);
 		if (notStopped(result))
@@ -3574,6 +3862,7 @@ class PlayState extends MusicBeatState {
 		data.holdReleased = true;
 		lastJudgedNote = data;
 
+		scoring.holdDrop(!endingSong);
 		noteMissCommon(data.column, data);
 		var result:Dynamic = callOnLuas('noteMiss', [-1, data.column, data.type, true]);
 		if (notStopped(result))
@@ -3590,6 +3879,7 @@ class PlayState extends MusicBeatState {
 		var data:NoteData = note.data;
 		data.headMissed = true;
 		lastJudgedNote = data;
+		scoring.miss(!endingSong);
 		noteMissCommon(data.column, data);
 		var result:Dynamic = callOnLuas('noteMiss', [-1, data.column, data.type, false]);
 		if (notStopped(result))
@@ -3641,6 +3931,7 @@ class PlayState extends MusicBeatState {
 	function sustainSegmentMiss(note:ActiveNote):Void {
 		var data:NoteData = note.data;
 		lastJudgedNote = data;
+		scoring.segmentMiss(!endingSong);
 		noteMissCommon(data.column, data);
 		var result:Dynamic = callOnLuas('noteMiss', [-1, data.column, data.type, true]);
 		if (notStopped(result))
@@ -3652,6 +3943,7 @@ class PlayState extends MusicBeatState {
 	function noteMissPress(direction:Int = 1):Void {
 		if (ClientPrefs.data.ghostTapping)
 			return;
+		scoring.ghostMiss();
 		noteMissCommon(direction);
 		FlxG.sound.play(Paths.soundRandom('missnote', 1, 3), FlxG.random.float(0.1, 0.2));
 		callOnScripts('noteMissPress', [direction]);
@@ -3676,7 +3968,10 @@ class PlayState extends MusicBeatState {
 		combo = 0;
 
 		health -= subtract * healthLoss;
-		songScore -= 10;
+		if (scoring.ownsDisplay)
+			songScore = scoring.score();
+		else
+			songScore -= 10;
 		if (!endingSong)
 			songMisses++;
 		totalPlayed++;
@@ -3696,6 +3991,26 @@ class PlayState extends MusicBeatState {
 			}
 		}
 		vocals.volume = 0;
+	}
+
+	/**
+		Shows a hit's signed millisecond offset near the judgement popups, colored by its tier
+		(late positive, early negative). One reused text, faded out in update.
+		@param offsetMs the signed rate-normalized offset
+		@param tier the judgement's visual tier
+	**/
+	function showMsTiming(offsetMs:Float, tier:Int):Void {
+		var rounded:Float = Math.round(offsetMs * 10) / 10;
+		msTimingTxt.text = (rounded > 0 ? '+' : '') + rounded + ' ms';
+		msTimingTxt.color = switch (tier) {
+			case 0: 0xFF6FE3FF;
+			case 1: 0xFF9EE86F;
+			case 2: 0xFFF2C94C;
+			default: 0xFFEB5757;
+		}
+		msTimingTxt.alpha = 1;
+		msTimingTxt.visible = !ClientPrefs.data.hideHud;
+		msTimingLife = 0.9;
 	}
 
 	// NoteSystem V2
@@ -3724,27 +4039,51 @@ class PlayState extends MusicBeatState {
 		var pl:UIPlacement = UISkinConfig.placement();
 		var placement:Float = FlxG.width * pl.anchorX;
 		var rating:FlxSprite = acquirePopupSprite();
-		var score:Int = 350;
 
-		var daRating:Rating = Conductor.judgeNote(ratingsData, noteDiff / playbackRate);
-		totalNotesHit += daRating.ratingMod;
-		data.ratingMod = daRating.ratingMod;
-		if (!data.ratingDisabled)
-			daRating.hits++;
-		data.rating = daRating.name;
-		score = daRating.score;
-
-		if (daRating.noteSplash && !data.splashDisabled)
-			splashOnColumn(data.column);
-
-		if (!cpuControlled) {
-			songScore += score;
-			if (!data.ratingDisabled) {
-				songHits++;
-				totalPlayed++;
-				RecalculateRating(false);
+		var signedDiff:Float = (data.time - Conductor.songPosition + ClientPrefs.data.ratingOffset) / playbackRate;
+		var ji:Int = scoring.judgeHit(Conductor.songPosition, signedDiff, !cpuControlled, !data.ratingDisabled);
+		if (hitErrorBar != null)
+			hitErrorBar.onHit(signedDiff, scoring.visualTier(ji));
+		if (msTimingTxt != null)
+			showMsTiming(signedDiff, scoring.visualTier(ji));
+		var daRating:Rating;
+		var doSplash:Bool;
+		if (scoring.ownsDisplay) {
+			daRating = ratingsData[scoring.visualTier(ji)];
+			data.ratingMod = scoring.accWeight(ji);
+			if (!data.ratingDisabled)
+				daRating.hits++;
+			data.rating = scoring.judgementName(ji);
+			doSplash = scoring.splash(ji);
+			if (scoring.breaksCombo(ji))
+				combo = 0;
+			if (!cpuControlled) {
+				songScore = scoring.score();
+				if (!data.ratingDisabled)
+					RecalculateRating(false);
+			}
+		} else {
+			daRating = Conductor.judgeNote(ratingsData, noteDiff / playbackRate);
+			totalNotesHit += daRating.ratingMod;
+			data.ratingMod = daRating.ratingMod;
+			if (!data.ratingDisabled)
+				daRating.hits++;
+			data.rating = daRating.name;
+			doSplash = daRating.noteSplash;
+			if (!cpuControlled) {
+				songScore += daRating.score;
+				if (!data.ratingDisabled) {
+					songHits++;
+					totalPlayed++;
+					RecalculateRating(false);
+				}
 			}
 		}
+		if (combo > maxCombo)
+			maxCombo = combo;
+
+		if (doSplash && !data.splashDisabled)
+			splashOnColumn(data.column);
 
 		var uiFolder:String = "";
 		var antialias:Bool = ClientPrefs.data.antialiasing;
@@ -3870,6 +4209,8 @@ class PlayState extends MusicBeatState {
 	}
 
 	override function destroy() {
+		backend.profiles.ProfileManager.commitSession();
+		exitReplayMode();
 		if (noteCompat != null) {
 			noteCompat.clear();
 			noteCompat = null;
@@ -4297,23 +4638,29 @@ class PlayState extends MusicBeatState {
 
 		var ret:Dynamic = callOnScripts('onRecalculateRating', null, true);
 		if (ret != LuaUtils.Function_Stop) {
-			ratingName = '?';
-			if (totalPlayed != 0) // Prevent divide by 0
-			{
-				// Rating Percent
-				ratingPercent = Math.min(1, Math.max(0, totalNotesHit / totalPlayed));
-				// trace((totalNotesHit / totalPlayed) + ', Total: ' + totalPlayed + ', notes hit: ' + totalNotesHit);
+			if (scoring.ownsDisplay) {
+				ratingPercent = scoring.accuracy();
+				ratingName = scoring.grade();
+				ratingFC = scoring.fcState();
+			} else {
+				ratingName = '?';
+				if (totalPlayed != 0) // Prevent divide by 0
+				{
+					// Rating Percent
+					ratingPercent = Math.min(1, Math.max(0, totalNotesHit / totalPlayed));
+					// trace((totalNotesHit / totalPlayed) + ', Total: ' + totalPlayed + ', notes hit: ' + totalNotesHit);
 
-				// Rating Name
-				ratingName = ratingStuff[ratingStuff.length - 1][0]; // Uses last string
-				if (ratingPercent < 1)
-					for (i in 0...ratingStuff.length - 1)
-						if (ratingPercent < ratingStuff[i][1]) {
-							ratingName = ratingStuff[i][0];
-							break;
-						}
+					// Rating Name
+					ratingName = ratingStuff[ratingStuff.length - 1][0]; // Uses last string
+					if (ratingPercent < 1)
+						for (i in 0...ratingStuff.length - 1)
+							if (ratingPercent < ratingStuff[i][1]) {
+								ratingName = ratingStuff[i][0];
+								break;
+							}
+				}
+				fullComboFunction();
 			}
-			fullComboFunction();
 		}
 		setOnScripts('rating', ratingPercent);
 		setOnScripts('ratingName', ratingName);
