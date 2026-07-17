@@ -272,7 +272,7 @@ class SectionTab {
 					s.positionNoteXByData(note.data);
 				}
 			}
-			s.softReloadNotes(true);
+			s.hardRefreshNotes();
 		});
 		var duetSectionButton:PsychUIButton = new PsychUIButton(objX + 100, objY, 'Duet Section', function() {
 			var side:Int = -1;
@@ -321,7 +321,7 @@ class SectionTab {
 				note.changeNoteData((Math.floor(data / ChartingState.GRID_COLUMNS_PER_PLAYER) * ChartingState.GRID_COLUMNS_PER_PLAYER) + ChartingState.GRID_COLUMNS_PER_PLAYER - note.noteData - 1);
 				s.positionNoteXByData(note.data);
 			}
-			s.softReloadNotes(true);
+			s.hardRefreshNotes();
 		});
 
 		tab_group.add(s.mustHitCheckBox);

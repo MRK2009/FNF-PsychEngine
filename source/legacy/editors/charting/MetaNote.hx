@@ -152,34 +152,46 @@ class MetaNote extends Note {
 	var _frameTex:String = null;
 	var _frameKey:Int = -1;
 
+	override function set_texture(value:String):String {
+		if (texture != value)
+			_frameCol = -999;
+		return super.set_texture(value);
+	}
+
 	public function refreshNoteData(data:ChartNote):Void {
 		noteData = data.noteData;
 		mustPress = data.mustPress;
 
+		var col:Int = noteData % Note.colArray.length;
+		if (col < 0)
+			col += Note.colArray.length;
+		var scrollAnim:String = Note.colArray[col] + 'Scroll';
+
 		// reloadNote rebuilds the per-(column, skin, pixel, texture, keycount) atlas frames. A pooled
-		// drawable often already holds exactly those, so skip the rebuild when the identity is unchanged;
-		// the column animation + hitbox below are re-applied cheaply regardless, and the '<col>Scroll'
-		// animation still exists from the prior same-identity build.
+		// drawable often already holds exactly those, so skip the rebuild when the identity is unchanged.
+		// The identity is only stamped when the rebuild actually produced this column's animation:
+		// reloadNote can bail silently (missing atlas / folder-skin image), and stamping anyway would
+		// leave the previous column's art permanently stuck on this drawable (mirror/swap section).
 		var skin:String = NoteSkinConfig.activeSkin();
 		var pix:Bool = PlayState.isPixelStage;
 		var tex:String = (PlayState.SONG != null) ? PlayState.SONG.arrowSkin : null;
 		var kc:Int = Mania.current;
 		if (noteData != _frameCol || skin != _frameSkin || pix != _framePix || tex != _frameTex || kc != _frameKey) {
 			reloadNote();
-			_frameCol = noteData;
-			_frameSkin = skin;
-			_framePix = pix;
-			_frameTex = tex;
-			_frameKey = kc;
+			if (animation.getByName(scrollAnim) != null) {
+				_frameCol = noteData;
+				_frameSkin = skin;
+				_framePix = pix;
+				_frameTex = tex;
+				_frameKey = kc;
+			} else
+				_frameCol = -999;
 		}
 
 		if (Note.globalRgbShaders.contains(rgbShader.parent))
 			rgbShader = new RGBShaderReference(this, Note.initializeGlobalRGBShader(noteData));
 
-		var col:Int = noteData % Note.colArray.length;
-		if (col < 0)
-			col += Note.colArray.length;
-		animation.play(Note.colArray[col] + 'Scroll');
+		animation.play(scrollAnim, true);
 		updateHitbox();
 		if (width > height)
 			setGraphicSize(ChartingState.GRID_SIZE);
@@ -288,6 +300,11 @@ class MetaNote extends Note {
 			data = null;
 			if (freeList != null)
 				freeList.push(this);
+		}
+		noteType = null;
+		if (texture != null && texture.length > 0) {
+			@:bypassAccessor texture = '';
+			_frameCol = -999;
 		}
 		if (eventText != null)
 			eventText.visible = false;

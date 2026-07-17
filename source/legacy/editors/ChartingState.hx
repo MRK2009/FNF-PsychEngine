@@ -2203,6 +2203,14 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 				spr.unbind();
 	}
 
+	// Unbinds every realized drawable and re-realizes the window so bulk edits of already-visible
+	// notes (mirror/swap section) rebuild their graphics through the full bind path.
+	function hardRefreshNotes():Void {
+		unrealizeGroup(curRenderedNotes);
+		unrealizeGroup(behindRenderedNotes);
+		softReloadNotes();
+	}
+
 	// Destroys + drops the whole drawable pool so fresh members re-resolve the song's note skin
 	// (the MetaNote constructor reads the current arrowSkin). Used after the Note Texture changes.
 	function reskinNotePool():Void {
