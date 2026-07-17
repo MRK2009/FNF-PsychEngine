@@ -9,6 +9,8 @@ import objects.MusicPlayer;
 import states.freeplay.FreeplayListView;
 import states.freeplay.FreeplayTopBar;
 import states.freeplay.FreeplayInfoPanel;
+import states.freeplay.FreeplayProfilePanel;
+import backend.profiles.ScoreRecord;
 import options.GameplayChangersSubstate;
 import substates.ResetScoreSubState;
 import flixel.math.FlxMath;
@@ -41,6 +43,7 @@ class FreeplayState extends MusicBeatState {
 	var uiRoot:UIRoot;
 	var topBar:FreeplayTopBar;
 	var infoPanel:FreeplayInfoPanel;
+	var profilePanel:FreeplayProfilePanel;
 
 	var bg:FlxSprite;
 	var scanLbl:UILabel;
@@ -63,6 +66,7 @@ class FreeplayState extends MusicBeatState {
 	var infoW:Float = 400;
 
 	override function create():Void {
+		PlayState.startReplay = null;
 		// Frees the previous state's bitmaps BEFORE this menu loads its own — must precede asset loading
 		// (deferring it disposes the freshly-loaded icons/font/bars and crashes).
 		Paths.clearStoredMemory();
@@ -132,12 +136,14 @@ class FreeplayState extends MusicBeatState {
 		FlxG.mouse.visible = true;
 		FlxG.mouse.useSystemCursor = true;
 
-		topBar = new FreeplayTopBar(uiRoot, library, onSearch, onSort, onGroup);
+		topBar = new FreeplayTopBar(uiRoot, library, onSearch, onSort, onGroup, onProfileChip);
 		// A reused (cached) library carries its last sort/search over — sync the chrome to it.
 		topBar.setSort(library.curSort);
 		if (library.searchQuery.length > 0)
 			topBar.searchInput.text = library.searchQuery;
 		infoPanel = new FreeplayInfoPanel(uiRoot);
+		infoPanel.onScoreClick = openScoreResults;
+		profilePanel = new FreeplayProfilePanel(onProfileChanged);
 
 		scanLbl = new UILabel('', 12, 2);
 		uiRoot.content.addChild(scanLbl);
@@ -183,6 +189,29 @@ class FreeplayState extends MusicBeatState {
 		library.searchQuery = q;
 		library.applyFilters();
 		restoreSelection(keep);
+	}
+
+	/** Toggles the profile overlay from the top-bar chip. */
+	function onProfileChip():Void {
+		if (profilePanel != null)
+			profilePanel.toggle();
+	}
+
+	/** Refreshes the chrome after the active profile switched or changed name. */
+	function onProfileChanged():Void {
+		topBar.refreshProfile();
+		var e:SongEntry = listView.selectedEntry();
+		if (e != null)
+			infoPanel.show(e, Difficulty.getString(curDifficulty, false), Difficulty.getString(curDifficulty), Difficulty.list.length);
+	}
+
+	/**
+	 * Opens a stored highscore in the results screen (view mode).
+	 * @param rec the clicked record
+	 */
+	function openScoreResults(rec:ScoreRecord):Void {
+		persistentUpdate = false;
+		MusicBeatState.switchState(new ResultsState(rec));
 	}
 
 	function onSort(idx:Int):Void {

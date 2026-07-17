@@ -5,9 +5,12 @@ import smidr.widgets.UIPanel;
 import smidr.widgets.UILabel;
 import smidr.widgets.UITextInput;
 import smidr.widgets.UIDropdown;
+import smidr.widgets.UIButton;
 import backend.freeplay.SongLibrary;
 import backend.freeplay.SongEntry;
 import backend.difficulty.DifficultyRating.ChartRatings;
+import backend.profiles.ProfileManager;
+import backend.profiles.ProfileManager.ProfileData;
 
 /**
  * The Freeplay top bar, built with **Smidr** and anchored flush across the very top of the screen
@@ -37,8 +40,11 @@ class FreeplayTopBar {
 	var groupCap:UILabel;
 	var groupDrop:UIDropdown;
 	var msdLbl:UILabel;
+	var profileBtn:UIButton;
 
 	var onGroup:Int->Void;
+
+	static inline final PROFILE_W:Float = 170;
 
 	var bx:Float = 0;
 	var by:Float = 0;
@@ -52,8 +58,9 @@ class FreeplayTopBar {
 	 * @param onSearch fired with the query text on every search keystroke
 	 * @param onSort fired with the picked sort index
 	 * @param onGroup fired with the picked group-option index
+	 * @param onProfile fired when the profile chip is clicked
 	 */
-	public function new(root:UIRoot, library:SongLibrary, onSearch:String->Void, onSort:Int->Void, onGroup:Int->Void) {
+	public function new(root:UIRoot, library:SongLibrary, onSearch:String->Void, onSort:Int->Void, onGroup:Int->Void, ?onProfile:Void->Void) {
 		this.root = root;
 		this.library = library;
 		this.onGroup = onGroup;
@@ -79,6 +86,12 @@ class FreeplayTopBar {
 
 		msdLbl = new UILabel('', 13, 1);
 		root.content.addChild(msdLbl);
+
+		// Added AFTER the frosted panel: the panel is click-blocking, so anything parented before
+		// it sits underneath in z-order and never receives the mouse.
+		profileBtn = new UIButton('', PROFILE_W, CTRL_H, onProfile);
+		root.content.addChild(profileBtn);
+		refreshProfile();
 
 		rebuildGroups();
 	}
@@ -123,8 +136,18 @@ class FreeplayTopBar {
 		groupDrop.x = cx;
 		groupDrop.y = ctrlY;
 
+		profileBtn.x = x + w - PAD - PROFILE_W;
+		profileBtn.y = ctrlY;
+
 		msdLbl.y = y + (h - 18) * 0.5;
 		refreshMsd();
+	}
+
+	/** Refreshes the profile chip's caption from the active profile (name + overall skill). */
+	public function refreshProfile():Void {
+		var p:ProfileData = ProfileManager.active();
+		var overall:Float = (p.skills != null && p.skills.length > 0) ? p.skills[0] : 0;
+		profileBtn.label = p.name + '   ' + fmt2(overall);
 	}
 
 	/** (Re)fills the group dropdown from the library's current group options. */
@@ -167,7 +190,7 @@ class FreeplayTopBar {
 		var avg:String = (n > 0) ? fmt2(sum / n) : '—';
 		msdLbl.text = library.entries.length + ' songs      Avg MSD ' + avg;
 		msdLbl.measure();
-		msdLbl.x = bx + bw - PAD - msdLbl.w;
+		msdLbl.x = bx + bw - PAD - PROFILE_W - 14 - msdLbl.w;
 	}
 
 	/**

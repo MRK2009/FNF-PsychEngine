@@ -5,10 +5,15 @@ import smidr.UIRoot;
 import smidr.widgets.UIPanel;
 import smidr.widgets.UILabel;
 import smidr.widgets.UITabs;
+import smidr.widgets.UIButton;
+import smidr.widgets.UIScrollPane;
 import backend.Highscore;
 import backend.freeplay.SongEntry;
 import backend.difficulty.DifficultyRating.ChartRatings;
 import backend.difficulty.RatingResult;
+import backend.profiles.ProfileManager;
+import backend.profiles.ScoreRecord;
+import backend.scoring.ScoreSystems;
 
 /**
  * The right-edge Freeplay info panel — Smidr, frosted 50%, overlaid on top of the classic Flixel song
@@ -55,6 +60,17 @@ class FreeplayInfoPanel {
 	var sTitle:UILabel;
 	var sList:UILabel;
 	var sStub:UILabel;
+	var sRows:Array<UIButton> = [];
+	var sAllBtn:UIButton;
+	var sPane:UIScrollPane;
+	var sRecords:Array<ScoreRecord> = [];
+	var sExpanded:Bool = false;
+
+	/** Fired when the user clicks a stored highscore; opens the results screen in view mode. */
+	public var onScoreClick:ScoreRecord->Void = null;
+
+	static inline final SCORE_ROW_H:Float = 30;
+	static inline final SCORE_TOP_N:Int = 10;
 	// Insights
 	var iTitle:UILabel;
 	var iMsd:UILabel;
@@ -114,6 +130,20 @@ class FreeplayInfoPanel {
 		sList = mk(15, 0);
 		sStub = mk(12, 2);
 		sStub.colorOverride = 0xFF8A8299;
+
+		for (i in 0...SCORE_TOP_N) {
+			var idx:Int = i;
+			var b:UIButton = new UIButton('', 100, SCORE_ROW_H - 4, () -> rowClicked(idx));
+			b.visible = false;
+			root.content.addChild(b);
+			sRows.push(b);
+		}
+		sAllBtn = new UIButton('Show all', 100, SCORE_ROW_H, toggleExpanded);
+		sAllBtn.visible = false;
+		root.content.addChild(sAllBtn);
+		sPane = new UIScrollPane(100, 100);
+		sPane.visible = false;
+		root.content.addChild(sPane);
 
 		iTitle = mk(17, 0);
 		iMsd = mk(18, 0);
@@ -264,19 +294,145 @@ class FreeplayInfoPanel {
 	}
 
 	/**
-	 * Fills the Scores tab. Phase 1 shows the single best; the multi-score history lands in Phase 2.
+	 * Fills the Scores tab from the active profile's score database: the top rows as clickable
+	 * buttons (opening the results screen in view mode), expandable to a scrollable full list.
 	 * @param e the song
 	 * @param diffDisplay the localized difficulty name
-	 * @param pbScore the personal-best score
-	 * @param pbAcc the personal-best accuracy in [0, 1]
+	 * @param pbScore the legacy personal-best score, shown when the DB has no records yet
+	 * @param pbAcc the legacy personal-best accuracy in [0, 1]
 	 */
 	function fillScores(e:SongEntry, diffDisplay:String, pbScore:Int, pbAcc:Float):Void {
-		sTitle.text = e.songName + '  —  ' + diffDisplay;
-		if (pbScore > 0)
-			sList.text = '1.   ' + commas(pbScore) + '    ·    ' + fmt2(pbAcc * 100) + '%    ' + grade(pbAcc);
-		else
-			sList.text = 'No scores yet — play it!';
-		sStub.text = 'Multiple scores and the result screen arrive with score recording (Phase 2). This shows your single best for now.';
+		sTitle.text = e.songName + '  -  ' + diffDisplay;
+		sRecords = ProfileManager.scores().listFor(songKeyFor(e, lastDiffName));
+		if (sRecords.length == 0) {
+			sExpanded = false;
+			if (pbScore > 0) {
+				sList.text = 'Best (legacy): ' + commas(pbScore) + '    ' + fmt2(pbAcc * 100) + '%    ' + grade(pbAcc);
+				sStub.text = 'Finish the song to record full scores here.';
+			} else {
+				sList.text = 'No scores yet.';
+				sStub.text = 'Finish the song to record a score.';
+			}
+		} else {
+			sList.text = '';
+			sStub.text = sRecords.length + (sRecords.length == 1 ? ' score' : ' scores') + ' recorded.';
+		}
+	}
+
+	/**
+	 * The score-DB key for a song at a difficulty, matching how PlayState records plays.
+	 * @param e the song
+	 * @param diffName the raw difficulty name
+	 * @return the songKey (path + difficulty suffix + keycount)
+	 */
+	function songKeyFor(e:SongEntry, diffName:String):String {
+		var r:ChartRatings = e.ratingFor(diffName);
+		var kc:Int = (r != null && r.keyCount > 0) ? r.keyCount : 4;
+		return Highscore.formatSong(e.songName, diffIndexOf(diffName)) + '_' + kc + 'k';
+	}
+
+	/**
+	 * One row's caption for a stored score.
+	 * @param i the rank position (0-based)
+	 * @param rec the record
+	 * @return the row text
+	 */
+	function scoreRowLabel(i:Int, rec:ScoreRecord):String {
+		var sys:Int = ScoreSystems.IDS.indexOf(rec.systemId);
+		var tag:String = sys >= 0 ? ScoreSystems.LABELS[sys] : rec.systemId;
+		var s:String = '${i + 1}.  ${commas(rec.score)}   ${fmt2(rec.accuracy * 100)}%   ${rec.grade}   $tag';
+		if (rec.playbackRate != 1)
+			s += '   ${rec.playbackRate}x';
+		return s;
+	}
+
+	/**
+	 * Opens the clicked score in the results screen.
+	 * @param i the visible row index into the collapsed top list
+	 */
+	function rowClicked(i:Int):Void {
+		if (onScoreClick != null && i < sRecords.length)
+			onScoreClick(sRecords[i]);
+	}
+
+	/** Switches the Scores tab between the top rows and the full scrollable list. */
+	function toggleExpanded():Void {
+		sExpanded = !sExpanded;
+		reflow();
+	}
+
+	/** Hides every score-row widget (used when leaving the Scores tab). */
+	function hideScoreRows():Void {
+		for (b in sRows)
+			b.visible = false;
+		sAllBtn.visible = false;
+		sPane.visible = false;
+	}
+
+	/**
+	 * Lays the score rows out below the stacked labels.
+	 * @param topY the y below the last label
+	 */
+	function layoutScoreRows(topY:Float):Void {
+		hideScoreRows();
+		if (!visible || sRecords.length == 0)
+			return;
+		var innerW:Float = pw - PAD * 2;
+		var bottom:Float = py + ph - PAD;
+
+		if (!sExpanded) {
+			var shown:Int = sRecords.length < SCORE_TOP_N ? sRecords.length : SCORE_TOP_N;
+			var cy:Float = topY;
+			for (i in 0...shown) {
+				if (cy + SCORE_ROW_H > bottom - SCORE_ROW_H)
+					break;
+				var b:UIButton = sRows[i];
+				b.label = (scoreRowLabel(i, sRecords[i]));
+				b.resize(innerW, SCORE_ROW_H - 4);
+				b.x = px + PAD;
+				b.y = cy;
+				b.visible = true;
+				cy += SCORE_ROW_H;
+			}
+			if (sRecords.length > shown || sExpanded) {
+				sAllBtn.label = ('Show all (${sRecords.length})');
+				sAllBtn.resize(innerW, SCORE_ROW_H);
+				sAllBtn.x = px + PAD;
+				sAllBtn.y = cy + 4;
+				sAllBtn.visible = true;
+			}
+		} else {
+			sAllBtn.label = ('Show top ${SCORE_TOP_N}');
+			sAllBtn.resize(innerW, SCORE_ROW_H);
+			sAllBtn.x = px + PAD;
+			sAllBtn.y = topY;
+			sAllBtn.visible = true;
+
+			var paneY:Float = topY + SCORE_ROW_H + 6;
+			var paneH:Float = bottom - paneY;
+			if (paneH < SCORE_ROW_H)
+				return;
+			sPane.x = px + PAD;
+			sPane.y = paneY;
+			sPane.resize(innerW, paneH);
+			sPane.visible = true;
+
+			while (sPane.content.numChildren > 0)
+				sPane.content.removeChildAt(0);
+			var cy:Float = 0;
+			for (i in 0...sRecords.length) {
+				var rec:ScoreRecord = sRecords[i];
+				var b:UIButton = new UIButton(scoreRowLabel(i, rec), innerW - 14, SCORE_ROW_H - 4, () -> {
+					if (onScoreClick != null)
+						onScoreClick(rec);
+				});
+				b.x = 0;
+				b.y = cy;
+				sPane.content.addChild(b);
+				cy += SCORE_ROW_H;
+			}
+			sPane.refreshContent(cy);
+		}
 	}
 
 	/**
@@ -319,7 +475,10 @@ class FreeplayInfoPanel {
 		iStats.text = s.join('\n');
 	}
 
-	/** Stacks the active tab's non-empty labels below the tab strip; hides everything else. */
+	/**
+	 * Stacks the active tab's non-empty labels below the tab strip and hides everything else;
+	 * the Scores tab additionally lays its clickable rows out below the labels.
+	 */
 	function reflow():Void {
 		for (t in 0...byTab.length)
 			if (t != curTab)
@@ -340,6 +499,11 @@ class FreeplayInfoPanel {
 			l.visible = true;
 			cy += h + gapFor(l);
 		}
+
+		if (curTab == TAB_SCORES && visible)
+			layoutScoreRows(cy + 2);
+		else
+			hideScoreRows();
 	}
 
 	/**
