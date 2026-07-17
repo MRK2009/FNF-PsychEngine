@@ -69,6 +69,13 @@ class OptionsState extends MusicBeatState {
 	var headerLabel:UILabel;
 	var descLabel:UILabel;
 
+	// Held for re-layout on window resize (SmidrUI is OpenFL-based, so it doesn't ride the cameras;
+	// the widescreen scale mode changes FlxG.width/height and the chrome must re-measure from it).
+	var bgSprite:FlxSprite;
+	var railPanel:UIPanel;
+	var contentPanel:UIPanel;
+	var titleLabel:UILabel;
+
 	/** Collapsed sub-sections, keyed by `category/section`; absent = expanded. **/
 	var collapsed:Map<String, Bool> = new Map();
 
@@ -114,12 +121,12 @@ class OptionsState extends MusicBeatState {
 		categories = OptionsCatalog.build();
 		wireDynamicOptions();
 
-		var bg:FlxSprite = new FlxSprite().loadGraphic(Paths.image('menuDesat'));
-		CoolUtil.fillScreen(bg);
-		bg.color = 0xFF1A1A2E;
-		bg.antialiasing = ClientPrefs.data.antialiasing;
-		bg.screenCenter();
-		add(bg);
+		bgSprite = new FlxSprite().loadGraphic(Paths.image('menuDesat'));
+		CoolUtil.fillScreen(bgSprite);
+		bgSprite.color = 0xFF1A1A2E;
+		bgSprite.antialiasing = ClientPrefs.data.antialiasing;
+		bgSprite.screenCenter();
+		add(bgSprite);
 
 		UILocale.translate = function(k:String, f:String):String return Language.getPhrase(k, f);
 		UIFonts.register('assets/fonts/vcr.ttf');
@@ -136,7 +143,63 @@ class OptionsState extends MusicBeatState {
 
 		buildChrome();
 		selectCategory(0);
+		// SmidrUI is OpenFL-based, so it doesn't follow the Flixel cameras: re-measure the chrome from
+		// FlxG.width/height whenever the game is resized (the widescreen scale mode changes them).
+		FlxG.signals.gameResized.add(onGameResized);
 		super.create();
+	}
+
+	/** Re-fits the background and re-lays the OpenFL-based Smidr chrome after a window resize. */
+	function onGameResized(w:Int, h:Int):Void {
+		if (uiRoot == null)
+			return;
+		if (bgSprite != null) {
+			CoolUtil.fillScreen(bgSprite);
+			bgSprite.screenCenter();
+		}
+
+		var insetL:Float = 24;
+		var insetR:Float = 24;
+		var insetT:Float = 0;
+		var insetB:Float = 0;
+		#if mobile
+		var corner:Float = mobile.backend.SafeArea.cornerRadius;
+		insetL = Math.max(24, Math.max(mobile.backend.SafeArea.left, corner) + 8);
+		insetR = Math.max(24, Math.max(mobile.backend.SafeArea.right, corner) + 8);
+		insetT = mobile.backend.SafeArea.top;
+		insetB = mobile.backend.SafeArea.bottom;
+		#end
+		railX = insetL;
+		panelY = 72 + insetT;
+		panelH = FlxG.height - panelY - 52 - insetB;
+		contentX = railX + RAIL_W + 16;
+		contentW = FlxG.width - contentX - insetR;
+
+		railPanel.resize(RAIL_W, panelH);
+		railPanel.x = railX;
+		railPanel.y = panelY;
+		contentPanel.resize(contentW, panelH);
+		contentPanel.x = contentX;
+		contentPanel.y = panelY;
+		titleLabel.x = railX;
+		titleLabel.y = 18 + insetT;
+		searchInput.x = FlxG.width - insetR - 340; // searchW in buildChrome
+		searchInput.y = 22 + insetT;
+		headerLabel.x = contentX + 16;
+		headerLabel.y = panelY + 12;
+		descLabel.x = contentX + 16;
+		descLabel.y = panelY + 46;
+		hintLabel.x = railX;
+		hintLabel.y = FlxG.height - 28 - insetB;
+		pane.resize(contentW - 16, panelH - 84);
+		pane.x = contentX + 8;
+		pane.y = panelY + 72;
+		for (i in 0...railButtons.length) {
+			railButtons[i].x = railX + 10;
+			railButtons[i].y = panelY + 16 + i * 58;
+		}
+
+		rebuildRows(); // reflow the current rows to the new content width
 	}
 
 	/** Builds the static chrome: panels, title/header/hint labels, category rail and the scroll pane. **/
@@ -159,20 +222,20 @@ class OptionsState extends MusicBeatState {
 		contentX = railX + RAIL_W + 16;
 		contentW = FlxG.width - contentX - insetR;
 
-		var railPanel:UIPanel = new UIPanel(RAIL_W, panelH, PANEL);
+		railPanel = new UIPanel(RAIL_W, panelH, PANEL);
 		railPanel.x = railX;
 		railPanel.y = panelY;
 		uiRoot.content.addChild(railPanel);
 
-		var contentPanel:UIPanel = new UIPanel(contentW, panelH, PANEL);
+		contentPanel = new UIPanel(contentW, panelH, PANEL);
 		contentPanel.x = contentX;
 		contentPanel.y = panelY;
 		uiRoot.content.addChild(contentPanel);
 
-		var title:UILabel = new UILabel('OPTIONS', 30, 0);
-		title.x = railX;
-		title.y = 18 + insetT;
-		uiRoot.content.addChild(title);
+		titleLabel = new UILabel('OPTIONS', 30, 0);
+		titleLabel.x = railX;
+		titleLabel.y = 18 + insetT;
+		uiRoot.content.addChild(titleLabel);
 
 		var searchW:Int = 340;
 		searchInput = new UITextInput('', searchW, '', onSearchChanged);
@@ -985,6 +1048,7 @@ class OptionsState extends MusicBeatState {
 	override function destroy():Void {
 		FlxG.mouse.useSystemCursor = false;
 		FlxG.mouse.visible = false;
+		FlxG.signals.gameResized.remove(onGameResized);
 		UITooltip.reset();
 		FlxSmidr.dispose();
 		#if mobile

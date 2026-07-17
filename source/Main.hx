@@ -180,7 +180,18 @@ class Main extends Sprite {
 		FlxG.signals.gameResized.add(function(w, h) {
 			if (FlxG.cameras != null) {
 				for (cam in FlxG.cameras.list) {
-					if (cam != null && cam.filters != null)
+					if (cam == null)
+						continue;
+					// Flixel's camera onResize only re-applies scale; it never grows the camera's logical
+					// size. With the widescreen scale mode FlxG.width/height can change on a window resize,
+					// so a full-screen camera created before the resize (the live state's) would keep its
+					// old size and leave the game view under-filled / wrong aspect. Re-fit it here.
+					if ((cam.x == 0 && cam.y == 0) && (cam.width != FlxG.width || cam.height != FlxG.height)) {
+						cam.width = FlxG.width;
+						cam.height = FlxG.height;
+						cam.setScale(cam.scaleX, cam.scaleY);
+					}
+					if (cam.filters != null)
 						resetSpriteCache(cam.flashSprite);
 				}
 			}
