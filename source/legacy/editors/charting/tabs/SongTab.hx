@@ -1,6 +1,8 @@
 package legacy.editors.charting.tabs;
 
 import backend.StageData;
+import backend.Song; // provides Song + the SwagSong typedef (used by the #if mac Reload JSON button)
+import backend.Highscore;
 import legacy.editors.content.Prompt;
 import legacy.editors.ChartingState;
 
