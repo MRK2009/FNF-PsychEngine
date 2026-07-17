@@ -4,17 +4,23 @@ Baseline: archived-repo commit
 [`5c67ced`](https://github.com/ShadowMario/FNF-PsychEngine/commit/5c67ced49e5a98535298a6daa3f8f4ec79ac8399)
 ("Update gitVersion.txt", 2025-03-24).
 
-This document covers two distinct eras of work, and is split accordingly:
+This document covers distinct eras of work, and is split accordingly:
 
 - **[Part 1: Base Engine Fixes](#part-1-base-engine-fixes)** -- `5c67ced..153fe63a`, **179 commits,
   188 files changed, ~20,300 insertions / ~17,800 deletions**. Modernization of the archived engine:
   updated libraries, a rewritten build/setup process, ModSecurity, and a large backlog of crash and
   bug fixes. The goal of this era was compatibility and maintenance, not new features.
 - **[Part 2: Fork-Specific Features](#part-2-fork-specific-features)** --
-  `153fe63a..HEAD`, **173 commits, 594 files changed, ~56,900 insertions / ~17,100 deletions**. New,
+  `153fe63a..`, **173 commits, 594 files changed, ~56,900 insertions / ~17,100 deletions**. New,
   fork-original systems built on top of the modernized base: the chart editor rewrite, the note/UI
   skin rework, multikey and time-signature support, the osu! beatmap converter, Android support, and
-  more.
+  more. The per-commit detail below runs through the early v1.3.0-dev work (the LoadingState
+  multithreading rework).
+- **Part 3: v1.2.1 to v1.3.0**, the remainder of the 1.3.0 line (~257 further commits): the
+  scoring / profiles / replay stack, the osu!-style results screen, the Freeplay redesign with
+  difficulty ratings, the SmidrUI migration of every editor and menu, widescreen scaling, and more.
+  This era is **summarized in the [v1.3.0 release notes](RELEASE_NOTES_1.3.md)**; a full per-commit
+  expansion here is still pending.
 
 ([source/states/MainMenuState.hx](../source/states/MainMenuState.hx#L16))
 

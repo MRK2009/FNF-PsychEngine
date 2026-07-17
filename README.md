@@ -13,15 +13,25 @@ This is a maintained fork of Psych Engine (by [MeguminBOT](https://github.com/Me
 - **Safer mods** — let players run community mods with less risk via an opt-in script-scanning sandbox.
 - **Better scripting & modding ergonomics** — class/state-level scripting, a real-Lua mode, modpack types, and more configurable engine features.
 
-**Headline changes**
-- **Modernized dependencies** — major upgrades to Flixel/Flixel-Addons, OpenFL, Lime; `linc_luajit` → `hxluajit`, `hscript-iris` → `hscript-insanity`, `flxanimate` → `flixel-animate`.
-- **ModSecurity** — scans a mod's Lua/HScript on enable, flags risky calls (`os.execute`, reflection tampering, etc.), and prompts to **Trust** or **Block** per mod. Configurable in *Misc* options.
-- **Modpack types** — `pack.json` now distinguishes globally-running *Script Packs* from local *Mod Packs* (with opt-in `runsGlobally`).
-- **Scripting upgrades** — class/state-based scripted states, plus selectable Lua modes (`compat` legacy callbacks vs. `raw` real-Lua object access) and a configurable *State Source*.
-- **Configurable FPS / performance counter** — position, color, font size, update rate, and toggleable FPS / Memory / Peak / CPU / GPU / VRAM readouts (CPU/GPU/VRAM via the optional `hxhardware` lib).
-- **Setup overhaul** — pinned, dependency-isolated `haxelib` setup with a project-local `.haxelib/` repo and `hxcpp` built from source.
+**Headline changes (1.2 to 1.3)**
+- **Note System V2**: a rewritten note/strum runtime (data/drawable split, note pooling) on a new native **psych_v2** chart format, with data-driven strumlines and native multikey (1K to 9K). Existing mods keep working via a per-modpack `compatibilityMode` flag.
+- **New note and UI skin system**: three first-class note-skin types (Modern/Folder, Classic, Legacy), per-asset independent coloring, and folder-based judgement/combo/countdown UI skins.
+- **New Chart Editor**: a ground-up editor with pooled notes, per-section scroll speed, strumline character icons, a Patterns rail, a Metadata tab, and a full touch (mobile) editor.
+- **Redesigned Freeplay plus difficulty ratings**: a threaded, cached song library with streamed ratings (an Etterna **MinaCalc** port and an osu!mania star engine), search/sort/group/favorites, and a song-info flyout.
+- **Scoring, profiles and replays**: pluggable scoring systems (Psych / Wife3 / osu!mania / V-Slice), local player profiles with an unlimited highscore DB, 1:1 binary replays, and an osu!-style results screen with an unstable-rate graph.
+- **osu! beatmap converter**: in-engine `.osz`/`.osu` to psych_v2 conversion with Scroll Velocity, storyboards, osu!std to mania, and skin conversion.
+- **Android / Mobile**: a full arm64 port with touch controls, the system file picker (SAF), the Game Mode API, and APK self-update.
+- **New UI framework (SmidrUI)** underpinning every editor and menu, plus opt-in desktop **widescreen** ("no black bars") scaling.
 
-See [docs/FORK_CHANGES.md](docs/FORK_CHANGES.md) for the full changelog and [docs/MIGRATION_1.0.4_to_1.1.md](docs/MIGRATION_1.0.4_to_1.1.md) for migration notes.
+**Earlier headline changes (1.1)**
+- **Modernized dependencies**: major upgrades to Flixel/Flixel-Addons, OpenFL, Lime; `linc_luajit` to `hxluajit`, `hscript-iris` to `hscript-insanity`, `flxanimate` to `flixel-animate`.
+- **ModSecurity**: scans a mod's Lua/HScript on enable, flags risky calls (`os.execute`, reflection tampering, etc.), and prompts to **Trust** or **Block** per mod. Configurable in *Misc* options.
+- **Modpack types**: `pack.json` now distinguishes globally-running *Script Packs* from local *Mod Packs* (with opt-in `runsGlobally`).
+- **Scripting upgrades**: class/state-based scripted states, plus selectable Lua modes (`compat` legacy callbacks vs. `raw` real-Lua object access) and a configurable *State Source*.
+- **Configurable FPS / performance counter**: position, color, font size, update rate, and toggleable FPS / Memory / Peak / CPU / GPU / VRAM readouts (CPU/GPU/VRAM via the optional `hxhardware` lib).
+- **Setup overhaul**: pinned, dependency-isolated `haxelib` setup with a project-local `.haxelib/` repo and `hxcpp` built from source.
+
+See the [v1.3.0 release notes](docs/RELEASE_NOTES_1.3.md) for the latest changelog, [docs/FORK_CHANGES.md](docs/FORK_CHANGES.md) for the full per-commit history, and [docs/MIGRATION_1.0.4_to_1.1.md](docs/MIGRATION_1.0.4_to_1.1.md) for migration notes.
 
 ## Installation:
 
