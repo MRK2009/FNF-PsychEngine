@@ -60,6 +60,24 @@ class DifficultyRating {
 	/** Shared instances for main-thread (single-threaded) callers only. Never touch these off-thread. */
 	public static var providers:Array<RatingProvider> = freshProviders();
 
+	static var _algoSignature:String = null;
+
+	/**
+	 * A combined signature of every provider's id and algoVersion. Cached results stamped with a
+	 * different signature were computed by older maths (e.g. the pre-MinaCalc MSD approximation)
+	 * and must be recomputed even when the chart file itself is unchanged.
+	 * @return the joined 'id:version' list
+	 */
+	public static function algoSignature():String {
+		if (_algoSignature == null) {
+			var parts:Array<String> = [];
+			for (p in providers)
+				parts.push(p.id() + ':' + p.algoVersion());
+			_algoSignature = parts.join(',');
+		}
+		return _algoSignature;
+	}
+
 	/**
 	 * Ratings + stats for `songName` at difficulty index `diff`, cache-first by chart-file
 	 * signature: an unchanged file returns the cached result without a re-read/parse, a new or

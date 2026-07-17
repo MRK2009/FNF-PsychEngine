@@ -21,7 +21,7 @@ import sys.FileSystem;
  */
 class ChartScanCache {
 	static var names:Map<String, {sig:String, name:String}> = null;
-	static var ratings:Map<String, {sig:String, data:ChartRatings}> = null;
+	static var ratings:Map<String, {sig:String, algo:String, data:ChartRatings}> = null;
 	static var dirty:Bool = false;
 
 	static function ensureLoaded():Void {
@@ -79,7 +79,10 @@ class ChartScanCache {
 	}
 
 	/**
-	 * Cached ratings for a chart file; runs `compute` (parse + rate) only on a signature miss.
+	 * Cached ratings for a chart file; runs `compute` (parse + rate) on a file-signature miss OR
+	 * when the entry was computed by older provider maths (algo-signature mismatch), so an
+	 * algoVersion bump -- like the MinaCalc port replacing the MSD approximation -- transparently
+	 * recomputes unchanged charts.
 	 * @param path the chart file path
 	 * @param compute loads + rates the chart (only called on a miss)
 	 */
@@ -89,11 +92,11 @@ class ChartScanCache {
 			return compute();
 		ensureLoaded();
 		var e = ratings.get(path);
-		if (e != null && e.sig == sig)
+		if (e != null && e.sig == sig && e.algo == DifficultyRating.algoSignature())
 			return e.data;
 		var data:ChartRatings = compute();
 		if (data != null) {
-			ratings.set(path, {sig: sig, data: data});
+			ratings.set(path, {sig: sig, algo: DifficultyRating.algoSignature(), data: data});
 			dirty = true;
 		}
 		return data;
@@ -111,7 +114,7 @@ class ChartScanCache {
 			return null;
 		ensureLoaded();
 		var e = ratings.get(path);
-		return (e != null && e.sig == sig) ? e.data : null;
+		return (e != null && e.sig == sig && e.algo == DifficultyRating.algoSignature()) ? e.data : null;
 	}
 
 	/**
@@ -128,7 +131,7 @@ class ChartScanCache {
 		if (sig == null)
 			return;
 		ensureLoaded();
-		ratings.set(path, {sig: sig, data: data});
+		ratings.set(path, {sig: sig, algo: DifficultyRating.algoSignature(), data: data});
 		dirty = true;
 	}
 
