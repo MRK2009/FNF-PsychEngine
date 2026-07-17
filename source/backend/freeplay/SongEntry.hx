@@ -59,6 +59,14 @@ class SongEntry {
 	/** True once every difficulty this song declares has a `ratings` entry (used by the star sort). */
 	public var ratingsComplete:Bool = false;
 
+	/**
+	 * @param songName the display name
+	 * @param week the owning week index, or -1 for loose songs
+	 * @param icon the health-icon character key
+	 * @param color the song's accent color
+	 * @param folder the owning mod directory, '' or null for base game
+	 * @param difficulties the declared difficulty names; null or empty falls back to ['Normal']
+	 */
 	public function new(songName:String, week:Int, icon:String, color:Int, folder:String, difficulties:Array<String>) {
 		this.songName = songName;
 		this.week = week;
@@ -68,12 +76,16 @@ class SongEntry {
 		this.difficulties = (difficulties != null && difficulties.length > 0) ? difficulties : ['Normal'];
 	}
 
-	/** Cached ratings for a difficulty name, or null when not computed yet. */
+	/**
+	 * Cached ratings for a difficulty name.
+	 * @param diffName the raw difficulty name
+	 * @return the ratings, or null when not computed yet
+	 */
 	public inline function ratingFor(diffName:String):Null<ChartRatings> {
 		return (diffName != null && ratings.exists(diffName)) ? ratings.get(diffName) : null;
 	}
 
-	/** Stable identity for favorites / de-dupe (matches the old `folder|songName` key). */
+	/** @return the stable `folder|songName` identity used for favorites and de-duping */
 	public inline function key():String
 		return folder + '|' + songName;
 }

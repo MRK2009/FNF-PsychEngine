@@ -42,6 +42,7 @@ class FreeplayListView extends FlxGroup {
 	var areaW:Float = 700;
 	var areaH:Float = 600;
 
+	/** @param library the song library whose filtered `view` this list renders */
 	public function new(library:SongLibrary) {
 		super();
 		this.library = library;
@@ -49,7 +50,13 @@ class FreeplayListView extends FlxGroup {
 			rows.push(new Row(this, library));
 	}
 
-	/** Left-column rect the list occupies (set by FreeplayState). */
+	/**
+	 * Sets the left-column rect the list occupies. Called by FreeplayState.
+	 * @param x the rect's left edge
+	 * @param y the rect's top edge
+	 * @param w the rect's width
+	 * @param h the rect's height
+	 */
 	public function setArea(x:Float, y:Float, w:Float, h:Float):Void {
 		areaX = x;
 		areaY = y;
@@ -66,6 +73,10 @@ class FreeplayListView extends FlxGroup {
 		lerpSelected = curSelected;
 	}
 
+	/**
+	 * Moves the selection, wrapping around the view's ends.
+	 * @param index the target view index, allowed out of range
+	 */
 	public function select(index:Int):Void {
 		var n:Int = library.view.length;
 		if (n < 1)
@@ -73,10 +84,16 @@ class FreeplayListView extends FlxGroup {
 		curSelected = FlxMath.wrap(index, 0, n - 1);
 	}
 
+	/** @return the currently selected entry, or null when the view is empty */
 	public inline function selectedEntry():Null<SongEntry>
 		return (curSelected >= 0 && curSelected < library.view.length) ? library.view[curSelected] : null;
 
-	/** Entry index under a screen point, or -1 (for click-to-select). */
+	/**
+	 * The view index of the row under a screen point, for click-to-select.
+	 * @param mx the screen x
+	 * @param my the screen y
+	 * @return the entry's view index, or -1 when no row is hit
+	 */
 	public function indexAtScreen(mx:Float, my:Float):Int {
 		for (r in rows)
 			if (r.boundIndex >= 0 && r.shown && r.contains(mx, my))
@@ -134,6 +151,10 @@ private class Row {
 	var rowW:Float = 0;
 	var rowH:Float = 0;
 
+	/**
+	 * @param owner the list the row's sprites are added to
+	 * @param library the library, needed for favorite lookups
+	 */
 	public function new(owner:FreeplayListView, library:SongLibrary) {
 		this.owner = owner;
 		this.library = library;
@@ -164,6 +185,11 @@ private class Row {
 		owner.add(star);
 	}
 
+	/**
+	 * Points this pooled row at a different entry: rebuilds the Alphabet text and swaps the icon.
+	 * @param e the entry to display
+	 * @param index the entry's index in the library view
+	 */
 	public function bind(e:SongEntry, index:Int):Void {
 		boundIndex = index;
 		entry = e;
@@ -174,6 +200,13 @@ private class Row {
 		icon.updateHitbox();
 	}
 
+	/**
+	 * Positions and styles the row's sprites for this frame.
+	 * @param x the row's left edge
+	 * @param y the row's vertical center
+	 * @param maxW the row's available width; long titles shrink to fit
+	 * @param selected whether this row is the current selection, drawn bright and enlarged
+	 */
 	public function layout(x:Float, y:Float, maxW:Float, selected:Bool):Void {
 		shown = true;
 
@@ -208,9 +241,16 @@ private class Row {
 		rowH = FreeplayListView.ROW_STEP;
 	}
 
+	/**
+	 * Hit-tests the row's last laid-out bounds.
+	 * @param mx the screen x
+	 * @param my the screen y
+	 * @return true when the point is inside the row
+	 */
 	public inline function contains(mx:Float, my:Float):Bool
 		return mx >= rowX && mx <= rowX + rowW && my >= rowY && my <= rowY + rowH;
 
+	/** Hides the row's sprites when its bound entry scrolls out of the draw window. */
 	public function hide():Void {
 		if (!shown)
 			return;

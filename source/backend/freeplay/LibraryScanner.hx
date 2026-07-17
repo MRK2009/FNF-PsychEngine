@@ -12,6 +12,11 @@ class ScanRequest {
 	public var diffName:String;
 	public var path:String;
 
+	/**
+	 * @param entry the song the chart belongs to
+	 * @param diffName the difficulty being rated
+	 * @param path the absolute chart-file path
+	 */
 	public function new(entry:SongEntry, diffName:String, path:String) {
 		this.entry = entry;
 		this.diffName = diffName;
@@ -26,6 +31,12 @@ class ScanResult {
 	public var path:String;
 	public var ratings:Null<ChartRatings>;
 
+	/**
+	 * @param entry the song the chart belongs to
+	 * @param diffName the difficulty that was rated
+	 * @param path the absolute chart-file path
+	 * @param ratings the computed ratings, or null when the chart couldn't be read
+	 */
 	public function new(entry:SongEntry, diffName:String, path:String, ratings:Null<ChartRatings>) {
 		this.entry = entry;
 		this.diffName = diffName;
@@ -67,6 +78,10 @@ class LibraryScanner {
 
 	public function new() {}
 
+	/**
+	 * Spins up the worker pool. No-op when already running or on non-`sys` targets.
+	 * @param workers the pool size, defaulting to `DEFAULT_WORKERS` when null or non-positive
+	 */
 	public function start(?workers:Int):Void {
 		#if sys
 		if (running)
@@ -84,6 +99,11 @@ class LibraryScanner {
 	}
 
 	#if sys
+	/**
+	 * A worker thread's life: block on the work queue, rate charts, push results until the null sentinel.
+	 * @param work the shared request queue
+	 * @param done the shared result queue
+	 */
 	static function workerLoop(work:Deque<ScanRequest>, done:Deque<ScanResult>):Void {
 		while (true) {
 			var req:ScanRequest = work.pop(true);
@@ -103,7 +123,11 @@ class LibraryScanner {
 	}
 	#end
 
-	/** Enqueue a compute. `priority` pushes to the front (an on-demand selection jumps the cold queue). */
+	/**
+	 * Enqueues a compute for the workers.
+	 * @param req the chart to rate
+	 * @param priority true pushes to the front of the queue, so an on-demand selection jumps the cold backlog
+	 */
 	public function enqueue(req:ScanRequest, priority:Bool = false):Void {
 		queued++;
 		#if sys
@@ -120,9 +144,11 @@ class LibraryScanner {
 	}
 
 	/**
-	 * Main-thread drain: returns up to `max` finished results. On `sys` these come from the worker
-	 * queue (non-blocking); on non-`sys` they're computed synchronously here (a few per call) so the
-	 * stream keeps flowing without a thread.
+	 * Main-thread drain of finished results. On `sys` these come off the worker queue without
+	 * blocking; on non-`sys` they are computed synchronously here, a few per call, so the stream
+	 * keeps flowing without a thread.
+	 * @param max the most results to return in one call
+	 * @return the drained results, possibly empty
 	 */
 	public function drain(max:Int):Array<ScanResult> {
 		var out:Array<ScanResult> = [];
@@ -154,7 +180,10 @@ class LibraryScanner {
 		return out;
 	}
 
-	/** True while cold computes are still outstanding. */
+	/**
+	 * Whether cold computes are still outstanding.
+	 * @return true while enqueued requests have not all been drained
+	 */
 	public inline function busy():Bool
 		return completed < queued;
 

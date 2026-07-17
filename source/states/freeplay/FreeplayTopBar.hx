@@ -45,6 +45,14 @@ class FreeplayTopBar {
 	var bw:Float = 1000;
 	var bh:Float = 42;
 
+	/**
+	 * Builds the bar's widgets into the Smidr root.
+	 * @param root the Smidr UI root to parent into
+	 * @param library the song library driving the readouts and options
+	 * @param onSearch fired with the query text on every search keystroke
+	 * @param onSort fired with the picked sort index
+	 * @param onGroup fired with the picked group-option index
+	 */
 	public function new(root:UIRoot, library:SongLibrary, onSearch:String->Void, onSort:Int->Void, onGroup:Int->Void) {
 		this.root = root;
 		this.library = library;
@@ -75,7 +83,13 @@ class FreeplayTopBar {
 		rebuildGroups();
 	}
 
-	/** Top-bar rect (screen == UI coords). Lays the centred control cluster out in one row. */
+	/**
+	 * Sets the bar's rect (screen == UI coords) and lays the centred control cluster out in one row.
+	 * @param x the rect's left edge
+	 * @param y the rect's top edge
+	 * @param w the rect's width
+	 * @param h the rect's height
+	 */
 	public function setArea(x:Float, y:Float, w:Float, h:Float):Void {
 		bx = x;
 		by = y;
@@ -122,10 +136,17 @@ class FreeplayTopBar {
 		groupDrop.select(library.curGroupIdx);
 	}
 
-	/** Keeps the dropdown captions in sync with keyboard-driven changes (no callback fired). */
+	/**
+	 * Keeps the sort dropdown's caption in sync with a keyboard-driven change; fires no callback.
+	 * @param idx the sort index to show
+	 */
 	public function setSort(idx:Int):Void
 		sortDrop.select(idx);
 
+	/**
+	 * Keeps the group dropdown's caption in sync with a keyboard-driven change; fires no callback.
+	 * @param idx the group-option index to show
+	 */
 	public function setGroup(idx:Int):Void
 		groupDrop.select(idx);
 
@@ -149,6 +170,11 @@ class FreeplayTopBar {
 		msdLbl.x = bx + bw - PAD - msdLbl.w;
 	}
 
+	/**
+	 * Display label for a group option.
+	 * @param g the group value: -1 all, -2 favorites, otherwise a week index
+	 * @return the human-readable label
+	 */
 	function groupLabel(g:Int):String {
 		return switch (g) {
 			case -1: 'All';
@@ -157,6 +183,11 @@ class FreeplayTopBar {
 		}
 	}
 
+	/**
+	 * Formats a number with exactly two decimals.
+	 * @param v the value
+	 * @return the formatted string
+	 */
 	static function fmt2(v:Float):String {
 		var r:Float = Math.round(v * 100) / 100;
 		var s:String = Std.string(r);

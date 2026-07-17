@@ -76,6 +76,10 @@ class FreeplayInfoPanel {
 	var lastDiffDisp:String = null;
 	var lastDiffCount:Int = 0;
 
+	/**
+	 * Builds the panel, the tab strip and every label, and restores the last-used tab.
+	 * @param root the Smidr UI root to parent into
+	 */
 	public function new(root:UIRoot) {
 		this.root = root;
 
@@ -128,12 +132,22 @@ class FreeplayInfoPanel {
 		tabs.select(curTab);
 	}
 
+	/**
+	 * Creates an empty label parented into the UI root.
+	 * @param size the font size
+	 * @param tone the theme tone index
+	 * @return the new label
+	 */
 	inline function mk(size:Int, tone:Int):UILabel {
 		var l:UILabel = new UILabel('', size, tone);
 		root.content.addChild(l);
 		return l;
 	}
 
+	/**
+	 * Tab-strip callback: persists the choice and re-renders the current song.
+	 * @param i the newly selected tab index
+	 */
 	function onTab(i:Int):Void {
 		curTab = i;
 		try {
@@ -146,6 +160,13 @@ class FreeplayInfoPanel {
 			reflow();
 	}
 
+	/**
+	 * Sets the panel's rect (screen == UI coords) and reflows the content.
+	 * @param x the rect's left edge
+	 * @param y the rect's top edge
+	 * @param w the rect's width
+	 * @param h the rect's height
+	 */
 	public function setArea(x:Float, y:Float, w:Float, h:Float):Void {
 		px = x;
 		py = y;
@@ -160,6 +181,7 @@ class FreeplayInfoPanel {
 		reflow();
 	}
 
+	/** Shows or hides the whole panel, tabs and labels included. */
 	public var visible(default, set):Bool = true;
 
 	function set_visible(v:Bool):Bool {
@@ -171,8 +193,12 @@ class FreeplayInfoPanel {
 	}
 
 	/**
-	 * Fills the panel for a song at a difficulty. `diffName` is the raw difficulty (rating lookup);
-	 * `diffDisplay` the localized name; `diffCount` how many difficulties the song has.
+	 * Fills the active tab for a song at a difficulty and reflows. Remembers the arguments so a
+	 * streamed rating or a tab switch can re-render without re-plumbing.
+	 * @param e the song to show, or null to blank the panel
+	 * @param diffName the raw difficulty name, used for the rating lookup
+	 * @param diffDisplay the localized difficulty name shown to the player
+	 * @param diffCount how many difficulties the song has
 	 */
 	public function show(e:SongEntry, diffName:String, diffDisplay:String, diffCount:Int):Void {
 		lastEntry = e;
@@ -200,6 +226,15 @@ class FreeplayInfoPanel {
 		reflow();
 	}
 
+	/**
+	 * Fills the General tab: title, metadata, headline star + MSD, top score.
+	 * @param e the song
+	 * @param diffDisplay the localized difficulty name
+	 * @param diffCount how many difficulties the song has, for the ‹ › arrows
+	 * @param r the difficulty's ratings, or null while still computing
+	 * @param pbScore the personal-best score
+	 * @param pbAcc the personal-best accuracy in [0, 1]
+	 */
 	function fillGeneral(e:SongEntry, diffDisplay:String, diffCount:Int, r:ChartRatings, pbScore:Int, pbAcc:Float):Void {
 		gTitle.text = e.songName;
 		gSub.text = subtitle(e);
@@ -228,6 +263,13 @@ class FreeplayInfoPanel {
 		gScoreMeta.text = pbScore > 0 ? (fmt2(pbAcc * 100) + '%    ·    ' + grade(pbAcc)) : '';
 	}
 
+	/**
+	 * Fills the Scores tab. Phase 1 shows the single best; the multi-score history lands in Phase 2.
+	 * @param e the song
+	 * @param diffDisplay the localized difficulty name
+	 * @param pbScore the personal-best score
+	 * @param pbAcc the personal-best accuracy in [0, 1]
+	 */
 	function fillScores(e:SongEntry, diffDisplay:String, pbScore:Int, pbAcc:Float):Void {
 		sTitle.text = e.songName + '  —  ' + diffDisplay;
 		if (pbScore > 0)
@@ -237,6 +279,12 @@ class FreeplayInfoPanel {
 		sStub.text = 'Multiple scores and the result screen arrive with score recording (Phase 2). This shows your single best for now.';
 	}
 
+	/**
+	 * Fills the Insights tab: the full MSD skillset spread plus pattern and chart stats.
+	 * @param e the song
+	 * @param diffDisplay the localized difficulty name
+	 * @param r the difficulty's ratings, or null while still computing
+	 */
 	function fillInsights(e:SongEntry, diffDisplay:String, r:ChartRatings):Void {
 		iTitle.text = e.songName + '  —  ' + diffDisplay + (r != null ? '  ·  ' + r.keyCount + 'K' : '');
 		if (r == null) {
@@ -294,13 +342,27 @@ class FreeplayInfoPanel {
 		}
 	}
 
+	/**
+	 * Vertical spacing after a label; section-ending labels get a double gap.
+	 * @param l the label just laid out
+	 * @return the gap in pixels
+	 */
 	inline function gapFor(l:UILabel):Float {
 		return (l == gSub || l == gMeta || l == gScoreMeta || l == iStats || l == sStub) ? GAP * 2 : GAP;
 	}
 
+	/**
+	 * @param s the string to test
+	 * @return true when non-null and non-empty
+	 */
 	inline function has(s:String):Bool
 		return s != null && s.length > 0;
 
+	/**
+	 * The General tab's subtitle line: artist, icon character and group, dot-separated.
+	 * @param e the song
+	 * @return the joined subtitle, possibly empty
+	 */
 	function subtitle(e:SongEntry):String {
 		var parts:Array<String> = [];
 		if (has(e.artist)) parts.push(e.artist);
@@ -309,12 +371,21 @@ class FreeplayInfoPanel {
 		return parts.join('  ·  ');
 	}
 
-	/** Maps a raw difficulty name back to its index in the current global Difficulty.list (for Highscore). */
+	/**
+	 * Maps a raw difficulty name back to its index in the current global `Difficulty.list`, for Highscore.
+	 * @param diffName the raw difficulty name
+	 * @return the list index, or 0 when not found
+	 */
 	function diffIndexOf(diffName:String):Int {
 		var idx:Int = Difficulty.list.indexOf(diffName);
 		return idx >= 0 ? idx : 0;
 	}
 
+	/**
+	 * Letter grade for an accuracy.
+	 * @param acc the accuracy in [0, 1]
+	 * @return S/A/B/C/D, or a dash placeholder when zero
+	 */
 	static function grade(acc:Float):String {
 		if (acc <= 0) return '—';
 		if (acc >= 0.99) return 'S';
@@ -324,12 +395,22 @@ class FreeplayInfoPanel {
 		return 'D';
 	}
 
+	/**
+	 * Formats the chart's BPM, collapsing to a single number when it never changes.
+	 * @param r the chart's ratings
+	 * @return "120" or "120-180"
+	 */
 	static function bpmText(r:ChartRatings):String {
 		if (Math.abs(r.bpmMax - r.bpmMin) < 0.01)
 			return trimNum(r.bpmMin);
 		return trimNum(r.bpmMin) + '-' + trimNum(r.bpmMax);
 	}
 
+	/**
+	 * Formats the chart's time signatures as a comma-separated list.
+	 * @param sigs the distinct [num, den] pairs
+	 * @return the joined list, "4/4" when null or empty
+	 */
 	static function sigList(sigs:Array<Array<Int>>):String {
 		if (sigs == null || sigs.length < 1)
 			return '4/4';
@@ -339,9 +420,19 @@ class FreeplayInfoPanel {
 		return parts.join(', ');
 	}
 
+	/**
+	 * Uppercases the first character.
+	 * @param s the string
+	 * @return the capitalized string; null/empty passes through
+	 */
 	static function cap(s:String):String
 		return (s == null || s.length == 0) ? s : s.charAt(0).toUpperCase() + s.substr(1);
 
+	/**
+	 * Formats an integer with thousands separators.
+	 * @param v the value
+	 * @return the comma-grouped string
+	 */
 	static function commas(v:Int):String {
 		var s:String = Std.string(v);
 		var out:String = '';
@@ -356,6 +447,11 @@ class FreeplayInfoPanel {
 		return out;
 	}
 
+	/**
+	 * Formats a number with exactly two decimals.
+	 * @param v the value
+	 * @return the formatted string
+	 */
 	static function fmt2(v:Float):String {
 		var r:Float = Math.round(v * 100) / 100;
 		var s:String = Std.string(r);
@@ -367,18 +463,34 @@ class FreeplayInfoPanel {
 		return s;
 	}
 
+	/**
+	 * Formats a number without trailing decimals when it is whole.
+	 * @param v the value
+	 * @return "120" for whole values, otherwise two decimals
+	 */
 	static function trimNum(v:Float):String {
 		if (v == Std.int(v))
 			return Std.string(Std.int(v));
 		return fmt2(v);
 	}
 
+	/**
+	 * Right-pads a string with spaces, for the aligned skillset columns.
+	 * @param s the string
+	 * @param n the minimum length
+	 * @return the padded string
+	 */
 	static function rpad(s:String, n:Int):String {
 		while (s.length < n)
 			s += ' ';
 		return s;
 	}
 
+	/**
+	 * Formats a duration as m:ss.
+	 * @param ms the duration in milliseconds
+	 * @return the clock string
+	 */
 	static function timeStr(ms:Float):String {
 		var total:Int = Std.int(ms / 1000);
 		var m:Int = Std.int(total / 60);

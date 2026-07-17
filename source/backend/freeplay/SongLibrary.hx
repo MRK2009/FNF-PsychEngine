@@ -36,7 +36,10 @@ class SongLibrary {
 	static var shared:SongLibrary = null;
 	static var sharedSig:String = null;
 
-	/** The cached library for the current mod set, rebuilt only when the enabled-mod list changes. */
+	/**
+	 * The cached library for the current mod set, rebuilt only when the enabled-mod list changes.
+	 * @return the shared instance, resumed when reused or freshly built on a mod-set change
+	 */
 	public static function acquire():SongLibrary {
 		var sig:String = signature();
 		if (shared != null && sharedSig == sig) {
@@ -51,6 +54,7 @@ class SongLibrary {
 		return shared;
 	}
 
+	/** @return the enabled-mod-set signature that keys the shared instance */
 	static function signature():String {
 		#if MODS_ALLOWED
 		return Mods.parseList().enabled.join('|');
@@ -80,6 +84,7 @@ class SongLibrary {
 		scanner = new LibraryScanner();
 	}
 
+	/** Enumerates every Freeplay song, reconciling loose folders against the persistent index. */
 	public function build():Void {
 		entries = [];
 		weekNames = [];
@@ -145,11 +150,13 @@ class SongLibrary {
 		refreshIncremental();
 	}
 
+	/** Stops the workers and flushes the rating cache before the instance is replaced. */
 	function dispose():Void {
 		scanner.stop();
 		ChartScanCache.commit();
 	}
 
+	/** Rebuilds the group filter options: ALL, FAVORITES when any exist, then each populated week. */
 	function rebuildGroupOptions():Void {
 		groupOptions = [-1];
 		if (favorites.length > 0)
@@ -159,6 +166,15 @@ class SongLibrary {
 				groupOptions.push(e.week);
 	}
 
+	/**
+	 * Adds one week-declared song, resolving its folder with a single directory listing.
+	 * @param display the song's display name
+	 * @param weekNum the owning week index
+	 * @param char the health-icon character
+	 * @param color the menu color
+	 * @param weekDiffs the week's declared difficulty names, or null for the defaults
+	 * @param seen the de-dupe set, updated with this song's key
+	 */
 	function addWeekSong(display:String, weekNum:Int, char:String, color:Int, weekDiffs:Array<String>, seen:Map<String, Bool>):Void {
 		var key:String = Paths.formatToSongPath(display);
 		var modDir:String = (Mods.currentModDirectory != null) ? Mods.currentModDirectory : '';
@@ -250,6 +266,11 @@ class SongLibrary {
 		#end
 	}
 
+	/**
+	 * A folder's last-modified time for change detection.
+	 * @param dir the folder path
+	 * @return the mtime in ms, 0 when unstattable
+	 */
 	inline function folderMtime(dir:String):Float {
 		#if sys
 		try
@@ -261,7 +282,12 @@ class SongLibrary {
 		#end
 	}
 
-	/** Rehydrates a `SongEntry` from a persisted index record (no filesystem or metadata read). */
+	/**
+	 * Rehydrates a `SongEntry` from a persisted index record with no filesystem or metadata read.
+	 * @param d the persisted record
+	 * @param weekIdx the synthetic week index for loose songs
+	 * @return the appended entry
+	 */
 	function mkEntryFromDB(d:DBEntry, weekIdx:Int):SongEntry {
 		var e:SongEntry = new SongEntry(d.songName, weekIdx, d.icon, d.color, d.folder, d.difficulties);
 		e.origIndex = entries.length;
@@ -284,7 +310,7 @@ class SongLibrary {
 		return e;
 	}
 
-	/** The loose (discovered) entries as persistable index records. */
+	/** @return the loose (discovered) entries as persistable index records */
 	function collectLooseDBEntries():Array<DBEntry> {
 		var out:Array<DBEntry> = [];
 		for (e in entries) {
@@ -315,6 +341,18 @@ class SongLibrary {
 		return out;
 	}
 
+	/**
+	 * Builds and appends a `SongEntry`, applying metadata overrides when the folder has any.
+	 * @param display the song's display name
+	 * @param week the owning week index
+	 * @param char the health-icon character
+	 * @param color the menu color
+	 * @param modDir the owning mod directory
+	 * @param diffs the difficulties found on disk
+	 * @param chartPath the representative chart file path, or null
+	 * @param hasMeta whether the folder listing contained a metadata.json
+	 * @return the appended entry
+	 */
 	function mkEntry(display:String, week:Int, char:String, color:Int, modDir:String, diffs:Array<String>, chartPath:String, hasMeta:Bool):SongEntry {
 		var e:SongEntry = new SongEntry(display, week, char, color, modDir, diffs);
 		e.origIndex = entries.length;
@@ -328,7 +366,10 @@ class SongLibrary {
 		return e;
 	}
 
-	/** Reads the folder's `metadata.json` (only called when the scan saw one) and applies its overrides. */
+	/**
+	 * Reads the folder's `metadata.json` and applies its overrides; only called when the scan saw one.
+	 * @param e the entry to apply the metadata onto
+	 */
 	function applyMeta(e:SongEntry):Void {
 		Mods.currentModDirectory = e.folder;
 		var info:SongMetaInfo = SongMeta.load(Paths.formatToSongPath(e.songName));
@@ -357,7 +398,11 @@ class SongLibrary {
 	}
 
 	#if sys
-	/** The first candidate data dir that actually holds a chart for `key`, with its listing. */
+	/**
+	 * The first candidate data dir that actually holds a chart for the song.
+	 * @param key the formatted song key
+	 * @return the folder and its listing, or null when no candidate has a chart
+	 */
 	function resolveSongFolder(key:String):Null<{dir:String, listing:Array<String>}> {
 		for (dir in candidateDataDirs(key)) {
 			var listing:Array<String> = Paths.listDirectory(dir);
@@ -370,6 +415,11 @@ class SongLibrary {
 		return null;
 	}
 
+	/**
+	 * All data dirs a song's charts could live in, in Paths precedence order.
+	 * @param key the formatted song key
+	 * @return the candidate folder paths
+	 */
 	function candidateDataDirs(key:String):Array<String> {
 		var dirs:Array<String> = [Paths.getSharedPath('data/$key')];
 		#if MODS_ALLOWED
@@ -383,7 +433,13 @@ class SongLibrary {
 	}
 	#end
 
-	/** Difficulties for a song, derived purely from its folder listing (declared order first, then extras). */
+	/**
+	 * Difficulties for a song, derived purely from its folder listing.
+	 * @param listing the folder's file names
+	 * @param key the formatted song key
+	 * @param weekDiffs the declared difficulty order, or null for the defaults
+	 * @return the difficulties with charts on disk, declared order first, then undeclared extras
+	 */
 	function deriveDiffs(listing:Array<String>, key:String, weekDiffs:Array<String>):Array<String> {
 		var result:Array<String> = [];
 		var declared:Array<String> = [];
@@ -420,6 +476,12 @@ class SongLibrary {
 		return result;
 	}
 
+	/**
+	 * The representative chart file in a folder listing.
+	 * @param listing the folder's file names
+	 * @param key the formatted song key
+	 * @return the bare `key.json` if present, else the first `key-*.json`, else null
+	 */
 	function repChartFile(listing:Array<String>, key:String):String {
 		var bare:String = '$key.json';
 		if (listing.indexOf(bare) >= 0)
@@ -430,6 +492,11 @@ class SongLibrary {
 		return null;
 	}
 
+	/**
+	 * Trims a declared difficulty list, falling back to the defaults when empty.
+	 * @param weekDiffs the declared difficulty names, or null
+	 * @return the cleaned list, never empty
+	 */
 	inline function declaredOrDefault(weekDiffs:Array<String>):Array<String> {
 		var out:Array<String> = [];
 		if (weekDiffs != null)
@@ -441,6 +508,11 @@ class SongLibrary {
 		return out.length > 0 ? out : Difficulty.defaultList.copy();
 	}
 
+	/**
+	 * The difficulty whose rating stands in for the song in list displays.
+	 * @param diffs the song's difficulties
+	 * @return the default difficulty if present, else the middle one
+	 */
 	function computeRepDiff(diffs:Array<String>):String {
 		if (diffs == null || diffs.length < 1)
 			return Difficulty.getDefault();
@@ -449,6 +521,12 @@ class SongLibrary {
 		return diffs[Std.int(diffs.length / 2)];
 	}
 
+	/**
+	 * Reorders difficulties to a metadata-declared order, keeping unlisted ones at the end.
+	 * @param have the difficulties found on disk
+	 * @param order the declared order
+	 * @return the reordered list
+	 */
 	function reorderDiffs(have:Array<String>, order:Array<String>):Array<String> {
 		var out:Array<String> = [];
 		for (d in order) {
@@ -462,9 +540,20 @@ class SongLibrary {
 		return out.length > 0 ? out : have;
 	}
 
+	/**
+	 * Uppercases the first character.
+	 * @param s the input string
+	 * @return the title-cased string
+	 */
 	static inline function titleCase(s:String):String
 		return s.length > 0 ? s.charAt(0).toUpperCase() + s.substr(1) : s;
 
+	/**
+	 * Case-insensitive difficulty membership test, via formatToSongPath.
+	 * @param list the difficulties to search
+	 * @param diff the name to look for
+	 * @return true when an equivalent name is present
+	 */
 	function containsDiffCI(list:Array<String>, diff:String):Bool {
 		var fmt:String = Paths.formatToSongPath(diff);
 		for (d in list)
@@ -473,6 +562,11 @@ class SongLibrary {
 		return false;
 	}
 
+	/**
+	 * Whether a week is still locked by its predecessor.
+	 * @param name the week file name
+	 * @return true when the week cannot be played yet
+	 */
 	function weekIsLocked(name:String):Bool {
 		var leWeek:WeekData = WeekData.weeksLoaded.get(name);
 		return (!leWeek.startUnlocked
@@ -480,10 +574,19 @@ class SongLibrary {
 			&& (!StoryMenuState.weekCompleted.exists(leWeek.weekBefore) || !StoryMenuState.weekCompleted.get(leWeek.weekBefore)));
 	}
 
+	/**
+	 * The difficulty whose rating stands in for a song in list displays.
+	 * @param e the song entry
+	 * @return the precomputed representative difficulty
+	 */
 	public function representativeDiff(e:SongEntry):String {
 		return (e.repDiff != null) ? e.repDiff : computeRepDiff(e.difficulties);
 	}
 
+	/**
+	 * Fills an entry's representative rating from cache or queues a background compute.
+	 * @param e the song entry
+	 */
 	function seedRepresentative(e:SongEntry):Void {
 		var diff:String = representativeDiff(e);
 		if (diff == null || e.ratings.exists(diff))
@@ -502,7 +605,10 @@ class SongLibrary {
 		scanner.enqueue(new ScanRequest(e, diff, e.chartPath), false);
 	}
 
-	/** Seeds up to `max` more entries' representative rating — spread across frames so load waits on none. */
+	/**
+	 * Seeds a batch of entries' representative ratings, spread across frames so load waits on none.
+	 * @param max how many entries to seed this call
+	 */
 	function seedTick(max:Int):Void {
 		var n:Int = 0;
 		while (seedCursor < entries.length && n < max) {
@@ -511,6 +617,13 @@ class SongLibrary {
 		}
 	}
 
+	/**
+	 * Ensures a rating for a song and difficulty: a cache hit fills it immediately, otherwise a compute
+	 * is queued. No-op when already present or queued.
+	 * @param e the song entry
+	 * @param diffName the raw difficulty name
+	 * @param priority true pushes the compute to the front of the queue
+	 */
 	public function requestRating(e:SongEntry, diffName:String, priority:Bool = true):Void {
 		if (diffName == null || e.ratings.exists(diffName))
 			return;
@@ -530,7 +643,12 @@ class SongLibrary {
 		scanner.enqueue(new ScanRequest(e, diffName, path), priority);
 	}
 
-	/** Resolves a non-representative difficulty's chart path through Paths (one song at a time). */
+	/**
+	 * Resolves a non-representative difficulty's chart path through Paths.
+	 * @param e the song entry, whose mod scope is applied first
+	 * @param diffName the raw difficulty name
+	 * @return the chart file path
+	 */
 	function chartPathFor(e:SongEntry, diffName:String):String {
 		Mods.currentModDirectory = e.folder;
 		var songKey:String = Paths.formatToSongPath(e.songName);
@@ -538,6 +656,11 @@ class SongLibrary {
 		return Paths.json('$songKey/$base');
 	}
 
+	/**
+	 * Per-frame drain: folds finished background ratings into their entries, persists them in batches
+	 * and seeds the next batch of cold entries.
+	 * @return true when any rating changed, so the UI can refresh
+	 */
 	public function poll():Bool {
 		var results:Array<ScanResult> = scanner.drain(DRAIN_PER_FRAME);
 		var changed:Bool = false;
@@ -561,15 +684,19 @@ class SongLibrary {
 		return changed;
 	}
 
+	/** @return how many queued computes have finished */
 	public inline function scanDone():Int
 		return scanner.completed;
 
+	/** @return how many computes were queued in total */
 	public inline function scanTotal():Int
 		return scanner.queued;
 
+	/** @return true while cold computes or seeding are still outstanding */
 	public inline function scanning():Bool
 		return scanner.busy() || seedCursor < entries.length;
 
+	/** Rebuilds `view` from `entries` using the current group, search query and sort. */
 	public function applyFilters():Void {
 		var g:Int = groupOptions[curGroupIdx];
 		var q:String = searchQuery.toLowerCase();
@@ -603,6 +730,12 @@ class SongLibrary {
 		view = filtered;
 	}
 
+	/**
+	 * Search match over title, week name, artist, source and tags.
+	 * @param e the song entry
+	 * @param q the lowercased query
+	 * @return true when any field contains the query
+	 */
 	function matchesQuery(e:SongEntry, q:String):Bool {
 		if (e.songName.toLowerCase().indexOf(q) >= 0)
 			return true;
@@ -619,12 +752,22 @@ class SongLibrary {
 		return false;
 	}
 
+	/**
+	 * Best stored score for the entry's default-or-first difficulty, for the score sort.
+	 * @param e the song entry
+	 * @return the stored score, 0 when none
+	 */
 	function bestScoreFor(e:SongEntry):Int {
 		var diffName:String = (e.difficulties.indexOf(Difficulty.getDefault()) >= 0) ? Difficulty.getDefault() : e.difficulties[0];
 		var key:String = Difficulty.scoreKey(e.songName, diffName);
 		return Highscore.songScores.exists(key) ? Highscore.songScores.get(key) : 0;
 	}
 
+	/**
+	 * The osu! star rating of the entry's representative difficulty, for the star sort.
+	 * @param e the song entry
+	 * @return the star value, -1 while not yet computed
+	 */
 	public function starOf(e:SongEntry):Float {
 		var r:ChartRatings = e.ratingFor(representativeDiff(e));
 		if (r == null)
@@ -633,9 +776,19 @@ class SongLibrary {
 		return osu != null ? osu.overall : -1;
 	}
 
+	/**
+	 * Whether a song is favorited.
+	 * @param e the song entry
+	 * @return true when its key is in the favorites list
+	 */
 	public inline function isFavorite(e:SongEntry):Bool
 		return favorites.indexOf(e.key()) >= 0;
 
+	/**
+	 * Toggles a song's favorite state and persists the list.
+	 * @param e the song entry
+	 * @return true when the song was just favorited
+	 */
 	public function toggleFavorite(e:SongEntry):Bool {
 		var k:String = e.key();
 		var added:Bool = favorites.indexOf(k) < 0;
@@ -650,7 +803,10 @@ class SongLibrary {
 		return added;
 	}
 
-	/** Adds song folders that appeared on disk since the last scan (single-pass, keeps cached ratings). */
+	/**
+	 * Adds song folders that appeared on disk since the last scan; single-pass, keeps cached ratings.
+	 * @return the number of new songs added
+	 */
 	public function refreshIncremental():Int {
 		#if (sys && MODS_ALLOWED)
 		var before:Int = entries.length;

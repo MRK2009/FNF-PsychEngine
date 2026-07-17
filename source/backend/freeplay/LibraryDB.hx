@@ -56,7 +56,11 @@ class LibraryDB {
 	static inline final FILE:String = 'freeplayLibrary.db';
 	static inline final LEGACY_JSON:String = 'freeplayLibrary.json';
 
-	/** The persisted entries for `sig`, or null (missing / unreadable / stale version / other mod set). */
+	/**
+	 * Reads the persisted loose-song index.
+	 * @param sig the current enabled-mod-set signature the snapshot must match
+	 * @return the persisted entries, or null when the file is missing, unreadable, a stale version or for another mod set
+	 */
 	public static function load(sig:String):Null<Array<DBEntry>> {
 		#if sys
 		try {
@@ -74,7 +78,11 @@ class LibraryDB {
 		#end
 	}
 
-	/** Persists the loose-song index for `sig`. Called only when the set changed. */
+	/**
+	 * Persists the loose-song index. Called only when the set actually changed.
+	 * @param sig the enabled-mod-set signature to stamp the snapshot with
+	 * @param entries the entries to store
+	 */
 	public static function save(sig:String, entries:Array<DBEntry>):Void {
 		#if sys
 		try {
@@ -87,6 +95,7 @@ class LibraryDB {
 		#end
 	}
 
+	/** Deletes the on-disk index, forcing the next launch to do a full scan. */
 	public static function clear():Void {
 		#if sys
 		try {

@@ -49,6 +49,11 @@ class ChartStats {
 		}
 	}
 
+	/**
+	 * Extracts stats + ratings from a parsed psych_v1 section-shaped chart.
+	 * @param data the parsed chart JSON
+	 * @return the assembled ratings, or null on a malformed chart
+	 */
 	static function fromV1(data:Dynamic):Null<ChartRatings> {
 		// Charts wrap their body in a top-level `song` object; unwrap it.
 		var song:Dynamic = data;
@@ -97,7 +102,13 @@ class ChartStats {
 		return assemble(playerNotes, keyCount, baseBpm, range.min, range.max, range.sigs, totalNotes, lengthMs);
 	}
 
-	/** BPM range + distinct time signatures across v1 sections (mirrors `DifficultyRating`). */
+	/**
+	 * BPM range and distinct time signatures across v1 sections; mirrors `DifficultyRating`.
+	 * @param sections the chart sections
+	 * @param baseBpm the chart-level starting bpm
+	 * @param baseSig the chart-level time signature
+	 * @return the bpm range and every distinct signature in appearance order
+	 */
 	static function bpmAndSigsV1(sections:Array<Dynamic>, baseBpm:Float, baseSig:Array<Int>):{min:Float, max:Float, sigs:Array<Array<Int>>} {
 		var bpmMin:Float = baseBpm;
 		var bpmMax:Float = baseBpm;
@@ -133,6 +144,11 @@ class ChartStats {
 		return {min: bpmMin, max: bpmMax, sigs: sigs};
 	}
 
+	/**
+	 * Extracts stats + ratings from a parsed psych_v2 flat-note chart.
+	 * @param data the parsed chart JSON
+	 * @return the assembled ratings, or null on a malformed chart
+	 */
 	static function fromV2(data:Dynamic):Null<ChartRatings> {
 		var meta:Dynamic = Reflect.field(data, 'metadata');
 		if (meta == null)
@@ -200,6 +216,13 @@ class ChartStats {
 		return assemble(playerNotes, playerKeyCount, baseBpm, range.min, range.max, range.sigs, totalNotes, lengthMs);
 	}
 
+	/**
+	 * BPM range and distinct time signatures across v2 sections.
+	 * @param sections the chart sections
+	 * @param baseBpm the chart-level starting bpm
+	 * @param baseSig the chart-level time signature
+	 * @return the bpm range and every distinct signature in appearance order
+	 */
 	static function bpmAndSigsV2(sections:Array<Dynamic>, baseBpm:Float, baseSig:Array<Int>):{min:Float, max:Float, sigs:Array<Array<Int>>} {
 		var bpmMin:Float = baseBpm;
 		var bpmMax:Float = baseBpm;
@@ -228,7 +251,18 @@ class ChartStats {
 		return {min: bpmMin, max: bpmMax, sigs: sigs};
 	}
 
-	/** Hashes the notes, runs every provider (no cache), and packs the `ChartRatings`. */
+	/**
+	 * Hashes the notes, runs every provider without touching the caches, and packs the `ChartRatings`.
+	 * @param playerNotes the flattened player-lane notes, sorted in place
+	 * @param keyCount the chart's column count
+	 * @param bpm the chart-level starting bpm
+	 * @param bpmMin the lowest bpm reached
+	 * @param bpmMax the highest bpm reached
+	 * @param sigs every distinct time signature
+	 * @param totalNotes the chart's total note count, both sides
+	 * @param lengthMs the chart length in ms
+	 * @return the packed ratings
+	 */
 	static function assemble(playerNotes:Array<ChartNote>, keyCount:Int, bpm:Float, bpmMin:Float, bpmMax:Float,
 			sigs:Array<Array<Int>>, totalNotes:Int, lengthMs:Float):ChartRatings {
 		playerNotes.sort((a, b) -> (a.time < b.time) ? -1 : (a.time > b.time ? 1 : (a.lane - b.lane)));
@@ -257,7 +291,12 @@ class ChartStats {
 		};
 	}
 
-	/** Etterna-style pattern tallies over the (time-sorted) player notes: chord-row sizes + holds + NPS. */
+	/**
+	 * Etterna-style pattern tallies over the time-sorted player notes: chord-row sizes, holds and NPS.
+	 * @param notes the flattened player-lane notes
+	 * @param lengthMs the chart length in ms
+	 * @return the tallied pattern stats
+	 */
 	static function patternsOf(notes:Array<ChartNote>, lengthMs:Float):PatternStats {
 		var jumps:Int = 0;
 		var hands:Int = 0;
@@ -286,7 +325,13 @@ class ChartStats {
 		return {jumps: jumps, hands: hands, holds: holds, avgNps: count / secs};
 	}
 
-	/** Deterministic content hash over the flattened player notes (matches `DifficultyRating.hashNotes`). */
+	/**
+	 * Deterministic content hash over the flattened player notes; matches `DifficultyRating.hashNotes`.
+	 * @param notes the flattened player-lane notes
+	 * @param keyCount the chart's column count
+	 * @param rate the music rate multiplier
+	 * @return the MD5 of the note stream
+	 */
 	static function hashNotes(notes:Array<ChartNote>, keyCount:Int, rate:Float):String {
 		var buf:StringBuf = new StringBuf();
 		buf.add('k');
@@ -305,12 +350,23 @@ class ChartStats {
 		return Md5.encode(buf.toString());
 	}
 
+	/**
+	 * Reads a numeric field off a Dynamic object.
+	 * @param o the object
+	 * @param name the field name
+	 * @param def the fallback value
+	 * @return the field as Float, or the fallback when missing or non-numeric
+	 */
 	static inline function numField(o:Dynamic, name:String, def:Float):Float {
 		var v:Dynamic = Reflect.field(o, name);
 		return (v != null && (Std.isOfType(v, Float) || Std.isOfType(v, Int))) ? (v : Float) : def;
 	}
 
-	/** Coerces a `[num, den]` value into a clean `[Int, Int]`, defaulting to 4/4. */
+	/**
+	 * Coerces a `[num, den]` value into a clean `[Int, Int]`.
+	 * @param v the raw time-signature value
+	 * @return the cleaned pair, 4/4 when invalid
+	 */
 	static function sigField(v:Dynamic):Array<Int> {
 		if (v != null && Std.isOfType(v, Array)) {
 			var a:Array<Dynamic> = cast v;
@@ -324,6 +380,11 @@ class ChartStats {
 		return [4, 4];
 	}
 
+	/**
+	 * Appends a time signature when an equal one is not already present.
+	 * @param into the collected signatures
+	 * @param sig the candidate pair
+	 */
 	static function pushSig(into:Array<Array<Int>>, sig:Array<Int>):Void {
 		for (s in into)
 			if (s[0] == sig[0] && s[1] == sig[1])
