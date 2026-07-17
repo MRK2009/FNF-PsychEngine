@@ -49,6 +49,13 @@ final class ChartEditorModel {
 	/** Adopts a chart and rebuilds the timing cache. **/
 	public function load(chart:SongChart):Void {
 		this.chart = chart;
+		// The whole editor assumes noteList is time-sorted: firstNoteIndex is a binary search, and both
+		// the note realization scan and the playback hit cursor (hitsounds + vortex flashes) walk it in
+		// order. A chart can load unsorted (per-strumline v2 files, converted charts, legacy sections in
+		// placement order), which silently breaks all of those -- notes pop in late, hitsounds and vortex
+		// get skipped. Normalize it once here so every downstream op can rely on the invariant.
+		if (chart != null && chart.noteList != null)
+			chart.noteList.sort(compareNoteTime);
 		rebuildTiming();
 	}
 

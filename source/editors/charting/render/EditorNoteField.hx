@@ -210,6 +210,9 @@ final class EditorNoteField {
 
 	final eventScratch:Array<Dynamic> = [];
 
+	/** Off-screen realize margin in pixels, kept constant across zoom so notes never snap in at the edges. **/
+	static inline final REALIZE_LEAD_PX:Float = 240;
+
 	var layoutSig:Float = -1;
 	var lastSectionKc:Int = -1;
 	var maxSustain:Float = 0;
@@ -998,8 +1001,11 @@ final class EditorNoteField {
 			refreshLayout();
 
 		var viewSteps:Float = stepsOf(viewTime);
-		// realize well outside the visible field so notes are never seen popping in at the edges
-		var padSteps:Float = 6;
+		// realize well outside the visible field so notes are never seen popping in at the edges.
+		// The lead is a fixed pixel margin (converted to steps via cellH), not a fixed step count:
+		// a fixed step pad collapses to a few pixels when zoomed out (cellH floors at 4px), which is
+		// what made notes snap in at the edges on low zoom. Pixel-based keeps the lead zoom-independent.
+		var padSteps:Float = REALIZE_LEAD_PX / cellH;
 		var stepsTop:Float = viewSteps - (fh * 0.5) / cellH - padSteps;
 		var stepsBottom:Float = viewSteps + (fh * 0.5) / cellH + padSteps;
 		var timeLow:Float = timeOfSteps(stepsTop < 0 ? 0 : stepsTop) - 1;
