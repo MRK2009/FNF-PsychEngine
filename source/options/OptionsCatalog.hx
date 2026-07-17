@@ -63,6 +63,37 @@ class OptionsCatalog {
 			"If checked, hold trails draw on top of the note heads instead of below them.\nA note skin can override this.", 'sustainsOverNotes', BOOL)));
 		rows.push(Setting(new Option('Disable Reset Button', "If checked, pressing Reset won't do anything.", 'noReset', BOOL)));
 
+		rows.push(Section(phrase('Scoring')));
+
+		rows.push(Setting(new Option('Scoring System:',
+			'Which scoring system judges your play.\nPsych is the classic engine scoring; each other system\nbrings its own hit windows, accuracy and grades.',
+			'scoreSystem', STRING, backend.scoring.ScoreSystems.LABELS)));
+
+		var judge:Option = new Option('Etterna Judge', 'Wife3 only: the judge level scaling the Etterna hit windows.\nJ4 is the competitive standard.',
+			'etternaJudge', INT);
+		judge.displayFormat = 'J%v';
+		judge.scrollSpeed = 4;
+		judge.minValue = 1;
+		judge.maxValue = 9;
+		rows.push(Setting(judge));
+
+		var od:Option = new Option('osu! Overall Difficulty', 'osu!mania only: the OD value the hit windows derive from.\nHigher = tighter windows.',
+			'osuOD', FLOAT);
+		od.scrollSpeed = 3;
+		od.minValue = 0;
+		od.maxValue = 10;
+		od.changeValue = 0.1;
+		od.decimals = 1;
+		rows.push(Setting(od));
+
+		rows.push(Setting(new Option('Save Replays', 'If checked, your ranked plays record a replay\nwatchable from their score in Freeplay.', 'saveReplays', BOOL)));
+
+		rows.push(Setting(new Option('Hit Error Bar:',
+			'Shows where your taps land inside the hit windows.\nosu! draws colored window segments, Etterna a minimal tick bar.',
+			'hitErrorBar', STRING, ['Off', 'osu!', 'Etterna'])));
+
+		rows.push(Setting(new Option('Hit Timing Display', 'If checked, shows each hit\'s millisecond offset next to the judgement.', 'hitMsDisplay', BOOL)));
+
 		rows.push(Section(phrase('Timing')));
 
 		var ratingOffset:Option = new Option('Rating Offset', 'Changes how late/early you have to hit for a "Sick!"\nHigher values mean you have to hit later.',
