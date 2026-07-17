@@ -7,16 +7,14 @@ import smidr.widgets.UITextInput;
 import smidr.widgets.UIDropdown;
 import smidr.widgets.UIButton;
 import backend.freeplay.SongLibrary;
-import backend.freeplay.SongEntry;
-import backend.difficulty.DifficultyRating.ChartRatings;
 import backend.profiles.ProfileManager;
 import backend.profiles.ProfileManager.ProfileData;
 
 /**
  * The Freeplay top bar, built with **Smidr** and anchored flush across the very top of the screen
  * (frosted, 50% transparent). Replaces the old classic Flixel `SORT / GROUP / SEARCH` header: a search
- * field plus clickable Sort and Group dropdowns, and a live library-MSD readout on the right. The
- * control cluster is centred (clamped clear of the top-left FPS overlay). The classic keyboard
+ * field plus clickable Sort and Group dropdowns, and a total-song count between the cluster and the
+ * profile chip. The control cluster is centred (clamped clear of the top-left FPS overlay). The classic keyboard
  * shortcuts (T / Q / E / TAB) still drive the same state and call back here to keep the captions in
  * sync.
  */
@@ -50,6 +48,7 @@ class FreeplayTopBar {
 	var by:Float = 0;
 	var bw:Float = 1000;
 	var bh:Float = 42;
+	var clusterRight:Float = 0; // right edge of the centred control cluster, so the count clears it
 
 	/**
 	 * Builds the bar's widgets into the Smidr root.
@@ -135,6 +134,7 @@ class FreeplayTopBar {
 		cx += groupCap.w + CAP_GAP;
 		groupDrop.x = cx;
 		groupDrop.y = ctrlY;
+		clusterRight = cx + GROUP_W;
 
 		profileBtn.x = x + w - PAD - PROFILE_W;
 		profileBtn.y = ctrlY;
@@ -173,24 +173,16 @@ class FreeplayTopBar {
 	public function setGroup(idx:Int):Void
 		groupDrop.select(idx);
 
-	/** Library average MSD over the songs rated so far (updates as the scan streams in). */
+	/** Total song count, centred in the gap between the control cluster and the profile chip. */
 	public function refreshMsd():Void {
-		var sum:Float = 0;
-		var n:Int = 0;
-		for (e in library.entries) {
-			var r:ChartRatings = e.ratingFor(library.representativeDiff(e));
-			if (r == null)
-				continue;
-			var msd = r.results.get('etterna_msd');
-			if (msd != null) {
-				sum += msd.overall;
-				n++;
-			}
-		}
-		var avg:String = (n > 0) ? fmt2(sum / n) : '—';
-		msdLbl.text = library.entries.length + ' songs      Avg MSD ' + avg;
+		msdLbl.text = library.entries.length + ' songs';
 		msdLbl.measure();
-		msdLbl.x = bx + bw - PAD - PROFILE_W - 14 - msdLbl.w;
+		var gapLeft:Float = clusterRight + SECTION_GAP;
+		var gapRight:Float = profileBtn.x - 14;
+		var lx:Float = gapLeft + ((gapRight - gapLeft) - msdLbl.w) * 0.5;
+		if (lx < gapLeft)
+			lx = gapLeft;
+		msdLbl.x = lx;
 	}
 
 	/**

@@ -38,6 +38,9 @@ import smidr.flixel.FlxSmidr;
 class FreeplayState extends MusicBeatState {
 	static var lastDifficultyName:String = Difficulty.getDefault();
 
+	/** The `folder|songName` identity of the last-selected song, restored when re-entering Freeplay. */
+	static var lastSongKey:String = null;
+
 	var library:SongLibrary;
 	var listView:FreeplayListView;
 	var uiRoot:UIRoot;
@@ -106,8 +109,23 @@ class FreeplayState extends MusicBeatState {
 		setupSmidr();
 		layout();
 
-		if (listView.curSelected >= library.view.length)
-			listView.curSelected = 0;
+		// SmidrUI is OpenFL-based, so it doesn't ride the Flixel cameras: FlxSmidr rescales its viewport
+		// on resize, but the widget POSITIONS come from FlxG.width/height at layout time. The widescreen
+		// scale mode changes those on a window resize, so re-run the layout (and refit the background)
+		// whenever the game is resized.
+		FlxG.signals.gameResized.add(onGameResized);
+
+		// Restore the last-selected song (the list view is rebuilt per state, so its index is stale);
+		// the cached library keeps entry identity, so match by key. onSelectionChanged then restores the
+		// song's remembered difficulty.
+		var restoreIdx:Int = -1;
+		if (lastSongKey != null)
+			for (i in 0...library.view.length)
+				if (library.view[i].key() == lastSongKey) {
+					restoreIdx = i;
+					break;
+				}
+		listView.curSelected = (restoreIdx >= 0) ? restoreIdx : (listView.curSelected >= library.view.length ? 0 : listView.curSelected);
 		curDifficulty = Std.int(Math.max(0, Difficulty.defaultList.indexOf(lastDifficultyName)));
 
 		listView.refreshView();
@@ -145,10 +163,18 @@ class FreeplayState extends MusicBeatState {
 		infoPanel.onScoreClick = openScoreResults;
 		profilePanel = new FreeplayProfilePanel(onProfileChanged);
 
-		scanLbl = new UILabel('', 12, 2);
+		scanLbl = new UILabel('', 12, 1);
 		uiRoot.content.addChild(scanLbl);
-		hintLbl = new UILabel(defaultHint(), 13, 2);
+		hintLbl = new UILabel(defaultHint(), 13, 1);
 		uiRoot.content.addChild(hintLbl);
+	}
+
+	/** Refits the background and re-lays the OpenFL-based Smidr chrome after a window resize. */
+	function onGameResized(w:Int, h:Int):Void {
+		if (bg != null)
+			CoolUtil.fillScreen(bg);
+		if (topBar != null)
+			layout();
 	}
 
 	function layout():Void {
@@ -281,6 +307,7 @@ class FreeplayState extends MusicBeatState {
 			curDifficulty = Difficulty.list.length - 1;
 		lastDifficultyName = Difficulty.getString(curDifficulty, false);
 		e.lastDifficulty = lastDifficultyName;
+		lastSongKey = e.key();
 
 		library.requestRating(e, lastDifficultyName, true);
 		refreshInfo();
@@ -607,6 +634,8 @@ class FreeplayState extends MusicBeatState {
 		// Restore the hidden cursor for gameplay / other menus (mirrors OptionsState).
 		FlxG.mouse.useSystemCursor = false;
 		FlxG.mouse.visible = false;
+
+		FlxG.signals.gameResized.remove(onGameResized);
 
 		if (library != null)
 			library.pause();

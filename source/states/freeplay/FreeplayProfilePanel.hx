@@ -14,7 +14,8 @@ import backend.profiles.ProfileManager.ProfileData;
  * scrollable pane with the active profile's total stats -- plays, keypresses, playtime, average
  * accuracy, recorded scores, grade tallies and the Etterna-style skill spread (always graded from
  * Wife3-at-J4 results) -- followed by profile switching, creation and renaming. Opened from the
- * top bar's profile chip; rebuilt fresh on every open (the modal disposes itself on close).
+ * top bar's profile chip; rebuilt fresh on every open (the modal disposes itself on close). Each
+ * inactive profile row carries a delete button (the last remaining profile can't be deleted).
  */
 class FreeplayProfilePanel {
 	static inline final W:Float = 480;
@@ -122,18 +123,30 @@ class FreeplayProfilePanel {
 		cy += 10;
 
 		cy = label('PROFILES', 11, 2, cy) + 4;
+		var multiple:Bool = ProfileManager.all().length > 1;
+		var delW:Float = 34;
 		for (prof in ProfileManager.all()) {
 			var id:Int = prof.id;
-			var caption:String = prof.name + (prof.id == p.id ? '   (active)' : '');
-			var b:UIButton = new UIButton(caption, innerW, ROW_H - 4, () -> {
+			var isActive:Bool = prof.id == p.id;
+			var caption:String = prof.name + (isActive ? '   (active)' : '');
+			// The last remaining profile can't be deleted, so it keeps the full row width.
+			var rowW:Float = multiple ? (innerW - delW - 6) : innerW;
+			var b:UIButton = new UIButton(caption, rowW, ROW_H - 4, () -> {
 				ProfileManager.setActive(id);
 				refresh();
 				if (onChanged != null)
 					onChanged();
-			}, prof.id == p.id);
+			}, isActive);
 			b.x = 0;
 			b.y = cy;
 			pane.content.addChild(b);
+
+			if (multiple) {
+				var del:UIButton = new UIButton('X', delW, ROW_H - 4, () -> deleteProfile(id));
+				del.x = rowW + 6;
+				del.y = cy;
+				pane.content.addChild(del);
+			}
 			cy += ROW_H;
 		}
 		cy += 6;
@@ -198,6 +211,18 @@ class FreeplayProfilePanel {
 			return;
 		var p:ProfileData = ProfileManager.create(name);
 		ProfileManager.setActive(p.id);
+		refresh();
+		if (onChanged != null)
+			onChanged();
+	}
+
+	/**
+	 * Deletes a profile (switching active if needed) and rebuilds the pane.
+	 * @param id the profile id to delete
+	 */
+	function deleteProfile(id:Int):Void {
+		if (!ProfileManager.delete(id))
+			return;
 		refresh();
 		if (onChanged != null)
 			onChanged();

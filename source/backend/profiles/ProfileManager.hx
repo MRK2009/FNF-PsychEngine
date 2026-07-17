@@ -121,6 +121,58 @@ class ProfileManager {
 			}
 	}
 
+	/**
+	 * Deletes a profile and its on-disk data (scores, replays). The last remaining profile can't be
+	 * deleted. If the active profile is removed, the first surviving profile becomes active.
+	 * @param id the profile id to delete
+	 * @return true when the profile was deleted
+	 */
+	public static function delete(id:Int):Bool {
+		ensureLoaded();
+		if (profiles.length <= 1)
+			return false;
+		var idx:Int = -1;
+		for (i in 0...profiles.length)
+			if (profiles[i].id == id) {
+				idx = i;
+				break;
+			}
+		if (idx < 0)
+			return false;
+
+		profiles.splice(idx, 1);
+		#if sys
+		try {
+			if (FileSystem.exists(profileDir(id)))
+				deleteDirRecursive(profileDir(id));
+		} catch (e:Dynamic) {}
+		#end
+
+		if (activeId == id) {
+			activeId = profiles[0].id;
+			_scores = null;
+		}
+		save();
+		return true;
+	}
+
+	#if sys
+	/**
+	 * Removes a directory and everything under it.
+	 * @param dir the directory path
+	 */
+	static function deleteDirRecursive(dir:String):Void {
+		if (!FileSystem.exists(dir))
+			return;
+		if (FileSystem.isDirectory(dir)) {
+			for (entry in FileSystem.readDirectory(dir))
+				deleteDirRecursive(dir + '/' + entry);
+			FileSystem.deleteDirectory(dir);
+		} else
+			FileSystem.deleteFile(dir);
+	}
+	#end
+
 	/** Counts one gameplay input press edge (keyboard, controller or mobile hitbox). */
 	public static inline function noteKeypress():Void
 		pendingKeypresses++;
