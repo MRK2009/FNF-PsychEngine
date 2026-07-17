@@ -30,6 +30,7 @@ final class HitErrorBar extends FlxSpriteGroup {
 	var hasAvg:Bool = false;
 	var centerX:Float;
 	var barY:Float;
+	var flipped:Bool;
 
 	/**
 	 * Builds the bar for the active scoring system's windows.
@@ -37,12 +38,15 @@ final class HitErrorBar extends FlxSpriteGroup {
 	 * @param styleName the ClientPrefs value: 'osu!' or 'Etterna'
 	 * @param x the bar's center x
 	 * @param y the bar's center y
+	 * @param flipped when true (bar sits at the top of the screen) the moving-average arrow is drawn
+	 *        below the bar instead of above it
 	 */
-	public function new(scoring:ScoreController, styleName:String, x:Float, y:Float) {
+	public function new(scoring:ScoreController, styleName:String, x:Float, y:Float, flipped:Bool = false) {
 		super();
 		osuStyle = styleName != 'Etterna';
 		centerX = x;
 		barY = y;
+		this.flipped = flipped;
 		scrollFactor.set();
 
 		var n:Int = scoring.judgementCount();
@@ -91,7 +95,7 @@ final class HitErrorBar extends FlxSpriteGroup {
 			arrow = new FlxSprite();
 			arrow.makeGraphic(8, 6, 0xFFFFFFFF);
 			arrow.x = x - 4;
-			arrow.y = y - 14;
+			arrow.y = flipped ? (y + 8) : (y - 14);
 			add(arrow);
 		}
 	}

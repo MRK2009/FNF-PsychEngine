@@ -277,6 +277,12 @@ class PlayState extends MusicBeatState {
 	var timeTxt:FlxText;
 	var scoreTxtTween:FlxTween;
 
+	// When the hit-error bar is on it takes the time bar's usual spot, so the time bar is delegated to a
+	// thin, semi-transparent yellow strip pinned to the bottom of the screen (see setupDelegatedTimeBar).
+	var delegatedTimeBar:Bool = false;
+	var timeBarTargetAlpha:Float = 1;
+	static inline final DELEGATED_TIME_BAR_H:Int = 8;
+
 	public static var campaignScore:Int = 0;
 	public static var campaignMisses:Int = 0;
 	public static var seenCutscene:Bool = false;
@@ -574,6 +580,7 @@ class PlayState extends MusicBeatState {
 
 		Conductor.songPosition = -Conductor.crochet * 5 + Conductor.offset;
 		var showTime:Bool = (ClientPrefs.data.timeBarType != 'Disabled');
+		delegatedTimeBar = showTime && ClientPrefs.data.hitErrorBar != 'Off';
 		timeTxt = new FlxText(0, 19, 400, "", 32);
 		timeTxt.setFormat(Paths.font("vcr.ttf"), 32, FlxColor.WHITE, CENTER, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 		timeTxt.scrollFactor.set();
@@ -601,6 +608,9 @@ class PlayState extends MusicBeatState {
 			timeTxt.size = 24;
 			timeTxt.y += 3;
 		}
+
+		if (delegatedTimeBar)
+			setupDelegatedTimeBar();
 
 		generateSong();
 
@@ -663,8 +673,11 @@ class PlayState extends MusicBeatState {
 		uiGroup.add(botplayTxt);
 
 		if (ClientPrefs.data.hitErrorBar != 'Off') {
-			hitErrorBar = new objects.HitErrorBar(scoring, ClientPrefs.data.hitErrorBar, FlxG.width * 0.5,
-				ClientPrefs.data.downScroll ? 84 : FlxG.height - 84);
+			// Pushed to the edge away from the notes: just above the thin bottom time bar for downscroll,
+			// near the top (flipped) for upscroll, since that whole edge is free of other HUD.
+			var down:Bool = ClientPrefs.data.downScroll;
+			var hy:Float = down ? (FlxG.height - DELEGATED_TIME_BAR_H - 18) : 26;
+			hitErrorBar = new objects.HitErrorBar(scoring, ClientPrefs.data.hitErrorBar, FlxG.width * 0.5, hy, !down);
 			hitErrorBar.visible = !ClientPrefs.data.hideHud;
 			uiGroup.add(hitErrorBar);
 		}
@@ -810,6 +823,34 @@ class PlayState extends MusicBeatState {
 	}
 
 	// addTextToDebug is inherited from MusicBeatState now.
+
+	/**
+	 * Re-shapes `timeBar` into a thin, full-width, semi-transparent yellow progress strip pinned to the
+	 * very bottom of the screen, with the time text shrunk to a small line just above it. Used when the
+	 * hit-error bar is enabled, since that bar then occupies the time bar's usual position.
+	 */
+	function setupDelegatedTimeBar():Void {
+		var w:Int = Std.int(FlxG.width);
+		var h:Int = DELEGATED_TIME_BAR_H;
+
+		timeBar.bg.makeGraphic(w, h, FlxColor.TRANSPARENT);
+		timeBar.leftBar.makeGraphic(w, h, FlxColor.WHITE);
+		timeBar.leftBar.color = 0xFFFFE24B; // yellow fill
+		timeBar.rightBar.makeGraphic(w, h, FlxColor.WHITE);
+		timeBar.rightBar.color = 0xFF201E16; // dark remainder
+		timeBar.barOffset.set(0, 0);
+		timeBar.barWidth = w;
+		timeBar.barHeight = h;
+		timeBar.regenerateClips();
+		timeBar.x = 0;
+		timeBar.y = FlxG.height - h;
+		timeBarTargetAlpha = 0.45;
+
+		timeTxt.size = 12;
+		timeTxt.updateHitbox();
+		timeTxt.screenCenter(X);
+		timeTxt.y = FlxG.height - h - 18;
+	}
 
 	public function reloadHealthBarColors() {
 		healthBar.setColors(FlxColor.fromRGB(dad.healthColorArray[0], dad.healthColorArray[1], dad.healthColorArray[2]),
@@ -1373,7 +1414,7 @@ class PlayState extends MusicBeatState {
 
 		// Song duration in a float, useful for the time left feature
 		songLength = FlxG.sound.music.length;
-		FlxTween.tween(timeBar, {alpha: 1}, 0.5, {ease: FlxEase.circOut});
+		FlxTween.tween(timeBar, {alpha: timeBarTargetAlpha}, 0.5, {ease: FlxEase.circOut});
 		FlxTween.tween(timeTxt, {alpha: 1}, 0.5, {ease: FlxEase.circOut});
 
 		#if DISCORD_ALLOWED
@@ -2748,6 +2789,12 @@ class PlayState extends MusicBeatState {
 		if (Math.isNaN(acc))
 			acc = 0;
 
+		// Downsample the tap offsets so the results scatter + unstable-rate graph can be redrawn from a
+		// stored score, without bloating the score DB with a point per note on huge charts.
+		var spreadTimes:Array<Float> = [];
+		var spreadOffsets:Array<Float> = [];
+		downsampleSpread(stats, spreadTimes, spreadOffsets, 256);
+
 		var rec:backend.profiles.ScoreRecord = {
 			id: 0,
 			songKey: Highscore.formatSong(Song.loadedSongName, storyDifficulty) + '_' + totalColumns + 'k',
@@ -2769,7 +2816,12 @@ class PlayState extends MusicBeatState {
 			playbackRate: playbackRate,
 			dateSec: Date.now().getTime() / 1000,
 			wifePercent: wifeJ4,
-			ssr: ssr
+			ssr: ssr,
+			ghostTaps: stats.ghostTaps,
+			holdDrops: stats.holdDrops + stats.segmentMisses,
+			unstableRate: scoring.unstableRate(),
+			spreadTimes: spreadTimes,
+			spreadOffsets: spreadOffsets
 		};
 		playResult = rec;
 		if (ranked) {
@@ -2823,6 +2875,38 @@ class PlayState extends MusicBeatState {
 			i = j;
 		}
 		return out;
+	}
+
+	/**
+		Copies the session's judged-tap offset log into two parallel arrays, evenly thinned to at most
+		`cap` samples so a stored score can redraw the hit scatter / unstable-rate graph cheaply.
+		@param stats the session log to read
+		@param outTimes filled with the sampled song times (ms)
+		@param outOffsets filled with the sampled signed offsets (ms), index-aligned with outTimes
+		@param cap the maximum sample count
+	**/
+	function downsampleSpread(stats:backend.scoring.SessionStats, outTimes:Array<Float>, outOffsets:Array<Float>, cap:Int):Void {
+		var n:Int = stats.hitCount;
+		if (n <= 0)
+			return;
+		if (n <= cap) {
+			for (i in 0...n) {
+				outTimes.push(stats.times[i]);
+				outOffsets.push(stats.offsets[i]);
+			}
+			return;
+		}
+		// Evenly spaced pick across the run so the scatter keeps its shape end to end.
+		var step:Float = n / cap;
+		var i:Int = 0;
+		while (i < cap) {
+			var idx:Int = Std.int(i * step);
+			if (idx >= n)
+				idx = n - 1;
+			outTimes.push(stats.times[idx]);
+			outOffsets.push(stats.offsets[idx]);
+			i++;
+		}
 	}
 
 	public var totalPlayed:Int = 0;
@@ -3594,6 +3678,11 @@ class PlayState extends MusicBeatState {
 			}
 			goodNoteHit(funny);
 		} else {
+			// A press that hit no note during live gameplay is logged as a ghost input regardless of
+			// whether ghost tapping is on (only the penalty is gated). keyPressed already returns early
+			// during countdown/end/pause, so reaching here means a section is active.
+			if (startedCountdown && !endingSong)
+				scoring.ghostTap();
 			if (ClientPrefs.data.ghostTapping)
 				callOnScripts('onGhostTap', [key]);
 			else

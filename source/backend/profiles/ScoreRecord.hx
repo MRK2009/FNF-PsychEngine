@@ -60,4 +60,20 @@ typedef ScoreRecord = {
 
 	/** Replay file name inside the profile's replays dir, null when none was saved. */
 	@:optional var replayFile:String;
+
+	/** Presses that hit no note during active gameplay (stray/ghost inputs). */
+	@:optional var ghostTaps:Int;
+
+	/** Guitar-hero hold drops + segmented-sustain body misses. */
+	@:optional var holdDrops:Int;
+
+	/** osu!-style unstable rate (10x the offset std-dev in ms), computed over the whole run. */
+	@:optional var unstableRate:Float;
+
+	/** Downsampled song times (ms) of judged taps, index-aligned with `spreadOffsets`, for the
+	    results hit-offset scatter and unstable-rate graph when re-opened from a stored score. */
+	@:optional var spreadTimes:Array<Float>;
+
+	/** Downsampled signed hit offsets (ms) of judged taps, index-aligned with `spreadTimes`. */
+	@:optional var spreadOffsets:Array<Float>;
 }

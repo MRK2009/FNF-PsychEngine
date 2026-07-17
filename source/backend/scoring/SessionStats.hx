@@ -32,8 +32,11 @@ final class SessionStats {
 	/** Counted segmented-sustain body misses. */
 	public var segmentMisses(default, null):Int = 0;
 
-	/** Counted ghost-tap misses. */
+	/** Counted ghost-tap misses (penalised presses with no note, ghost tapping off). */
 	public var ghostMisses(default, null):Int = 0;
+
+	/** Every press that hit no note during active gameplay, whether or not it was penalised. */
+	public var ghostTaps(default, null):Int = 0;
 
 	/** Highest combo reached (written by the gameplay side). */
 	public var maxCombo:Int = 0;
@@ -55,6 +58,7 @@ final class SessionStats {
 		holdDrops = 0;
 		segmentMisses = 0;
 		ghostMisses = 0;
+		ghostTaps = 0;
 		maxCombo = 0;
 		if (capacity > times.length)
 			alloc(capacity);
@@ -86,6 +90,9 @@ final class SessionStats {
 
 	public inline function addGhostMiss():Void
 		ghostMisses++;
+
+	public inline function addGhostTap():Void
+		ghostTaps++;
 
 	/**
 	 * Allocates fresh buffers.

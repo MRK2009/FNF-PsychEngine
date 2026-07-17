@@ -115,6 +115,10 @@ final class ScoreController {
 		stats.addGhostMiss();
 	}
 
+	/** A press with no note in reach during active gameplay (logged whether or not it was penalised). */
+	public inline function ghostTap():Void
+		stats.addGhostTap();
+
 	/** A sustain held to its very end. */
 	public inline function sustainComplete():Void
 		system.onSustainComplete();
@@ -205,5 +209,27 @@ final class ScoreController {
 		points += stats.misses * Wife3.MISS_WEIGHT;
 		points += (stats.holdDrops + stats.segmentMisses) * Wife3.HOLD_DROP_WEIGHT;
 		return points / (Wife3.MAX_POINTS * taps);
+	}
+
+	/**
+	 * The osu!-style unstable rate: ten times the standard deviation of the logged hit offsets (ms).
+	 * @return the unstable rate, 0 with fewer than two logged taps
+	 */
+	public function unstableRate():Float {
+		var n:Int = stats.hitCount;
+		if (n < 2)
+			return 0;
+		var offsets:Vector<Float> = stats.offsets;
+		var mean:Float = 0;
+		for (i in 0...n)
+			mean += offsets[i];
+		mean /= n;
+		var variance:Float = 0;
+		for (i in 0...n) {
+			var d:Float = offsets[i] - mean;
+			variance += d * d;
+		}
+		variance /= n;
+		return Math.sqrt(variance) * 10;
 	}
 }

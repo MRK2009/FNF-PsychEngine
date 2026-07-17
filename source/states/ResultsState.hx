@@ -20,11 +20,13 @@ import backend.WeekData;
  * The osu!-style results screen, shown after finishing a song outside story mode and reopenable
  * from any stored highscore in Freeplay.
  *
- * Two modes share the layout: **live** (`fromPlay = true`, carries the run's `SessionStats` for
- * the hit-offset graph and offers Retry) and **view** (a stored `ScoreRecord` only). The left
- * Smidr panel lists score / accuracy / per-judgement counts with the scoring system's own names /
- * combo / Wife3-at-J4 / SSR; the right side is the big grade letter. Watch Replay appears once the
- * record carries a replay file.
+ * Two modes share the layout: **live** (`fromPlay = true`, carries the run's `SessionStats` and
+ * offers Retry) and **view** (a stored `ScoreRecord` only). The left Smidr panel names the scoring
+ * system up front, then lists score / accuracy / per-judgement counts with the system's own names /
+ * combo / Wife3-at-J4 / unstable rate / SSR; the right side is the big grade letter plus an osu!-style
+ * hit-offset scatter and a rolling unstable-rate line. The graphs draw from the live session or, when
+ * a stored score is reopened, from its downsampled offset spread. Watch Replay appears once the record
+ * carries a replay file.
  */
 class ResultsState extends MusicBeatState {
 	var record:ScoreRecord;
@@ -34,8 +36,19 @@ class ResultsState extends MusicBeatState {
 	var uiRoot:UIRoot;
 	var panel:UIPanel;
 	var labels:Array<UILabel> = [];
+	var bg:FlxSprite;
 	var gradeTxt:FlxText;
+	var fcTxt:FlxText;
 	var graph:FlxSprite;
+	var urGraph:FlxSprite;
+	// The right-hand column (grade, FC, graphs, their captions) is anchored to FlxG.width, so it must
+	// re-x on a window resize (SmidrUI is OpenFL-based and the widescreen mode changes FlxG.width).
+	var graphLabels:Array<FlxText> = [];
+
+	// Judged-tap offset samples, from the live session or a stored score's downsampled spread.
+	var sampleTimes:Array<Float> = null;
+	var sampleOffsets:Array<Float> = null;
+	var unstable:Float = 0;
 
 	/**
 	 * @param record the play to present
@@ -55,7 +68,7 @@ class ResultsState extends MusicBeatState {
 		if (FlxG.sound.music == null || !FlxG.sound.music.playing)
 			FlxG.sound.playMusic(Paths.music('freakyMenu'));
 
-		var bg:FlxSprite = new FlxSprite().loadGraphic(Paths.image('menuDesat'));
+		bg = new FlxSprite().loadGraphic(Paths.image('menuDesat'));
 		bg.color = 0xFF223344;
 		CoolUtil.fillScreen(bg);
 		add(bg);
@@ -67,18 +80,28 @@ class ResultsState extends MusicBeatState {
 		gradeTxt.y = 130;
 		add(gradeTxt);
 
-		var fcTxt:FlxText = new FlxText(gradeTxt.x, gradeTxt.y + 170, 520, record.fc, 28);
+		fcTxt = new FlxText(gradeTxt.x, gradeTxt.y + 170, 520, record.fc, 28);
 		fcTxt.setFormat(Paths.font('vcr.ttf'), 28, FlxColor.WHITE, CENTER, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 		add(fcTxt);
 
-		if (stats != null && stats.hitCount > 0) {
-			graph = buildGraph(520, 150);
-			graph.x = FlxG.width - 560;
-			graph.y = 380;
+		resolveSamples();
+		if (sampleTimes != null && sampleTimes.length > 0) {
+			var gx:Float = FlxG.width - 560;
+			addGraphLabel('HIT OFFSET (ms)', gx, 352);
+			graph = buildOffsetGraph(520, 116);
+			graph.x = gx;
+			graph.y = 372;
 			add(graph);
+
+			addGraphLabel('UNSTABLE RATE  ' + fmt2(unstable), gx, 500);
+			urGraph = buildURGraph(520, 92);
+			urGraph.x = gx;
+			urGraph.y = 520;
+			add(urGraph);
 		}
 
 		setupSmidr();
+		FlxG.signals.gameResized.add(onGameResized);
 		super.create();
 
 		#if mobile
@@ -110,12 +133,17 @@ class ResultsState extends MusicBeatState {
 
 		var cy:Float = py + 18;
 		cy = line('${record.songName}  [${record.diffName}]', 24, 0, px, cy, pw) + 6;
-		var sub:String = record.systemId != null ? systemLabel() : '';
+		// Name the scoring system that judged the play up front, so it's never ambiguous which ruleset
+		// the score/grade came from (they aren't comparable across systems).
+		cy = line('SCORING SYSTEM   ' + (record.systemId != null ? systemLabel() : 'Psych'), 13, 2, px, cy, pw) + 2;
+		var meta:String = '';
 		if (record.playbackRate != 1)
-			sub += '    ${record.playbackRate}x';
+			meta += '${record.playbackRate}x';
 		if (record.keyCount != 4)
-			sub += '    ${record.keyCount}K';
-		cy = line(sub, 13, 1, px, cy, pw) + 14;
+			meta += (meta.length > 0 ? '    ' : '') + '${record.keyCount}K';
+		if (meta.length > 0)
+			cy = line(meta, 13, 1, px, cy, pw) + 2;
+		cy += 12;
 
 		cy = line('SCORE', 11, 2, px, cy, pw) + 2;
 		cy = line(commas(record.score), 34, 0, px, cy, pw) + 10;
@@ -127,10 +155,18 @@ class ResultsState extends MusicBeatState {
 			var n:Int = (record.counts != null && i < record.counts.length) ? record.counts[i] : 0;
 			cy = line(rpad(names[i], 12) + Std.string(n), 15, 1, px, cy, pw) + 2;
 		}
-		cy = line(rpad('Misses', 12) + Std.string(record.misses), 15, 1, px, cy, pw) + 12;
+		cy = line(rpad('Misses', 12) + Std.string(record.misses), 15, 1, px, cy, pw) + 2;
+		if (record.holdDrops != null && record.holdDrops > 0)
+			cy = line(rpad('Hold Drops', 12) + Std.string(record.holdDrops), 15, 1, px, cy, pw) + 2;
+		if (record.ghostTaps != null && record.ghostTaps > 0)
+			cy = line(rpad('Ghost Taps', 12) + Std.string(record.ghostTaps), 15, 1, px, cy, pw) + 2;
+		cy += 10;
 
 		cy = line('Max Combo   ${record.maxCombo}x        Notes   ${record.totalNotes}', 14, 1, px, cy, pw) + 6;
 		cy = line('Wife3 (J4)   ' + fmt2(record.wifePercent * 100) + '%', 14, 1, px, cy, pw) + 6;
+		var ur:Float = (record.unstableRate != null && record.unstableRate > 0) ? record.unstableRate : unstable;
+		if (ur > 0)
+			cy = line('Unstable Rate   ' + fmt2(ur), 14, 1, px, cy, pw) + 6;
 		if (record.ssr != null && record.ssr.length >= 8)
 			cy = line('SSR   ' + fmt2(record.ssr[0]), 14, 1, px, cy, pw) + 6;
 		cy = line(dateStr(record.dateSec), 12, 2, px, cy, pw) + 6;
@@ -214,24 +250,100 @@ class ResultsState extends MusicBeatState {
 	}
 
 	/**
-	 * Renders the run's signed hit offsets over song time onto a scatter bitmap.
+	 * Resolves the judged-tap offset samples used by both graphs: the live session's full log when
+	 * present, otherwise the stored score's downsampled spread. Also computes the run's unstable rate
+	 * from those samples (falling back on the record's stored value).
+	 */
+	function resolveSamples():Void {
+		if (stats != null && stats.hitCount > 0) {
+			sampleTimes = [];
+			sampleOffsets = [];
+			for (i in 0...stats.hitCount) {
+				sampleTimes.push(stats.times[i]);
+				sampleOffsets.push(stats.offsets[i]);
+			}
+		} else if (record.spreadTimes != null && record.spreadOffsets != null && record.spreadTimes.length > 0) {
+			sampleTimes = record.spreadTimes;
+			sampleOffsets = record.spreadOffsets;
+		} else
+			return;
+		unstable = computeUR(sampleOffsets);
+		if (unstable <= 0 && record.unstableRate != null)
+			unstable = record.unstableRate;
+	}
+
+	/**
+	 * The unstable rate (10x the offset std-dev in ms) of a sample set.
+	 * @param offsets the signed offsets
+	 * @return the unstable rate, 0 with fewer than two samples
+	 */
+	static function computeUR(offsets:Array<Float>):Float {
+		var n:Int = offsets.length;
+		if (n < 2)
+			return 0;
+		var mean:Float = 0;
+		for (o in offsets)
+			mean += o;
+		mean /= n;
+		var v:Float = 0;
+		for (o in offsets) {
+			var d:Float = o - mean;
+			v += d * d;
+		}
+		return Math.sqrt(v / n) * 10;
+	}
+
+	/**
+	 * Adds a small caption above a graph.
+	 * @param text the caption
+	 * @param x the caption's left edge
+	 * @param y the caption's top
+	 */
+	function addGraphLabel(text:String, x:Float, y:Float):Void {
+		var t:FlxText = new FlxText(x, y, 520, text, 14);
+		t.setFormat(Paths.font('vcr.ttf'), 14, 0xFFB8C0D0, LEFT);
+		add(t);
+		graphLabels.push(t);
+	}
+
+	/** Re-x's the FlxG.width-anchored right column (grade, FC, graphs, captions) after a window resize. */
+	function onGameResized(w:Int, h:Int):Void {
+		if (bg != null)
+			CoolUtil.fillScreen(bg);
+		var gx:Float = FlxG.width - 560;
+		if (gradeTxt != null)
+			gradeTxt.x = gx;
+		if (fcTxt != null)
+			fcTxt.x = gx;
+		if (graph != null)
+			graph.x = gx;
+		if (urGraph != null)
+			urGraph.x = gx;
+		for (l in graphLabels)
+			l.x = gx;
+	}
+
+	/**
+	 * Renders the run's signed hit offsets over song time onto a scatter bitmap (osu!-style),
+	 * coloured by how close each tap was to perfect.
 	 * @param w the graph width
 	 * @param h the graph height
 	 * @return the finished sprite
 	 */
-	function buildGraph(w:Int, h:Int):FlxSprite {
+	function buildOffsetGraph(w:Int, h:Int):FlxSprite {
 		var bmp:BitmapData = new BitmapData(w, h, true, 0x88000000);
 		var mid:Int = h >> 1;
 		for (x in 0...w)
 			bmp.setPixel32(x, mid, 0xFFFFFFFF);
 
-		var lastTime:Float = stats.times[stats.hitCount - 1];
+		var n:Int = sampleTimes.length;
+		var lastTime:Float = sampleTimes[n - 1];
 		if (lastTime <= 0)
 			lastTime = 1;
 		var range:Float = 180.0;
-		for (i in 0...stats.hitCount) {
-			var x:Int = Std.int((stats.times[i] / lastTime) * (w - 3)) + 1;
-			var off:Float = stats.offsets[i];
+		for (i in 0...n) {
+			var x:Int = Std.int((sampleTimes[i] / lastTime) * (w - 3)) + 1;
+			var off:Float = sampleOffsets[i];
 			if (off < -range)
 				off = -range;
 			else if (off > range)
@@ -241,6 +353,68 @@ class ResultsState extends MusicBeatState {
 			var color:Int = abs <= 45 ? 0xFF6FE3FF : (abs <= 90 ? 0xFF9EE86F : (abs <= 135 ? 0xFFF2C94C : 0xFFEB5757));
 			bmp.setPixel32(x, y, color);
 			bmp.setPixel32(x, y + 1, color);
+		}
+
+		var spr:FlxSprite = new FlxSprite();
+		spr.pixels = bmp;
+		return spr;
+	}
+
+	/**
+	 * Renders a rolling unstable-rate line over song time: at each column the local UR of a sliding
+	 * window of taps, scaled against the run's peak so the shape reads clearly.
+	 * @param w the graph width
+	 * @param h the graph height
+	 * @return the finished sprite
+	 */
+	function buildURGraph(w:Int, h:Int):FlxSprite {
+		var bmp:BitmapData = new BitmapData(w, h, true, 0x88000000);
+		var n:Int = sampleTimes.length;
+
+		// Per-column rolling UR over a window of samples centred on each column's song time.
+		var half:Int = Std.int(Math.max(3, n / 24));
+		var col:Array<Float> = [];
+		var peak:Float = 1;
+		var lastTime:Float = sampleTimes[n - 1];
+		if (lastTime <= 0)
+			lastTime = 1;
+		for (x in 0...w) {
+			// Sample index nearest this column's time.
+			var centre:Int = Std.int((x / (w - 1)) * (n - 1));
+			var lo:Int = centre - half;
+			if (lo < 0)
+				lo = 0;
+			var hi:Int = centre + half;
+			if (hi > n - 1)
+				hi = n - 1;
+			var win:Array<Float> = [];
+			for (k in lo...hi + 1)
+				win.push(sampleOffsets[k]);
+			var ur:Float = computeUR(win);
+			col.push(ur);
+			if (ur > peak)
+				peak = ur;
+		}
+
+		var prevY:Int = -1;
+		for (x in 0...w) {
+			var norm:Float = col[x] / peak;
+			var y:Int = (h - 2) - Std.int(norm * (h - 4));
+			if (y < 0)
+				y = 0;
+			else if (y >= h)
+				y = h - 1;
+			bmp.setPixel32(x, y, 0xFFFFD75E);
+			if (y + 1 < h)
+				bmp.setPixel32(x, y + 1, 0xFFFFD75E);
+			// Join to the previous column so it reads as a continuous line, not dots.
+			if (prevY >= 0) {
+				var a:Int = prevY < y ? prevY : y;
+				var b:Int = prevY < y ? y : prevY;
+				for (yy in a...b + 1)
+					bmp.setPixel32(x, yy, 0x88FFD75E);
+			}
+			prevY = y;
 		}
 
 		var spr:FlxSprite = new FlxSprite();
@@ -271,6 +445,7 @@ class ResultsState extends MusicBeatState {
 	override function destroy():Void {
 		FlxG.mouse.useSystemCursor = false;
 		FlxG.mouse.visible = false;
+		FlxG.signals.gameResized.remove(onGameResized);
 		if (uiRoot != null) {
 			uiRoot = null;
 			FlxSmidr.dispose();
