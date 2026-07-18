@@ -19,6 +19,14 @@ class TouchButton extends FlxSprite
 	public var pressed:Bool = false;
 	public var justReleased:Bool = false;
 
+	/**
+	 * When set, the next `update` re-baselines the press state without emitting a `justPressed` /
+	 * `justReleased` edge. Lets a pad that just (re)gained focus ignore a touch already held over the
+	 * button -- e.g. a finger still down on Back when a substate closes over the parent's pad, which
+	 * would otherwise read as a fresh press and pop an extra menu.
+	 */
+	public var ignoreHeld:Bool = false;
+
 	/** Highlight alpha applied while held. */
 	public var pressedAlpha:Float = 1.0;
 	public var idleAlpha:Float = 0.6;
@@ -34,8 +42,18 @@ class TouchButton extends FlxSprite
 	{
 		super.update(elapsed);
 
-		final wasPressed:Bool = pressed;
 		final nowPressed:Bool = checkPressed();
+
+		if (ignoreHeld) {
+			ignoreHeld = false;
+			justPressed = false;
+			justReleased = false;
+			pressed = nowPressed;
+			alpha = pressed ? pressedAlpha : idleAlpha;
+			return;
+		}
+
+		final wasPressed:Bool = pressed;
 
 		justPressed = nowPressed && !wasPressed;
 		justReleased = !nowPressed && wasPressed;

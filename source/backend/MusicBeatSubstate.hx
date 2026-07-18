@@ -35,11 +35,9 @@ class MusicBeatSubstate extends FlxSubState {
 			mobileControlsCamera.bgColor.alpha = 0;
 			FlxG.cameras.add(mobileControlsCamera, false);
 		}
-		touchPad = new TouchPad(dpadMode, actionMode);
-		touchPad.cameras = [mobileControlsCamera];
-		for (btn in touchPad.buttons) btn.cameras = [mobileControlsCamera];
-		final a:Float = ClientPrefs.data.controlsAlpha;
-		for (btn in touchPad.buttons) btn.idleAlpha = a;
+		// SmidrUI-styled pad on its own OpenFL overlay; the camera is only a scroll-0 reference for
+		// projecting touches, and alpha comes from ClientPrefs per button.
+		touchPad = new TouchPad(dpadMode, actionMode, mobileControlsCamera);
 		add(touchPad);
 		TouchPad.current = touchPad;
 	}
@@ -83,6 +81,16 @@ class MusicBeatSubstate extends FlxSubState {
 		super.destroy();
 	}
 	#end
+
+	override function closeSubState():Void {
+		super.closeSubState();
+		#if mobile
+		// See MusicBeatState.closeSubState: don't let a held touch carry a fresh press into this
+		// substate's pad when a nested substate closes over it.
+		if (touchPad != null)
+			touchPad.ignoreHeldTouches();
+		#end
+	}
 
 	public function touchPadJustPressed(tag:String):Bool {
 		#if mobile return touchPad != null && touchPad.buttonJustPressed(tag); #else return false; #end

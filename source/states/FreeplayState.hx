@@ -400,7 +400,7 @@ class FreeplayState extends MusicBeatState {
 			FlxG.sound.play(Paths.sound('scrollMenu'), 0.2);
 			changeSelection(-FlxG.mouse.wheel);
 		}
-		if (!player.playingMusic && !typing && FlxG.mouse.justPressed) {
+		if (!player.playingMusic && !typing && FlxG.mouse.justPressed && !pointerOverTouchPad()) {
 			var hit:Int = listView.indexAtScreen(FlxG.mouse.x, FlxG.mouse.y);
 			if (hit >= 0 && hit != listView.curSelected) {
 				listView.curSelected = hit;

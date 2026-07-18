@@ -12,8 +12,8 @@ import mobile.input.Hitbox;
 class MusicBeatState extends FlxState {
 	#if mobile
 	// On-screen controls for this state. `touchPad` drives menu navigation (read by
-	// backend.Controls); `hitbox` drives gameplay lanes (polled by PlayState). Both
-	// render on a dedicated overlay camera so they ignore game-camera zoom/scroll.
+	// backend.Controls) and renders SmidrUI-styled buttons on its own OpenFL overlay;
+	// `hitbox` drives gameplay lanes (polled by PlayState) on the overlay camera below.
 	public var touchPad:TouchPad;
 	public var hitbox:Hitbox;
 	public var mobileControlsCamera:FlxCamera;
@@ -130,11 +130,10 @@ class MusicBeatState extends FlxState {
 	 */
 	public function addTouchPad(dpadMode:String = 'FULL', actionMode:String = 'A_B'):Void {
 		removeTouchPad();
+		// The SmidrUI-styled pad renders on its own OpenFL overlay; the camera is only a scroll-0
+		// reference for projecting touches into pad space, and alpha comes from ClientPrefs per button.
 		initMobileControlsCamera();
-		touchPad = new TouchPad(dpadMode, actionMode);
-		touchPad.cameras = [mobileControlsCamera];
-		for (btn in touchPad.buttons) btn.cameras = [mobileControlsCamera];
-		applyControlsAlpha(touchPad);
+		touchPad = new TouchPad(dpadMode, actionMode, mobileControlsCamera);
 		add(touchPad);
 		TouchPad.current = touchPad;
 	}
@@ -165,11 +164,6 @@ class MusicBeatState extends FlxState {
 		}
 	}
 
-	function applyControlsAlpha(pad:TouchPad):Void {
-		final a:Float = ClientPrefs.data.controlsAlpha;
-		for (btn in pad.buttons) btn.idleAlpha = a;
-	}
-
 	// Keep the on-screen controls above any HUD cameras a state adds after
 	// addTouchPad/addHitbox, so callers can add the pad anywhere in create().
 	// (see below for the reorder; the input helpers are declared outside #if mobile.)
@@ -183,6 +177,12 @@ class MusicBeatState extends FlxState {
 
 	public function touchPadPressed(tag:String):Bool {
 		#if mobile return touchPad != null && touchPad.buttonPressed(tag); #else return false; #end
+	}
+
+	// Whether the pointer is over a touch-pad button right now, so click/tap handlers can ignore a tap
+	// that was meant for the pad (e.g. a list click under the d-pad). Always false off-mobile.
+	public function pointerOverTouchPad():Bool {
+		#if mobile return touchPad != null && touchPad.overlapsPointer(); #else return false; #end
 	}
 
 	// Index of the visible group item under a just-started click/tap, else -1.
@@ -255,6 +255,16 @@ class MusicBeatState extends FlxState {
 
 	public static var timePassedOnState:Float = 0;
 	private static var _lastSavedFullscreen:Bool = false;
+
+	override function closeSubState():Void {
+		super.closeSubState();
+		#if mobile
+		// A finger still held on this pad's Back (etc.) after the substate closes must not read as a
+		// fresh press on the resume frame, or the parent pops an extra menu.
+		if (touchPad != null)
+			touchPad.ignoreHeldTouches();
+		#end
+	}
 
 	override function update(elapsed:Float) {
 		#if (mobile && HSCRIPT_ALLOWED)

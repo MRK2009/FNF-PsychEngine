@@ -182,8 +182,33 @@ class MobileChartingState extends MusicBeatState {
 		for (e in legacy.editors.ChartingState.defaultEvents)
 			if (e.length > 0 && e[0].length > 0 && !eventNames.contains(e[0]))
 				eventNames.push(e[0]);
+		// Custom mod events (custom_events/*.txt), same source the desktop editor scans -- otherwise
+		// the picker only ever lists the built-ins.
+		#if MODS_ALLOWED
+		for (name in scanCustomEventNames())
+			if (name.length > 0 && !eventNames.contains(name))
+				eventNames.push(name);
+		#end
 		placeEvent = (eventNames.length > 0) ? eventNames[0] : '';
 	}
+
+	#if MODS_ALLOWED
+	/** Names of custom event definitions (`custom_events/<name>.txt`) across the shared path and enabled mods. **/
+	function scanCustomEventNames():Array<String> {
+		var out:Array<String> = [];
+		for (dir in Mods.directoriesWithFile(Paths.getSharedPath(), 'custom_events/')) {
+			for (file in sys.FileSystem.readDirectory(dir)) {
+				var path:String = haxe.io.Path.join([dir, file]);
+				if (!sys.FileSystem.isDirectory(path) && file.endsWith('.txt') && !file.startsWith('readme.')) {
+					var name:String = file.substr(0, file.length - 4);
+					if (name.length > 0 && !out.contains(name))
+						out.push(name);
+				}
+			}
+		}
+		return out;
+	}
+	#end
 
 	// ---- Chrome (rails / action bar / guide) ----
 

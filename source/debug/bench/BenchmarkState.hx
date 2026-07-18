@@ -57,6 +57,10 @@ class BenchmarkState extends MusicBeatState {
 		if (FlxG.sound.music == null || !FlxG.sound.music.playing)
 			FlxG.sound.playMusic(Paths.music('freakyMenu'), 0.8);
 
+		#if mobile
+		addTouchPad('UP_DOWN', 'A_B');
+		#end
+
 		changeSelection();
 		FlxG.mouse.visible = false;
 		super.create();
