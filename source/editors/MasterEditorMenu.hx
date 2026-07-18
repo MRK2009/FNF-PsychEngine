@@ -8,7 +8,11 @@ import states.FreeplayState;
 class MasterEditorMenu extends MusicBeatState {
 	var options:Array<String> = [
 		'Chart Editor',
+		// The legacy editor is PsychUI/mouse-driven with no touch controls -- unusable on touch, so
+		// it's hidden on mobile (the touch-native editor above replaces it there).
+		#if !mobile
 		'Legacy Chart Editor',
+		#end
 		'Character Editor',
 		'Stage Editor',
 		'Week Editor',

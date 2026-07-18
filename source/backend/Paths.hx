@@ -403,8 +403,17 @@ class Paths {
 		var folderKey:String = Language.getFileTranslation('fonts/$key');
 		#if MODS_ALLOWED
 		var file:String = modFolders(folderKey);
-		if (FileSystem.exists(file))
+		if (FileSystem.exists(file)) {
+			#if android
+			// A mod font lives on external storage, which OpenFL can't load by path on Android -- register
+			// it from bytes and hand back the registered font name so FlxText actually uses it (matches
+			// how AssetUtil.getBitmap/getSound already load mod images/sounds from bytes).
+			var registered:String = mobile.backend.AssetUtil.getFontName(file);
+			if (registered != null)
+				return registered;
+			#end
 			return file;
+		}
 		#end
 		return 'assets/$folderKey';
 	}

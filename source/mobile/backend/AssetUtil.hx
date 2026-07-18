@@ -75,6 +75,41 @@ class AssetUtil
 		return Assets.exists(path) ? Assets.getBitmapData(path) : null;
 	}
 
+	static var fontNameCache:Map<String, String> = new Map();
+
+	/**
+	 * Registers a TTF/OTF font at `path` from its BYTES and returns the registered font name, so
+	 * `FlxText` can reference it by name. Mods live on external storage, which OpenFL cannot load a font
+	 * from by path on Android (the same limitation `getBitmap`/`getSound` work around) -- so a mod's
+	 * custom font silently fell back to the default. Cached per path; returns `null` (caller keeps the
+	 * raw path) if the bytes can't be read or parsed. Base-game fonts are APK-registered and never reach
+	 * here.
+	 */
+	public static function getFontName(path:String):String
+	{
+		if (fontNameCache.exists(path))
+			return fontNameCache.get(path);
+
+		var name:String = null;
+		try
+		{
+			final bytes:haxe.io.Bytes = getBytes(path);
+			if (bytes != null)
+			{
+				final font:openfl.text.Font = openfl.text.Font.fromBytes(bytes);
+				if (font != null)
+				{
+					openfl.text.Font.registerFont(font);
+					name = font.fontName;
+				}
+			}
+		}
+		catch (e:Dynamic) {}
+
+		fontNameCache.set(path, name);
+		return name;
+	}
+
 	/** Like FileSystem.exists, but also true for APK-bundled assets. */
 	public static function exists(path:String):Bool
 	{
