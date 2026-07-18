@@ -184,6 +184,12 @@ final class SustainSprite extends FlxSprite {
 			tailRGB.enabled = false;
 		}
 
+		if (data.type == 'Hurt Note') {
+			rgbShader.r = tailRGB.r = 0xFF101010;
+			rgbShader.g = tailRGB.g = 0xFFFF0000;
+			rgbShader.b = tailRGB.b = 0xFF990022;
+		}
+
 		// No hold-end frame in the skin -> the body extends over the tail's span instead of stopping short.
 		var endAnim = tail.animation.getByName('end');
 		hasTail = (endAnim != null && endAnim.numFrames > 0);

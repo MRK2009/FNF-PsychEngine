@@ -186,6 +186,26 @@ final class NoteSprite extends FlxSprite {
 			pixel = v.pixel;
 			scaleFactor = v.scaleFactor;
 		}
+
+		applyTypeVisual(data.type);
+	}
+
+	/**
+		Applies a built-in note type's visual half (RGB tint + splash) on top of the skin build, the
+		drawable counterpart to `NoteData.applyType`'s gameplay half. Setting the `rgbShader` channels
+		clones the shared per-column palette on write, so the tint stays local to this head.
+		@param type the note-type name (`''`/`null` for a normal note)
+	**/
+	inline function applyTypeVisual(type:String):Void {
+		if (type == 'Hurt Note') {
+			rgbShader.r = 0xFF101010;
+			rgbShader.g = 0xFFFF0000;
+			rgbShader.b = 0xFF990022;
+
+			noteSplashData.r = 0xFFFF0000;
+			noteSplashData.g = 0xFF101010;
+			noteSplashData.texture = 'noteSplashes/noteSplashes-electric';
+		}
 	}
 
 	/**

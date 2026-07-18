@@ -139,7 +139,7 @@
 		     system downscaling and FPS override are refused. The manifest MUST be the
 		     explicit file+rename form: file templates are copied after the directory
 		     overlays, which lose collisions against lime's own templates. NOTE: the
-		     manifest copy tracks lime 8.3.2's template -- re-diff it if lime is updated. -->
+		     manifest copy tracks lime 8.3.2's template re-diff it if lime is updated. -->
 		<template path="art/android/templates" />
 		<template path="art/android/AndroidManifest.xml" rename="app/src/main/AndroidManifest.xml" />
 
@@ -231,6 +231,18 @@
 	     SmidrUI: legacy/editors still references it, but keep() guards against DCE stripping any
 	     class a script constructs via import()/reflection. -->
 	<haxeflag name="--macro" value="keep('backend.ui')" />
+
+	<!-- Scripts can construct ANY Flixel / flixel-addons class by name (import()/reflection), but DCE
+	     only keeps types the engine itself references, so an unreferenced one (e.g.
+	     flixel.addons.effects.FlxSkewedSprite) resolves to nil in a script. keep() does not help: it
+	     only tags already-compiled types, it does not pull an unreferenced module into the build.
+	     include() force-compiles AND keeps every module, and one recursive include covers flixel core
+	     AND flixel-addons (both live under the `flixel` package namespace across all classpaths). The
+	     ignore list skips modules that can't be compiled as runtime code: the addon integrations
+	     needing libraries we don't ship (nape physics, spine editor), the FlxRayCastTilemap deprecation
+	     stub (removed in flixel-addons 5.9.0), and flixel's macro-only classes (they use
+	     haxe.macro.Context and are meaningless at runtime). -->
+	<haxeflag name="--macro" value="include('flixel', true, ['flixel.addons.nape', 'flixel.addons.editors.spine', 'flixel.addons.tile.FlxRayCastTilemap', 'flixel.system.macros'])" />
 
 	<!-- ================================ Icons ================================== -->
 

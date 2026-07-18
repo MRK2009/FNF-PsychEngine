@@ -137,14 +137,14 @@ class WeekData {
 				for (daWeek in listOfWeeks) {
 					var path:String = directory + daWeek + '.json';
 					if (FileSystem.exists(path)) {
-						addWeek(daWeek, path, directories[i], i, originalLength);
+						addWeek(daWeek, path, directories[i], i, originalLength, isStoryMode);
 					}
 				}
 
 				for (file in FileSystem.readDirectory(directory)) {
 					var path = haxe.io.Path.join([directory, file]);
 					if (!FileSystem.isDirectory(path) && file.endsWith('.json')) {
-						addWeek(file.substr(0, file.length - 5), path, directories[i], i, originalLength);
+						addWeek(file.substr(0, file.length - 5), path, directories[i], i, originalLength, isStoryMode);
 					}
 				}
 			}
@@ -152,7 +152,7 @@ class WeekData {
 		#end
 	}
 
-	private static function addWeek(weekToCheck:String, path:String, directory:String, i:Int, originalLength:Int) {
+	private static function addWeek(weekToCheck:String, path:String, directory:String, i:Int, originalLength:Int, isStoryMode:Null<Bool> = false) {
 		if (!weeksLoaded.exists(weekToCheck)) {
 			var week:WeekFile = getWeekFile(path);
 			if (week != null) {
@@ -162,7 +162,9 @@ class WeekData {
 					weekFile.folder = directory.substring(Paths.mods().length, directory.length - 1);
 					#end
 				}
-				if ((PlayState.isStoryMode && !weekFile.hideStoryMode) || (!PlayState.isStoryMode && !weekFile.hideFreeplay)) {
+				if (isStoryMode == null
+					|| (isStoryMode && !weekFile.hideStoryMode)
+					|| (!isStoryMode && !weekFile.hideFreeplay)) {
 					weeksLoaded.set(weekToCheck, weekFile);
 					weeksList.push(weekToCheck);
 				}
