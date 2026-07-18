@@ -31,7 +31,19 @@ import states.TitleState;
 	public var camZooms:Bool = true;
 	// Widescreen fill: on displays wider than 16:9 the game widens instead of adding pillarbox bars.
 	// Off by default -- standard 16:9 displays render identically either way. See backend.FullScreenScaleMode.
-	public var widescreen:Bool = false;
+	// A property so assigning it (e.g. a script doing ClientPrefs.data.widescreen = false on one song)
+	// applies to the live scale mode immediately, not just the stored value. Prefs LOAD sets the backing
+	// field via Reflect.setField (bypassing this setter); FullScreenScaleMode is applied there explicitly.
+	public var widescreen(default, set):Bool = false;
+
+	function set_widescreen(value:Bool):Bool {
+		widescreen = value;
+		#if desktop
+		if (backend.FullScreenScaleMode.instance != null)
+			backend.FullScreenScaleMode.enabled = value;
+		#end
+		return value;
+	}
 	public var hideHud:Bool = false;
 	public var noteOffset:Int = 0;
 	public var arrowRGB:Array<Array<FlxColor>> = [
