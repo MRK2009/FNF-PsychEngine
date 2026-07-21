@@ -354,6 +354,7 @@ final class SustainSprite extends FlxSprite {
 		super.draw();
 		if (tail != null && tail.exists && tail.visible) {
 			tail.cameras = cameras;
+			tail.scrollFactor.copyFrom(scrollFactor); // keep the end cap parallaxing with the body
 			tail.draw();
 		}
 	}
