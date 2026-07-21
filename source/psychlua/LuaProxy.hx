@@ -4,6 +4,7 @@ package psychlua;
 import hxluajit.Lua;
 import hxluajit.LuaL;
 import hxluajit.Types;
+import hxluajit.wrapper.LuaConverter;
 import llua.Convert;
 
 /**
@@ -97,6 +98,15 @@ class LuaProxy {
 
 		Lua.pushcfunction(L, cpp.Callable.fromStaticFunction(luaImport));
 		Lua.setglobal(L, "import");
+		Convert.userdataToHaxe = cpp.Callable.fromStaticFunction(unwrapUserdata);
+	}
+
+	// other userdata -> the raw converter (must NOT re-enter Convert.fromLua, which would
+	// loop back here). Stateless; the owning state is read from the userdata itself.
+	static function unwrapUserdata(L:cpp.RawPointer<Lua_State>, idx:Int):Dynamic {
+		if (isProxy(L, idx))
+			return objAt(L, idx);
+		return LuaConverter.fromLua(L, idx);
 	}
 
 	/** Drops this state's registry. Call BEFORE Lua.close(). */

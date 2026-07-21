@@ -24,7 +24,27 @@ import hxluajit.wrapper.LuaFunction;
 //    first so `luaL_ref` consumes the copy and the stack stays balanced.
 //  - TTABLE: reimplemented here so its values are converted through THIS fromLua
 //    (the corrected TFUNCTION path) rather than the haxelib's buggy recursion.
+//  - TUSERDATA: routed through the `userdataToHaxe` hook (installed by LuaProxy) so a
+//    table of object proxies unwraps its ELEMENTS to their live Haxe objects instead
+//    of marshalling them to null (e.g. `cam.filters = {shaderFilter}`).
 class Convert {
+	/**
+	 * Proxy-userdata unwrap, installed by `psychlua.LuaProxy`. `convertTable` runs every
+	 * element through `fromLua`; when an element is an object proxy this returns the live
+	 * Haxe object it wraps, so `{proxyA, proxyB}` becomes a real `Array` of those objects.
+	 * Defaults to `rawUserdata` (plain `LuaConverter` marshalling) when no proxy bridge
+	 * is active.
+	 *
+	 * A `cpp.Callable` (raw C function pointer), NOT a Haxe closure: `State` is a
+	 * `cpp.RawPointer`, which hxcpp cannot box into `Dynamic`, so assigning a plain
+	 * function here makes it emit a `_dyn()` wrapper it never declares ("no member named
+	 * 'unwrapUserdata_dyn'" at C++ compile time, invisible to `haxe --no-output`).
+	 */
+	public static var userdataToHaxe:cpp.Callable<(L:State, idx:Int) -> Dynamic> = cpp.Callable.fromStaticFunction(rawUserdata);
+
+	static function rawUserdata(L:State, idx:Int):Dynamic
+		return LuaConverter.fromLua(L, idx);
+
 	public static inline function toLua(L:State, val:Dynamic):Void
 		LuaConverter.toLua(L, val);
 
@@ -42,6 +62,8 @@ class Convert {
 				});
 			case t if (t == Lua.TTABLE):
 				convertTable(L, idx);
+			case t if (t == Lua.TUSERDATA):
+				userdataToHaxe(L, idx);
 			default:
 				LuaConverter.fromLua(L, idx);
 		}
