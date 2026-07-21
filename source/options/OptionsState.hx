@@ -352,16 +352,12 @@ class OptionsState extends MusicBeatState {
 			for (row in cat.rows) {
 				switch (row) {
 					case Setting(o):
-						if (o.name.toLowerCase().indexOf(q) >= 0
-							|| (o.description != null
-								&& o.description.toLowerCase().indexOf(q) >= 0))
+						if (o.name.toLowerCase().indexOf(q) >= 0 || (o.description != null && o.description.toLowerCase().indexOf(q) >= 0))
 							y = addSetting(o, innerW, y);
 
 					case Action(name, desc, which):
 						var label:String = Language.getPhrase('options_$name', name);
-						if (label.toLowerCase().indexOf(q) >= 0
-							|| (desc != null 
-								&& desc.toLowerCase().indexOf(q) >= 0))
+						if (label.toLowerCase().indexOf(q) >= 0 || (desc != null && desc.toLowerCase().indexOf(q) >= 0))
 							y = addAction(name, desc, which, innerW, y);
 					default:
 				}
@@ -386,7 +382,7 @@ class OptionsState extends MusicBeatState {
 				case Section(title):
 					var key:String = sectionKey(title);
 					var isCollapsed:Bool = collapsed.exists(key) && collapsed.get(key);
-	
+
 					if (y > 8)
 						y += 10;
 
@@ -985,29 +981,41 @@ class OptionsState extends MusicBeatState {
 	/** The rebindable game-control groups shown in the controls modal (standard binds + per-keycount notes). **/
 	function controlGroups():Array<{name:String, binds:Array<{id:String, label:String}>}> {
 		var groups:Array<{name:String, binds:Array<{id:String, label:String}>}> = [
-			{name: 'Notes', binds: [
-				{id: 'note_left', label: 'Left'},
-				{id: 'note_down', label: 'Down'},
-				{id: 'note_up', label: 'Up'},
-				{id: 'note_right', label: 'Right'}
-			]},
-			{name: 'UI', binds: [
-				{id: 'ui_left', label: 'Left'},
-				{id: 'ui_down', label: 'Down'},
-				{id: 'ui_up', label: 'Up'},
-				{id: 'ui_right', label: 'Right'}
-			]},
-			{name: 'General', binds: [
-				{id: 'reset', label: 'Reset'},
-				{id: 'accept', label: 'Accept'},
-				{id: 'back', label: 'Back'},
-				{id: 'pause', label: 'Pause'}
-			]},
-			{name: 'Volume', binds: [
-				{id: 'volume_mute', label: 'Mute'},
-				{id: 'volume_up', label: 'Up'},
-				{id: 'volume_down', label: 'Down'}
-			]},
+			{
+				name: 'Notes',
+				binds: [
+					{id: 'note_left', label: 'Left'},
+					{id: 'note_down', label: 'Down'},
+					{id: 'note_up', label: 'Up'},
+					{id: 'note_right', label: 'Right'}
+				]
+			},
+			{
+				name: 'UI',
+				binds: [
+					{id: 'ui_left', label: 'Left'},
+					{id: 'ui_down', label: 'Down'},
+					{id: 'ui_up', label: 'Up'},
+					{id: 'ui_right', label: 'Right'}
+				]
+			},
+			{
+				name: 'General',
+				binds: [
+					{id: 'reset', label: 'Reset'},
+					{id: 'accept', label: 'Accept'},
+					{id: 'back', label: 'Back'},
+					{id: 'pause', label: 'Pause'}
+				]
+			},
+			{
+				name: 'Volume',
+				binds: [
+					{id: 'volume_mute', label: 'Mute'},
+					{id: 'volume_up', label: 'Up'},
+					{id: 'volume_down', label: 'Down'}
+				]
+			},
 			{name: 'Debug', binds: [{id: 'debug_1', label: 'Debug Key #1'}, {id: 'debug_2', label: 'Debug Key #2'}]}
 		];
 		for (count in Mania.MIN...Mania.MAX + 1) {
