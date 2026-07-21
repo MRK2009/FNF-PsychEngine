@@ -755,6 +755,36 @@ class FunkinLua {
 				an.sustain.rgbEnabled = colorable;
 			return true;
 		});
+		// Sets the whole RGB palette (all three slots) on the spawning note in one call, replacing the
+		// nine setProperty writes it used to take. r/g/b are the palette's three colours (int or hex string);
+		// part = 'all' (default: head + hold body + tail) | 'head' | 'hold' (body + tail) | 'body' | 'tail'.
+		Lua_helper.add_callback(lua, "setNoteRGB", function(r:Dynamic, g:Dynamic, b:Dynamic, ?part:String = 'all') {
+			var an = PlayState.instance.spawnNote;
+			if (an == null)
+				return false;
+			var cr:FlxColor = LuaUtils.getColor(r);
+			var cg:FlxColor = LuaUtils.getColor(g);
+			var cb:FlxColor = LuaUtils.getColor(b);
+			var p:String = part.toLowerCase();
+			if ((p == 'all' || p == 'head') && an.head != null && an.head.rgbShader != null) {
+				an.head.rgbShader.r = cr;
+				an.head.rgbShader.g = cg;
+				an.head.rgbShader.b = cb;
+			}
+			if (an.sustain != null) {
+				if ((p == 'all' || p == 'hold' || p == 'body') && an.sustain.rgbShader != null) {
+					an.sustain.rgbShader.r = cr;
+					an.sustain.rgbShader.g = cg;
+					an.sustain.rgbShader.b = cb;
+				}
+				if ((p == 'all' || p == 'hold' || p == 'tail' || p == 'end') && an.sustain.tailRGB != null) {
+					an.sustain.tailRGB.r = cr;
+					an.sustain.tailRGB.g = cg;
+					an.sustain.tailRGB.b = cb;
+				}
+			}
+			return true;
+		});
 		Lua_helper.add_callback(lua, "mouseClicked", function(?button:String = 'left') {
 			var click:Bool = FlxG.mouse.justPressed;
 			switch (button.trim().toLowerCase()) {

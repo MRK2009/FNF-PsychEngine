@@ -75,13 +75,16 @@ final class Receptor extends FlxSprite {
 		if (PlayState.SONG != null && PlayState.SONG.disableNoteRGB)
 			useRGBShader = false;
 
-		var arr:Array<FlxColor>;
-		if (Mania.current != Mania.DEFAULT)
-			arr = Mania.getColors(Mania.current)[column];
-		else {
-			arr = ClientPrefs.data.arrowRGB[column];
-			if (PlayState.isPixelStage)
-				arr = ClientPrefs.data.arrowRGBPixel[column];
+		// Skin-shipped palette first, then the keycount/player colours (see NoteSkinConfig.skinNoteColors).
+		var arr:Array<FlxColor> = backend.NoteSkinConfig.skinNoteColors(column);
+		if (arr == null) {
+			if (Mania.current != Mania.DEFAULT)
+				arr = Mania.getColors(Mania.current)[column];
+			else {
+				arr = ClientPrefs.data.arrowRGB[column];
+				if (PlayState.isPixelStage)
+					arr = ClientPrefs.data.arrowRGBPixel[column];
+			}
 		}
 		if (arr != null && arr.length >= 3) {
 			@:bypassAccessor {
@@ -122,8 +125,10 @@ final class Receptor extends FlxSprite {
 	/** Applies the initial on-screen placement for this column/side (matches the legacy strum layout). **/
 	public function playerPosition():Void {
 		final kc:Int = Mania.current;
+		// A skin may widen/narrow the lane spacing; additive, and 4K gets it too (it has no base gap).
+		final skinGap:Float = backend.NoteSkinConfig.columnGap();
 		if (kc == Mania.DEFAULT) {
-			x += Mania.swagWidth * column;
+			x += (Mania.swagWidth + skinGap) * column;
 			x += 50;
 			x += ((FlxG.width / 2) * player);
 			x += skinOffsetX;
@@ -131,7 +136,7 @@ final class Receptor extends FlxSprite {
 			return;
 		}
 
-		final step:Float = Mania.swagWidth + Mania.STRUM_GAP;
+		final step:Float = Mania.swagWidth + Mania.STRUM_GAP + skinGap;
 		final center4K:Float = 160 * Mania.noteSizes[Mania.DEFAULT - 1] * (Mania.DEFAULT - 1) / 2;
 
 		x += step * column;
@@ -165,6 +170,29 @@ final class Receptor extends FlxSprite {
 		}
 	}
 
+	var _lastFrameW:Int = -1;
+	var _lastFrameH:Int = -1;
+
+	/**
+		Re-applies the centering when the CURRENT FRAME's size changes.
+
+		`playAnim` centers once, but a folder skin's frames are packed at their own individual sizes, so
+		frames WITHIN one animation can differ in size (a confirm burst is usually wider than its first
+		frame). The offset computed at play time then goes stale as the animation advances and the
+		receptor visibly drifts -- a few px, most obvious on pixel skins where every source pixel is
+		multiplied by `pixelScale`. Cheap: it only recomputes on an actual frame-size change.
+	**/
+	inline function syncFrameCentering():Void {
+		if (frameWidth == _lastFrameW && frameHeight == _lastFrameH)
+			return;
+		_lastFrameW = frameWidth;
+		_lastFrameH = frameHeight;
+		centerOffsets();
+		centerOrigin();
+		if (laneCenter)
+			offset.x = (frameWidth - Mania.swagWidth) / 2;
+	}
+
 	override function update(elapsed:Float) {
 		if (resetAnim > 0) {
 			resetAnim -= elapsed;
@@ -174,6 +202,7 @@ final class Receptor extends FlxSprite {
 			}
 		}
 		super.update(elapsed);
+		syncFrameCentering();
 	}
 
 	/**
@@ -187,10 +216,8 @@ final class Receptor extends FlxSprite {
 
 		animation.play(anim, force);
 		if (animation.curAnim != null) {
-			centerOffsets();
-			centerOrigin();
-			if (laneCenter)
-				offset.x = (frameWidth - Mania.swagWidth) / 2;
+			_lastFrameW = _lastFrameH = -1; // force a re-center for the new anim's first frame
+			syncFrameCentering();
 		}
 
 		if (colorPerAnim) {

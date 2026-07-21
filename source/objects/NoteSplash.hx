@@ -304,7 +304,11 @@ class NoteSplash extends FlxSprite {
 		var anim:String = playDefaultAnim();
 
 		var tempShader:RGBPalette = null;
-		if (config.allowRGB && ClientPrefs.data.linkSplashColor) {
+		// A skin that ships its own splash art can force the colour sync on (or off) for itself; without
+		// an opinion the player's option decides.
+		var syncOverride:Null<Bool> = backend.NoteSkinConfig.splashSyncColor();
+		var splashLinked:Bool = (syncOverride != null) ? syncOverride : ClientPrefs.data.linkSplashColor;
+		if (config.allowRGB && splashLinked) {
 			NoteDefaults.initializeGlobalRGBShader(noteData % colArray.length);
 			if (inEditor
 				|| (note == null || note.noteSplashData.useRGBShader)
@@ -379,7 +383,7 @@ class NoteSplash extends FlxSprite {
 
 		// Independent splash colour: the skin allows colouring the splash but its link is OFF, so use the
 		// splash's own per-asset colour (per-keycount aware, note-colour fallback) instead of the note's.
-		if (config.allowRGB && !ClientPrefs.data.linkSplashColor) {
+		if (config.allowRGB && !splashLinked) {
 			var sc:Array<Array<FlxColor>> = Mania.getAssetColors('splash', Mania.current);
 			if (paletteCol >= 0 && paletteCol < sc.length && sc[paletteCol] != null && sc[paletteCol].length >= 3) {
 				if (tempShader == null)
@@ -437,11 +441,12 @@ class NoteSplash extends FlxSprite {
 		if (animation.curAnim != null)
 			animation.curAnim.frameRate = FlxG.random.int(minFps, maxFps);
 
-		// Multikey: scale the splash down to match the smaller notes (4K keeps the config scale
-		// untouched) and shrink the configured nudge with it.
-		if (!inEditor && Mania.current != Mania.DEFAULT) {
-			var ratio:Float = Mania.noteSizes[Mania.current - 1] / Mania.noteSizes[Mania.DEFAULT - 1];
-			scale.set(config.scale * ratio, config.scale * ratio);
+		// `config.scale` applies at EVERY keycount -- it used to be set only inside the multikey branch,
+		// so a skin's `splashScale` silently did nothing on the default 4K layout. Multikey then scales
+		// down on top of it to match the smaller notes, shrinking the configured nudge with it.
+		var ratio:Float = (!inEditor && Mania.current != Mania.DEFAULT) ? (Mania.noteSizes[Mania.current - 1] / Mania.noteSizes[Mania.DEFAULT - 1]) : 1;
+		scale.set(config.scale * ratio, config.scale * ratio);
+		if (ratio != 1) {
 			splashNudgeX *= ratio;
 			splashNudgeY *= ratio;
 		}

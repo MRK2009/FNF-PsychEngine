@@ -24,6 +24,28 @@ class LuaUtils {
 	public static final Function_StopHScript:String = "##PSYCHLUA_FUNCTIONSTOPHSCRIPT";
 	public static final Function_StopAll:String = "##PSYCHLUA_FUNCTIONSTOPALL";
 
+	/**
+		Coerces a script-supplied colour into an `FlxColor`. Accepts an int/`FlxColor` (returned as-is),
+		or a string -- a hex like `"FF0000"`/`"#FF0000"` or a named colour (`"red"`), via `FlxColor.fromString`.
+		@param value the raw colour from Lua/HScript
+		@return the resolved `FlxColor` (`FlxColor.WHITE` when a string can't be parsed)
+	**/
+	public static function getColor(value:Dynamic):FlxColor {
+		if (value == null)
+			return FlxColor.WHITE;
+		if (Std.isOfType(value, String)) {
+			var str:String = cast value;
+			// Bare hex (e.g. "FF0000"/"FF0000FF") needs a '#' before FlxColor.fromString will read it;
+			// prefixed hex ("#..."/"0x...") and named colours ("red") are passed through untouched.
+			if (str.length > 0 && str.charAt(0) != '#' && str.substr(0, 2) != '0x'
+				&& ~/^[A-Fa-f0-9]{6}([A-Fa-f0-9]{2})?$/.match(str))
+				str = '#' + str;
+			var parsed:Null<FlxColor> = FlxColor.fromString(str);
+			return (parsed != null) ? parsed : FlxColor.WHITE;
+		}
+		return Std.int(value);
+	}
+
 	public static function getLuaTween(options:Dynamic) {
 		return (options != null) ? {
 			type: getTweenTypeByString(options.type),

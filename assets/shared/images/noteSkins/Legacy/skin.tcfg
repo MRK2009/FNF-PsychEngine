@@ -1,0 +1,57 @@
+# Legacy note skin -- the classic 1.0.4 NOTE_assets sparrow atlas.
+# This is the TEMPLATE new atlas skins are cloned from: every routable frame prefix is spelled out
+# below so you can point them at your own sheet's frame names.
+#
+# Prefixes are matched with addByPrefix, so they must be specific enough not to collide --
+# "purple0" matches purple0001 but NOT "purple hold piece0001", which a bare "purple" would.
+#
+# Atlas skins only read: images / sheet / squareSheet / fps / antialiasing / colorable / *Offsets / keys.
+# scale, rotate, directionAngles, holdAlpha and animated are FOLDER-skin only and do nothing here.
+#
+# Multikey centre lane: this sheet ships no square frames, so the shared noteSkins/square atlas is
+# merged in automatically. Set `squareSheet` to use your own instead, or bake square0 / arrowSQUARE /
+# "square press" / "square confirm" / "square hold piece" / "square hold end" into the sheet above --
+# baked-in frames always win over any merge.
+
+images:
+	notes:
+		left: purple0
+		down: blue0
+		up: green0
+		right: red0
+	strums:
+		left: arrowLEFT
+		down: arrowDOWN
+		up: arrowUP
+		right: arrowRIGHT
+	pressed:
+		left: left press
+		down: down press
+		up: up press
+		right: right press
+	confirm:
+		left: left confirm
+		down: down confirm
+		up: up confirm
+		right: right confirm
+	holdBody:
+		left: purple hold piece
+		down: blue hold piece
+		up: green hold piece
+		right: red hold piece
+	holdEnd:
+		left: purple hold end
+		down: blue hold end
+		up: green hold end
+		right: red hold end
+general:
+	sheet: NOTE_assets
+	fps: 24
+	antialiasing: true
+colorable:
+	notes: true
+	holdBody: true
+	holdEnd: true
+	strums: false
+	pressed: true
+	confirm: true

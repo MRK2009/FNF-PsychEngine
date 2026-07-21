@@ -60,14 +60,37 @@ class ClassicNoteSkin implements INoteSkin {
 		return def;
 	}
 
-	// Merges the default square sheet only when the skin's own atlas lacks the centre/square frames, so a
-	// classic skin missing a centre note still renders it in multikey (and one that ships its own keeps it).
+	// Merges a square sheet only when the skin's own atlas lacks the centre/square frames, so a classic
+	// skin missing a centre note still renders it in multikey (and one that BAKES square frames into its
+	// regular sheet keeps its own -- that always wins).
 	inline function mergeSquare(atlas:FlxAtlasFrames):Void {
 		if (Mania.current != Mania.DEFAULT && lacksSquare(atlas)) {
-			var overlay:FlxAtlasFrames = Paths.getSparrowAtlas(Mania.ATLAS);
+			var overlay:FlxAtlasFrames = Paths.getSparrowAtlas(squareSheet());
 			if (overlay != null)
 				atlas.addAtlas(overlay);
 		}
+	}
+
+	/**
+		The square/centre atlas to merge in for multikey: the skin's own `squareSheet` when it declares one
+		(resolved inside the skin's folder first, then as a bare image key), otherwise the shared
+		`noteSkins/square`. Lets a classic skin ship a centre note matching its own art instead of being
+		stuck with the default one.
+		@return the sparrow atlas image key to merge
+	**/
+	function squareSheet():String {
+		var cfg:NoteSkinData = config();
+		if (cfg != null && cfg.squareSheet != null && cfg.squareSheet.length > 0) {
+			var owner:String = configName();
+			if (owner != null && owner.length > 0) {
+				var foldered:String = '$owner/${cfg.squareSheet}';
+				if (Paths.fileExists('images/$foldered.png', IMAGE))
+					return foldered;
+			}
+			if (Paths.fileExists('images/${cfg.squareSheet}.png', IMAGE))
+				return cfg.squareSheet;
+		}
+		return Mania.ATLAS;
 	}
 
 	static function lacksSquare(atlas:FlxAtlasFrames):Bool {
@@ -263,6 +286,11 @@ class ClassicNoteSkin implements INoteSkin {
 		// Lane-center the hold like the folder-skin and per-note-texture paths do, so a body/tail frame
 		// narrower (or wider) than the note head still sits on the lane instead of drifting off the head.
 		v.centerOnStrum = true;
+		// ...but a CLASSIC note head is centered on its OWN art width, not the lane. The stock sheet's
+		// arrows are 154px * 0.7 = 107.8 wide against a 112px lane, so lane-centering the trail alone
+		// left it ~2px right of its head. Pull the trail back onto the head instead of moving the head
+		// (which is glued to the receptor).
+		v.offsetX += headCenterShift(column, kc);
 
 		var vcfg:NoteSkinData = PlayState.isPixelStage ? null : config();
 		if (vcfg != null) {
@@ -273,6 +301,50 @@ class ClassicNoteSkin implements INoteSkin {
 		}
 		v.ok = true;
 		return v;
+	}
+
+	// Cached note-art half-width delta per "skin|column|keycount"; the lookup below walks the atlas
+	// frames, and a sustain applies on every spawn.
+	static var headShiftCache:Map<String, Float> = new Map();
+
+	/**
+		How far a lane-centred element must move to sit on the classic note HEAD instead of the nominal
+		lane: `(headArtWidth - swagWidth) / 2`. Zero when the head's frame can't be resolved (the caller
+		then keeps plain lane centring).
+		@param column the 0-based lane
+		@param keyCount the active column count
+		@return the x shift in screen px
+	**/
+	function headCenterShift(column:Int, keyCount:Int):Float {
+		if (PlayState.isPixelStage)
+			return 0;
+		var skin:String = resolveSkin();
+		var key:String = '$skin|$column|$keyCount';
+		if (headShiftCache.exists(key))
+			return headShiftCache.get(key);
+
+		var shift:Float = 0;
+		var atlas:FlxAtlasFrames = Paths.getSparrowAtlas(skin);
+		if (atlas != null) {
+			var cfg:NoteSkinData = config();
+			var nd:Int = column % Mania.colArray.length;
+			var prefix:String = routePrefix(cfg, cfg != null ? cfg.notes : null, column, Mania.colArray[nd] + '0');
+			var w:Float = firstFrameWidth(atlas, prefix);
+			if (w > 0)
+				shift = (w * Mania.noteSizes[Mania.clamp(keyCount) - 1] - Mania.swagWidth) * 0.5;
+		}
+		headShiftCache.set(key, shift);
+		return shift;
+	}
+
+	/** Width of the first frame whose name starts with `prefix`, or 0 when there is none. **/
+	static function firstFrameWidth(atlas:FlxAtlasFrames, prefix:String):Float {
+		if (atlas == null || prefix == null)
+			return 0;
+		for (f in atlas.frames)
+			if (f.name != null && f.name.startsWith(prefix))
+				return f.frame.width;
+		return 0;
 	}
 
 	/**

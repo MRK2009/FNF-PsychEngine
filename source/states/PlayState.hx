@@ -3248,22 +3248,21 @@ class PlayState extends MusicBeatState {
 		refreshStrumAliases();
 
 		// Note layering, per-skin (`skin.tcfg` `holdsOverHeads`) or the global `sustainsOverNotes` option.
-		if (backend.NoteSkinConfig.holdsOverHeads()) {
-			// Over: sustains drawn on top of the receptors and the heads.
-			noteGroup.add(receptorGroup);
+		// Un-held trails ALWAYS sit at the back so a hold looks like it disappears into its note head;
+		// `holdsOverHeads` only lifts the trail once it is actually being HELD, which is the moment the
+		// trail should read as passing over the receptor.
+		var overHeads:Bool = backend.NoteSkinConfig.holdsOverHeads();
+		for (line in visibleLines)
+			noteGroup.add(line.field.sustainGroup);
+		if (!overHeads)
 			for (line in visibleLines)
-				noteGroup.add(line.field.headGroup);
+				noteGroup.add(line.field.heldSustainGroup);
+		noteGroup.add(receptorGroup);
+		for (line in visibleLines)
+			noteGroup.add(line.field.headGroup);
+		if (overHeads)
 			for (line in visibleLines)
-				noteGroup.add(line.field.sustainGroup);
-		} else {
-			// Under (default): sustains sit at the very back, behind the receptor (press/confirm) and the
-			// head, so a hold looks like it disappears into the note rather than passing over it.
-			for (line in visibleLines)
-				noteGroup.add(line.field.sustainGroup);
-			noteGroup.add(receptorGroup);
-			for (line in visibleLines)
-				noteGroup.add(line.field.headGroup);
-		}
+				noteGroup.add(line.field.heldSustainGroup);
 
 		// Keep note splashes drawn above the notes (the splash group was added during create()).
 		if (grpNoteSplashes != null && noteGroup.members.contains(grpNoteSplashes)) {

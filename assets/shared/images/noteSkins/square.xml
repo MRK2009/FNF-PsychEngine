@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TextureAtlas imagePath="square.png" width="755" height="411" spritePadding="1" borderPadding="1">
+	<SubTexture name="square hold end0000" x="659" y="241" width="50" height="64" frameX="0" frameY="0" frameWidth="50" frameHeight="64"/>
+	<SubTexture name="square hold piece0000" x="710" y="241" width="44" height="50" rotated="true" frameX="0" frameY="0" frameWidth="50" frameHeight="44"/>
+	<SubTexture name="arrowSQUARE0000" x="1" y="241" width="170" height="169" frameX="0" frameY="-1" frameWidth="170" frameHeight="169"/>
+	<SubTexture name="square confirm0000" x="1" y="1" width="240" height="239" frameX="-4" frameY="-4" frameWidth="240" frameHeight="239"/>
+	<SubTexture name="square confirm0001" x="242" y="1" width="240" height="239" frameX="-4" frameY="-4" frameWidth="240" frameHeight="239"/>
+	<SubTexture name="square confirm0002" x="483" y="1" width="216" height="217" rotated="true" frameX="-16" frameY="-17" frameWidth="240" frameHeight="239"/>
+	<SubTexture name="square confirm0003" x="483" y="1" width="216" height="217" rotated="true" frameX="-16" frameY="-17" frameWidth="240" frameHeight="239"/>
+	<SubTexture name="square press0000" x="505" y="241" width="153" height="154" rotated="true" frameX="-4" frameY="-4" frameWidth="162" frameHeight="161"/>
+	<SubTexture name="square press0001" x="505" y="241" width="153" height="154" rotated="true" frameX="-4" frameY="-4" frameWidth="162" frameHeight="161"/>
+	<SubTexture name="square press0002" x="343" y="241" width="161" height="162" rotated="true" frameX="0" frameY="0" frameWidth="162" frameHeight="161"/>
+	<SubTexture name="square press0003" x="343" y="241" width="161" height="162" rotated="true" frameX="0" frameY="0" frameWidth="162" frameHeight="161"/>
+	<SubTexture name="square0000" x="172" y="241" width="170" height="169" frameX="0" frameY="-1" frameWidth="170" frameHeight="169"/>
+</TextureAtlas>

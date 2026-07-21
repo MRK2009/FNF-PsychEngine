@@ -190,9 +190,13 @@ final class SustainSprite extends FlxSprite {
 			rgbShader.b = tailRGB.b = 0xFF990022;
 		}
 
-		// No hold-end frame in the skin -> the body extends over the tail's span instead of stopping short.
+		// No hold-end frame in the skin -> the body extends over the tail's span instead of stopping
+		// short. A skin can answer this outright with `hasHoldEnd` rather than relying on the probe.
 		var endAnim = tail.animation.getByName('end');
-		hasTail = (endAnim != null && endAnim.numFrames > 0);
+		var declared:Null<Bool> = backend.NoteSkinConfig.hasHoldEnd();
+		hasTail = (declared != null) ? declared : (endAnim != null && endAnim.numFrames > 0);
+		if (hasTail && (endAnim == null || endAnim.numFrames < 1))
+			hasTail = false; // declared true but the frames aren't there
 		tail.visible = hasTail;
 
 		// Holds default to a dimmer 0.6; a load-time/compat script override on the note replaces it.

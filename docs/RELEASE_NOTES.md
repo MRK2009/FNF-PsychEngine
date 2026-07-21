@@ -57,7 +57,7 @@ ModSecurity adds a layer of protection:
 
 | Component       | Old                | New        |
 | --------------- | ------------------ | ---------- |
-| HaxeFlixel      | 5.6.1              | **6.1.2**  |
+| HaxeFlixel      | 5.6.1              | **6.2.0**  |
 | flixel-addons   | 3.2.2              | **4.0.1**  |
 | OpenFL          | 9.3.3              | **9.5.2**  |
 | Lime            | 8.1.2              | **8.3.2**  |

@@ -29,6 +29,14 @@ general:
 	pixelVariant: true
 	hi-res: true
 
+animated:
+	notes: false
+	strums: false
+	holdBody: false
+	holdEnd: false
+	pressed: true
+	confirm: true
+
 colorable:
 	notes: true
 	strums: false

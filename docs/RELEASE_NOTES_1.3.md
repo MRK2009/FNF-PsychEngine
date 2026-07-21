@@ -1,3 +1,207 @@
+# Release Notes: v1.3.1
+
+A patch release on top of v1.3.0: bug fixes reported against 1.3.0, with no new
+features.
+
+## General
+
+### Fixes
+- **Hurt Notes**: no longer render uncolored. The note-system-v2 rewrite applied
+  a note type's gameplay effects but never its visual half, so Hurt Notes lost
+  their tint. The drawable now applies the type's RGB palette and electric splash
+  to both the note head and the sustain trail.
+- **Freeplay / weeks**: mod weeks now honor their `hideFreeplay` flag. The mod
+  week loader read the stale `PlayState.isStoryMode` static instead of the mode
+  passed to `reloadWeekFiles`, so weeks hidden from Freeplay could still leak in
+  after playing Story mode.
+- **Freeplay**: selecting a song and pressing Enter no longer
+  intermittently just plays the cancel sound. The song-library's per-frame
+  metadata/rating streaming reassigned the global `Mods.currentModDirectory` to
+  whatever song it was scanning and never restored it, so the wrong mod context
+  could be live when you pressed Enter and the chart failed to load. The library
+  now scopes and restores that global around each lookup, leaving the selection as
+  its sole owner.
+- **ClientPrefs**: setting `ClientPrefs.data.widescreen` from a script now applies
+  to the live scale mode immediately (e.g. disabling widescreen for one song),
+  instead of only changing the stored value. `widescreen` is now a property whose
+  setter drives `FullScreenScaleMode` on desktop.
+- **Libraries**: the entire Flixel and flixel-addons class surface is now kept
+  out of dead-code elimination, so scripts can construct any of them by name
+  (`import()`/reflection) without the class resolving to `nil`. Previously only
+  types the engine itself referenced survived DCE, so classes like
+  `FlxSkewedSprite` were unavailable to mods.
+- **LuaProxy**: a Lua table of objects assigned to a Haxe field now translates
+  correctly. Assigning a table literal such as `game.camGame.filters =
+  {shaderFilter}` produced an array of `null` (and crashed the renderer) because
+  the table-to-array conversion could not unwrap the proxy elements back to their
+  live objects; scripts had to build a real array with `import('Array')` and
+  `:push()` instead. Table elements are now unwrapped like every other argument,
+  so the direct `{...}` assignment works and the `import('Array')` workaround is no
+  longer needed.
+
+- **Multikey centre notes**: the shared `noteSkins/square` atlas was missing from the
+  repo, so classic (atlas) skins rendered **no centre note at all** on any keycount that
+  has one -- the merge silently resolved to nothing. The atlas ships again, and a skin
+  can now point `squareSheet` at its own instead.
+- **Note colours on keycount change**: switching keycount recoloured the receptors but
+  not the notes. The shared per-column palettes are seeded from the keycount palette but
+  cached by column alone and were never invalidated, while receptors re-read the colours
+  directly. The cache is now dropped when the keycount actually changes.
+- **Splash scale**: a skin's `splashScale` did nothing on the default 4K layout -- the
+  scale was only ever applied inside the multikey branch. It now applies at every
+  keycount, with the multikey shrink layered on top.
+- **Pixel splashes**: folder skins got no pixelated splash on pixel stages. The splash's
+  pixel look comes from a shader, but folder skins hard-disabled it on the assumption
+  they ship their own pixel art -- which for splashes they were never expected to. The
+  shader now runs unless the skin actually ships a pixel splash, in which case it stays
+  off so the art isn't pixelated twice.
+- **Receptor drift on hit**: receptors shifted a few pixels after being hit, most visibly
+  on pixel skins. A folder skin's frames are packed at their own individual sizes, so
+  frames within one animation can differ in size; the centring was computed once when the
+  animation started and went stale as it advanced. It is now refreshed whenever the
+  current frame's size actually changes.
+- **Classic hold alignment**: on atlas skins the hold trail sat ~2px right of its note
+  head, because the head centres on its own art width while the trail centred on the
+  nominal lane width (a 154px arrow at 0.7 is 107.8 wide against a 112px lane). The trail
+  is now pulled onto the head; nothing else moves.
+- **Hold layering**: `holdsOverHeads` drew every trail permanently on top of the note
+  heads. A trail now only lifts above the receptor while it is actually being **held**,
+  which is the moment it should read as passing over -- un-held trails stay behind their
+  heads as before.
+- **Note skin configs**: saving a skin no longer silently drops fields. The writer had a
+  hardcoded whitelist that omitted `sheet` -- the field naming an atlas skin's sheet --
+  so an atlas skin could never be saved correctly. `sheet`, `holdsOverHeads`,
+  `headOverlap` and `fitColumnWidth` now round-trip.
+- **Note skins in mods**: a folder skin living in a non-current mod reported its pixel art
+  as missing (it rendered fine); the lookup didn't pin asset resolution to the skin's
+  owning mod the way the renderers do.
+
+### New
+- **Freeplay Music Player**: rebuilt on SmidrUI, the song-preview player is now a persistent
+  bar (draggable seek slider, Play/Pause, Reset, playback-rate stepper) with real
+  touch controls, replacing the old Flixel overlay. The info panel above it now
+  shrinks to its content instead of leaving a large empty gap. A new **Freeplay
+  Song Preview** option (Visuals, off by default) auto-plays/switches the preview
+  as you scroll the list, osu!/Etterna-style.
+- **Rewritten crash handler**: the old "write a log, pop a native alert, quit"
+  path was replaced with an in-engine crash screen. When a caught error kills the
+  running state you now get a screen that lets you **try to continue** (drop back to
+  the main menu instead of losing the whole session), **copy the report**, open the
+  **crash folder**, or quit -- with a **Send Issue** button stubbed in for later. A
+  crash-loop guard falls back to the old alert-and-exit if errors keep firing.
+  - **Richer reports**: crash logs now capture the engine version, the OS and its
+    version/build number, CPU architecture, desktop/mobile form factor, display
+    resolution, and locale, plus the live state, current mod, song + difficulty, and
+    memory alongside the stack. All of it is machine-generic (nothing that identifies
+    the user), gathered once at startup, and every lookup is guarded so collecting that
+    context can never crash on top of the original error.
+  - **Script errors are recorded**: HScript / hscript-insanity and LuaProxy errors are
+    fed into a rolling history that is folded into the next crash report. A bad script
+    frequently corrupts state that hard-crashes a few frames later, so the report now
+    shows the script activity that led up to it.
+  - **Silent script crashes are caught**: HScript and Lua could previously take the
+    whole game down with *no* log at all -- e.g. handing a bad shader/filter to the
+    renderer faults deep in native code, which never reaches the normal error handler.
+    A native signal / SEH handler now catches those hard crashes and still writes a
+    report; because the recent-script-error history lives in memory that survives the
+    fault, the log usually points straight at the offending script.
+
+- **Rewritten Note Skin Editor**: the old single tab-box editor was replaced with a
+  proper editor layout -- menu bar, activity rail, left dock and inspector, transport
+  and status bar, matching the chart editor's chrome. On entry it asks whether to make
+  a new skin or open an existing one; **File** handles both afterwards.
+  - **Live simulated chart**: the preview is a looping generated pattern (taps, chords,
+    jacks, sustains) scrolling down a *real* `NoteField` and auto-playing at the
+    receptor line, with confirm animations and splashes. It runs the shipping gameplay
+    path -- real receptors, pooling, spawn/reclaim and `follow` geometry -- so the
+    preview cannot drift from what gameplay draws. A **Static** mode freezes it and
+    cycles the receptor states for still inspection.
+  - **Everything applies live**: every field restyles the running simulation in place;
+    there is no Apply step and the pattern never stops scrolling.
+  - **Atlas skins are first-class**: classic sparrow-atlas skins can now be previewed
+    and edited at all (the old editor only handled folder skins), including their frame
+    prefixes and the centre-lane atlas.
+  - **Pixel art is its own tab**: the two interacting `pixel` / `pixelVariant` booleans
+    are replaced by an explicit **pixel mode** (`none` / `always` / `variant`; the old
+    booleans are still read, so existing skins are unaffected). The tab shows where each
+    element's pixel art resolves from and whether it was found, and a **preview as pixel
+    stage** toggle checks the pixel look without changing the skin.
+  - **Pixel art baking**: generate a skin's `pixel/` art from its HD art instead of
+    drawing it from scratch. Splash frames reproduce the pixel-splash *shader* (which
+    quantises in place), while notes/strums/holds are downscaled by `scale / pixelScale`
+    -- the factor that makes them occupy the same on-screen space. Both then get an
+    alpha cull (anything under 50% opacity is dropped, the rest made fully opaque) and
+    an optional median-cut palette reduction, which is what makes the result read as
+    pixel art rather than a blurry miniature. Meant as a base to tidy up by hand.
+- **New note skin options**: skins can now ship their own **note colours** (`noteColors`,
+  falling back to your arrow colours; a new **Override Skin Colours** option in Visuals
+  ignores them), set a per-skin **column gap** (`columnGap`, added on top of the engine's
+  spacing and honoured at every keycount including 4K), declare whether they have a
+  **hold end cap** (`hasHoldEnd`), force the **splash to follow the lane colour**
+  (`splashSyncColor`), and point at their own **centre-lane atlas** for multikey
+  (`squareSheet`) instead of the shared one.
+- **Legacy note skin**: the classic 1.0.4 `NOTE_assets` sheet ships again as a selectable
+  **Legacy** skin, and is the template new atlas skins are cloned from.
+
+## Mobile specific
+- **Substate**: closing a substate (e.g. Gameplay Changers) no longer also backs
+  out of the parent menu. A finger still held on the Back button when the substate
+  closed was re-read as a fresh press by the parent's touch pad on the resume
+  frame; a pad regaining focus now ignores touches already held over its buttons.
+- **Mobile**: the Benchmark menu now has on-screen navigation (up/down + accept/
+  back), so it can be used without a keyboard. (Aborting a running suite still
+  needs F8.)
+- **Rewritten touch pad**: the on-screen menu gamepad was rebuilt with SmidrUI-styled
+  buttons on a self-managed overlay, replacing the old flat sprites. It still
+  drives `backend.Controls` through the same API (so every menu keeps working
+  unchanged) and keeps true multitouch by hit-testing `FlxG.touches` itself. The
+  gameplay lane Hitbox is unchanged.
+- **Freeplay**: tapping the on-screen navigation pad no longer also click-selects
+  the song row underneath it -- taps that land on a pad button are ignored by the
+  list.
+- **Chart editor**: the mobile editor's Events picker now lists custom mod events
+  (`custom_events/*.txt`), not just the built-in ones.
+- **Mods**: a mod's custom fonts now load. Mods live on external storage, which
+  OpenFL can't load a font from by path on mobile, so a mod's `fonts/*.ttf`
+  silently fell back to the default font ("not recognized"). Mod fonts are now
+  registered from their bytes (the same way mod images/sounds already load).
+- **Misc**: the mouse-only Legacy Chart Editor is hidden on mobile (it has no
+  touch controls);
+
+## Haxelibs
+- **HaxeFlixel 6.2.0** (from 6.1.2): brings Flixel's sound-system refactor
+  (music streaming, `loopCount` / `loopUntil` on sounds), the new
+  `FlxMatrixSprite`, tilemap ray helpers (`rayAdvanced`, `forEachInRay`), and
+  position converters between coordinate spaces on `FlxObject` / `FlxCamera`.
+  Nothing in the engine or the scripting surface had to change: the `FlxSound`
+  load methods kept their names and signatures, and the engine never used the
+  generic `FlxRandom` / `FlxArrayUtil` methods that 6.2.0 removed. Scripts that
+  construct Flixel or flixel-addons classes by name are unaffected, since that
+  whole surface is still kept out of dead-code elimination.
+- **hxcpp v4.3.148** (from v4.3.143): bug fixes only, covering `String` and
+  reflection handling, the garbage collector, and sockets / process handling,
+  plus a warning suppression that quiets the Android NDK build. The Windows and
+  Unix setup scripts now pin the *same* hxcpp revision; previously only Windows
+  was pinned, so Linux and macOS builds silently used whatever was newest.
+- **flixel-animate** now tracks flixel 6.2.0.
+- Every other dependency (Lime 8.3.2, OpenFL 9.5.2, flixel-addons 4.0.1, hxvlc
+  2.3.0, hxdiscord_rpc 1.3.0, hscript 2.7.0) was already current and is
+  unchanged.
+
+## Notes for modders and developers
+- **New Lua callback `setNoteRGB(r, g, b, part)`**: sets a spawning note's whole RGB
+  palette in one call from `onSpawnNote`, replacing the nine `setProperty` writes it used
+  to take. `part` is `all` (default) / `head` / `hold` / `body` / `tail`. Colours accept an
+  int, a hex string (`"FF0000"`), or a colour name.
+- **New skin fields**: `noteColors`, `columnGap`, `hasHoldEnd`, `splashSyncColor`,
+  `squareSheet` and `pixelMode` (see above). `pixelMode` supersedes the `pixel` /
+  `pixelVariant` booleans, which are still honoured, so existing skins need no changes.
+- **Default skins** now declare `animated: false` for notes, strums and hold pieces
+  (pressed/confirm stay animated), so those elements use only their first frame.
+- Skins in `skin.tcfg` / `skin.json` are otherwise unchanged and load as before.
+---
+
+
 # Release Notes: v1.3.0
 Where v1.1 was about modernization and maintenance, v1.2 started some experimental stuff, and now v1.3.0 starts with new fork-original systems built on top of that base: a rewritten note runtime
 and chart format, a brand-new chart editor, a redesigned Freeplay with real

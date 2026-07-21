@@ -194,6 +194,9 @@ class OptionsCatalog {
 			ClientPrefs.data.noteSkin = ClientPrefs.defaultData.noteSkin;
 		noteSkins.insert(0, ClientPrefs.defaultData.noteSkin);
 		rows.push(Setting(new Option('Note Skins:', 'Select your prefered Note skin.', 'noteSkin', STRING, noteSkins)));
+		rows.push(Setting(new Option('Override Skin Colours',
+			"Ignore the colours a note skin ships and use your own arrow colours instead.",
+			'overrideSkinColors', BOOL)));
 		rows.push(Setting(new Option('Force Selected Skin',
 			"Locks your chosen note skin: mods can't replace it via chart arrowSkin, per-note textures, or their own same-named assets.\nCustom note types keep their own look.",
 			'forceNoteSkin', BOOL)));

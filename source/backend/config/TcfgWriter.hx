@@ -45,12 +45,26 @@ class TcfgWriter {
 		add(gen, node, 'pixelScale', 'pixelScale');
 		add(gen, node, 'antialiasing', 'antialiasing');
 		add(gen, node, 'holdAntialiasing', 'holdAntialiasing');
+		add(gen, node, 'hasHoldEnd', 'hasHoldEnd');
+		add(gen, node, 'columnGap', 'columnGap');
+		add(gen, node, 'noteColors', 'noteColors');
 		add(gen, node, 'holdAlpha', 'holdAlpha');
+		// `pixelMode` is the current field; the two booleans are only written back out when a skin
+		// still carries them (`add` skips nulls), so old files round-trip without being rewritten.
+		add(gen, node, 'pixelMode', 'pixelMode');
 		add(gen, node, 'pixel', 'pixel');
 		add(gen, node, 'pixelVariant', 'pixelVariant');
 		add(gen, node, 'splashScale', 'splashScale');
 		add(gen, node, 'splashFps', 'splashFps');
+		add(gen, node, 'splashSyncColor', 'splashSyncColor');
 		add(gen, node, 'hiRes', 'hi-res');
+		// `sheet` names a CLASSIC skin's atlas -- without it an atlas skin can't round-trip at all. The
+		// rest are plain scalars the parser already accepts (the `general` group is a pass-through).
+		add(gen, node, 'sheet', 'sheet');
+		add(gen, node, 'squareSheet', 'squareSheet');
+		add(gen, node, 'holdsOverHeads', 'holdsOverHeads');
+		add(gen, node, 'headOverlap', 'headOverlap');
+		add(gen, node, 'fitColumnWidth', 'fitColumnWidth');
 		emitGroup('general', gen, b, indent);
 
 		emitElemMap('animated', Reflect.field(node, 'animated'), b, indent);

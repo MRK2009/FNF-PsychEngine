@@ -70,8 +70,10 @@ class NoteDefaults {
 	public static function initializeGlobalRGBShader(noteData:Int):RGBPalette {
 		if (globalRgbShaders[noteData] == null) {
 			var newRGB:RGBPalette = new RGBPalette();
-			var arr:Array<FlxColor>;
-			if (Mania.current != Mania.DEFAULT)
+			// A skin may ship its own palette; the player's colours are the fallback (and win outright
+			// when `overrideSkinColors` is on).
+			var arr:Array<FlxColor> = backend.NoteSkinConfig.skinNoteColors(noteData);
+			if (arr != null) {} else if (Mania.current != Mania.DEFAULT)
 				arr = Mania.getColors(Mania.current)[noteData]; // multikey palette
 			else
 				arr = (!PlayState.isPixelStage) ? ClientPrefs.data.arrowRGB[noteData] : ClientPrefs.data.arrowRGBPixel[noteData];

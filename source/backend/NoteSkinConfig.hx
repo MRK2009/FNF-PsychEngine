@@ -23,6 +23,10 @@ typedef NoteSkinData = {
 	@:optional var splashOffsets:Dynamic; // per-lane splash offsets
 	@:optional var antialiasing:Dynamic; // Bool, or a per-lane object (arrow/center/col index)
 	@:optional var holdAntialiasing:Bool;
+	@:optional var splashSyncColor:Bool; // force the splash to take the lane's note colour regardless of the player's "Link splash colour" option -- for skins that ship their own splash art and need it tinted
+	@:optional var noteColors:Dynamic; // per-lane [r, g, b] palette the skin ships (object keyed by col index / direction); falls back to the player's arrowRGB prefs, and is ignored entirely when `overrideSkinColors` is on
+	@:optional var columnGap:Float; // extra px between lanes, ADDED to the engine's own spacing; lets a skin with unusually wide/narrow art breathe correctly (applies at every keycount, 4K included)
+	@:optional var hasHoldEnd:Bool; // explicit override for whether the skin ships a hold-end cap; unset auto-detects from the built frames
 	@:optional var holdsOverHeads:Bool; // draw hold trails above the note heads instead of below; overrides the global option
 	@:optional var headOverlap:Float; // fraction of the note width an un-held hold's body extends up under the head (closes the head/body seam); overrides SustainSprite.headOverlap
 	@:optional var holdAlpha:Dynamic; // Float, or per-lane object
@@ -34,8 +38,9 @@ typedef NoteSkinData = {
 	@:optional var endOffsets:Dynamic; // sustain-tail offsets (per-lane); falls back to holdOffsets
 	@:optional var colorable:Dynamic;
 	@:optional var animated:Dynamic;
-	@:optional var pixel:Bool;
-	@:optional var pixelVariant:Bool;
+	@:optional var pixelMode:String; // 'none' | 'always' | 'variant' -- the explicit pixel mode. Supersedes the `pixel`/`pixelVariant` booleans below, which are still honoured for older skins (see `NoteSkinConfig.pixelModeOf`).
+	@:optional var pixel:Bool; // LEGACY: equivalent to pixelMode 'always'
+	@:optional var pixelVariant:Bool; // LEGACY: equivalent to pixelMode 'variant'
 	@:optional var rotate:Bool;
 	@:optional var directionAngles:Array<Float>;
 	@:optional var columnAngles:Array<Float>; // per-column angle override (indexed by column, beats directionAngles)
@@ -44,6 +49,7 @@ typedef NoteSkinData = {
 	@:optional var holdOffsets:Dynamic;
 	@:optional var keys:Dynamic;
 	@:optional var sheet:String; // CLASSIC skins only: names the atlas file inside a folder (overrides the <name>/<name> and <name>/NOTE_assets convention)
+	@:optional var squareSheet:String; // CLASSIC skins only: the skin's OWN square/centre atlas merged in for multikey, instead of the shared `noteSkins/square`. Ignored when the main sheet already ships square frames (those win).
 }
 
 typedef SkinImage = {
@@ -277,7 +283,61 @@ class NoteSkinConfig {
 
 	public static var editorOverride:String = null;
 
-	public static var pixelMode:Bool = false;
+	/**
+		Whether the skin currently being built renders PIXEL art -- it makes `resolveFrames` prefer a
+		`pixel/` / `-pixel` variant, drops antialiasing on rotated frames and switches `scaleForColumn`
+		to `pixelScale`. Set from the active skin's `pixelMode` (an editor may force it for previewing).
+		This is a RENDER flag, not the skin's declared mode: see `pixelModeOf` for that.
+	**/
+	public static var pixelRender:Bool = false;
+
+	/** `pixelMode`: never pixel. **/
+	public static inline var PIXEL_NONE:String = 'none';
+
+	/** `pixelMode`: the skin IS pixel art and always renders as such. **/
+	public static inline var PIXEL_ALWAYS:String = 'always';
+
+	/** `pixelMode`: HD by default, with pixel art that takes over on a pixel stage. **/
+	public static inline var PIXEL_VARIANT:String = 'variant';
+
+	/**
+		A skin's declared pixel mode. Reads the explicit `pixelMode` field, falling back to the older
+		`pixel` / `pixelVariant` booleans so skins written before the field keep working unchanged.
+		@param cfg the skin config (null-safe)
+		@return one of `PIXEL_NONE` / `PIXEL_ALWAYS` / `PIXEL_VARIANT`
+	**/
+	public static function pixelModeOf(cfg:NoteSkinData):String {
+		if (cfg == null)
+			return PIXEL_NONE;
+		if (cfg.pixelMode != null) {
+			var m:String = cfg.pixelMode.toLowerCase();
+			if (m == PIXEL_ALWAYS || m == PIXEL_VARIANT || m == PIXEL_NONE)
+				return m;
+		}
+		if (cfg.pixel == true)
+			return PIXEL_ALWAYS;
+		if (cfg.pixelVariant == true)
+			return PIXEL_VARIANT;
+		return PIXEL_NONE;
+	}
+
+	/**
+		Whether a skin renders pixel art right now: `always` unconditionally, `variant` only on a pixel
+		stage. The single decision every skin builder should use.
+		@param cfg the skin config
+	**/
+	public static function pixelRenderFor(cfg:NoteSkinData):Bool {
+		var m:String = pixelModeOf(cfg);
+		if (m == PIXEL_ALWAYS)
+			return true;
+		if (m == PIXEL_VARIANT)
+			return PlayState.isPixelStage;
+		return false;
+	}
+
+	/** Whether a skin ships pixel art at all (`always` or `variant`). **/
+	public static inline function hasPixelArt(cfg:NoteSkinData):Bool
+		return pixelModeOf(cfg) != PIXEL_NONE;
 
 	public static function setConfig(name:String, data:NoteSkinData) {
 		configCache.set(name, data);
@@ -289,6 +349,23 @@ class NoteSkinConfig {
 		mergedCache.clear();
 		frameExistsCache.clear();
 		frameKeysCache.clear();
+	}
+
+	/**
+		Drops every DERIVED cache for one skin so the next resolve re-reads it, while KEEPING the parsed
+		config in `configCache`. This is the live-edit refresh an editor wants: `reset()` would also throw
+		away the in-memory config being edited (forcing a re-read from disk and losing unsaved changes),
+		and `clearAnimCache()` alone leaves the sheet/location lookups stale so a changed `sheet` field or
+		a newly dropped-in image would not be picked up.
+		@param name the skin being edited (e.g. `noteSkins/MySkin`)
+	**/
+	public static function invalidate(name:String):Void {
+		clearAnimCache();
+		if (name == null)
+			return;
+		classicSheetCache.remove(name);
+		locateCache.remove(name);
+		folderCache.remove(name);
 	}
 
 	public static function forCurrentKeys(name:String):NoteSkinData {
@@ -373,7 +450,7 @@ class NoteSkinConfig {
 		// `arrowSkin` is left alone -- it brings its own `pixelUI/` sheet.
 		if (PlayState.isPixelStage) {
 			var cfg:NoteSkinData = (sel != null) ? get(sel) : null;
-			var hasPixel:Bool = (cfg != null) && (cfg.pixelVariant == true || cfg.pixel == true);
+			var hasPixel:Bool = hasPixelArt(cfg);
 			var song = PlayState.SONG;
 			var explicitClassic:Bool = (sel == null) && (song != null && song.arrowSkin != null && song.arrowSkin.length > 1);
 			if (!hasPixel && !explicitClassic) {
@@ -415,6 +492,12 @@ class NoteSkinConfig {
 		that fallback so its resolution stays byte-identical.
 	**/
 	public static function activeClassicSkin():String {
+		// An editor previewing an ATLAS skin owns the choice outright -- without this the editor would
+		// fall through to the chart/pref/NOTE_assets default and render a different sheet than the one
+		// being edited.
+		if (editorOverride != null)
+			return isClassicSkin(editorOverride) ? editorOverride : null;
+
 		var song = PlayState.SONG;
 		if (!ClientPrefs.data.forceNoteSkin && song != null && song.arrowSkin != null && song.arrowSkin.length > 1)
 			return null;
@@ -497,13 +580,13 @@ class NoteSkinConfig {
 		pixelVariantComputed = true;
 
 		var def:NoteSkinData = get(DEFAULT);
-		if (def != null && def.pixelVariant == true) {
+		if (pixelModeOf(def) == PIXEL_VARIANT) {
 			pixelVariantCache = DEFAULT;
 			return pixelVariantCache;
 		}
 		for (name in list()) {
 			var cfg:NoteSkinData = get(name);
-			if (cfg != null && cfg.pixelVariant == true) {
+			if (pixelModeOf(cfg) == PIXEL_VARIANT) {
 				pixelVariantCache = name;
 				return pixelVariantCache;
 			}
@@ -526,6 +609,86 @@ class NoteSkinConfig {
 				return cfg.holdsOverHeads;
 		}
 		return ClientPrefs.data.sustainsOverNotes;
+	}
+
+	/**
+		Whether the ACTIVE skin forces its splash to follow the lane's note colour. `null` = no opinion,
+		so the player's `linkSplashColor` option decides (the historical behaviour).
+	**/
+	public static function splashSyncColor():Null<Bool> {
+		var active:String = activeSkin();
+		if (active != null) {
+			var cfg:NoteSkinData = forCurrentKeys(active);
+			if (cfg != null && cfg.splashSyncColor != null)
+				return cfg.splashSyncColor;
+		}
+		return null;
+	}
+
+	/**
+		The `[r, g, b]` palette the ACTIVE skin ships for a lane, or null to use the player's own colours.
+		Null whenever the player has turned the skin's colours off (`overrideSkinColors`), the skin ships
+		none, or the entry is malformed -- callers then keep their existing behaviour untouched.
+		@param column the 0-based lane
+	**/
+	public static function skinNoteColors(column:Int):Array<FlxColor> {
+		if (ClientPrefs.data.overrideSkinColors)
+			return null;
+		var active:String = activeSkin();
+		if (active == null)
+			return null;
+		var cfg:NoteSkinData = forCurrentKeys(active);
+		if (cfg == null || cfg.noteColors == null)
+			return null;
+
+		var raw:Dynamic = rawForColumn(cfg.noteColors, column);
+		if (raw == null || !Std.isOfType(raw, Array))
+			return null;
+		var a:Array<Dynamic> = raw;
+		if (a.length < 3)
+			return null;
+		return [toColor(a[0]), toColor(a[1]), toColor(a[2])];
+	}
+
+	// tcfg scalars arrive as Int (0xAARRGGBB) or as a bare/0x-prefixed hex String.
+	static function toColor(v:Dynamic):FlxColor {
+		if (v == null)
+			return FlxColor.WHITE;
+		if (Std.isOfType(v, Int) || Std.isOfType(v, Float))
+			return Std.int(v);
+		var str:String = Std.string(v).trim();
+		if (str.substr(0, 2).toLowerCase() == '0x')
+			str = str.substr(2);
+		var n:Null<Int> = Std.parseInt('0x' + str);
+		return (n != null) ? n : FlxColor.WHITE;
+	}
+
+	/**
+		Extra per-lane spacing the active skin asks for, ADDED on top of the engine's own gap. `0` when
+		the skin doesn't set one.
+	**/
+	public static function columnGap():Float {
+		var active:String = activeSkin();
+		if (active != null) {
+			var cfg:NoteSkinData = forCurrentKeys(active);
+			if (cfg != null && cfg.columnGap != null)
+				return cfg.columnGap;
+		}
+		return 0;
+	}
+
+	/**
+		Explicit per-skin answer to "does this skin have a hold-end cap?", from `hasHoldEnd`. `null` means
+		auto-detect from the built frames (the historical behaviour).
+	**/
+	public static function hasHoldEnd():Null<Bool> {
+		var active:String = activeSkin();
+		if (active != null) {
+			var cfg:NoteSkinData = forCurrentKeys(active);
+			if (cfg != null && cfg.hasHoldEnd != null)
+				return cfg.hasHoldEnd;
+		}
+		return null;
 	}
 
 	/**
@@ -559,14 +722,13 @@ class NoteSkinConfig {
 		return key == null ? null : folder(active) + key;
 	}
 
-	// Pixel-mode decision for a skin (matches `FolderNoteSkin.isPixel`): an explicit `pixel`, or a
-	// `pixelVariant` while on a pixel stage.
+	// Pixel-render decision for a skin; thin alias kept so the splash code below reads naturally.
 	static inline function pixelForSkin(cfg:NoteSkinData):Bool
-		return (cfg.pixel == true) || (cfg.pixelVariant == true && PlayState.isPixelStage);
+		return pixelRenderFor(cfg);
 
 	// A cache identity for the active skin's folder-native splash (skin|keycount|pixel), or null when
 	// the active skin provides no folder splash (no `splash`, or it resolves only as a sparrow atlas).
-	// Setting up `pixelMode` here lets `resolveFrames` resolve the splash's pixel/@2x frames.
+	// Setting up `pixelRender` here lets `resolveFrames` resolve the splash's pixel/@2x frames.
 	public static function splashSourceKey():String {
 		var active:String = activeSkin();
 		if (active == null)
@@ -577,7 +739,7 @@ class NoteSkinConfig {
 
 		var pix:Bool = pixelForSkin(cfg);
 		if (editorOverride == null)
-			pixelMode = pix;
+			pixelRender = pix;
 
 		var key:String = columnKey(cfg.splash, 0);
 		if (key == null || resolveFrames(folder(active) + key) == null)
@@ -643,12 +805,19 @@ class NoteSkinConfig {
 			offsets[col] = offsetFor(cfg.splashOffsets, col);
 		}
 
+		// Splash pixelation is SHADER-driven (`PixelSplashShader`'s block size), not an art swap: unlike
+		// notes/strums, a skin isn't expected to ship a `pixel/splash`. So on a pixel stage let the
+		// shader do the work -- UNLESS this skin actually does ship a pixel splash variant, in which
+		// case the art is already pixel and blocking it again would double-pixelate it.
+		var pixelNow:Bool = pixelForSkin(cfg);
+		var shipsPixelSplash:Bool = pixelNow && pixelArt(base + keyByCol[0]) != null;
+
 		return {
 			source: source,
 			scale: numForColumn(cfg.splashScale, 0, 1) * factor,
 			allowRGB: colorableFor(cfg, 'splash'), // skin support; the link gating happens in NoteSplash
-			allowPixel: false, // folder skins ship their own pixel art; no extra shader blocking
-			pixel: pixelForSkin(cfg), // but still drop antialiasing so that art stays crisp
+			allowPixel: pixelNow && !shipsPixelSplash,
+			pixel: pixelNow, // drop antialiasing either way so the art stays crisp
 			fps: fps,
 			names: names,
 			offsets: offsets
@@ -719,7 +888,7 @@ class NoteSkinConfig {
 	// mode and defines one (low-res pixel art usually needs a larger zoom than the HD art), otherwise
 	// `scale` (default 0.7). The multikey size ratio is applied on top of this by the caller.
 	public static function scaleForColumn(cfg:NoteSkinData, col:Int):Float {
-		if (pixelMode && cfg.pixelScale != null)
+		if (pixelRender && cfg.pixelScale != null)
 			return numForColumn(cfg.pixelScale, col, numForColumn(cfg.scale, col, 0.7));
 		return numForColumn(cfg.scale, col, 0.7);
 	}
@@ -960,7 +1129,7 @@ class NoteSkinConfig {
 	// Pixel-variant-aware frame list for `key`: in pixel mode prefers a pixel variant, else the base
 	// art. The single resolver the skin builders use so every element finds its pixel art the same way.
 	public static function resolveFrames(key:String):Array<String> {
-		if (pixelMode) {
+		if (pixelRender) {
 			var p:Array<String> = pixelFrameKeys(key);
 			if (p != null)
 				return p;
@@ -968,22 +1137,57 @@ class NoteSkinConfig {
 		return frameKeys(key);
 	}
 
-	// Tries the pixel variants of `key`, or null when none exist. Covers every common layout: a
-	// `pixel/` subfolder (bare `pixel/x` or per-frame `pixel/x<N>-pixel`) and a `-pixel` suffix on the
-	// key itself (`x-pixel` single, or `x<N>-pixel` sequence). Falls through to null so `resolveFrames`
-	// can use the base art when a skin genuinely ships no pixel variant for this element.
+	// Tries the pixel variants of `key`, or null when none exist. Falls through to null so
+	// `resolveFrames` can use the base art when a skin genuinely ships no pixel variant.
 	static function pixelFrameKeys(key:String):Array<String> {
+		var hit = pixelArt(key);
+		return (hit == null) ? null : hit.frames;
+	}
+
+	/**
+		Every layout a pixel variant of `key` may use, in resolution order:
+
+		1. `<dir>/pixel/<name>` -- a `pixel/` subfolder with plain names
+		2. `<dir>/pixel/<name>-pixel` -- a `pixel/` subfolder with suffixed names (per-frame for sequences)
+		3. `<name>-pixel` -- suffixed alongside the base art
+
+		@param key the base art key
+		@return the candidate keys, in the order they are tried
+	**/
+	public static function pixelArtCandidates(key:String):Array<String> {
+		if (key == null || key.length < 1)
+			return [];
+		var out:Array<String> = [];
 		var slash:Int = key.lastIndexOf('/');
 		if (slash >= 0) {
 			var sub:String = key.substr(0, slash) + '/pixel' + key.substr(slash);
-			var r:Array<String> = frameKeys(sub);
-			if (r != null)
-				return r;
-			r = frameKeys(sub, '-pixel');
-			if (r != null)
-				return r;
+			out.push(sub);
+			out.push(sub + '-pixel');
 		}
-		return frameKeys(key, '-pixel');
+		out.push(key + '-pixel');
+		return out;
+	}
+
+	/**
+		Resolves the pixel variant of `key`, returning BOTH the frames and the key they came from.
+		The single implementation behind the renderer's `pixelFrameKeys` and the note-skin editor's
+		"pixel art found/missing" readout -- the editor used to re-implement this list and drifted,
+		reporting art as missing that the renderer resolves fine.
+		@param key the base art key
+		@return the resolved key + frame list, or null when the skin ships no pixel variant
+	**/
+	public static function pixelArt(key:String):Null<{path:String, frames:Array<String>}> {
+		var slash:Int = (key != null) ? key.lastIndexOf('/') : -1;
+		for (candidate in pixelArtCandidates(key)) {
+			// Only the SUFFIXED forms pass '-pixel' to `frameKeys`; the bare `pixel/<name>` form must
+			// not, or a sequence would be searched as `<name><N>-pixel` inside the pixel folder.
+			var suffixed:Bool = candidate.endsWith('-pixel');
+			var base:String = suffixed ? candidate.substr(0, candidate.length - 6) : candidate;
+			var frames:Array<String> = suffixed ? frameKeys(base, '-pixel') : frameKeys(base);
+			if (frames != null)
+				return {path: candidate, frames: frames};
+		}
+		return null;
 	}
 
 	static function resolveFrameKeys(key:String, suffix:String):Array<String> {
@@ -1120,7 +1324,7 @@ class NoteSkinConfig {
 		m.translate(nw / 2, nh / 2);
 
 		var out:BitmapData = new BitmapData(nw, nh, true, 0x00000000);
-		out.draw(src, m, null, null, null, !pixelMode);
+		out.draw(src, m, null, null, null, !pixelRender);
 		return out;
 	}
 }

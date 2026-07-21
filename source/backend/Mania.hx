@@ -49,10 +49,16 @@ class Mania {
 		@return the clamped keycount that was applied
 	**/
 	public static function apply(count:Int):Int {
+		var changed:Bool = (count != current);
 		count = clamp(count);
 		current = count;
 		colArray = colArrayTable[count - 1];
 		swagWidth = 160 * noteSizes[count - 1];
+		// The shared per-column note palettes are seeded from the KEYCOUNT palette but cached by column
+		// alone, so a keycount change has to drop them or notes keep the previous count's colours.
+		// Receptors re-read `getColors` in their constructor, which is why only they used to recolour.
+		if (changed)
+			objects.notes.NoteDefaults.globalRgbShaders = [];
 		return count;
 	}
 

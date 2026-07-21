@@ -506,7 +506,7 @@ class LegacyNote extends FlxSprite {
 			return false;
 
 		if (NoteSkinConfig.editorOverride == null)
-			NoteSkinConfig.pixelMode = (cfg.pixel == true) || (cfg.pixelVariant == true && PlayState.isPixelStage);
+			NoteSkinConfig.pixelRender = NoteSkinConfig.pixelRenderFor(cfg);
 
 		var base:String = NoteSkinConfig.folder(skinName);
 		var col:Int = noteData;
@@ -576,7 +576,7 @@ class LegacyNote extends FlxSprite {
 			if (cfg.splash != null)
 				noteSplashData.useRGBShader = colorable;
 		}
-		antialiasing = (cfg.pixel == true || NoteSkinConfig.pixelMode) ? false : NoteSkinConfig.boolForColumn(cfg.antialiasing, col,
+		antialiasing = NoteSkinConfig.pixelRender ? false : NoteSkinConfig.boolForColumn(cfg.antialiasing, col,
 			ClientPrefs.data.antialiasing);
 		if (isSustainNote && cfg.holdAntialiasing != null)
 			antialiasing = cfg.holdAntialiasing;

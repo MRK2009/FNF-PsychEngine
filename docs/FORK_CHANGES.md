@@ -36,7 +36,7 @@ This document covers distinct eras of work, and is split accordingly:
 | -------------------- | ------------------ | --------------- | ---------------------------------------------------------------------------------------------- |
 | `lime`               | 8.1.2              | **8.3.2**       | Minor upgrade                                                                                  |
 | `openfl`             | 9.3.3              | **9.5.2**       | Minor upgrade; required source patch in `PsychUIInputText` (see fixes)                         |
-| `flixel`             | 5.6.1              | **6.1.2**       | **Major** upgrade                                                                              |
+| `flixel`             | 5.6.1              | **6.2.0**       | **Major** upgrade                                                                              |
 | `flixel-addons`      | 3.2.2              | **4.0.1**       | **Major** upgrade                                                                              |
 | `flixel-tools`       | 1.5.1              | 1.5.1           | unchanged                                                                                      |
 | `hscript-iris`       | 1.1.3              | **removed**     | Replaced by `hscript-insanity` to gain class-based scripted states                              |

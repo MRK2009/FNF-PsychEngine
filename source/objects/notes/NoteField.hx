@@ -48,6 +48,17 @@ final class NoteField {
 	public var headGroup:FlxTypedGroup<NoteSprite>;
 	public var sustainGroup:FlxTypedGroup<SustainSprite>;
 
+	/**
+		Sustains that are CURRENTLY being held. `PlayState` draws this group above the heads/receptors
+		when the skin wants holds on top, so a trail only rises above the receptor while it's actually
+		held instead of permanently covering the note heads.
+
+		A held sustain MOVES between the two groups rather than being rebuilt -- migration is a pair of
+		array operations and keeps the sprite's frames, clip and scale exactly as they were. Both groups
+		act as pools; each grows to its own concurrent peak and then stops allocating.
+	**/
+	public var heldSustainGroup:FlxTypedGroup<SustainSprite>;
+
 	public var active:Array<ActiveNote> = [];
 
 	/** Called right after an entry becomes alive; used to fire the `onSpawnNote` callbacks. **/
@@ -68,6 +79,7 @@ final class NoteField {
 		this.downScroll = downScroll;
 		headGroup = new FlxTypedGroup<NoteSprite>();
 		sustainGroup = new FlxTypedGroup<SustainSprite>();
+		heldSustainGroup = new FlxTypedGroup<SustainSprite>();
 	}
 
 	/**
@@ -109,10 +121,54 @@ final class NoteField {
 					note.sustain.follow(strum, speed, scrollNow);
 			}
 
+			if (note.sustain != null && note.sustain.exists)
+				syncHeldLayer(note);
+
 			if (songPos - note.data.endTime() > killBehind) {
 				free(note);
 				active.splice(i, 1);
 			}
+		}
+	}
+
+	/**
+		Keeps a sustain in the group matching its held state, so `PlayState` can draw held trails above
+		the note heads while un-held ones stay behind them. Only touches the groups on an actual state
+		change, so it costs one array scan per hold, not per frame.
+		@param note the active entry to place
+	**/
+	inline function syncHeldLayer(note:ActiveNote):Void {
+		var spr:SustainSprite = note.sustain;
+		var wantHeld:Bool = note.data.hit;
+		var isHeld:Bool = heldSustainGroup.members.contains(spr);
+		if (wantHeld == isHeld)
+			return;
+		if (wantHeld) {
+			sustainGroup.remove(spr, true);
+			heldSustainGroup.add(spr);
+		} else {
+			heldSustainGroup.remove(spr, true);
+			sustainGroup.add(spr);
+		}
+	}
+
+	/**
+		Rewinds the field to the start of its note list: releases every alive drawable back to the
+		pools, clears the per-note judgement/spawn state and resets the spawn cursor, so the SAME
+		`notes` can be played through again.
+
+		Used by the note-skin editor's looping preview -- reallocating the field each cycle would work
+		but would throw away the sprite pools, which is exactly what the pooling exists to avoid.
+	**/
+	public function rewind():Void {
+		for (note in active)
+			free(note);
+		active.splice(0, active.length);
+		nextSpawn = 0;
+		for (data in notes) {
+			data.spawned = false;
+			data.hit = false;
+			data.missed = false;
 		}
 	}
 

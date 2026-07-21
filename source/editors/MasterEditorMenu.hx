@@ -20,6 +20,7 @@ class MasterEditorMenu extends MusicBeatState {
 		'Dialogue Editor',
 		'Dialogue Portrait Editor',
 		'Note Splash Editor',
+		'Note Skin Editor',
 		'UI Skin Editor',
 		'Benchmark'
 	];
@@ -148,7 +149,7 @@ class MasterEditorMenu extends MusicBeatState {
 				case 'Note Splash Editor':
 					MusicBeatState.switchState(new NoteSplashEditorState());
 				case 'Note Skin Editor':
-					MusicBeatState.switchState(new NoteSkinEditorState());
+					MusicBeatState.switchState(new editors.noteskin.NoteSkinEditorState());
 				case 'UI Skin Editor':
 					MusicBeatState.switchState(new UISkinEditorState());
 				case 'Benchmark':

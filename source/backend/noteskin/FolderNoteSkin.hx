@@ -29,13 +29,13 @@ class FolderNoteSkin implements INoteSkin {
 		var cfg:NoteSkinData = NoteSkinConfig.forCurrentKeys(skinName);
 		if (cfg == null)
 			return PlayState.isPixelStage;
-		return (cfg.pixel == true) || (cfg.pixelVariant == true && PlayState.isPixelStage);
+		return NoteSkinConfig.pixelRenderFor(cfg);
 	}
 
-	/** Updates the global `NoteSkinConfig.pixelMode` for this skin (unless an editor override is set). **/
+	/** Updates the global `NoteSkinConfig.pixelRender` for this skin (unless an editor override is set). **/
 	inline function syncPixelMode(cfg:NoteSkinData):Void {
 		if (NoteSkinConfig.editorOverride == null)
-			NoteSkinConfig.pixelMode = (cfg.pixel == true) || (cfg.pixelVariant == true && PlayState.isPixelStage);
+			NoteSkinConfig.pixelRender = NoteSkinConfig.pixelRenderFor(cfg);
 	}
 
 	/** Builds the note head; falls back to the classic skin if the lane/element can't be resolved. **/
@@ -70,8 +70,7 @@ class FolderNoteSkin implements INoteSkin {
 		v.colorable = colorable;
 		// (Note splashes are built separately by NoteSkinConfig.applySplash / NoteSplash, not here.)
 
-		spr.antialiasing = (cfg.pixel == true
-			|| NoteSkinConfig.pixelMode) ? false : NoteSkinConfig.boolForColumn(cfg.antialiasing, col, ClientPrefs.data.antialiasing);
+		spr.antialiasing = NoteSkinConfig.pixelRender ? false : NoteSkinConfig.boolForColumn(cfg.antialiasing, col, ClientPrefs.data.antialiasing);
 		var fit:Float = NoteSkinConfig.fitScaleFor(cfg, spr.frameWidth, kc);
 		var scaleFinal:Float = (fit > 0) ? fit : scaleBase * factor;
 		spr.scale.set(scaleFinal, scaleFinal);
@@ -84,7 +83,7 @@ class FolderNoteSkin implements INoteSkin {
 		v.offsetX = off[0];
 		v.offsetY = off[1];
 		v.scaleFactor = scaleFinal;
-		v.pixel = (cfg.pixel == true || NoteSkinConfig.pixelMode);
+		v.pixel = NoteSkinConfig.pixelRender;
 		spr.animation.play('note', true);
 		v.ok = true;
 		return v;
@@ -125,8 +124,7 @@ class FolderNoteSkin implements INoteSkin {
 		tintElement(bodyRGB, 'holds', holdsSupported, linked, col, kc);
 		tintElement(tailRGB, 'ends', endsSupported, linked, col, kc);
 
-		var aa:Bool = (cfg.pixel == true
-			|| NoteSkinConfig.pixelMode) ? false : NoteSkinConfig.boolForColumn(cfg.antialiasing, col, ClientPrefs.data.antialiasing);
+		var aa:Bool = NoteSkinConfig.pixelRender ? false : NoteSkinConfig.boolForColumn(cfg.antialiasing, col, ClientPrefs.data.antialiasing);
 		if (cfg.holdAntialiasing != null)
 			aa = cfg.holdAntialiasing;
 		body.antialiasing = tail.antialiasing = aa;
@@ -144,7 +142,7 @@ class FolderNoteSkin implements INoteSkin {
 		v.offsetX = off[0];
 		v.offsetY = off[1];
 		v.scaleFactor = bodyScale;
-		v.pixel = (cfg.pixel == true || NoteSkinConfig.pixelMode);
+		v.pixel = NoteSkinConfig.pixelRender;
 		v.colorable = holdsSupported;
 		v.ok = true;
 		return v;
@@ -229,8 +227,7 @@ class FolderNoteSkin implements INoteSkin {
 		v.staticColorable = NoteSkinConfig.colorableFor(cfg, 'strums');
 		v.pressedColorable = NoteSkinConfig.colorableFor(cfg, 'pressed');
 		v.confirmColorable = NoteSkinConfig.colorableFor(cfg, 'confirm');
-		spr.antialiasing = (cfg.pixel == true
-			|| NoteSkinConfig.pixelMode) ? false : NoteSkinConfig.boolForColumn(cfg.antialiasing, c, ClientPrefs.data.antialiasing);
+		spr.antialiasing = NoteSkinConfig.pixelRender ? false : NoteSkinConfig.boolForColumn(cfg.antialiasing, c, ClientPrefs.data.antialiasing);
 
 		var soff:Array<Float> = NoteSkinConfig.offsetFor(cfg.strumOffsets, c);
 		v.offsetX = soff[0];
@@ -243,7 +240,7 @@ class FolderNoteSkin implements INoteSkin {
 		spr.scale.set(scaleFinal, scaleFinal);
 		spr.updateHitbox();
 		v.scaleFactor = scaleFinal;
-		v.pixel = (cfg.pixel == true || NoteSkinConfig.pixelMode);
+		v.pixel = NoteSkinConfig.pixelRender;
 
 		if (lastAnim != null && spr.animation.getByName(lastAnim) != null)
 			spr.animation.play(lastAnim, true);

@@ -20,6 +20,9 @@ import states.TitleState;
 	// Locks the selected note skin: mods can't replace it via chart arrowSkin, per-note textures, or
 	// their own same-named assets. Custom note TYPES still keep their own look.
 	public var forceNoteSkin:Bool = false;
+
+	/** Ignore per-skin `noteColors` and use the player's own arrow colours instead. **/
+	public var overrideSkinColors:Bool = false;
 	public var uiSkin:String = 'Default';
 	public var splashSkin:String = 'From Noteskin';
 	public var splashAlpha:Float = 0.6;
