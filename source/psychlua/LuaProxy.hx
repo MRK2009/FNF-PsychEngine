@@ -374,6 +374,7 @@ class LuaProxy {
 		try {
 			Reflect.setProperty(obj, key, unwrap(L, 3));
 		} catch (e:Dynamic) {
+			#if CRASH_HANDLER backend.CrashHandler.reportScriptError('LuaProxy', 'set "$key": ${Std.string(e)}'); #end
 			LuaL.error(L, '%s', 'set "$key": ${Std.string(e)}');
 		}
 		return 0;
@@ -402,6 +403,7 @@ class LuaProxy {
 		} catch (e:Dynamic) {
 			args.resize(0);
 			argPool.push(args);
+			#if CRASH_HANDLER backend.CrashHandler.reportScriptError('LuaProxy', 'call: ${Std.string(e)}'); #end
 			LuaL.error(L, '%s', 'call: ${Std.string(e)}');
 			return 0;
 		}
@@ -435,6 +437,7 @@ class LuaProxy {
 		} catch (e:Dynamic) {
 			args.resize(0);
 			argPool.push(args);
+			#if CRASH_HANDLER backend.CrashHandler.reportScriptError('LuaProxy', 'call "$key": ${Std.string(e)}'); #end
 			LuaL.error(L, '%s', 'call "$key": ${Std.string(e)}');
 			return 0;
 		}
@@ -482,6 +485,7 @@ class LuaProxy {
 		} catch (e:Dynamic) {
 			args.resize(0);
 			argPool.push(args);
+			#if CRASH_HANDLER backend.CrashHandler.reportScriptError('LuaProxy', 'new: ${Std.string(e)}'); #end
 			LuaL.error(L, '%s', 'new: ${Std.string(e)}');
 			return 0;
 		}
