@@ -23,6 +23,7 @@ import smidr.UILocale;
 import smidr.UITheme;
 import smidr.widgets.UIButton;
 import smidr.widgets.UICheckbox;
+import smidr.widgets.UIDropdown;
 import smidr.widgets.UILabel;
 import smidr.widgets.UIScrollPane;
 import smidr.widgets.UIStepper;
@@ -44,7 +45,7 @@ import smidr.overlays.UIToast;
  * `ClipboardModel` / `SnapGrid` / `EditorNoteField` / `IChartAudio`. Scripts and the advanced
  * desktop tabs are follow-up drawer pages.
  */
-class MobileChartingState extends MusicBeatState {
+class MobileChartingState extends MobileEditorBase {
 	static inline var ZOOM_MIN:Float = 1.0;
 	static inline var ZOOM_MAX:Float = 3.2;
 
@@ -53,12 +54,11 @@ class MobileChartingState extends MusicBeatState {
 	var undoStack:UndoStack;
 	var selection:SelectionModel;
 	var clipboard:ClipboardModel;
-	final fileDialog:editors.content.FileDialogHandler = new editors.content.FileDialogHandler();
+	// `fileDialog` is provided by MobileEditorBase (native open/save; destroyed there).
 	var audio:IChartAudio;
 	var noteField:EditorNoteField;
 
-	var shell:MobileEditorShell;
-	var gestures:EditorCanvasGestures;
+	// `shell` + `gestures` are provided by MobileEditorBase; this editor uses its own `gridCam` for the grid.
 	var gridCam:FlxCamera;
 
 	var playBtn:UIButton;
@@ -233,7 +233,7 @@ class MobileChartingState extends MusicBeatState {
 		shell.addRight('EVENTS', openEventsPage);
 		shell.railGap(false);
 		multiBtn = shell.addRight('MULTI: OFF', toggleMulti);
-		shell.addRight('SEL SECT', selectCurrentSection);
+		shell.addRight('STRUMS', openStrumlinesPage);
 		shell.addRight('SECTION', openSectionPage);
 		shell.addRight('SETTINGS', openSettingsPage);
 		shell.railGap(false);
@@ -265,7 +265,7 @@ class MobileChartingState extends MusicBeatState {
 			'EVENT LANE    tap to place / edit, hold to remove',
 			'MULTI         tap-add notes, then copy / delete / retype',
 			'LEFT RAIL     play, TEST, sections, undo/redo, paste',
-			'RIGHT RAIL    note type, snap, events, section, settings'
+			'RIGHT RAIL    note type, snap, events, strumlines, section, settings'
 		], function() {
 			if (firstRun) {
 				FlxG.save.data.mobileChartGuideSeen = true;
@@ -365,6 +365,178 @@ class MobileChartingState extends MusicBeatState {
 		});
 	}
 
+	/** Scanned character jsons, sorted (empty when MODS_ALLOWED is off). Mirrors the desktop picker source. **/
+	function characterList():Array<String> {
+		#if MODS_ALLOWED
+		var list:Array<String> = editors.ChartingState.listEditorFiles('characters/', ['.json']);
+		list.sort(function(a:String, b:String):Int return (a < b) ? -1 : (a > b ? 1 : 0));
+		return list;
+		#else
+		return [];
+		#end
+	}
+
+	/** Scanned stage jsons, sorted (empty when MODS_ALLOWED is off). **/
+	function stageList():Array<String> {
+		#if MODS_ALLOWED
+		var list:Array<String> = editors.ChartingState.listEditorFiles('stages/', ['.json']);
+		list.sort(function(a:String, b:String):Int return (a < b) ? -1 : (a > b ? 1 : 0));
+		return list;
+		#else
+		return [];
+		#end
+	}
+
+	/**
+	 * Full strumline editor: one block per strumline with a character picker, role, key count and
+	 * gameplay visibility, plus reorder / remove and an add button. Mirrors the desktop strumline
+	 * properties modal, so characters are set the same way in both editors.
+	 */
+	function openStrumlinesPage():Void {
+		shell.openPage('STRUMLINES', function(pane:UIScrollPane):Float {
+			var w:Float = shell.pageWidth();
+			var y:Float = 4;
+			var lines = model.chart.strumLines;
+			for (li in 0...lines.length) {
+				var idx:Int = li;
+				var line = lines[li];
+
+				var head:UILabel = new UILabel('Strumline ${li + 1}: ${line.id}', 15, 0);
+				head.y = y;
+				pane.content.addChild(head);
+				y += 30;
+
+				var curChar:String = (line.characters.length > 0) ? line.characters[0] : '';
+				var chars:Array<String> = characterList();
+				if (curChar != '' && chars.indexOf(curChar) < 0)
+					chars.unshift(curChar);
+				if (chars.length == 0)
+					chars.push(curChar);
+				var charDrop:UIDropdown = new UIDropdown('Character', w, function(_:Int, value:String):Void {
+					undoStack.snapshot(model, 'Character');
+					model.setLineCharacter(idx, value);
+				});
+				charDrop.fontSize = 15;
+				charDrop.controlWidth = 260;
+				charDrop.setItems(chars);
+				charDrop.select(Std.int(Math.max(0, chars.indexOf(curChar))));
+				charDrop.y = y;
+				pane.content.addChild(charDrop);
+				y += 44;
+
+				var roleDrop:UIDropdown = new UIDropdown('Role', w, function(index:Int, _:String):Void {
+					undoStack.snapshot(model, 'Strumline Role');
+					model.setLineRole(idx, (index == 0) ? 1 : ((index == 1) ? 0 : 2));
+				});
+				roleDrop.fontSize = 15;
+				roleDrop.controlWidth = 220;
+				roleDrop.setItems(['Player', 'CPU (Opponent)', 'Extra']);
+				roleDrop.select(line.type == 1 ? 0 : (line.type == 0 ? 1 : 2));
+				roleDrop.y = y;
+				pane.content.addChild(roleDrop);
+				y += 44;
+
+				var kc:UIStepper = new UIStepper('Key Count', w, line.keyCount, 1, function(v:Float):Void {
+					undoStack.snapshot(model, 'Key Count');
+					var removed:Int = model.setLineKeyCount(idx, Std.int(v));
+					noteField.onModelChanged();
+					refitGrid();
+					if (removed > 0)
+						UIToast.show('$removed out-of-range notes removed');
+				});
+				kc.min = 1;
+				kc.max = 9;
+				kc.y = y;
+				pane.content.addChild(kc);
+				y += 54;
+
+				var vis:UICheckbox = new UICheckbox('Render arrows in gameplay', w, line.visible, function(checked:Bool):Void {
+					if (checked && !line.visible && model.visibleLineCount() >= editors.ChartingState.MAX_VISIBLE_LINES) {
+						UIToast.show('At most ${editors.ChartingState.MAX_VISIBLE_LINES} strumlines can be visible');
+						openStrumlinesPage();
+						return;
+					}
+					undoStack.snapshot(model, 'Lane Visibility');
+					model.setLineVisible(idx, checked);
+					noteField.onModelChanged();
+					refitGrid();
+				});
+				vis.y = y;
+				pane.content.addChild(vis);
+				y += 58;
+
+				var third:Float = (w - 20) / 3;
+				var up:UIButton = new UIButton('UP', third, 50, function() {
+					if (idx > 0) {
+						undoStack.snapshot(model, 'Reorder Strumlines');
+						model.swapStrumLines(idx, idx - 1);
+						noteField.onModelChanged();
+						openStrumlinesPage();
+					}
+				});
+				up.fontSize = 14;
+				up.y = y;
+				pane.content.addChild(up);
+				var down:UIButton = new UIButton('DOWN', third, 50, function() {
+					if (idx < model.chart.strumLines.length - 1) {
+						undoStack.snapshot(model, 'Reorder Strumlines');
+						model.swapStrumLines(idx, idx + 1);
+						noteField.onModelChanged();
+						openStrumlinesPage();
+					}
+				});
+				down.fontSize = 14;
+				down.x = third + 10;
+				down.y = y;
+				pane.content.addChild(down);
+				var rem:UIButton = new UIButton('REMOVE', third, 50, function() {
+					if (model.chart.strumLines.length <= 1) {
+						UIToast.show("Can't remove the last strumline");
+						return;
+					}
+					undoStack.snapshot(model, 'Remove Strumline');
+					selection.clear();
+					model.removeStrumLine(idx);
+					noteField.onModelChanged();
+					refitGrid();
+					openStrumlinesPage();
+				}, false);
+				rem.danger = true;
+				rem.fontSize = 14;
+				rem.x = third * 2 + 20;
+				rem.y = y;
+				pane.content.addChild(rem);
+				y += 64;
+
+				var sep:UILabel = new UILabel('---------------------------------', 12, 0);
+				sep.y = y;
+				pane.content.addChild(sep);
+				y += 24;
+			}
+
+			var add:UIButton = new UIButton('+ ADD STRUMLINE', w, 60, function() {
+				undoStack.snapshot(model, 'Add Strumline');
+				model.addStrumLine('extra${model.chart.strumLines.length}', 'bf', model.chart.keyCount);
+				noteField.onModelChanged();
+				refitGrid();
+				openStrumlinesPage();
+			}, true);
+			add.fontSize = 16;
+			add.y = y;
+			pane.content.addChild(add);
+			y += 70;
+
+			return y + 8;
+		});
+	}
+
+	/** Re-fits and re-clamps the magnifying grid camera after the lane layout changes. **/
+	function refitGrid():Void {
+		gridCam.zoom = fitZoom();
+		clampScrollX();
+		updateStatus();
+	}
+
 	function openSnapPage():Void {
 		shell.openPage('SNAP', function(pane:UIScrollPane):Float {
 			var w:Float = shell.pageWidth();
@@ -440,7 +612,7 @@ class MobileChartingState extends MusicBeatState {
 			var dw:Float = (w - 30) / 4;
 			for (di in 0...denoms.length) {
 				var dv:Int = denoms[di];
-				var db:UIButton = new UIButton('/$dv', dw, 46, function() {
+				var db:UIButton = new UIButton('/$dv', dw, 52, function() {
 					undoStack.snapshot(model, 'Time Signature');
 					model.setDenominator(sec, dv, EditorPrefs.timeSigAdapt);
 					noteField.refreshTiming();
@@ -451,7 +623,7 @@ class MobileChartingState extends MusicBeatState {
 				db.y = y;
 				pane.content.addChild(db);
 			}
-			y += 58;
+			y += 62;
 
 			var secSpeed:UIStepper = new UIStepper('Scroll Speed', w, model.scrollSpeedAt(sec), 0.1, function(v:Float):Void {
 				undoStack.snapshotCoalesced(model, 'Speed');
@@ -474,7 +646,7 @@ class MobileChartingState extends MusicBeatState {
 			for (li in 0...lines.length) {
 				var idx:Int = li;
 				var label:String = lines[li].id + (lines[li].isPlayer ? ' (you)' : '');
-				var b:UIButton = new UIButton(label, w, 50, function() {
+				var b:UIButton = new UIButton(label, w, 54, function() {
 					undoStack.snapshot(model, 'Camera Target');
 					model.setCameraTarget(sec, idx);
 					shell.closeDrawer();
@@ -482,7 +654,7 @@ class MobileChartingState extends MusicBeatState {
 				b.fontSize = 15;
 				b.y = y;
 				pane.content.addChild(b);
-				y += 56;
+				y += 60;
 			}
 			y += 14;
 
@@ -491,8 +663,17 @@ class MobileChartingState extends MusicBeatState {
 			pane.content.addChild(toolsHead);
 			y += 30;
 
+			var selBtn:UIButton = new UIButton('Select Section Notes', w, 54, function() {
+				selectCurrentSection();
+				shell.closeDrawer();
+			}, true);
+			selBtn.fontSize = 15;
+			selBtn.y = y;
+			pane.content.addChild(selBtn);
+			y += 60;
+
 			function tool(label:String, snapshot:String, act:Void->Void, danger:Bool):Void {
-				var b:UIButton = new UIButton(label, w, 50, function() {
+				var b:UIButton = new UIButton(label, w, 54, function() {
 					undoStack.snapshot(model, snapshot);
 					act();
 					shell.closeDrawer();
@@ -502,7 +683,7 @@ class MobileChartingState extends MusicBeatState {
 				b.fontSize = 15;
 				b.y = y;
 				pane.content.addChild(b);
-				y += 56;
+				y += 60;
 			}
 			tool('Copy Previous Section', 'Copy Prev', function() model.copyFromSection(sec, -1), false);
 			tool('Duet (mirror to other side)', 'Duet', function() model.duetSection(sec), false);
@@ -517,6 +698,21 @@ class MobileChartingState extends MusicBeatState {
 		shell.openPage('SETTINGS', function(pane:UIScrollPane):Float {
 			var w:Float = shell.pageWidth();
 			var y:Float = 6;
+
+			var songHead:UILabel = new UILabel('Song', 14, 0);
+			songHead.y = y;
+			pane.content.addChild(songHead);
+			y += 30;
+
+			var songName:UITextInput = new UITextInput('Song Name', w, model.chart.song, function(v:String):Void {
+				undoStack.snapshotCoalesced(model, 'Song Name');
+				model.chart.song = v;
+				model.markDirty();
+			});
+			songName.controlWidth = 240;
+			songName.y = y;
+			pane.content.addChild(songName);
+			y += 54;
 
 			var bpm:UIStepper = new UIStepper('BPM', w, model.chart.bpm, 1, function(v:Float):Void {
 				undoStack.snapshotCoalesced(model, 'BPM');
@@ -540,6 +736,37 @@ class MobileChartingState extends MusicBeatState {
 			speed.y = y;
 			pane.content.addChild(speed);
 			y += 52;
+
+			var vel:UIStepper = new UIStepper('Scroll Velocity', w, model.velocityAt(0), 0.1, function(v:Float):Void {
+				undoStack.snapshotCoalesced(model, 'Scroll Velocity');
+				model.setVelocity(0, v);
+			});
+			vel.min = -10;
+			vel.max = 10;
+			vel.decimals = 2;
+			vel.y = y;
+			pane.content.addChild(vel);
+			y += 52;
+
+			var offset:UIStepper = new UIStepper('Offset (ms)', w, model.chart.offset, 1, function(v:Float):Void {
+				undoStack.snapshotCoalesced(model, 'Offset');
+				model.chart.offset = v;
+				model.markDirty();
+			});
+			offset.min = -5000;
+			offset.max = 5000;
+			offset.y = y;
+			pane.content.addChild(offset);
+			y += 52;
+
+			var voices:UICheckbox = new UICheckbox('Needs Voices', w, model.chart.needsVoices, function(checked:Bool):Void {
+				undoStack.snapshot(model, 'Needs Voices');
+				model.chart.needsVoices = checked;
+				model.markDirty();
+			});
+			voices.y = y;
+			pane.content.addChild(voices);
+			y += 60;
 
 			var down:UICheckbox = new UICheckbox('Downscroll', w, EditorPrefs.downscroll, function(checked:Bool):Void {
 				EditorPrefs.downscroll = checked;
@@ -599,35 +826,84 @@ class MobileChartingState extends MusicBeatState {
 			pane.content.addChild(mVox);
 			y += 60;
 
-			// Characters: one row per strumline (name + lane count).
-			var charsHead:UILabel = new UILabel('Characters', 14, 0);
+			// Characters & stage: strumlines/characters live on their own page (matches desktop);
+			// here we keep the song-level stage, GF and game-over character pickers.
+			var charsHead:UILabel = new UILabel('Characters & Stage', 14, 0);
 			charsHead.y = y;
 			pane.content.addChild(charsHead);
 			y += 30;
-			var lines = model.chart.strumLines;
-			for (li in 0...lines.length) {
-				var idx:Int = li;
-				var line = lines[li];
-				var cur:String = (line.characters.length > 0) ? line.characters[0] : '';
-				var input:UITextInput = new UITextInput(line.id, w, cur, function(v:String):Void {
-					undoStack.snapshotCoalesced(model, 'Character');
-					model.setLineCharacter(idx, v);
+
+			var strumBtn:UIButton = new UIButton('EDIT STRUMLINES / CHARACTERS', w, 56, function() {
+				openStrumlinesPage();
+			});
+			strumBtn.fontSize = 15;
+			strumBtn.y = y;
+			pane.content.addChild(strumBtn);
+			y += 64;
+
+			var stages:Array<String> = stageList();
+			var curStage:String = (model.chart.stage != null) ? model.chart.stage : '';
+			if (stages.length > 0) {
+				if (curStage != '' && stages.indexOf(curStage) < 0)
+					stages.unshift(curStage);
+				var stageDrop:UIDropdown = new UIDropdown('Stage', w, function(_:Int, value:String):Void {
+					undoStack.snapshot(model, 'Stage');
+					model.chart.stage = value;
+					model.markDirty();
 				});
-				input.controlWidth = 200;
-				input.y = y;
-				pane.content.addChild(input);
-				y += 52;
-				var kc:UIStepper = new UIStepper('  ${line.id} keys', w, line.keyCount, 1, function(v:Float):Void {
-					undoStack.snapshot(model, 'Key Count');
-					model.setLineKeyCount(idx, Std.int(v));
-					noteField.onModelChanged();
+				stageDrop.fontSize = 15;
+				stageDrop.controlWidth = 240;
+				stageDrop.setItems(stages);
+				stageDrop.select(Std.int(Math.max(0, stages.indexOf(curStage))));
+				stageDrop.y = y;
+				pane.content.addChild(stageDrop);
+				y += 44;
+			} else {
+				var stageInput:UITextInput = new UITextInput('Stage', w, curStage, function(v:String):Void {
+					undoStack.snapshotCoalesced(model, 'Stage');
+					model.chart.stage = v;
+					model.markDirty();
 				});
-				kc.min = 1;
-				kc.max = 9;
-				kc.y = y;
-				pane.content.addChild(kc);
+				stageInput.controlWidth = 240;
+				stageInput.y = y;
+				pane.content.addChild(stageInput);
 				y += 54;
 			}
+
+			var gfInput:UITextInput = new UITextInput('GF Version', w, (model.chart.gfVersion != null) ? model.chart.gfVersion : '', function(v:String):Void {
+				undoStack.snapshotCoalesced(model, 'GF Version');
+				model.chart.gfVersion = v;
+				model.markDirty();
+			});
+			gfInput.controlWidth = 240;
+			gfInput.y = y;
+			pane.content.addChild(gfInput);
+			y += 54;
+
+			var goInput:UITextInput = new UITextInput('Game Over Char', w, (model.chart.gameOverChar != null) ? model.chart.gameOverChar : '', function(v:String):Void {
+				undoStack.snapshotCoalesced(model, 'Game Over Char');
+				model.chart.gameOverChar = v;
+				model.markDirty();
+			});
+			goInput.controlWidth = 240;
+			goInput.y = y;
+			pane.content.addChild(goInput);
+			y += 58;
+
+			var reload:UIButton = new UIButton('RELOAD AUDIO', w, 56, function() {
+				backend.Song.loadedSongName = model.chart.song;
+				audio.load(backend.Song.loadedSongName, model.chart.needsVoices);
+				applyVolumes();
+				audio.setRate(playRate);
+				noteField.maxTime = audio.loaded ? audio.length : -1;
+				if (audio.loaded && noteField.waveSource == null)
+					noteField.waveSource = audio.waveformSound(0);
+				UIToast.show(audio.loaded ? 'Audio loaded' : 'No audio found for "${model.chart.song}"');
+			});
+			reload.fontSize = 15;
+			reload.y = y;
+			pane.content.addChild(reload);
+			y += 70;
 
 			var save:UIButton = new UIButton('SAVE CHART', w, 60, saveChart, true);
 			save.fontSize = 16;
@@ -1143,9 +1419,15 @@ class MobileChartingState extends MusicBeatState {
 		#end
 	}
 
-	function exitEditor():Void {
-		MusicBeatState.switchState(new editors.MasterEditorMenu());
-		FlxG.sound.playMusic(Paths.music('freakyMenu'));
+	// exitEditor() is provided by MobileEditorBase (switch to the editors menu + restore the menu music).
+
+	// Android back: dismiss a live selection before the base exits (guide/drawer are handled by the base).
+	override function onBackButtonExtra():Bool {
+		if (selection.count > 0) {
+			selection.clear();
+			return true;
+		}
+		return false;
 	}
 
 	// ---- Status strip ----
@@ -1184,24 +1466,12 @@ class MobileChartingState extends MusicBeatState {
 			updateStatus();
 		}
 
-		#if android
-		if (mobile.backend.BackButton.justPressed) {
-			if (shell.guideOpen)
-				shell.closeGuide();
-			else if (shell.drawerOpen)
-				shell.closeDrawer();
-			else if (selection.count > 0)
-				selection.clear();
-			else
-				exitEditor();
-		}
-		#end
-
+		// The Android back button (guide -> drawer -> selection -> exit) is routed by MobileEditorBase.update.
 		super.update(elapsed);
 	}
 
 	override function destroy():Void {
-		fileDialog.destroy();
+		// fileDialog.destroy() is handled by MobileEditorBase.destroy.
 		if (gestures != null)
 			gestures.enabled = false;
 		if (audio != null)
@@ -1210,8 +1480,7 @@ class MobileChartingState extends MusicBeatState {
 			noteField.dispose();
 		if (gridCam != null)
 			FlxG.cameras.remove(gridCam);
-		if (shell != null)
-			shell.dispose();
+		// shell.dispose() is handled by MobileEditorBase.destroy.
 		super.destroy();
 	}
 }

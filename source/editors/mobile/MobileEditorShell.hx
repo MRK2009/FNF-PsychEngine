@@ -32,9 +32,10 @@ class MobileEditorShell {
 	public final root:UIRoot;
 
 	// Layout constants (logical px on the 1280x720 game surface).
-	public static inline var RAIL_W:Float = 150;
-	public static inline var RAIL_BTN_H:Float = 56;
-	public static inline var STRIP_H:Float = 36;
+	public static inline var RAIL_W:Float = 168;
+	public static inline var RAIL_BTN_H:Float = 60;
+	public static inline var STRIP_H:Float = 38;
+	public static inline var DRAWER_W:Float = 500;
 
 	final mainUI:Sprite;
 	final leftRail:Sprite;
@@ -84,9 +85,9 @@ class MobileEditorShell {
 		strip.y = safeT;
 		mainUI.addChild(strip);
 
-		statusLabel = new UILabel('', 15, 0);
+		statusLabel = new UILabel('', 16, 0);
 		statusLabel.x = strip.x + 14;
-		statusLabel.y = safeT + (STRIP_H - 20) / 2;
+		statusLabel.y = safeT + (STRIP_H - 22) / 2;
 		mainUI.addChild(statusLabel);
 
 		// Thumb rails (slightly translucent so the grid reads as full-screen).
@@ -106,14 +107,14 @@ class MobileEditorShell {
 
 		// Drawer: rail-opened flyout pages. Edge swipe stays OFF -- Android's back gesture owns
 		// the screen edges, so panels open from explicit buttons only.
-		drawer = new UIDrawer(UIDrawerSide.RIGHT, 460);
+		drawer = new UIDrawer(UIDrawerSide.RIGHT, DRAWER_W);
 		drawer.edgeSwipeEnabled = false;
 		drawer.edgeInset = safeR;
-		drawerTitle = new UILabel('', 18, 0);
+		drawerTitle = new UILabel('', 20, 0);
 		drawerTitle.x = 18;
 		drawerTitle.y = safeT + 14;
 		drawer.content.addChild(drawerTitle);
-		drawerPane = new UIScrollPane(460 - 28, FlxG.height - safeT - safeB - 60);
+		drawerPane = new UIScrollPane(DRAWER_W - 28, FlxG.height - safeT - safeB - 60);
 		drawerPane.x = 14;
 		drawerPane.y = safeT + 48;
 		drawer.content.addChild(drawerPane);
@@ -146,9 +147,9 @@ class MobileEditorShell {
 
 	function railButton(rail:Sprite, label:String, cb:Void->Void, accent:Bool, left:Bool):UIButton {
 		var b:UIButton = new UIButton(label, RAIL_W - 16, RAIL_BTN_H, cb, accent);
-		// The mobile preset scales button fonts ~1.4x; 15 overflows the fixed rail width and clips
-		// ("SETTINGS", "MULTI: OFF"). 12 lands at ~17 effective, which fits the longest labels.
-		b.fontSize = 12;
+		// The mobile preset scales button fonts ~1.4x; 13 lands at ~18 effective, which still fits the
+		// longest labels ("SETTINGS", "MULTI: OFF") on the wider rail.
+		b.fontSize = 13;
 		b.x = 8;
 		if (left) {
 			b.y = leftY;
@@ -215,8 +216,8 @@ class MobileEditorShell {
 		}
 		actionBar.removeChildren();
 
-		var btnW:Float = 128;
-		var btnH:Float = 58;
+		var btnW:Float = 140;
+		var btnH:Float = 66;
 		var pad:Float = 10;
 		var totalW:Float = items.length * (btnW + pad) + pad;
 
@@ -229,7 +230,7 @@ class MobileEditorShell {
 			var b:UIButton = new UIButton(item.label, btnW, btnH, item.cb, !danger);
 			if (danger)
 				b.danger = true;
-			b.fontSize = 12;
+			b.fontSize = 13;
 			b.x = actionX;
 			b.y = pad;
 			actionBar.addChild(b);

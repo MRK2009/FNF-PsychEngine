@@ -114,17 +114,37 @@ class MasterEditorMenu extends MusicBeatState {
 				case 'Legacy Chart Editor':
 					LoadingState.loadAndSwitchState(new legacy.editors.ChartingState(), false);
 				case 'Character Editor':
+					#if mobile
+					LoadingState.loadAndSwitchState(new editors.mobile.MobileCharacterEditorState());
+					#else
 					LoadingState.loadAndSwitchState(new CharacterEditorState(Character.DEFAULT_CHARACTER, false));
+					#end
 				case 'Stage Editor':
 					LoadingState.loadAndSwitchState(new StageEditorState());
 				case 'Week Editor':
+					#if mobile
+					MusicBeatState.switchState(new editors.mobile.MobileWeekEditorState());
+					#else
 					MusicBeatState.switchState(new WeekEditorState());
+					#end
 				case 'Menu Character Editor':
+					#if mobile
+					MusicBeatState.switchState(new editors.mobile.MobileMenuCharacterEditorState());
+					#else
 					MusicBeatState.switchState(new MenuCharacterEditorState());
+					#end
 				case 'Dialogue Editor':
+					#if mobile
+					MusicBeatState.switchState(new editors.mobile.MobileDialogueEditorState());
+					#else
 					LoadingState.loadAndSwitchState(new DialogueEditorState(), false);
+					#end
 				case 'Dialogue Portrait Editor':
+					#if mobile
+					MusicBeatState.switchState(new editors.mobile.MobileDialoguePortraitEditorState());
+					#else
 					LoadingState.loadAndSwitchState(new DialogueCharacterEditorState(), false);
+					#end
 				case 'Note Splash Editor':
 					MusicBeatState.switchState(new NoteSplashEditorState());
 				case 'Note Skin Editor':

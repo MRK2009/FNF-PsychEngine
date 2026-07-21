@@ -112,6 +112,7 @@ class StageEditorState extends MusicBeatState {
 		UILocale.translate = function(k:String, f:String):String return Language.getPhrase(k, f);
 		UIFonts.register('assets/fonts/vcr.ttf');
 
+		#if mobile UITheme.applyMobilePreset(); #end
 		uiRoot = FlxSmidr.init();
 		FlxSmidr.autoBlockMouse = true;
 
@@ -1941,6 +1942,7 @@ class StageEditorState extends MusicBeatState {
 		animationEditor.destroy();
 		if (uiRoot != null) {
 			FlxSmidr.dispose();
+			#if mobile UITheme.clearMobilePreset(); #end
 			uiRoot = null;
 		}
 		super.destroy();

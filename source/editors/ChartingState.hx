@@ -131,7 +131,7 @@ class ChartingState extends MusicBeatState {
 	];
 
 	/** How many strumlines may render lanes at once. **/
-	static inline var MAX_VISIBLE_LINES:Int = 6;
+	public static inline var MAX_VISIBLE_LINES:Int = 6;
 
 	/** Time-signature denominators the engine actually supports (only powers of 2 keep 16/d an
 		integer step-per-beat; anything else is unsupported, so the pickers are limited to these). **/
