@@ -92,7 +92,7 @@ class CoolUtil {
 	inline public static function colorFromString(color:String):FlxColor {
 		var color:String = _hideCharsRegex.split(color).join('').trim();
 		if (color.startsWith('0x'))
-			color = color.substring(color.length - 6);
+			color = color.substring(color.length - (color.length >= 10 ? 8 : 6));
 
 		var colorNum:Null<FlxColor> = FlxColor.fromString(color);
 		if (colorNum == null)
