@@ -63,3 +63,7 @@ if not "!RC!"=="0" exit /b !RC!
 echo ^>^> APK:
 dir /b "%APK_DIR%\*.apk"
 endlocal
+echo.
+echo done.
+pause
+explorer.exe export\release\android\bin\app\build\outputs\apk\release
