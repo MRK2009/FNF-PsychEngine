@@ -71,6 +71,7 @@ class FreeplayInfoPanel {
 
 	static inline final SCORE_ROW_H:Float = 30;
 	static inline final SCORE_TOP_N:Int = 10;
+
 	// Insights
 	var iTitle:UILabel;
 	var iMsd:UILabel;
@@ -85,6 +86,12 @@ class FreeplayInfoPanel {
 	var py:Float = 0;
 	var pw:Float = 400;
 	var ph:Float = 600;
+
+	/** The height cap from `setArea`; the panel shrinks to its content but never grows past this. **/
+	var maxH:Float = 600;
+
+	/** Y of the bottom of the active tab's laid-out labels, updated each `reflow` (drives the shrink). **/
+	var contentBottomY:Float = 0;
 
 	// last shown song/diff (so a streamed rating or a tab switch can re-render without re-plumbing)
 	var lastEntry:SongEntry = null;
@@ -201,14 +208,27 @@ class FreeplayInfoPanel {
 		px = x;
 		py = y;
 		pw = w;
-		ph = h;
+		maxH = h;
 		panel.x = x;
 		panel.y = y;
-		panel.resize(w, h);
 		tabs.x = x;
 		tabs.y = y;
 		tabs.resize(w, TABS_H);
+		// reflow() lays out the content and applies the content-fitted panel height.
 		reflow();
+	}
+
+	/**
+	 * Sizes the panel to the active tab's content instead of the full `maxH`, so the General/Insights
+	 * tabs don't leave a large empty gap under their text. The Scores tab keeps full height for its
+	 * (scrollable) list. Called at the end of `reflow`, before the score rows lay out.
+	 */
+	function applyPanelHeight():Void {
+		if (curTab == TAB_SCORES)
+			ph = maxH;
+		else
+			ph = Math.min(maxH, Math.max(TABS_H + PAD * 2, contentBottomY - py + PAD));
+		panel.resize(pw, ph);
 	}
 
 	/** Shows or hides the whole panel, tabs and labels included. */
@@ -249,9 +269,12 @@ class FreeplayInfoPanel {
 		var pbAcc:Float = Highscore.getRating(e.songName, diffIndexOf(diffName));
 
 		switch (curTab) {
-			case TAB_SCORES: fillScores(e, diffDisplay, pbScore, pbAcc);
-			case TAB_INSIGHTS: fillInsights(e, diffDisplay, ratings);
-			default: fillGeneral(e, diffDisplay, diffCount, ratings, pbScore, pbAcc);
+			case TAB_SCORES:
+				fillScores(e, diffDisplay, pbScore, pbAcc);
+			case TAB_INSIGHTS:
+				fillInsights(e, diffDisplay, ratings);
+			default:
+				fillGeneral(e, diffDisplay, diffCount, ratings, pbScore, pbAcc);
 		}
 		reflow();
 	}
@@ -281,11 +304,16 @@ class FreeplayInfoPanel {
 		}
 
 		var meta:Array<String> = [];
-		if (has(e.artist)) meta.push('Artist: ' + e.artist);
-		if (has(e.charter)) meta.push('Charter: ' + e.charter);
-		if (has(e.source)) meta.push('Source: ' + e.source);
-		if (has(e.weekName)) meta.push('Group: ' + e.weekName);
-		if (r != null) meta.push('BPM: ' + bpmText(r) + '    Length: ' + timeStr(r.lengthMs));
+		if (has(e.artist))
+			meta.push('Artist: ' + e.artist);
+		if (has(e.charter))
+			meta.push('Charter: ' + e.charter);
+		if (has(e.source))
+			meta.push('Source: ' + e.source);
+		if (has(e.weekName))
+			meta.push('Group: ' + e.weekName);
+		if (r != null)
+			meta.push('BPM: ' + bpmText(r) + '    Length: ' + timeStr(r.lengthMs));
 		gMeta.text = meta.join('\n');
 
 		gScoreHdr.text = 'TOP SCORE';
@@ -412,6 +440,7 @@ class FreeplayInfoPanel {
 			var paneH:Float = bottom - paneY;
 			if (paneH < SCORE_ROW_H)
 				return;
+
 			sPane.x = px + PAD;
 			sPane.y = paneY;
 			sPane.resize(innerW, paneH);
@@ -419,6 +448,7 @@ class FreeplayInfoPanel {
 
 			while (sPane.content.numChildren > 0)
 				sPane.content.removeChildAt(0);
+
 			var cy:Float = 0;
 			for (i in 0...sRecords.length) {
 				var rec:ScoreRecord = sRecords[i];
@@ -466,6 +496,7 @@ class FreeplayInfoPanel {
 		iStatHdr.text = 'PATTERN & CHART';
 		var s:Array<String> = [];
 		s.push('Notes: ' + r.playerNotes + '  (opp ' + r.opponentNotes + ')');
+
 		if (r.patterns != null) {
 			s.push('Jumps: ' + r.patterns.jumps + '    Hands: ' + r.patterns.hands);
 			s.push('Holds: ' + r.patterns.holds + '    Avg NPS: ' + fmt2(r.patterns.avgNps));
@@ -500,6 +531,9 @@ class FreeplayInfoPanel {
 			cy += h + gapFor(l);
 		}
 
+		contentBottomY = cy;
+		applyPanelHeight(); // sizes ph to content (General/Insights) before the score rows read ph
+
 		if (curTab == TAB_SCORES && visible)
 			layoutScoreRows(cy + 2);
 		else
@@ -529,9 +563,12 @@ class FreeplayInfoPanel {
 	 */
 	function subtitle(e:SongEntry):String {
 		var parts:Array<String> = [];
-		if (has(e.artist)) parts.push(e.artist);
-		if (has(e.icon)) parts.push(cap(e.icon));
-		if (has(e.weekName)) parts.push(e.weekName);
+		if (has(e.artist))
+			parts.push(e.artist);
+		if (has(e.icon))
+			parts.push(cap(e.icon));
+		if (has(e.weekName))
+			parts.push(e.weekName);
 		return parts.join('  ·  ');
 	}
 
@@ -551,11 +588,16 @@ class FreeplayInfoPanel {
 	 * @return S/A/B/C/D, or a dash placeholder when zero
 	 */
 	static function grade(acc:Float):String {
-		if (acc <= 0) return '—';
-		if (acc >= 0.99) return 'S';
-		if (acc >= 0.95) return 'A';
-		if (acc >= 0.90) return 'B';
-		if (acc >= 0.80) return 'C';
+		if (acc <= 0)
+			return '—';
+		if (acc >= 0.99)
+			return 'S';
+		if (acc >= 0.95)
+			return 'A';
+		if (acc >= 0.90)
+			return 'B';
+		if (acc >= 0.80)
+			return 'C';
 		return 'D';
 	}
 

@@ -45,6 +45,9 @@ import states.TitleState;
 		return value;
 	}
 	public var hideHud:Bool = false;
+	// Freeplay: auto-play a preview of the selected song as you scroll the list (osu!/Etterna style).
+	// Off by default -- with it off the music bar shows the song and the user presses Play.
+	public var freeplayPreview:Bool = false;
 	public var noteOffset:Int = 0;
 	public var arrowRGB:Array<Array<FlxColor>> = [
 		[0xFFC24B99, 0xFFFFFFFF, 0xFF3C1F56],

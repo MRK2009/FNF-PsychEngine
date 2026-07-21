@@ -229,6 +229,9 @@ class OptionsCatalog {
 		rows.push(Setting(percent('Health Bar Opacity', 'How much transparent should the health bar and icons be.', 'healthBarAlpha')));
 		rows.push(Setting(new Option('Combo Stacking', "If unchecked, Ratings and Combo won't stack, saving on System Memory and making them easier to read",
 			'comboStacking', BOOL)));
+		rows.push(Setting(new Option('Freeplay Song Preview',
+			"If checked, scrolling the Freeplay list auto-plays a preview of the selected song (osu!/Etterna style).\nIf unchecked, press Play on the music bar to preview.",
+			'freeplayPreview', BOOL)));
 
 		rows.push(Section(phrase('Note Colours')));
 		rows.push(Action('Edit Colors...', 'Open the colour picker to set per-lane note colours.', 'noteColors'));

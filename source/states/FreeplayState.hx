@@ -5,10 +5,10 @@ import backend.Highscore;
 import backend.Song;
 import backend.freeplay.SongLibrary;
 import backend.freeplay.SongEntry;
-import objects.MusicPlayer;
 import states.freeplay.FreeplayListView;
 import states.freeplay.FreeplayTopBar;
 import states.freeplay.FreeplayInfoPanel;
+import states.freeplay.FreeplayMusicBar;
 import states.freeplay.FreeplayProfilePanel;
 import backend.profiles.ScoreRecord;
 import options.GameplayChangersSubstate;
@@ -52,7 +52,7 @@ class FreeplayState extends MusicBeatState {
 	var scanLbl:UILabel;
 	var hintLbl:UILabel;
 
-	var player:MusicPlayer;
+	var musicBar:FreeplayMusicBar;
 
 	var curDifficulty:Int = 0;
 	var intendedColor:Int;
@@ -61,8 +61,14 @@ class FreeplayState extends MusicBeatState {
 
 	public static var vocals:FlxSound = null;
 	public static var opponentVocals:FlxSound = null;
-	var instPlaying:Int = -1;
+
+	var previewKey:String = null;
 	var stopMusicPlay:Bool = false;
+	var previewing:Bool = false;
+	var previewRate:Float = 1;
+	var wasPreviewPlaying:Bool = false;
+	var previewPending:Bool = false;
+	var previewDebounce:Float = 0;
 
 	// layout rects (computed in layout())
 	var panelY:Float;
@@ -89,8 +95,7 @@ class FreeplayState extends MusicBeatState {
 			FlxTransitionableState.skipNextTransIn = true;
 			persistentUpdate = false;
 			MusicBeatState.switchState(new states.ErrorState("NO SONGS FOUND FOR FREEPLAY\n\nAdd a song (data/<song>/<song>.json) to an enabled mod,\nor make a week.\n\nPress ACCEPT for the Week Editor.\nPress BACK to return to Main Menu.",
-				function() MusicBeatState.switchState(new editors.WeekEditorState()),
-				function() MusicBeatState.switchState(new states.MainMenuState())));
+				function() MusicBeatState.switchState(new editors.WeekEditorState()), function() MusicBeatState.switchState(new states.MainMenuState())));
 			return;
 		}
 		Mods.loadTopMod();
@@ -102,9 +107,6 @@ class FreeplayState extends MusicBeatState {
 
 		listView = new FreeplayListView(library);
 		add(listView);
-
-		player = new MusicPlayer(this);
-		add(player);
 
 		setupSmidr();
 		layout();
@@ -163,6 +165,13 @@ class FreeplayState extends MusicBeatState {
 		infoPanel.onScoreClick = openScoreResults;
 		profilePanel = new FreeplayProfilePanel(onProfileChanged);
 
+		musicBar = new FreeplayMusicBar(uiRoot);
+		musicBar.onTogglePlay = previewToggle;
+		musicBar.onSeek = previewSeek;
+		musicBar.onReset = previewReset;
+		musicBar.onRate = previewSetRate;
+		add(musicBar);
+
 		scanLbl = new UILabel('', 12, 1);
 		uiRoot.content.addChild(scanLbl);
 		hintLbl = new UILabel(defaultHint(), 13, 1);
@@ -198,7 +207,12 @@ class FreeplayState extends MusicBeatState {
 		var panelH:Float = panelBottom - panelY;
 		infoW = Math.min(400, FlxG.width * 0.36);
 		var infoX:Float = FlxG.width - insetR - infoW;
-		infoPanel.setArea(infoX, panelY, infoW, panelH);
+
+		var musicBarH:Float = 116;
+		var musicBarY:Float = panelBottom - musicBarH;
+		infoPanel.setArea(infoX, panelY, infoW, (musicBarY - 14) - panelY);
+		if (musicBar != null)
+			musicBar.setArea(infoX, musicBarY, infoW, musicBarH);
 
 		var listX:Float = 56 + insetL;
 		var listW:Float = infoX - listX - 20;
@@ -264,7 +278,7 @@ class FreeplayState extends MusicBeatState {
 	}
 
 	function changeSelection(change:Int, playSound:Bool = true):Void {
-		if (player.playingMusic || library.view.length < 1)
+		if (library.view.length < 1)
 			return;
 		listView.select(listView.curSelected + change);
 		if (playSound)
@@ -311,10 +325,28 @@ class FreeplayState extends MusicBeatState {
 
 		library.requestRating(e, lastDifficultyName, true);
 		refreshInfo();
+
+		if (musicBar != null)
+			musicBar.setSong(e.songName);
+
+		var movedSong:Bool = (e.key() != previewKey);
+		if (previewing && movedSong) {
+			if (ClientPrefs.data.freeplayPreview)
+				schedulePreview();
+			else
+				stopPreview();
+		} else if (!previewing && ClientPrefs.data.freeplayPreview) {
+			schedulePreview();
+		}
+	}
+
+	function schedulePreview():Void {
+		previewPending = true;
+		previewDebounce = 0.28;
 	}
 
 	function changeDiff(change:Int):Void {
-		if (player.playingMusic || library.view.length < 1)
+		if (library.view.length < 1)
 			return;
 		curDifficulty = FlxMath.wrap(curDifficulty + change, 0, Difficulty.list.length - 1);
 		onSelectionChanged(true);
@@ -361,16 +393,30 @@ class FreeplayState extends MusicBeatState {
 			}
 		}
 		updateScanLabel();
+		updatePreview(elapsed);
 
 		var typing:Bool = (UIFocus.focused != null) || UIRoot.overlayOpen;
 
-		if (!player.playingMusic && !typing) {
+		if (!typing) {
 			var shiftMult:Int = FlxG.keys.pressed.SHIFT ? 3 : 1;
 			if (library.view.length > 1) {
-				if (FlxG.keys.justPressed.HOME) { listView.curSelected = 0; onSelectionChanged(false); holdTime = 0; }
-				else if (FlxG.keys.justPressed.END) { listView.curSelected = library.view.length - 1; onSelectionChanged(false); holdTime = 0; }
-				if (controls.UI_UP_P) { changeSelection(-shiftMult); holdTime = 0; }
-				if (controls.UI_DOWN_P) { changeSelection(shiftMult); holdTime = 0; }
+				if (FlxG.keys.justPressed.HOME) {
+					listView.curSelected = 0;
+					onSelectionChanged(false);
+					holdTime = 0;
+				} else if (FlxG.keys.justPressed.END) {
+					listView.curSelected = library.view.length - 1;
+					onSelectionChanged(false);
+					holdTime = 0;
+				}
+				if (controls.UI_UP_P) {
+					changeSelection(-shiftMult);
+					holdTime = 0;
+				}
+				if (controls.UI_DOWN_P) {
+					changeSelection(shiftMult);
+					holdTime = 0;
+				}
 				if (controls.UI_DOWN || controls.UI_UP) {
 					var last:Int = Math.floor((holdTime - 0.5) * 10);
 					holdTime += elapsed;
@@ -396,11 +442,12 @@ class FreeplayState extends MusicBeatState {
 				UIFocus.set(topBar.searchInput); // classic TAB -> search
 		}
 
-		if (!player.playingMusic && FlxG.mouse.wheel != 0 && library.view.length > 1) {
+		if (FlxG.mouse.wheel != 0 && library.view.length > 1) {
 			FlxG.sound.play(Paths.sound('scrollMenu'), 0.2);
 			changeSelection(-FlxG.mouse.wheel);
 		}
-		if (!player.playingMusic && !typing && FlxG.mouse.justPressed && !pointerOverTouchPad()) {
+
+		if (!typing && FlxG.mouse.justPressed && !pointerOverTouchPad()) {
 			var hit:Int = listView.indexAtScreen(FlxG.mouse.x, FlxG.mouse.y);
 			if (hit >= 0 && hit != listView.curSelected) {
 				listView.curSelected = hit;
@@ -435,15 +482,8 @@ class FreeplayState extends MusicBeatState {
 
 	function handleActions(elapsed:Float, typing:Bool):Void {
 		if (controls.BACK && !typing) {
-			if (player.playingMusic) {
-				FlxG.sound.music.stop();
-				destroyFreeplayVocals();
-				FlxG.sound.music.volume = 0;
-				instPlaying = -1;
-				player.playingMusic = false;
-				player.switchPlayMusic();
-				FlxG.sound.playMusic(Paths.music('freakyMenu'), 0);
-				FlxTween.tween(FlxG.sound.music, {volume: 1}, 1);
+			if (previewing) {
+				stopPreview();
 			} else if (library.searchQuery.length > 0 || library.curGroupIdx != 0 || library.curSort != 0) {
 				var keep:SongEntry = listView.selectedEntry();
 				library.searchQuery = '';
@@ -466,14 +506,14 @@ class FreeplayState extends MusicBeatState {
 		if (typing || library.view.length < 1)
 			return;
 
-		if (FlxG.keys.justPressed.CONTROL && !player.playingMusic) {
+		if (FlxG.keys.justPressed.CONTROL) {
 			persistentUpdate = false;
 			openSubState(new GameplayChangersSubstate());
 		} else if (FlxG.keys.justPressed.SPACE) {
-			onListen();
-		} else if (controls.ACCEPT && !player.playingMusic) {
+			previewToggle();
+		} else if (controls.ACCEPT) {
 			onAccept(elapsed);
-		} else if (controls.RESET && !player.playingMusic) {
+		} else if (controls.RESET) {
 			var e:SongEntry = listView.selectedEntry();
 			persistentUpdate = false;
 			openSubState(new ResetScoreSubState(e.songName, curDifficulty, e.icon));
@@ -499,8 +539,7 @@ class FreeplayState extends MusicBeatState {
 	}
 
 	public function defaultHint():String {
-		return Language.getPhrase('freeplay_tip2',
-			'TAB Search   T Sort   Q/E Group   F Favorite   SPACE Listen   ENTER Play   CTRL Changers   RESET Score');
+		return Language.getPhrase('freeplay_tip2', 'TAB Search   T Sort   Q/E Group   F Favorite   SPACE Preview   ENTER Play   CTRL Changers   RESET Score');
 	}
 
 	override function closeSubState():Void {
@@ -512,31 +551,153 @@ class FreeplayState extends MusicBeatState {
 		super.closeSubState();
 	}
 
-	function onListen():Void {
-		var e:SongEntry = listView.selectedEntry();
-		if (e == null)
-			return;
-		if (instPlaying != listView.curSelected && !player.playingMusic) {
-			destroyFreeplayVocals();
-			FlxG.sound.music.volume = 0;
+	inline function isPreviewPlaying():Bool
+		return FlxG.sound.music != null && FlxG.sound.music.playing;
 
-			Mods.currentModDirectory = e.folder;
+	function previewToggle():Void {
+		if (!previewing)
+			startPreview();
+		else
+			pauseResumePreview(!isPreviewPlaying());
+	}
+
+	function startPreview():Void {
+		var e:SongEntry = listView.selectedEntry();
+		if (e == null || (previewing && previewKey == e.key()))
+			return;
+
+		destroyFreeplayVocals();
+		FlxG.sound.music.volume = 0;
+
+		Mods.currentModDirectory = e.folder;
+		try {
 			var poop:String = Highscore.formatSong(e.songName.toLowerCase(), curDifficulty);
 			Song.loadFromJson(poop, e.songName.toLowerCase());
-			if (PlayState.SONG.needsVoices)
-				loadPreviewVocals();
-
-			FlxG.sound.playMusic(Paths.inst(PlayState.SONG.song), 0.8);
-			FlxG.sound.music.pause();
-			instPlaying = listView.curSelected;
-
-			player.playingMusic = true;
-			player.curTime = 0;
-			player.switchPlayMusic();
-			player.pauseOrResume(true);
-		} else if (instPlaying == listView.curSelected && player.playingMusic) {
-			player.pauseOrResume(!player.playing);
+		} catch (err:Dynamic) {
+			FlxG.sound.play(Paths.sound('cancelMenu'));
+			return;
 		}
+
+		if (PlayState.SONG.needsVoices)
+			loadPreviewVocals();
+
+		FlxG.sound.playMusic(Paths.inst(PlayState.SONG.song), 0.8);
+		previewKey = e.key();
+
+		previewing = true;
+		previewRate = 1;
+		setPlaybackRate();
+		if (musicBar != null) {
+			musicBar.setPreviewing(true);
+			musicBar.setRate(1);
+			musicBar.setPlaying(true);
+		}
+		pauseResumePreview(true);
+	}
+
+	function stopPreview():Void {
+		FlxG.sound.music.stop();
+		destroyFreeplayVocals();
+		FlxG.sound.music.volume = 0;
+		previewKey = null;
+		previewing = false;
+		previewRate = 1;
+		if (musicBar != null) {
+			musicBar.setPreviewing(false);
+			musicBar.setRate(1);
+		}
+		FlxG.sound.playMusic(Paths.music('freakyMenu'), 0);
+		FlxTween.tween(FlxG.sound.music, {volume: 1}, 1);
+	}
+
+	function pauseResumePreview(resume:Bool):Void {
+		if (resume) {
+			if (!FlxG.sound.music.playing)
+				FlxG.sound.music.resume();
+			if (vocals != null && vocals.length > FlxG.sound.music.time && !vocals.playing)
+				vocals.resume();
+			if (opponentVocals != null && opponentVocals.length > FlxG.sound.music.time && !opponentVocals.playing)
+				opponentVocals.resume();
+		} else {
+			FlxG.sound.music.pause();
+			if (vocals != null)
+				vocals.pause();
+			if (opponentVocals != null)
+				opponentVocals.pause();
+		}
+		if (musicBar != null)
+			musicBar.setPlaying(FlxG.sound.music.playing);
+	}
+
+	function previewSeek(ms:Float):Void {
+		if (!previewing)
+			return;
+		var t:Float = Math.max(0, Math.min(ms, FlxG.sound.music.length));
+		FlxG.sound.music.time = t;
+		setVocalsTime(t);
+	}
+
+	function previewReset():Void {
+		if (!previewing)
+			return;
+		previewRate = 1;
+		setPlaybackRate();
+		if (musicBar != null)
+			musicBar.setRate(1);
+		FlxG.sound.music.time = 0;
+		setVocalsTime(0);
+	}
+
+	function previewSetRate(v:Float):Void {
+		previewRate = FlxMath.bound(v, 0.25, 3);
+		setPlaybackRate();
+	}
+
+	function setPlaybackRate():Void {
+		FlxG.sound.music.pitch = previewRate;
+		if (vocals != null)
+			vocals.pitch = previewRate;
+		if (opponentVocals != null)
+			opponentVocals.pitch = previewRate;
+	}
+
+	function setVocalsTime(time:Float):Void {
+		if (vocals != null && vocals.length > time)
+			vocals.time = time;
+		if (opponentVocals != null && opponentVocals.length > time)
+			opponentVocals.time = time;
+	}
+
+	function updatePreview(elapsed:Float):Void {
+		if (previewPending && initialized) {
+			previewDebounce -= elapsed;
+			if (previewDebounce <= 0) {
+				previewPending = false;
+				startPreview();
+			}
+		}
+
+		if (!previewing)
+			return;
+
+		if (FlxG.sound.music.playing) {
+			if (vocals != null)
+				vocals.volume = (vocals.length > FlxG.sound.music.time) ? 0.8 : 0;
+			if (opponentVocals != null)
+				opponentVocals.volume = (opponentVocals.length > FlxG.sound.music.time) ? 0.8 : 0;
+
+			if ((vocals != null && vocals.length > FlxG.sound.music.time && Math.abs(FlxG.sound.music.time - vocals.time) >= 25)
+				|| (opponentVocals != null
+					&& opponentVocals.length > FlxG.sound.music.time
+					&& Math.abs(FlxG.sound.music.time - opponentVocals.time) >= 25)) {
+				pauseResumePreview(false);
+				setVocalsTime(FlxG.sound.music.time);
+				pauseResumePreview(true);
+			}
+		}
+
+		if (musicBar != null)
+			musicBar.setPlaying(FlxG.sound.music.playing);
 	}
 
 	function loadPreviewVocals():Void {
