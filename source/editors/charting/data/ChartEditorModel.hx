@@ -938,6 +938,15 @@ final class ChartEditorModel {
 		if (idx < 0 || idx >= chart.strumLines.length)
 			return;
 		chart.strumLines[idx].characters = [character];
+		// The primary lines are re-derived from the scalar player1/player2/gfVersion metadata by
+		// SongChart.syncPrimaryCharacters() (on playtest) and by fromLegacy() (on save+reload). Without
+		// updating that scalar too, the edit would be reverted and gameplay would keep the old character.
+		switch (chart.strumLines[idx].index) {
+			case SongChart.LEGACY_OPPONENT: chart.player2 = character;
+			case SongChart.LEGACY_PLAYER: chart.player1 = character;
+			case SongChart.LEGACY_GF: chart.gfVersion = character;
+			default:
+		}
 		markDirty();
 	}
 
