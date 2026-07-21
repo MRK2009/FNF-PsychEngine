@@ -216,6 +216,9 @@ class SongLibrary {
 		var scanned:Bool = false; // a new/changed folder was read
 		var looseCount:Int = 0; // loose entries added (reused + scanned)
 
+		// Re-point and restore. Gonna make a better solution for this but for this works
+		var prevMod:String = Mods.currentModDirectory;
+
 		var roots:Array<Array<String>> = [];
 		for (mod in Mods.parseList().enabled)
 			roots.push([mod, Paths.mods('$mod/data')]);
@@ -224,14 +227,15 @@ class SongLibrary {
 		for (root in roots) {
 			var modFolder:String = root[0];
 			var dataDir:String = root[1];
+	
 			for (entry in Paths.listDirectory(dataDir)) {
 				var key:String = Paths.formatToSongPath(entry);
 				var dedupe:String = '$modFolder|$key';
 				if (seen.exists(dedupe))
 					continue;
+
 				var songDir:String = '$dataDir/$entry';
 				var mtime:Float = folderMtime(songDir);
-
 				var cached:DBEntry = dbMap.get(dedupe);
 				if (cached != null && cached.mtime == mtime) {
 					seen.set(dedupe, true);
@@ -244,11 +248,14 @@ class SongLibrary {
 				var diffs:Array<String> = deriveDiffs(listing, key, null);
 				if (diffs.length < 1)
 					continue;
+
 				var rep:String = repChartFile(listing, key);
 				if (rep == null)
 					continue;
+
 				seen.set(dedupe, true);
 				Mods.currentModDirectory = modFolder;
+
 				var e:SongEntry = mkEntry(entry, weekIdx, 'face', FlxColor.fromRGB(146, 113, 253), modFolder, diffs, '$songDir/$rep',
 					listing.indexOf('metadata.json') >= 0);
 				e.folderMtime = mtime;
@@ -256,6 +263,8 @@ class SongLibrary {
 				looseCount++;
 			}
 		}
+		Mods.currentModDirectory = prevMod;
+
 		if (looseCount > 0 && (weekIdx >= weekNames.length || weekNames[weekIdx] == null))
 			weekNames[weekIdx] = 'Other Songs';
 
@@ -371,26 +380,39 @@ class SongLibrary {
 	 * @param e the entry to apply the metadata onto
 	 */
 	function applyMeta(e:SongEntry):Void {
+		// Re-point and restore. Gonna make a better solution for this but for this works
+		var prevMod:String = Mods.currentModDirectory;
 		Mods.currentModDirectory = e.folder;
+
 		var info:SongMetaInfo = SongMeta.load(Paths.formatToSongPath(e.songName));
+		Mods.currentModDirectory = prevMod;
+
 		e.metaLoaded = true;
 		if (info == null)
 			return;
+
 		if (info.icon != null && info.icon.length > 0)
 			e.icon = info.icon;
+
 		if (info.color != null && info.color.length >= 3)
 			e.color = FlxColor.fromRGB(info.color[0], info.color[1], info.color[2]);
+
 		e.charter = info.charter;
 		e.source = (info.source != null && info.source.length > 0) ? info.source : info.mod;
 		e.artist = info.artist;
+
 		if (info.beatmapId != null)
 			e.beatmapId = info.beatmapId;
+
 		e.info = info.info;
 		e.tags = info.tags;
+
 		if (info.displayBpm != null)
 			e.displayBpm = info.displayBpm;
+
 		e.displayTimeSignature = info.displayTimeSignature;
 		e.charters = info.charters;
+
 		if (info.difficulties != null && info.difficulties.length > 0) {
 			e.difficulties = reorderDiffs(e.difficulties, info.difficulties);
 			e.repDiff = computeRepDiff(e.difficulties);
@@ -443,12 +465,14 @@ class SongLibrary {
 	function deriveDiffs(listing:Array<String>, key:String, weekDiffs:Array<String>):Array<String> {
 		var result:Array<String> = [];
 		var declared:Array<String> = [];
+
 		if (weekDiffs != null)
 			for (d in weekDiffs) {
 				var t:String = d.trim();
 				if (t.length > 0)
 					declared.push(t);
 			}
+
 		if (declared.length < 1)
 			declared = Difficulty.defaultList.copy();
 
@@ -459,6 +483,7 @@ class SongLibrary {
 			if (listing.indexOf('$base.json') >= 0 && !containsDiffCI(result, d))
 				result.push(d);
 		}
+
 		for (f in listing) {
 			if (!f.endsWith('.json'))
 				continue;
@@ -591,12 +616,15 @@ class SongLibrary {
 		var diff:String = representativeDiff(e);
 		if (diff == null || e.ratings.exists(diff))
 			return;
+
 		var rk:String = e.key() + '|' + diff;
 		if (requested.exists(rk))
 			return;
 		requested.set(rk, true);
+
 		if (e.chartPath == null)
 			return;
+
 		var cached:ChartRatings = ChartScanCache.getCachedRatings(e.chartPath);
 		if (cached != null) {
 			e.ratings.set(diff, cached);
@@ -627,6 +655,7 @@ class SongLibrary {
 	public function requestRating(e:SongEntry, diffName:String, priority:Bool = true):Void {
 		if (diffName == null || e.ratings.exists(diffName))
 			return;
+
 		var rk:String = e.key() + '|' + diffName;
 		if (requested.exists(rk))
 			return;
@@ -635,6 +664,7 @@ class SongLibrary {
 		requested.set(rk, true);
 		if (path == null)
 			return;
+
 		var cached:ChartRatings = ChartScanCache.getCachedRatings(path);
 		if (cached != null) {
 			e.ratings.set(diffName, cached);
@@ -650,10 +680,14 @@ class SongLibrary {
 	 * @return the chart file path
 	 */
 	function chartPathFor(e:SongEntry, diffName:String):String {
+		// Re-point and restore. Gonna make a better solution for this but for this works
+		var prevMod:String = Mods.currentModDirectory;
 		Mods.currentModDirectory = e.folder;
 		var songKey:String = Paths.formatToSongPath(e.songName);
 		var base:String = Difficulty.scoreKey(e.songName, diffName);
-		return Paths.json('$songKey/$base');
+		var path:String = Paths.json('$songKey/$base');
+		Mods.currentModDirectory = prevMod;
+		return path;
 	}
 
 	/**
@@ -714,7 +748,8 @@ class SongLibrary {
 		switch (curSort) {
 			case 1:
 				filtered.sort(function(a, b) {
-					var an:String = a.songName.toLowerCase(), bn:String = b.songName.toLowerCase();
+					var an:String = a.songName.toLowerCase(),
+						bn:String = b.songName.toLowerCase();
 					return an < bn ? -1 : (an > bn ? 1 : 0);
 				});
 			case 2:
