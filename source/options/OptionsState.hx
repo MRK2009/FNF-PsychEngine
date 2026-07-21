@@ -56,7 +56,20 @@ class OptionsState extends MusicBeatState {
 	var contentW:Float = 966;
 	var panelY:Float = 72;
 	var panelH:Float = 596;
+
+	// Bigger touch targets on mobile; the font sizes already scale via the mobile theme preset, so
+	// only the row/button heights need bumping to give fingers room.
+	#if mobile
+	static inline var ROW_H:Int = 62;
+	static inline var RAIL_BTN_H:Int = 62;
+	static inline var RAIL_BTN_STEP:Int = 70;
+	static inline var ACTION_BTN_H:Int = 50;
+	#else
 	static inline var ROW_H:Int = 52;
+	static inline var RAIL_BTN_H:Int = 50;
+	static inline var RAIL_BTN_STEP:Int = 58;
+	static inline var ACTION_BTN_H:Int = 40;
+	#end
 	static inline var ROW_FONT:Int = 16;
 	static inline var RAIL_FONT:Int = 17;
 
@@ -153,6 +166,7 @@ class OptionsState extends MusicBeatState {
 	function onGameResized(w:Int, h:Int):Void {
 		if (uiRoot == null)
 			return;
+
 		if (bgSprite != null) {
 			CoolUtil.fillScreen(bgSprite);
 			bgSprite.screenCenter();
@@ -162,6 +176,7 @@ class OptionsState extends MusicBeatState {
 		var insetR:Float = 24;
 		var insetT:Float = 0;
 		var insetB:Float = 0;
+
 		#if mobile
 		var corner:Float = mobile.backend.SafeArea.cornerRadius;
 		insetL = Math.max(24, Math.max(mobile.backend.SafeArea.left, corner) + 8);
@@ -169,34 +184,45 @@ class OptionsState extends MusicBeatState {
 		insetT = mobile.backend.SafeArea.top;
 		insetB = mobile.backend.SafeArea.bottom;
 		#end
+
 		railX = insetL;
+
 		panelY = 72 + insetT;
 		panelH = FlxG.height - panelY - 52 - insetB;
+
 		contentX = railX + RAIL_W + 16;
 		contentW = FlxG.width - contentX - insetR;
 
 		railPanel.resize(RAIL_W, panelH);
 		railPanel.x = railX;
 		railPanel.y = panelY;
+
 		contentPanel.resize(contentW, panelH);
 		contentPanel.x = contentX;
 		contentPanel.y = panelY;
+
 		titleLabel.x = railX;
 		titleLabel.y = 18 + insetT;
+
 		searchInput.x = FlxG.width - insetR - 340; // searchW in buildChrome
 		searchInput.y = 22 + insetT;
+
 		headerLabel.x = contentX + 16;
 		headerLabel.y = panelY + 12;
+
 		descLabel.x = contentX + 16;
 		descLabel.y = panelY + 46;
+
 		hintLabel.x = railX;
 		hintLabel.y = FlxG.height - 28 - insetB;
+
 		pane.resize(contentW - 16, panelH - 84);
 		pane.x = contentX + 8;
 		pane.y = panelY + 72;
+
 		for (i in 0...railButtons.length) {
 			railButtons[i].x = railX + 10;
-			railButtons[i].y = panelY + 16 + i * 58;
+			railButtons[i].y = panelY + 16 + i * RAIL_BTN_STEP;
 		}
 
 		rebuildRows(); // reflow the current rows to the new content width
@@ -208,6 +234,7 @@ class OptionsState extends MusicBeatState {
 		var insetR:Float = 24;
 		var insetT:Float = 0;
 		var insetB:Float = 0;
+
 		#if mobile
 		// The rail and hint hug screen edges, so they clear the cutout and the corner curve.
 		var corner:Float = mobile.backend.SafeArea.cornerRadius;
@@ -216,9 +243,12 @@ class OptionsState extends MusicBeatState {
 		insetT = mobile.backend.SafeArea.top;
 		insetB = mobile.backend.SafeArea.bottom;
 		#end
+
 		railX = insetL;
+
 		panelY = 72 + insetT;
 		panelH = FlxG.height - panelY - 52 - insetB;
+
 		contentX = railX + RAIL_W + 16;
 		contentW = FlxG.width - contentX - insetR;
 
@@ -267,10 +297,10 @@ class OptionsState extends MusicBeatState {
 		railButtons = [];
 		for (i in 0...categories.length) {
 			var idx:Int = i;
-			var btn:UIButton = new UIButton(categories[i].name, RAIL_W - 20, 50, function() selectCategory(idx));
+			var btn:UIButton = new UIButton(categories[i].name, RAIL_W - 20, RAIL_BTN_H, function() selectCategory(idx));
 			btn.fontSize = RAIL_FONT;
 			btn.x = railX + 10;
-			btn.y = panelY + 16 + i * 58;
+			btn.y = panelY + 16 + i * RAIL_BTN_STEP;
 			uiRoot.content.addChild(btn);
 			railButtons.push(btn);
 		}
@@ -293,6 +323,7 @@ class OptionsState extends MusicBeatState {
 	function rebuildRows():Void {
 		clearPane();
 		rowEntries = [];
+
 		selHighlight = new Shape();
 		selHighlight.visible = false;
 		pane.content.addChild(selHighlight); // sits behind the widgets added after it
@@ -316,15 +347,21 @@ class OptionsState extends MusicBeatState {
 	/** Fills the pane with settings/actions from every category matching the current query. **/
 	function buildSearchRows(innerW:Float, y:Float):Float {
 		var q:String = query.toLowerCase();
+
 		for (cat in categories) {
 			for (row in cat.rows) {
 				switch (row) {
 					case Setting(o):
-						if (o.name.toLowerCase().indexOf(q) >= 0 || (o.description != null && o.description.toLowerCase().indexOf(q) >= 0))
+						if (o.name.toLowerCase().indexOf(q) >= 0
+							|| (o.description != null
+								&& o.description.toLowerCase().indexOf(q) >= 0))
 							y = addSetting(o, innerW, y);
+
 					case Action(name, desc, which):
 						var label:String = Language.getPhrase('options_$name', name);
-						if (label.toLowerCase().indexOf(q) >= 0 || (desc != null && desc.toLowerCase().indexOf(q) >= 0))
+						if (label.toLowerCase().indexOf(q) >= 0
+							|| (desc != null 
+								&& desc.toLowerCase().indexOf(q) >= 0))
 							y = addAction(name, desc, which, innerW, y);
 					default:
 				}
@@ -349,8 +386,10 @@ class OptionsState extends MusicBeatState {
 				case Section(title):
 					var key:String = sectionKey(title);
 					var isCollapsed:Bool = collapsed.exists(key) && collapsed.get(key);
+	
 					if (y > 8)
 						y += 10;
+
 					var acc:UIAccordion = new UIAccordion(title, innerW, !isCollapsed, function(expanded:Bool) {
 						collapsed.set(key, !expanded);
 						needsRebuild = true;
@@ -358,7 +397,14 @@ class OptionsState extends MusicBeatState {
 					acc.x = 12;
 					acc.y = y;
 					pane.content.addChild(acc);
-					rowEntries.push({kind: 2, y: y, h: 24, secTitle: title, widget: acc});
+					rowEntries.push({
+						kind: 2,
+						y: y,
+						h: 24,
+						secTitle: title,
+						widget: acc
+					});
+
 					y += 32;
 					sectionOpen = !isCollapsed;
 
@@ -384,19 +430,31 @@ class OptionsState extends MusicBeatState {
 		wdg.x = 12;
 		wdg.y = y + (ROW_H - wdg.h) / 2;
 		pane.content.addChild(wdg);
-		rowEntries.push({kind: 0, y: y, h: ROW_H - 6, option: o, widget: wdg});
+		rowEntries.push({
+			kind: 0,
+			y: y,
+			h: ROW_H - 6,
+			option: o,
+			widget: wdg
+		});
 		return y + ROW_H;
 	}
 
 	/** Appends an Action row (button + focus entry) and returns the next y. **/
 	function addAction(name:String, desc:String, which:String, innerW:Float, y:Float):Float {
-		var b:UIButton = new UIButton(Language.getPhrase('options_$name', name), innerW, 40, function() launch(which));
+		var b:UIButton = new UIButton(Language.getPhrase('options_$name', name), innerW, ACTION_BTN_H, function() launch(which));
 		b.fontSize = ROW_FONT;
 		b.tooltip = desc;
 		b.x = 12;
-		b.y = y + (ROW_H - 40) / 2;
+		b.y = y + (ROW_H - ACTION_BTN_H) / 2;
 		pane.content.addChild(b);
-		rowEntries.push({kind: 1, y: y, h: 40, which: which, widget: b});
+		rowEntries.push({
+			kind: 1,
+			y: y,
+			h: ACTION_BTN_H,
+			which: which,
+			widget: b
+		});
 		return y + ROW_H;
 	}
 
@@ -544,12 +602,7 @@ class OptionsState extends MusicBeatState {
 								needsRebuild = true;
 						}
 					case STRING:
-						if (accept())
-							cycleString(e, 1);
-						else if (controls.UI_LEFT_P)
-							cycleString(e, -1);
-						else if (controls.UI_RIGHT_P)
-							cycleString(e, 1);
+						if (accept()) cycleString(e, 1); else if (controls.UI_LEFT_P) cycleString(e, -1); else if (controls.UI_RIGHT_P) cycleString(e, 1);
 					default:
 						numericEdit(e, elapsed);
 				}
@@ -932,10 +985,29 @@ class OptionsState extends MusicBeatState {
 	/** The rebindable game-control groups shown in the controls modal (standard binds + per-keycount notes). **/
 	function controlGroups():Array<{name:String, binds:Array<{id:String, label:String}>}> {
 		var groups:Array<{name:String, binds:Array<{id:String, label:String}>}> = [
-			{name: 'Notes', binds: [{id: 'note_left', label: 'Left'}, {id: 'note_down', label: 'Down'}, {id: 'note_up', label: 'Up'}, {id: 'note_right', label: 'Right'}]},
-			{name: 'UI', binds: [{id: 'ui_left', label: 'Left'}, {id: 'ui_down', label: 'Down'}, {id: 'ui_up', label: 'Up'}, {id: 'ui_right', label: 'Right'}]},
-			{name: 'General', binds: [{id: 'reset', label: 'Reset'}, {id: 'accept', label: 'Accept'}, {id: 'back', label: 'Back'}, {id: 'pause', label: 'Pause'}]},
-			{name: 'Volume', binds: [{id: 'volume_mute', label: 'Mute'}, {id: 'volume_up', label: 'Up'}, {id: 'volume_down', label: 'Down'}]},
+			{name: 'Notes', binds: [
+				{id: 'note_left', label: 'Left'},
+				{id: 'note_down', label: 'Down'},
+				{id: 'note_up', label: 'Up'},
+				{id: 'note_right', label: 'Right'}
+			]},
+			{name: 'UI', binds: [
+				{id: 'ui_left', label: 'Left'},
+				{id: 'ui_down', label: 'Down'},
+				{id: 'ui_up', label: 'Up'},
+				{id: 'ui_right', label: 'Right'}
+			]},
+			{name: 'General', binds: [
+				{id: 'reset', label: 'Reset'},
+				{id: 'accept', label: 'Accept'},
+				{id: 'back', label: 'Back'},
+				{id: 'pause', label: 'Pause'}
+			]},
+			{name: 'Volume', binds: [
+				{id: 'volume_mute', label: 'Mute'},
+				{id: 'volume_up', label: 'Up'},
+				{id: 'volume_down', label: 'Down'}
+			]},
 			{name: 'Debug', binds: [{id: 'debug_1', label: 'Debug Key #1'}, {id: 'debug_2', label: 'Debug Key #2'}]}
 		];
 		for (count in Mania.MIN...Mania.MAX + 1) {
