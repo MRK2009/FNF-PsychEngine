@@ -229,7 +229,7 @@ class ReflectionFunctions {
 
 				default: // Is Group
 					if (obj == null)
-						Reflect.getProperty(groupOrArray, 'members')[index]; // Reflect here because of FlxTypedSpriteGroup
+						obj = Reflect.getProperty(groupOrArray, 'members')[index]; // Reflect here because of FlxTypedSpriteGroup
 					groupOrArray.remove(obj, true);
 					if (destroy)
 						obj.destroy();
