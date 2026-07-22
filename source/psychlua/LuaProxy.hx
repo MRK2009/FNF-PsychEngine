@@ -382,7 +382,11 @@ class LuaProxy {
 				f = mapLookup(L, obj);
 			pushHaxe(L, f, false);
 		} catch (e:Dynamic) {
-			Lua.pushnil(L);
+			// A THROWING getter -- not a missing field (Reflect.getProperty returns null for those
+			// without throwing). Surface it instead of the old silent nil, which hid the failure and
+			// resurfaced later as an unrelated nil-index somewhere downstream.
+			#if CRASH_HANDLER backend.CrashHandler.reportScriptError('LuaProxy', 'get "$key": ${Std.string(e)}'); #end
+			LuaL.error(L, '%s', 'get "$key": ${Std.string(e)}');
 		}
 		return 1;
 	}
@@ -460,7 +464,10 @@ class LuaProxy {
 				f = mapLookup(L, obj);
 			pushHaxe(L, f);
 		} catch (e:Dynamic) {
-			Lua.pushnil(L);
+			// A throwing getter/static, surfaced rather than swallowed to nil (see instanceIndex). The
+			// leftover env table on the stack doesn't need cleanup: LuaL.error longjmps out of the call.
+			#if CRASH_HANDLER backend.CrashHandler.reportScriptError('LuaProxy', 'get "$key": ${Std.string(e)}'); #end
+			LuaL.error(L, '%s', 'get "$key": ${Std.string(e)}');
 		}
 		return 1;
 	}

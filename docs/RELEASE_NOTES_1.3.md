@@ -227,6 +227,9 @@ scripting bug to behave.
   error (the class metatable had no write handler). Reads always worked; writes do now too.
 - **Methods always return exactly one value**: a method returning null used to push *nothing*, so
   `nil` couldn't be handled positionally (`select('#', o:f())` was 0). A void return is now `nil`.
+- **A throwing property getter surfaces its error** instead of being swallowed to `nil`. Reading a
+  field that doesn't exist still returns `nil` as before -- this only affects a getter that actually
+  raises, which used to fail invisibly and reappear as an unrelated `nil` later.
 - **Haxe enums cross into Lua** instead of arriving as `nil`; `..` concatenation works on a proxy;
   cyclic tables (`t.self = t`) passed from a script no longer stack-overflow; a non-string table key
   no longer risks a crash; and iterating a large proxied array no longer pins a proxy per element.
