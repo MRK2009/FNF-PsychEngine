@@ -275,6 +275,14 @@ class FunkinLua {
 			return MusicBeatState.getVariables().remove(varName);
 		});
 
+		// debugPrint is a DEBUGGING tool, not part of the gameplay API, so it stays available in raw
+		// mode too -- that is the mode with the least visibility, where a silent error is hardest to
+		// chase. `Std.string` because the binding takes Dynamic: debugPrint(true) / debugPrint(12)
+		// used to hand a non-String straight to a String parameter.
+		Lua_helper.add_callback(lua, "debugPrint", function(text:Dynamic = '', color:String = 'WHITE') {
+			PlayState.instance.addTextToDebug(Std.string(text), CoolUtil.colorFromString(color));
+		});
+
 		// ── Legacy PsychLua callback API (skipped entirely in raw mode) ──────
 		if (!rawLua) {
 		//
@@ -1697,8 +1705,6 @@ class FunkinLua {
 		});
 		//
 
-		Lua_helper.add_callback(lua, "debugPrint",
-			function(text:Dynamic = '', color:String = 'WHITE') PlayState.instance.addTextToDebug(text, CoolUtil.colorFromString(color)));
 
 		addLocalCallback("close", function() {
 			closed = true;

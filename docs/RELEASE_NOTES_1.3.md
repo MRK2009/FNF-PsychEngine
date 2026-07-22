@@ -199,6 +199,37 @@ features.
 - **Default skins** now declare `animated: false` for notes, strums and hold pieces
   (pressed/confirm stay animated), so those elements use only their first frame.
 - Skins in `skin.tcfg` / `skin.json` are otherwise unchanged and load as before.
+
+### Real Lua (raw mode) hardening
+A batch of fixes to the object bridge that backs `import()` and `game:method()` / `game.field`
+style scripts. Most are correctness gaps that failed silently, which is the worst way for a
+scripting bug to behave.
+
+- **Callbacks can no longer crash on script unload**: a Lua function handed to a Haxe API
+  (an `FlxTween` ease/`onComplete`, an `FlxTimer` callback) that outlived the script used to
+  fire into the already-freed Lua state -- a hard native crash with no log. Wrapped callbacks
+  now check their state is still open and no-op if it isn't.
+- **`debugPrint` works in raw mode**: it lived in the legacy callback block that raw mode skips,
+  so it was `nil` -- and calling it aborted the script silently, in the exact mode where errors
+  are hardest to see. It's now available in both modes (and stringifies its argument, so
+  `debugPrint(someBool)` works).
+- **`import()` reports failures**: a bad path, a class dropped by dead-code elimination, or one
+  blocked by ModSecurity all returned a bare `nil` that surfaced later as "attempt to index a
+  nil value" somewhere unrelated. It now warns at the point of failure (log, crash report, and
+  on-screen debug text).
+- **`==` between two proxies compares the objects**, not the wrapper handles, so
+  `a.shader == mirror` is true when they're the same instance. Previously it was effectively
+  always false for method returns and field reads.
+- **Maps are indexable**: `someMap['tag']` / `someMap[1]` read and write entries, and `#someMap`
+  reports the count. Only `Array` had element access before, so a `Map` was reachable only through
+  `:get()` / `:set()`.
+- **Class statics are writable**: `Conductor.bpm = 150` on an `import()`ed class used to raise an
+  error (the class metatable had no write handler). Reads always worked; writes do now too.
+- **Methods always return exactly one value**: a method returning null used to push *nothing*, so
+  `nil` couldn't be handled positionally (`select('#', o:f())` was 0). A void return is now `nil`.
+- **Haxe enums cross into Lua** instead of arriving as `nil`; `..` concatenation works on a proxy;
+  cyclic tables (`t.self = t`) passed from a script no longer stack-overflow; a non-string table key
+  no longer risks a crash; and iterating a large proxied array no longer pins a proxy per element.
 ---
 
 

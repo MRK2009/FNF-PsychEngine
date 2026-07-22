@@ -45,6 +45,36 @@ class Convert {
 	static function rawUserdata(L:State, idx:Int):Dynamic
 		return LuaConverter.fromLua(L, idx);
 
+	/**
+	 * The proxy state id owning `L`, installed by `psychlua.LuaProxy`. A wrapped Lua callback captures
+	 * this at CONVERT time (while the state is alive) so it can later check the state is still open
+	 * before dereferencing it -- see the TFUNCTION branch below. `0` means no proxy bridge is active,
+	 * which disables the check (the callback behaves exactly as before).
+	 *
+	 * A `cpp.Callable`, not a Haxe closure, for the same reason as `userdataToHaxe`: `State` is a
+	 * `cpp.RawPointer` and can't be boxed into `Dynamic`.
+	 */
+	public static var stateIdOf:cpp.Callable<(L:State) -> Int> = cpp.Callable.fromStaticFunction(noStateId);
+
+	static function noStateId(L:State):Int
+		return 0;
+
+	/**
+	 * Whether a proxy state is still open, installed by `psychlua.LuaProxy` (a plain `Int` closure, so
+	 * it needs no `cpp.Callable`). A wrapped Lua callback consults this before touching its state; once
+	 * the script's Lua state is closed this returns false and the callback no-ops instead of calling
+	 * `lua_rawgeti` on freed memory (a native crash when a surviving `FlxTimer`/`FlxTween` fires after
+	 * the script unloads). Defaults to "always alive" so non-proxy use is unchanged.
+	 */
+	public static var stateAlive:Int->Bool = function(sid:Int):Bool return true;
+
+	// Guards `convertTable` against self-referential tables (`t.self = t`), which would otherwise
+	// recurse until the native stack overflows. Depth-based rather than a visited set: Lua tables
+	// have no cheap Haxe identity, and real script data never nests anywhere near this deep.
+	static inline var MAX_TABLE_DEPTH:Int = 64;
+
+	static var tableDepth:Int = 0;
+
 	public static inline function toLua(L:State, val:Dynamic):Void
 		LuaConverter.toLua(L, val);
 
@@ -56,7 +86,12 @@ class Convert {
 				// bare LuaFunction; wrap it as a real callable Haxe function.
 				Lua.pushvalue(L, idx);
 				final fn:LuaFunction = LuaConverter.fromLua(L, -1);
+				// Capture the owning state now (it is alive); the callback checks it is still open
+				// before invoking, so a tween/timer that outlives the script can't call into a freed state.
+				final sid:Int = stateIdOf(L);
 				Reflect.makeVarArgs(function(args:Array<Dynamic>):Dynamic {
+					if (sid > 0 && !stateAlive(sid))
+						return null;
 					final res:Array<Dynamic> = fn.call(args);
 					return (res != null && res.length > 0) ? res[0] : null;
 				});
@@ -73,6 +108,24 @@ class Convert {
 	// 1..n integer-keyed tables -> Array. Mirrors hxluajit's convertTable but routes
 	// value conversion through our fromLua so callbacks survive.
 	static function convertTable(L:State, idx:Int):Dynamic {
+		// A table that contains itself (`t.self = t`) would recurse forever; bail past the depth cap.
+		if (tableDepth >= MAX_TABLE_DEPTH)
+			return {};
+		tableDepth++;
+		// Decrement even if an element conversion throws, so a single bad table can't leave the counter
+		// stuck high and quietly truncate every table converted afterwards.
+		var result:Dynamic;
+		try {
+			result = convertTableInner(L, idx);
+		} catch (e:Dynamic) {
+			tableDepth--;
+			throw e;
+		}
+		tableDepth--;
+		return result;
+	}
+
+	static function convertTableInner(L:State, idx:Int):Dynamic {
 		var isArray:Bool = true;
 		var count:Int = 0;
 		iterate(L, idx, function():Void {

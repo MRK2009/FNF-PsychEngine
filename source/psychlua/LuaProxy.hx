@@ -75,6 +75,8 @@ class LuaProxy {
 			setMeta(L, "__index", cpp.Callable.fromStaticFunction(instanceIndex));
 			setMeta(L, "__newindex", cpp.Callable.fromStaticFunction(instanceNewIndex));
 			setMeta(L, "__len", cpp.Callable.fromStaticFunction(instanceLen));
+			setMeta(L, "__eq", cpp.Callable.fromStaticFunction(proxyEq));
+			setMeta(L, "__concat", cpp.Callable.fromStaticFunction(proxyConcat));
 			setMeta(L, "__tostring", cpp.Callable.fromStaticFunction(proxyToString));
 			setMeta(L, "__gc", cpp.Callable.fromStaticFunction(proxyGc));
 		}
@@ -82,7 +84,10 @@ class LuaProxy {
 
 		if (LuaL.newmetatable(L, CLASS_META) == 1) {
 			setMeta(L, "__index", cpp.Callable.fromStaticFunction(classIndex));
+			setMeta(L, "__newindex", cpp.Callable.fromStaticFunction(classNewIndex));
 			setMeta(L, "__call", cpp.Callable.fromStaticFunction(classCall));
+			setMeta(L, "__eq", cpp.Callable.fromStaticFunction(proxyEq));
+			setMeta(L, "__concat", cpp.Callable.fromStaticFunction(proxyConcat));
 			setMeta(L, "__tostring", cpp.Callable.fromStaticFunction(proxyToString));
 			setMeta(L, "__gc", cpp.Callable.fromStaticFunction(proxyGc));
 		}
@@ -99,7 +104,19 @@ class LuaProxy {
 		Lua.pushcfunction(L, cpp.Callable.fromStaticFunction(luaImport));
 		Lua.setglobal(L, "import");
 		Convert.userdataToHaxe = cpp.Callable.fromStaticFunction(unwrapUserdata);
+		// Let wrapped Lua callbacks (Convert's TFUNCTION path) check their state is still open before
+		// firing, so a tween/timer outliving the script can't call into a freed Lua state.
+		Convert.stateIdOf = cpp.Callable.fromStaticFunction(sidHook);
+		Convert.stateAlive = isStateAlive;
 	}
+
+	// Non-inline so it can be taken as a C function pointer (`stateId` itself is inline).
+	static function sidHook(L:cpp.RawPointer<Lua_State>):Int
+		return stateId(L);
+
+	/** Whether a proxy state id is still registered (i.e. its Lua state hasn't been disposed). */
+	public static function isStateAlive(sid:Int):Bool
+		return states.exists(sid);
 
 	// other userdata -> the raw converter (must NOT re-enter Convert.fromLua, which would
 	// loop back here). Stateless; the owning state is read from the userdata itself.
@@ -174,6 +191,18 @@ class LuaProxy {
 					Convert.toLua(L, v); // native 1-based table for the traditional API
 				else
 					pushObject(L, v, INST_META, cached);
+			case TEnum(_):
+				// `Convert` has no enum case and pushes nil, which is indistinguishable from "no such
+				// field". An ephemeral proxy instead round-trips: `tostring()` gives the constructor
+				// name and handing it back to Haxe yields the SAME enum value.
+				//
+				// Only on the direct-access path. The traditional API is deliberately byte-compatible
+				// with upstream Psych, where an enum reads as nil; a stock mod testing `== nil` would
+				// change behaviour if we handed it userdata there.
+				if (proxyContainers)
+					pushObject(L, v, INST_META, false);
+				else
+					Convert.toLua(L, v);
 			default:
 				Convert.toLua(L, v); // anonymous structures / unknowns
 		}
@@ -244,6 +273,57 @@ class LuaProxy {
 		return Convert.fromLua(L, idx);
 	}
 
+	/**
+	 * `==` on two proxies compares the HAXE OBJECTS behind them, not the userdata.
+	 *
+	 * Without this, identity comparison silently lies: every method return and field read of an object
+	 * is pushed as a fresh EPHEMERAL proxy (own handle, own userdata), so `a.shader == a.shader` was
+	 * false even though both sides are the same Haxe instance. Cached proxies happened to compare
+	 * correctly, which made the failure look intermittent rather than systematic.
+	 *
+	 * Lua 5.1 only dispatches `__eq` when both operands share a metatable, so an instance proxy never
+	 * compares equal to a class proxy -- which is correct anyway.
+	 */
+	static function proxyEq(L:cpp.RawPointer<Lua_State>):Int {
+		var a:Dynamic = objAt(L, 1);
+		var b:Dynamic = objAt(L, 2);
+		// Two dead handles are not "equal"; null here means the object is already gone.
+		Lua.pushboolean(L, (a != null && a == b) ? 1 : 0);
+		return 1;
+	}
+
+	/**
+	 * A Lua stack slot as a Haxe field name, or null when the value can't be one.
+	 *
+	 * `lua_tostring` returns NULL for anything that is not a string or a number, and the raw
+	 * `.toString()` on that is unguarded -- so `obj[{}]`, `obj[true]` or `obj[somefunc]` used to push a
+	 * null string straight into `Reflect`. Callers must treat null as "no such key".
+	 */
+	static inline function keyAt(L:cpp.RawPointer<Lua_State>, idx:Int):String {
+		var t:Int = Lua.type(L, idx);
+		if (t != Lua.TSTRING && t != Lua.TNUMBER)
+			return null;
+		var cs:cpp.ConstCharStar = Lua.tostring(L, idx);
+		return (cs == null) ? null : cs.toString();
+	}
+
+	/**
+	 * A Lua stack slot as a Haxe MAP key. Integral numbers are narrowed to `Int` so `IntMap` lookups
+	 * hit (a bare `Convert.fromLua` hands back a Float, which never matches an `IntMap` key).
+	 */
+	static function mapKeyAt(L:cpp.RawPointer<Lua_State>, idx:Int):Dynamic {
+		if (Lua.type(L, idx) == Lua.TNUMBER) {
+			var n:Float = Lua.tonumber(L, idx);
+			var i:Int = Std.int(n);
+			return (i == n) ? (i : Dynamic) : (n : Dynamic);
+		}
+		return unwrap(L, idx);
+	}
+
+	static inline function asMap(obj:Dynamic):haxe.Constraints.IMap<Dynamic, Dynamic> {
+		return (obj is haxe.Constraints.IMap) ? cast obj : null;
+	}
+
 	static function isProxy(L:cpp.RawPointer<Lua_State>, idx:Int):Bool {
 		if (Lua.getmetatable(L, idx) == 0)
 			return false;
@@ -274,7 +354,10 @@ class LuaProxy {
 			// Lua is 1-based; map to the Haxe array's 0-based index so direct
 			// access matches Lua/Psych convention (e.g. arr[1] is the first item).
 			var i:Int = Lua.tointeger(L, 2) - 1;
-			pushHaxe(L, (i >= 0 && i < arr.length) ? arr[i] : null);
+			// EPHEMERAL: a cached element proxy is pinned in the registry for the state's life, so
+			// iterating a large array (e.g. every NoteData in a chart) would leak thousands of proxies.
+			// `__eq` compares the underlying objects, so re-proxying the same element still compares equal.
+			pushHaxe(L, (i >= 0 && i < arr.length) ? arr[i] : null, false);
 			return 1;
 		}
 
@@ -282,7 +365,11 @@ class LuaProxy {
 			return cachedIndex(L, st, obj, false);
 
 		// Ephemeral: no env cache, simple resolve.
-		var key:String = Lua.tostring(L, 2).toString();
+		var key:String = keyAt(L, 2);
+		if (key == null) {
+			Lua.pushnil(L);
+			return 1;
+		}
 		try {
 			var f:Dynamic = Reflect.getProperty(obj, key);
 			if (Reflect.isFunction(f)) {
@@ -291,11 +378,26 @@ class LuaProxy {
 				Lua.pushcclosure(L, cpp.Callable.fromStaticFunction(methodCall), 2);
 				return 1;
 			}
+			if (f == null)
+				f = mapLookup(L, obj);
 			pushHaxe(L, f, false);
 		} catch (e:Dynamic) {
 			Lua.pushnil(L);
 		}
 		return 1;
+	}
+
+	/**
+	 * Map CONTENT for the key in stack slot 2, or null when `obj` isn't a Map.
+	 *
+	 * `pushHaxe` proxies `Map` like any other class, but only `Array` ever got element access -- so
+	 * `someMap['tag']` resolved through `Reflect` (which sees fields, not entries) and was always nil,
+	 * leaving `:get()` as the only way in. Content is consulted only AFTER reflection comes up empty,
+	 * so a map's own methods (`get`/`set`/`exists`/`keys`) still win and nothing that worked breaks.
+	 */
+	static function mapLookup(L:cpp.RawPointer<Lua_State>, obj:Dynamic):Dynamic {
+		var m = asMap(obj);
+		return (m == null) ? null : m.get(mapKeyAt(L, 2));
 	}
 
 	// Cached fast path: classify the key once into the proxy's env, then reuse.
@@ -313,13 +415,25 @@ class LuaProxy {
 		if (et == Lua.TBOOLEAN) {
 			// Known plain field: read its current value (no method machinery).
 			Lua.pop(L, 2);
-			var key:String = Lua.tostring(L, 2).toString();
-			pushHaxe(L, isClass ? Reflect.field(obj, key) : Reflect.getProperty(obj, key));
+			var key:String = keyAt(L, 2);
+			if (key == null) {
+				Lua.pushnil(L);
+				return 1;
+			}
+			var v:Dynamic = isClass ? Reflect.field(obj, key) : Reflect.getProperty(obj, key);
+			if (v == null && !isClass)
+				v = mapLookup(L, obj);
+			pushHaxe(L, v);
 			return 1;
 		}
 		Lua.pop(L, 1); // [env]
 
-		var key:String = Lua.tostring(L, 2).toString();
+		var key:String = keyAt(L, 2);
+		if (key == null) {
+			Lua.pop(L, 1);
+			Lua.pushnil(L);
+			return 1;
+		}
 		try {
 			if (isClass && key == "new") {
 				Lua.pushvalue(L, 1); // self -> [env, self]
@@ -342,6 +456,8 @@ class LuaProxy {
 			Lua.pushboolean(L, 1); // [env, key, true]
 			Lua.rawset(L, -3); // env[key]=true -> [env]
 			Lua.pop(L, 1); // []
+			if (f == null && !isClass)
+				f = mapLookup(L, obj);
 			pushHaxe(L, f);
 		} catch (e:Dynamic) {
 			Lua.pushnil(L);
@@ -365,7 +481,19 @@ class LuaProxy {
 	// without the 5.2-compat build flag (not enabled here).
 	static function instanceLen(L:cpp.RawPointer<Lua_State>):Int {
 		var obj:Dynamic = objAt(L, 1);
-		Lua.pushinteger(L, (obj is Array) ? (obj : Array<Dynamic>).length : 0);
+		if (obj is Array) {
+			Lua.pushinteger(L, (obj : Array<Dynamic>).length);
+			return 1;
+		}
+		var m = asMap(obj);
+		if (m != null) {
+			var n:Int = 0;
+			for (_ in m.keys())
+				n++;
+			Lua.pushinteger(L, n);
+			return 1;
+		}
+		Lua.pushinteger(L, 0);
 		return 1;
 	}
 
@@ -380,7 +508,16 @@ class LuaProxy {
 			return 0;
 		}
 
-		var key:String = Lua.tostring(L, 2).toString();
+		var m = asMap(obj);
+		if (m != null) {
+			// A Map's entries are its content; it has no script-settable fields, so a write is a `set`.
+			m.set(mapKeyAt(L, 2), unwrap(L, 3));
+			return 0;
+		}
+
+		var key:String = keyAt(L, 2);
+		if (key == null)
+			return 0;
 		try {
 			Reflect.setProperty(obj, key, unwrap(L, 3));
 		} catch (e:Dynamic) {
@@ -404,11 +541,13 @@ class LuaProxy {
 
 		var args:Array<Dynamic> = (argPool.length > 0 ? argPool.pop() : []);
 		args.resize(0);
-		for (i in start...nargs + 1)
-			args.push(unwrap(L, i));
 
 		var ret:Dynamic = null;
 		try {
+			// Arg conversion is inside the try: `unwrap` can throw (a cyclic table, a bad value), and
+			// letting that unwind out of a C callback is UB and would strand the pooled `args` buffer.
+			for (i in start...nargs + 1)
+				args.push(unwrap(L, i));
 			ret = Reflect.callMethod(null, f, args); // f already bound to obj (or static)
 		} catch (e:Dynamic) {
 			args.resize(0);
@@ -419,11 +558,11 @@ class LuaProxy {
 		}
 		args.resize(0);
 		argPool.push(args);
-		if (ret != null) {
-			pushHaxe(L, ret, false);
-			return 1;
-		}
-		return 0;
+		// ALWAYS one return value. Pushing nothing for a null result made a nullable return
+		// indistinguishable from a void one at the Lua end: `print(o:f())` printed a blank line and
+		// `select('#', o:f())` was 0, so nil could not be handled positionally.
+		pushHaxe(L, ret, false);
+		return 1;
 	}
 
 	// Simple method closure (ephemeral proxies): upvalues (self userdata, key).
@@ -438,11 +577,12 @@ class LuaProxy {
 
 		var args:Array<Dynamic> = (argPool.length > 0 ? argPool.pop() : []);
 		args.resize(0);
-		for (i in start...nargs + 1)
-			args.push(unwrap(L, i));
 
 		var ret:Dynamic = null;
 		try {
+			// Arg conversion inside the try (see methodCallFast): `unwrap` can throw.
+			for (i in start...nargs + 1)
+				args.push(unwrap(L, i));
 			ret = Reflect.callMethod(obj, Reflect.field(obj, key), args);
 		} catch (e:Dynamic) {
 			args.resize(0);
@@ -453,11 +593,11 @@ class LuaProxy {
 		}
 		args.resize(0);
 		argPool.push(args);
-		if (ret != null) {
-			pushHaxe(L, ret, false);
-			return 1;
-		}
-		return 0;
+		// ALWAYS one return value. Pushing nothing for a null result made a nullable return
+		// indistinguishable from a void one at the Lua end: `print(o:f())` printed a blank line and
+		// `select('#', o:f())` was 0, so nil could not be handled positionally.
+		pushHaxe(L, ret, false);
+		return 1;
 	}
 
 	static function classIndex(L:cpp.RawPointer<Lua_State>):Int {
@@ -487,10 +627,11 @@ class LuaProxy {
 		var nargs:Int = Lua.gettop(L);
 		var args:Array<Dynamic> = (argPool.length > 0 ? argPool.pop() : []);
 		args.resize(0);
-		for (i in start...nargs + 1)
-			args.push(unwrap(L, i));
 		var inst:Dynamic = null;
 		try {
+			// Arg conversion inside the try (see methodCallFast): `unwrap` can throw.
+			for (i in start...nargs + 1)
+				args.push(unwrap(L, i));
 			inst = Type.createInstance(cls, args);
 		} catch (e:Dynamic) {
 			args.resize(0);
@@ -503,6 +644,49 @@ class LuaProxy {
 		argPool.push(args);
 		pushHaxe(L, inst, false); // freshly constructed -> ephemeral
 		return 1;
+	}
+
+	/**
+	 * Static-field WRITE on a class proxy (`Conductor.bpm = 150`).
+	 *
+	 * Without a `__newindex` on `CLASS_META`, Lua 5.1 RAISES on any assignment to class userdata, so
+	 * writing a static was impossible even though reading one worked. Statics use `Reflect.setField`
+	 * (not `setProperty`, which is for instances).
+	 */
+	static function classNewIndex(L:cpp.RawPointer<Lua_State>):Int {
+		var cls:Dynamic = objAt(L, 1);
+		if (cls == null)
+			return 0;
+		var key:String = keyAt(L, 2);
+		if (key == null)
+			return 0;
+		try {
+			Reflect.setField(cls, key, unwrap(L, 3));
+		} catch (e:Dynamic) {
+			#if CRASH_HANDLER backend.CrashHandler.reportScriptError('LuaProxy', 'set static "$key": ${Std.string(e)}'); #end
+			LuaL.error(L, '%s', 'set static "$key": ${Std.string(e)}');
+		}
+		return 0;
+	}
+
+	/**
+	 * `..` on a proxy. Either operand may be the proxy (`"x=" .. obj` or `obj .. "!"`), so both slots
+	 * are stringified: a proxy through its object's `Std.string`, anything else through Lua's own
+	 * `tostring`. Without this, concatenating a proxy raised "attempt to concatenate" despite the
+	 * `__tostring` already installed -- a common shape in exactly the debug prints scripts reach for.
+	 */
+	static function proxyConcat(L:cpp.RawPointer<Lua_State>):Int {
+		Lua.pushstring(L, concatSide(L, 1) + concatSide(L, 2));
+		return 1;
+	}
+
+	static function concatSide(L:cpp.RawPointer<Lua_State>, idx:Int):String {
+		if (Lua.type(L, idx) == Lua.TUSERDATA && isProxy(L, idx)) {
+			var obj:Dynamic = objAt(L, idx);
+			return obj == null ? "null" : Std.string(obj);
+		}
+		var cs:cpp.ConstCharStar = Lua.tostring(L, idx);
+		return (cs == null) ? "" : cs.toString();
 	}
 
 	static function proxyToString(L:cpp.RawPointer<Lua_State>):Int {
@@ -534,6 +718,16 @@ class LuaProxy {
 		}
 		var path:String = Lua.tostring(L, 1).toString();
 		var cls:Dynamic = #if MODS_ALLOWED backend.ModSecurity.safeResolveClass(path) #else Type.resolveClass(path) #end;
+		if (cls == null) {
+			// A bare nil here surfaces much later as "attempt to index a nil value" somewhere unrelated.
+			// Warn at the point of failure instead -- a typo, a class dropped by DCE (see
+			// `_importAnchors`) and one blocked by ModSecurity all land here.
+			var msg:String = 'import("$path") failed: class not found, removed by DCE, or blocked';
+			FlxG.log.warn(msg);
+			#if CRASH_HANDLER backend.CrashHandler.reportScriptError('LuaProxy', msg); #end
+			if (PlayState.instance != null)
+				PlayState.instance.addTextToDebug(msg, 0xFFFF8800);
+		}
 		pushClass(L, cls);
 		return 1;
 	}
