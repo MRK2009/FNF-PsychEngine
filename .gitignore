@@ -30,3 +30,6 @@ art/build_html-debug.bat
 # Q:/Android/signing/; signing.local.xml holds the <certificate> referencing it.
 release.keystore
 signing.local.xml
+
+# TEMP ignore
+art/example-osu-skins/*
