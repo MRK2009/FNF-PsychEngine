@@ -174,8 +174,11 @@ class FreeplayState extends MusicBeatState {
 
 		scanLbl = new UILabel('', 12, 1);
 		uiRoot.content.addChild(scanLbl);
+		// The hint line lists keyboard shortcuts, which say nothing on a touch build.
+		#if !mobile
 		hintLbl = new UILabel(defaultHint(), 13, 1);
 		uiRoot.content.addChild(hintLbl);
+		#end
 	}
 
 	/** Refits the background and re-lays the OpenFL-based Smidr chrome after a window resize. */
@@ -208,8 +211,15 @@ class FreeplayState extends MusicBeatState {
 		infoW = Math.min(400, FlxG.width * 0.36);
 		var infoX:Float = FlxG.width - insetR - infoW;
 
+		// On touch builds the pad's A/B buttons own the bottom-right corner, so the right column stops
+		// above them instead of being covered by them.
+		var actionReserve:Float = 0;
+		#if mobile
+		actionReserve = 150;
+		#end
+
 		var musicBarH:Float = 116;
-		var musicBarY:Float = panelBottom - musicBarH;
+		var musicBarY:Float = panelBottom - actionReserve - musicBarH;
 		infoPanel.setArea(infoX, panelY, infoW, (musicBarY - 14) - panelY);
 		if (musicBar != null)
 			musicBar.setArea(infoX, musicBarY, infoW, musicBarH);
@@ -220,8 +230,10 @@ class FreeplayState extends MusicBeatState {
 
 		scanLbl.x = listX;
 		scanLbl.y = FlxG.height - 52 - insetB;
-		hintLbl.x = listX;
-		hintLbl.y = FlxG.height - 26 - insetB;
+		if (hintLbl != null) {
+			hintLbl.x = listX;
+			hintLbl.y = FlxG.height - 26 - insetB;
+		}
 	}
 
 	function onSearch(q:String):Void {

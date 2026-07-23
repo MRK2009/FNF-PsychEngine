@@ -70,6 +70,13 @@ class OptionsState extends MusicBeatState {
 	static inline var RAIL_BTN_STEP:Int = 58;
 	static inline var ACTION_BTN_H:Int = 40;
 	#end
+	// Space kept under the panels: the keyboard hint line on desktop, a thin margin on touch builds
+	// (which don't draw the hint at all).
+	#if mobile
+	static inline var BOTTOM_PAD:Int = 20;
+	#else
+	static inline var BOTTOM_PAD:Int = 52;
+	#end
 	static inline var ROW_FONT:Int = 16;
 	static inline var RAIL_FONT:Int = 17;
 
@@ -78,6 +85,10 @@ class OptionsState extends MusicBeatState {
 	var curCat:Int = 0;
 
 	var railButtons:Array<UIButton> = [];
+
+	/** Scrolls the category rail: more categories than the panel is tall (mobile row heights especially). **/
+	var railPane:UIScrollPane;
+
 	var pane:UIScrollPane;
 	var headerLabel:UILabel;
 	var descLabel:UILabel;
@@ -188,7 +199,7 @@ class OptionsState extends MusicBeatState {
 		railX = insetL;
 
 		panelY = 72 + insetT;
-		panelH = FlxG.height - panelY - 52 - insetB;
+		panelH = FlxG.height - panelY - BOTTOM_PAD - insetB;
 
 		contentX = railX + RAIL_W + 16;
 		contentW = FlxG.width - contentX - insetR;
@@ -213,17 +224,24 @@ class OptionsState extends MusicBeatState {
 		descLabel.x = contentX + 16;
 		descLabel.y = panelY + 46;
 
-		hintLabel.x = railX;
-		hintLabel.y = FlxG.height - 28 - insetB;
+		if (hintLabel != null) {
+			hintLabel.x = railX;
+			hintLabel.y = FlxG.height - 28 - insetB;
+		}
 
 		pane.resize(contentW - 16, panelH - 84);
 		pane.x = contentX + 8;
 		pane.y = panelY + 72;
 
+		railPane.resize(RAIL_W - 4, panelH - 16);
+		railPane.x = railX + 2;
+		railPane.y = panelY + 8;
 		for (i in 0...railButtons.length) {
-			railButtons[i].x = railX + 10;
-			railButtons[i].y = panelY + 16 + i * RAIL_BTN_STEP;
+			railButtons[i].x = 8;
+			railButtons[i].y = 8 + i * RAIL_BTN_STEP;
 		}
+		railPane.refreshContent(8 + railButtons.length * RAIL_BTN_STEP);
+		ensureRailVisible(curCat);
 
 		rebuildRows(); // reflow the current rows to the new content width
 	}
@@ -247,7 +265,7 @@ class OptionsState extends MusicBeatState {
 		railX = insetL;
 
 		panelY = 72 + insetT;
-		panelH = FlxG.height - panelY - 52 - insetB;
+		panelH = FlxG.height - panelY - BOTTOM_PAD - insetB;
 
 		contentX = railX + RAIL_W + 16;
 		contentW = FlxG.width - contentX - insetR;
@@ -284,26 +302,49 @@ class OptionsState extends MusicBeatState {
 		descLabel.y = panelY + 46;
 		uiRoot.content.addChild(descLabel);
 
+		// The hint line lists keyboard shortcuts, which say nothing on a touch build.
+		#if !mobile
 		hintLabel = new UILabel('', 14, 2);
 		hintLabel.x = railX;
 		hintLabel.y = FlxG.height - 28 - insetB;
 		uiRoot.content.addChild(hintLabel);
+		#end
 
 		pane = new UIScrollPane(contentW - 16, panelH - 84);
 		pane.x = contentX + 8;
 		pane.y = panelY + 72;
 		uiRoot.content.addChild(pane);
 
+		// The rail lives in its own scroll pane so a tall category list (or the taller mobile rows)
+		// scrolls inside the panel instead of spilling past its bottom edge.
+		railPane = new UIScrollPane(RAIL_W - 4, panelH - 16);
+		railPane.x = railX + 2;
+		railPane.y = panelY + 8;
+		uiRoot.content.addChild(railPane);
+
 		railButtons = [];
 		for (i in 0...categories.length) {
 			var idx:Int = i;
 			var btn:UIButton = new UIButton(categories[i].name, RAIL_W - 20, RAIL_BTN_H, function() selectCategory(idx));
 			btn.fontSize = RAIL_FONT;
-			btn.x = railX + 10;
-			btn.y = panelY + 16 + i * RAIL_BTN_STEP;
-			uiRoot.content.addChild(btn);
+			btn.x = 8;
+			btn.y = 8 + i * RAIL_BTN_STEP;
+			railPane.content.addChild(btn);
 			railButtons.push(btn);
 		}
+		railPane.refreshContent(8 + categories.length * RAIL_BTN_STEP);
+	}
+
+	/** Scrolls the rail so the given category's button is fully inside the pane. **/
+	function ensureRailVisible(i:Int):Void {
+		if (railPane == null || i < 0 || i >= railButtons.length)
+			return;
+		var top:Float = 8 + i * RAIL_BTN_STEP;
+		var bottom:Float = top + RAIL_BTN_H;
+		if (top < railPane.scrollY)
+			railPane.setScroll(top - 8);
+		else if (bottom > railPane.scrollY + railPane.h)
+			railPane.setScroll(bottom - railPane.h + 8);
 	}
 
 	/**
@@ -316,6 +357,7 @@ class OptionsState extends MusicBeatState {
 		curRow = 0;
 		rebuildRows();
 		pane.setScroll(0);
+		ensureRailVisible(i);
 		updateHint();
 	}
 
@@ -536,6 +578,8 @@ class OptionsState extends MusicBeatState {
 
 	/** Updates the bottom hint line for the current focus depth. **/
 	function updateHint():Void {
+		if (hintLabel == null)
+			return;
 		hintLabel.text = onSidebar ? 'Up/Down  Category      Enter / Right  Open      /  Search      Esc  Exit' : 'Up/Down  Move      Left/Right  Change      Enter  Toggle / Open      Reset  Default      /  Search      Esc  Back';
 	}
 
@@ -1053,8 +1097,9 @@ class OptionsState extends MusicBeatState {
 
 	/** Saves settings and returns to gameplay (when opened from a song) or the main menu. **/
 	function exitState():Void {
-		#if desktop
-		// A restart-required setting changed (e.g. Audio Buffer): offer to relaunch before leaving.
+		// A restart-required setting changed (e.g. Audio Buffer). Desktop can relaunch itself; Android
+		// can't, so it says so and offers to close the app for a manual restart.
+		#if (desktop || android)
 		if (ClientPrefs.data.audioBuffer != backend.ALSoftConfig.appliedBuffer) {
 			showRestartPrompt();
 			return;
@@ -1075,32 +1120,59 @@ class OptionsState extends MusicBeatState {
 			MusicBeatState.switchState(new MainMenuState());
 	}
 
-	#if desktop
-	/** Asks whether to relaunch now so a restart-required setting takes effect; "Later" exits normally. **/
+	#if (desktop || android)
+	/**
+		Tells the player a restart-required setting won't take effect yet, and offers to do the restart:
+		desktop relaunches itself, Android can only close the app for a manual relaunch. "Later" exits
+		normally. Measured from the theme so the mobile preset's bigger text still fits.
+	**/
 	function showRestartPrompt():Void {
-		var modal:UIModal = new UIModal('Restart Required', 460, 200);
+		final pad:Float = UITheme.px(20);
+		final gap:Float = UITheme.px(12);
+		final titleH:Float = UITheme.px(40);
+		final btnH:Float = UITheme.px(44);
 
-		var msg:UILabel = new UILabel('Audio Buffer only takes effect after a restart.\nRestart now to apply it?', 15, 2);
-		msg.x = 24;
-		msg.y = 12;
+		var panelW:Float = Math.min(560, FlxG.width - 80);
+		var innerW:Float = panelW - pad * 2;
+		var modal:UIModal = new UIModal('Restart Required', panelW, titleH + btnH + pad * 3);
+
+		#if android
+		var text:String = 'Audio Buffer only takes effect after the app is restarted.\nClose the game now to apply it?';
+		var applyLabel:String = 'Close Game';
+		#else
+		var text:String = 'Audio Buffer only takes effect after a restart.\nRestart now to apply it?';
+		var applyLabel:String = 'Restart Now';
+		#end
+
+		var msg:UILabel = new UILabel(text, 15, 2);
+		msg.wrapWidth = innerW;
+		var msgH:Float = msg.measure();
+		msg.x = pad;
+		msg.y = 0;
 		modal.body.addChild(msg);
 
-		var restart:UIButton = new UIButton('Restart Now', 190, 38, function():Void {
+		var btnW:Float = (innerW - gap) / 2;
+		var apply:UIButton = new UIButton(applyLabel, btnW, btnH, function():Void {
 			ClientPrefs.saveSettings();
+			#if android
+			Sys.exit(0);
+			#else
 			CoolUtil.restartGame();
+			#end
 		}, true);
-		restart.x = 24;
-		restart.y = 100;
-		modal.body.addChild(restart);
+		apply.x = pad;
+		apply.y = msgH + pad;
+		modal.body.addChild(apply);
 
-		var later:UIButton = new UIButton('Later', 190, 38, function():Void {
+		var later:UIButton = new UIButton('Later', btnW, btnH, function():Void {
 			modal.close();
 			doExit();
 		});
-		later.x = 232;
-		later.y = 100;
+		later.x = pad + btnW + gap;
+		later.y = apply.y;
 		modal.body.addChild(later);
 
+		modal.resize(panelW, titleH + msgH + pad * 2 + btnH);
 		modal.open();
 	}
 	#end
