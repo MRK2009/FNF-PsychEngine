@@ -876,8 +876,8 @@ class OptionsState extends MusicBeatState {
 					ModSecurityChecksSubState.commit);
 			#end
 			#if mobile
-			case 'mobile':
-				openSubState(new mobile.options.MobileOptionsSubState());
+			case 'hitboxColors':
+				openSubState(new mobile.options.HitboxColorSubState());
 			#end
 			default:
 		}

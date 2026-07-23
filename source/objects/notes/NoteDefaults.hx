@@ -93,6 +93,31 @@ class NoteDefaults {
 		return globalRgbShaders[noteData];
 	}
 
+	/**
+		The resolved `[main, border, shadow]` RGB triple for a lane, matching exactly what receptors and
+		notes render: the active skin's shipped palette first (unless the player is overriding skin colours),
+		then the multikey/player palette, then the pixel/normal arrow-colour prefs. Unlike
+		`initializeGlobalRGBShader` this touches no shared cache, so menus and overlays (e.g. the mobile
+		Hitbox) can read a lane's colour with no gameplay side effects.
+		@param column the 0-based lane
+	**/
+	public static function resolveLaneColors(column:Int):Array<FlxColor> {
+		var arr:Array<FlxColor> = backend.NoteSkinConfig.skinNoteColors(column);
+		if (arr == null) {
+			if (Mania.current != Mania.DEFAULT)
+				arr = Mania.getColors(Mania.current)[column];
+			else
+				arr = (!PlayState.isPixelStage) ? ClientPrefs.data.arrowRGB[column] : ClientPrefs.data.arrowRGBPixel[column];
+		}
+		return arr;
+	}
+
+	/** The primary (Main channel) colour of a lane, i.e. the arrow's dominant tint. **/
+	public static function resolveLaneColor(column:Int):FlxColor {
+		var arr:Array<FlxColor> = resolveLaneColors(column);
+		return (arr != null && arr.length > 0) ? arr[0] : 0xFFFFFFFF;
+	}
+
 	/** The skin postfix derived from the user's note-skin pref (empty for the default skin). **/
 	public static function getNoteSkinPostfix():String {
 		var skin:String = '';

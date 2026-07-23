@@ -121,6 +121,22 @@ import states.TitleState;
 	public var controlsAlpha:Float = 0.6;
 	public var vibration:Bool = true;
 	public var pauseButton:Bool = true;
+	// Mobile gameplay hitbox (the full-lane touch overlay). All spatial values are fractions of the
+	// screen so they hold across resolutions/aspect ratios; see mobile.input.Hitbox.
+	public var hitboxStyle:String = 'Fill'; // 'Fill' | 'Outline'
+	public var hitboxWidth:Float = 1.0; // fraction of screen width the lane strip covers (centered)
+	public var hitboxHeight:Float = 1.0; // fraction of screen height each lane covers
+	public var hitboxPosition:String = 'Bottom'; // vertical anchor when height < 1: 'Top' | 'Center' | 'Bottom'
+	public var hitboxOverlap:Float = 0.0; // 0..0.9, how far each lane's touch area extends into its neighbours
+	public var hitboxIdleAlpha:Float = 0.18; // resting opacity
+	public var hitboxPressAlpha:Float = 0.45; // opacity while a lane is held
+	// 'Noteskin' syncs each lane to the note colour it plays (following skin palettes and colour
+	// overrides); 'Custom' uses the per-lane colours below instead. Edited via HitboxColorSubState.
+	public var hitboxColorSource:String = 'Noteskin';
+	public var hitboxColors:Array<FlxColor> = [
+		0xFFC24B99, 0xFF00FFFF, 0xFF12FA05, 0xFFF9393F,
+		0xFFFFD700, 0xFFFF8C00, 0xFFFFFFFF, 0xFF9B59B6, 0xFF1ABC9C
+	];
 	public var gameplaySettings:Map<String, Dynamic> = [
 		'scrollspeed' => 1.0,
 		'scrolltype' => 'multiplicative',

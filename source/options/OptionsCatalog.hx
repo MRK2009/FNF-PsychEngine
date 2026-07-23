@@ -44,6 +44,9 @@ class OptionsCatalog {
 			{name: phrase('Freeplay'), desc: 'Freeplay menu extras.', rows: freeplayRows()},
 			{name: phrase('Controls'), desc: 'Rebind keyboard / controller controls.', rows: [Action('Rebind...', 'Rebind keyboard / controller controls.',
 				'controls')]},
+			#if mobile
+			{name: phrase('Mobile'), desc: 'On-screen controls and the gameplay hitbox.', rows: mobileRows()},
+			#end
 			{name: phrase('System'), desc: 'Engine, updates and mod behavior.', rows: systemRows()}
 		];
 		return list;
@@ -430,12 +433,45 @@ class OptionsCatalog {
 		#if TRANSLATIONS_ALLOWED
 		rows.push(Action('Language...', 'Change the game language.', 'language'));
 		#end
-
-		#if mobile
-		rows.push(Action('Mobile...', 'Mobile-specific controls and options.', 'mobile'));
-		#end
 		return rows;
 	}
+
+	#if mobile
+	/**
+		On-screen control settings: touch-button opacity/vibration, then the gameplay Hitbox (the full-lane
+		touch overlay) look/reach, and a lane-colour section. The Hitbox spatial values are fractions of the
+		screen; lane colours default to the note colour each lane plays and can be overridden per lane via
+		the `hitboxColors` editor (Action 'hitboxColors').
+	**/
+	static function mobileRows():Array<OptionRow> {
+		var rows:Array<OptionRow> = [];
+
+		rows.push(Setting(percentMin('Controls Opacity', 'How visible the on-screen buttons are.', 'controlsAlpha', 0.1)));
+		rows.push(Setting(new Option('Vibration', 'Vibrate on note hits and misses.', 'vibration', BOOL)));
+		#if android
+		rows.push(Setting(new Option('Pause Button', 'Show an on-screen Pause button during gameplay.\nWhen off, pause with the system Back button/gesture.',
+			'pauseButton', BOOL)));
+		#end
+
+		rows.push(Section(phrase('Hitbox')));
+		rows.push(Setting(new Option('Hitbox Style', 'How the gameplay lanes are drawn: solid Fill or just an Outline.', 'hitboxStyle', STRING,
+			['Fill', 'Outline'])));
+		rows.push(Setting(percentMin('Hitbox Width', 'How much of the screen width the lanes cover, centered horizontally.', 'hitboxWidth', 0.1)));
+		rows.push(Setting(percentMin('Hitbox Height', 'How much of the screen height each lane covers.', 'hitboxHeight', 0.1)));
+		rows.push(Setting(new Option('Hitbox Position', 'Where the lanes sit vertically when they are shorter than the screen.', 'hitboxPosition', STRING,
+			['Bottom', 'Center', 'Top'])));
+		rows.push(Setting(percentMin('Hitbox Overlap', "How far each lane's touch area extends into its neighbours.", 'hitboxOverlap', 0.0, 0.9)));
+		rows.push(Setting(percentMin('Hitbox Opacity', 'Resting opacity of the gameplay lanes.', 'hitboxIdleAlpha', 0.05)));
+		rows.push(Setting(percentMin('Hitbox Press Opacity', 'Opacity of a lane while it is being held.', 'hitboxPressAlpha', 0.1)));
+
+		rows.push(Section(phrase('Lane Colours')));
+		rows.push(Action('Edit Lane Colours...', 'Open the colour picker to set each lane\'s custom colour.', 'hitboxColors'));
+		rows.push(Setting(new Option('Lane Colour Source',
+			'Noteskin: each lane matches the note colour it plays (following skin palettes and overrides).\nCustom: use the colours from the editor above.',
+			'hitboxColorSource', STRING, ['Noteskin', 'Custom'])));
+		return rows;
+	}
+	#end
 
 	/**
 		Builds an Option backed by the `ClientPrefs.data.gameplaySettings` map (session modifiers)
@@ -503,6 +539,23 @@ class OptionsCatalog {
 		o.maxValue = 1;
 		o.changeValue = 0.1;
 		o.decimals = 1;
+		return o;
+	}
+
+	/**
+		A PERCENT (0..1) option with a custom minimum (and optional maximum), for values that shouldn't
+		reach 0 or a full 100% - e.g. the mobile Hitbox size/opacity/overlap sliders.
+		@param name the row label
+		@param desc the row description
+		@param variable the backing `ClientPrefs` field
+		@param min the minimum fraction
+		@param max the maximum fraction (defaults to 1)
+		@return the configured option
+	**/
+	static function percentMin(name:String, desc:String, variable:String, min:Float, max:Float = 1):Option {
+		var o:Option = new Option(name, desc, variable, PERCENT);
+		o.minValue = min;
+		o.maxValue = max;
 		return o;
 	}
 
