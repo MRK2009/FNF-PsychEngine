@@ -861,7 +861,7 @@ class OptionsState extends MusicBeatState {
 			case 'controls':
 				openControlsModal();
 			case 'noteColors':
-				openSubState(new NotesColorSubState());
+				MusicBeatState.switchState(new NotesColorState());
 			case 'noteOffset':
 				MusicBeatState.switchState(new NoteOffsetState());
 			case 'fpsSettings':
