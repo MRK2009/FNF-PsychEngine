@@ -1299,6 +1299,11 @@ class NoteSkinConfig {
 		return s;
 	}
 
+	/** Whether a cached built atlas still has a live backing bitmap (see the GPU-caching note in applyAnims). **/
+	static inline function builtAlive(b:BuiltAnims):Bool {
+		return b != null && b.frames != null && b.frames.parent != null && b.frames.parent.bitmap != null;
+	}
+
 	public static function applyAnims(sprite:flixel.FlxSprite, anims:Array<SkinAnim>):Float {
 		var cacheKey:String = [
 			for (a in anims)
@@ -1306,6 +1311,14 @@ class NoteSkinConfig {
 				+ a.keys.join(',')
 		].join('|');
 		var built:BuiltAnims = animCache.get(cacheKey);
+
+		// A cached atlas can outlive its bitmap: GPU caching (cacheOnGPU) disposes a persisted graphic's
+		// CPU BitmapData after upload, so `built.frames.parent.bitmap` goes null. Assigning that to a
+		// sprite null-refs inside `set_frames`. Drop the dead entry and rebuild.
+		if (built != null && !builtAlive(built)) {
+			animCache.remove(cacheKey);
+			built = null;
+		}
 
 		if (built == null) {
 			built = build(anims, cacheKey);
@@ -1362,6 +1375,11 @@ class NoteSkinConfig {
 		}
 
 		var graphic:FlxGraphic = FlxGraphic.fromBitmapData(sheet, false, cacheKey);
+		// `fromBitmapData` returns any existing graphic cached under this key -- if a previous one had its
+		// bitmap disposed (GPU caching), it hands back a dead graphic and ignores our fresh sheet. Detect
+		// that and build a unique graphic from the sheet instead so the frames have a live bitmap.
+		if (graphic == null || graphic.bitmap == null)
+			graphic = FlxGraphic.fromBitmapData(sheet, true);
 		graphic.persist = true;
 		graphic.destroyOnNoUse = false;
 
