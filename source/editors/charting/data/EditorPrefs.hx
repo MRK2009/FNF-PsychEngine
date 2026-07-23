@@ -9,7 +9,7 @@ import flixel.FlxG;
 final class EditorPrefs {
 	/** Bumped whenever the default values change; a stale saved version forces a one-time reset to
 		the new defaults (so default changes actually reach users who already have a saved profile). **/
-	public static inline var PREFS_VERSION:Int = 2;
+	public static inline var PREFS_VERSION:Int = 3;
 
 	/** Waveform overlay toggle. **/
 	public static var waveform:Bool = true;
@@ -38,6 +38,10 @@ final class EditorPrefs {
 
 	/** Persisted grid snap index (into `SnapGrid.SNAPS`). **/
 	public static var snapIndex:Int = 3;
+
+	/** Free grid snapping (the default, legacy feel): quantize to the drawn grid row at the current
+		zoom instead of the fixed `snapIndex` division, so every visible cell is placeable. **/
+	public static var gridSnap:Bool = true;
 
 	/** Persisted grid zoom index. **/
 	public static var zoomIndex:Int = 2;
@@ -122,6 +126,8 @@ final class EditorPrefs {
 			showHiddenLines = d.showHiddenLines;
 		if (d.snapIndex != null)
 			snapIndex = d.snapIndex;
+		if (d.gridSnap != null)
+			gridSnap = d.gridSnap;
 		if (d.zoomIndex != null)
 			zoomIndex = d.zoomIndex;
 		if (d.uiScale != null)
@@ -167,6 +173,7 @@ final class EditorPrefs {
 			combinedDock: combinedDock,
 			showHiddenLines: showHiddenLines,
 			snapIndex: snapIndex,
+			gridSnap: gridSnap,
 			zoomIndex: zoomIndex,
 			uiScale: uiScale,
 			hitsoundP: hitsoundP,

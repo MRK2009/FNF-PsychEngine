@@ -232,7 +232,7 @@ class MobileChartingState extends MobileEditorBase {
 		shell.addLeft('FILE', openFilePage, true);
 
 		typeBtn = shell.addRight(typeLabel(), openTypePage);
-		snapBtn = shell.addRight('SNAP ${snap.label()}', openSnapPage);
+		snapBtn = shell.addRight(snapLabel(), openSnapPage);
 		shell.addRight('EVENTS', openEventsPage);
 		shell.railGap(false);
 		multiBtn = shell.addRight('MULTI: OFF', toggleMulti);
@@ -535,6 +535,26 @@ class MobileChartingState extends MobileEditorBase {
 		updateStatus();
 	}
 
+	/** The division matching one drawn grid row (free grid snapping quantizes to it). **/
+	function gridSnapDiv():Int {
+		var div:Int = Math.round(16 * ((noteField != null) ? noteField.zoom : 1));
+		return (div < 1) ? 1 : div;
+	}
+
+	/** The division every placement/drag op uses: the drawn grid row, or the fixed snap when picked. **/
+	inline function activeSnap():Int {
+		return EditorPrefs.gridSnap ? gridSnapDiv() : snap.value;
+	}
+
+	inline function snapLabel():String {
+		return EditorPrefs.gridSnap ? 'SNAP GRID' : 'SNAP ${snap.label()}';
+	}
+
+	function updateSnapButton():Void {
+		if (snapBtn != null)
+			snapBtn.label = snapLabel();
+	}
+
 	function openSnapPage():Void {
 		shell.openPage('SNAP', function(pane:UIScrollPane):Float {
 			var w:Float = shell.pageWidth();
@@ -542,14 +562,25 @@ class MobileChartingState extends MobileEditorBase {
 			var x:Float = 0;
 			var y:Float = 4;
 			var col:Int = 0;
+			var gridChip:UIButton = new UIButton('GRID', w, 56, function() {
+				EditorPrefs.gridSnap = true;
+				updateSnapButton();
+				shell.closeDrawer();
+			}, EditorPrefs.gridSnap);
+			gridChip.fontSize = 16;
+			gridChip.x = 0;
+			gridChip.y = y;
+			pane.content.addChild(gridChip);
+			y += 68;
 			for (i in 0...SnapGrid.SNAPS.length) {
 				var idx:Int = i;
 				var chip:UIButton = new UIButton('1/${SnapGrid.SNAPS[i]}', chipW, 56, function() {
 					snap.select(idx);
 					EditorPrefs.snapIndex = snap.index;
-					snapBtn.label = 'SNAP ${snap.label()}';
+					EditorPrefs.gridSnap = false;
+					updateSnapButton();
 					shell.closeDrawer();
-				}, i == snap.index);
+				}, !EditorPrefs.gridSnap && i == snap.index);
 				chip.fontSize = 16;
 				chip.x = x;
 				chip.y = y;
@@ -1054,10 +1085,10 @@ class MobileChartingState extends MobileEditorBase {
 		var line:Int = noteField.laneStrumLine(lane);
 		if (line < 0) {
 			// A valid lane with no strumline is the event lane.
-			tapEventLane(wy);
+			tapEventLane(wx, wy);
 			return;
 		}
-		var t:Float = model.floorTime(noteField.timeAtY(wy), snap.value);
+		var t:Float = model.floorTime(noteField.timeAtY(wy), activeSnap());
 		if (t < 0)
 			t = 0;
 		undoStack.snapshot(model, 'Place Note');
@@ -1066,24 +1097,24 @@ class MobileChartingState extends MobileEditorBase {
 	}
 
 	/** Event lane: tap an existing event to edit it, or place the chosen event type on an empty spot. **/
-	function tapEventLane(wy:Float):Void {
-		var t:Float = model.floorTime(noteField.timeAtY(wy), snap.value);
-		if (t < 0)
-			t = 0;
-		var unit:Float = model.snapMs(model.sectionAt(t), snap.value);
-		var found:Array<Dynamic> = [];
-		model.eventsBetween(t - 1, t + unit - 1, found);
-		if (found.length > 0) {
-			openEventEditorPage(found[0]);
+	function tapEventLane(wx:Float, wy:Float):Void {
+		// existing events are picked where their mark is drawn, so off-grid ones stay tappable
+		var hit:Array<Dynamic> = noteField.eventUnder(wx, wy);
+		if (hit != null) {
+			openEventEditorPage(hit);
 			return;
 		}
 		if (placeEvent == '') {
 			UIToast.show('Pick an event type (EVENTS)');
 			return;
 		}
+		var t:Float = model.floorTime(noteField.timeAtY(wy), activeSnap());
+		if (t < 0)
+			t = 0;
 		undoStack.snapshot(model, 'Place Event');
 		model.addEvent(t, placeEvent, '', '');
-		model.eventsBetween(t - 1, t + unit - 1, found);
+		var found:Array<Dynamic> = [];
+		model.eventsBetween(t - 1, t + 1, found);
 		if (found.length > 0)
 			openEventEditorPage(found[0]);
 	}
@@ -1099,15 +1130,10 @@ class MobileChartingState extends MobileEditorBase {
 		// Event lane long-press: remove the event group there.
 		var lane:Int = noteField.laneAt(worldX(x));
 		if (lane >= 0 && noteField.laneStrumLine(lane) < 0) {
-			var t:Float = model.floorTime(noteField.timeAtY(worldY(y)), snap.value);
-			if (t < 0)
-				t = 0;
-			var unit:Float = model.snapMs(model.sectionAt(t), snap.value);
-			var found:Array<Dynamic> = [];
-			model.eventsBetween(t - 1, t + unit - 1, found);
-			if (found.length > 0) {
+			var found:Array<Dynamic> = noteField.eventUnder(worldX(x), worldY(y));
+			if (found != null) {
 				undoStack.snapshot(model, 'Remove Event');
-				model.chart.events.remove(found[0]);
+				model.chart.events.remove(found);
 				model.markDirty();
 				UIToast.show('Event removed');
 			}
@@ -1150,7 +1176,7 @@ class MobileChartingState extends MobileEditorBase {
 	function onDragMove(dx:Float, dy:Float, x:Float, y:Float):Void {
 		if (dragNote == null)
 			return;
-		var t:Float = model.floorTime(noteField.timeAtY(worldY(y)), snap.value);
+		var t:Float = model.floorTime(noteField.timeAtY(worldY(y)), activeSnap());
 		if (t < 0)
 			t = 0;
 		if (dragSustain) {
@@ -1215,7 +1241,7 @@ class MobileChartingState extends MobileEditorBase {
 		var i:Int = selection.notes.length;
 		while (--i >= 0) {
 			var n:SongNote = selection.notes[i];
-			var unit:Float = model.snapMs(model.sectionAt(n.time), snap.value);
+			var unit:Float = model.snapMs(model.sectionAt(n.time), activeSnap());
 			var len:Float = n.length + dir * unit;
 			n.length = (len > 0) ? len : 0;
 		}

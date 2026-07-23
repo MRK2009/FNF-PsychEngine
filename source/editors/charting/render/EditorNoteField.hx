@@ -202,6 +202,11 @@ final class EditorNoteField {
 	final sectionLines:Array<FlxSprite> = [];
 	final eventMarks:Array<FlxSprite> = [];
 
+	/** The event group each live mark in `eventMarks` is showing (parallel, valid up to `usedEventMarks`). **/
+	final eventMarkGroups:Array<Dynamic> = [];
+
+	var usedEventMarks:Int = 0;
+
 	final headPool:Array<NoteSprite> = [];
 	final sustainPool:Array<FlxSprite> = [];
 	final dataPool:Array<NoteData> = [];
@@ -819,6 +824,26 @@ final class EditorNoteField {
 		return null;
 	}
 
+	/**
+		The event group whose mark is under the pointer, or `null`. Pixel-based like `noteUnder`, so an
+		off-grid event is picked exactly where it is drawn no matter what the placement snap is.
+		@param gx the pointer x in field space
+		@param gy the pointer y in field space
+		@return the `[time, subEvents]` group, or `null`
+	**/
+	public function eventUnder(gx:Float, gy:Float):Array<Dynamic> {
+		if (laneX.length == 0 || gx < laneX[0] || gx >= laneX[0] + cell)
+			return null;
+		var pad:Float = 4;
+		var i:Int = usedEventMarks;
+		while (--i >= 0) {
+			var mark:FlxSprite = eventMarks[i];
+			if (mark.visible && gy >= mark.y - pad && gy < mark.y + mark.height + pad)
+				return eventMarkGroups[i];
+		}
+		return null;
+	}
+
 	/** Which grip the last `grabUnder` hit landed on: `true` = stretch the sustain, `false` = move. **/
 	public var grabbedTail(default, null):Bool = false;
 
@@ -1228,9 +1253,11 @@ final class EditorNoteField {
 				}
 				showEventLabel(text, mark.x - UITheme.px(6), rowTop + cell / 2);
 			}
+			eventMarkGroups[used] = group2;
 			used++;
 			i++;
 		}
+		usedEventMarks = used;
 		i = eventMarks.length;
 		while (--i >= used)
 			eventMarks[i].exists = eventMarks[i].visible = false;

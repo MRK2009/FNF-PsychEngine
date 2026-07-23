@@ -475,7 +475,30 @@ class ChartingState extends MusicBeatState {
 
 	/** One snap unit expressed in 16th-note steps (snap 1/16 = 1 step, 1/4 = 4 steps). **/
 	inline function snapSteps():Float {
-		return 16 / snap.value;
+		return 16 / activeSnap();
+	}
+
+	/**
+		The division matching one drawn grid row at the current zoom (1x = one step = 1/16), i.e. what
+		free grid snapping quantizes to - every cell you can see is a placement target.
+	**/
+	function gridSnapDiv():Int {
+		var div:Int = Math.round(16 * ((noteField != null) ? noteField.zoom : ZOOM_VALUES[zoomIndex]));
+		return (div < 1) ? 1 : div;
+	}
+
+	/**
+		The division every placement/scroll/quantize op uses: the visible grid row while free grid
+		snapping is on (the default, legacy feel), else the snap chip's fixed division.
+	**/
+	inline function activeSnap():Int {
+		return EditorPrefs.gridSnap ? gridSnapDiv() : snap.value;
+	}
+
+	/** The snap chip's readout: the grid mode also shows the row division it currently resolves to. **/
+	function updateSnapChip():Void {
+		if (shell != null && shell.snapChip != null)
+			shell.snapChip.label = EditorPrefs.gridSnap ? 'Snap Grid (1/${gridSnapDiv()})' : 'Snap ${snap.label()}';
 	}
 
 	function refreshSectionPanel():Void {
@@ -551,7 +574,7 @@ class ChartingState extends MusicBeatState {
 			{title: "Help", items: helpMenu}
 		]);
 
-		shell.snapChip.label = 'Snap ${snap.label()}';
+		updateSnapChip();
 		shell.zoomChip.label = 'Zoom ${ZOOM_LABELS[zoomIndex]}';
 		shell.rateChip.label = 'Rate ${RATE_LABELS[rateIndex]}';
 		shell.snapChip.onClick = wrapSnap;
@@ -719,16 +742,46 @@ class ChartingState extends MusicBeatState {
 			shell.rail.select(pos);
 	}
 
+	/**
+		Steps through the snap selector, which treats free grid snapping as the entry below the
+		coarsest division: stepping down off `1/4` lands on Grid, stepping up off Grid re-enters at `1/4`.
+	**/
 	function cycleSnap(dir:Int):Void {
+		if (EditorPrefs.gridSnap) {
+			if (dir > 0)
+				setSnapDiv(0);
+			return;
+		}
+		if (dir < 0 && snap.index == 0) {
+			setGridSnap(true);
+			return;
+		}
 		snap.cycle(dir);
-		EditorPrefs.snapIndex = snap.index;
-		shell.snapChip.label = 'Snap ${snap.label()}';
+		setSnapDiv(snap.index);
 	}
 
+	/** Left-click the chip: Grid -> 1/4 -> ... -> 1/192 -> Grid. **/
 	function wrapSnap():Void {
-		snap.select((snap.index + 1) % SnapGrid.SNAPS.length);
+		if (EditorPrefs.gridSnap)
+			setSnapDiv(0);
+		else if (snap.index >= SnapGrid.SNAPS.length - 1)
+			setGridSnap(true);
+		else
+			setSnapDiv(snap.index + 1);
+	}
+
+	/** Selects a fixed division (leaving free grid snapping). **/
+	function setSnapDiv(idx:Int):Void {
+		snap.select(idx);
 		EditorPrefs.snapIndex = snap.index;
-		shell.snapChip.label = 'Snap ${snap.label()}';
+		EditorPrefs.gridSnap = false;
+		updateSnapChip();
+	}
+
+	/** Toggles free grid snapping (placement follows the drawn rows instead of a fixed division). **/
+	function setGridSnap(on:Bool):Void {
+		EditorPrefs.gridSnap = on;
+		updateSnapChip();
 	}
 
 	function cycleZoom(dir:Int):Void {
@@ -745,6 +798,9 @@ class ChartingState extends MusicBeatState {
 		shell.zoomChip.label = 'Zoom ${ZOOM_LABELS[zoomIndex]}';
 		if (noteField != null)
 			noteField.setZoom(ZOOM_VALUES[zoomIndex]);
+		// free grid snapping follows the rows, so its readout changes with the zoom
+		if (EditorPrefs.gridSnap)
+			updateSnapChip();
 	}
 
 	function cycleRate(dir:Int):Void {
@@ -764,13 +820,15 @@ class ChartingState extends MusicBeatState {
 	/** Right-click a value chip: a checkable list of every option, picked directly. **/
 	function openSnapMenu():Void {
 		var items:Array<UIMenuItem> = [];
+		items.push({label: 'Grid (free)', checked: EditorPrefs.gridSnap, onSelect: function():Void setGridSnap(true)});
+		items.push({separator: true});
 		for (i in 0...SnapGrid.SNAPS.length) {
 			var idx:Int = i;
-			items.push({label: '1/${SnapGrid.SNAPS[i]}', checked: (i == snap.index), onSelect: function():Void {
-				snap.select(idx);
-				EditorPrefs.snapIndex = snap.index;
-				shell.snapChip.label = 'Snap ${snap.label()}';
-			}});
+			items.push({
+				label: '1/${SnapGrid.SNAPS[i]}',
+				checked: (!EditorPrefs.gridSnap && i == snap.index),
+				onSelect: function():Void setSnapDiv(idx)
+			});
 		}
 		UIContextMenu.open(FlxG.mouse.x, FlxG.mouse.y, items);
 	}
@@ -1831,6 +1889,9 @@ class ChartingState extends MusicBeatState {
 		flow.add(new UIButton("Keybinds...", colW, UITheme.px(28), openKeybindsModal));
 		flow.add(new UIButton("Open Autosave", colW, UITheme.px(28), openNewestAutosave));
 		flow.add(new UICheckbox("Combined Dock", colW, EditorPrefs.combinedDock, function(v:Bool):Void setCombinedDock(v)));
+		var freeGrid:UICheckbox = new UICheckbox("Free Grid Snap", colW, EditorPrefs.gridSnap, function(v:Bool):Void setGridSnap(v));
+		freeGrid.tooltip = "Place on the drawn grid rows at any zoom instead of the fixed Snap division";
+		flow.add(freeGrid);
 		var snapGhost:UICheckbox = new UICheckbox("Snap Region Marker", colW, EditorPrefs.snapRegionGhost,
 			function(v:Bool):Void EditorPrefs.snapRegionGhost = v);
 		snapGhost.tooltip = "Highlight every grid cell the current snap covers under the cursor";
@@ -2101,7 +2162,7 @@ class ChartingState extends MusicBeatState {
 		sustainStep.value = first.length;
 		// step the sustain by one snap unit at the note's section, not a raw 0.5ms nudge (which
 		// was too fine to ever build a visible hold).
-		var susStep:Float = model.snapMs(model.sectionAt(first.time), snap.value);
+		var susStep:Float = model.snapMs(model.sectionAt(first.time), activeSnap());
 		sustainStep.step = (susStep > 1) ? susStep : 1;
 		var idx:Int = noteTypesList.indexOf((first.type != null) ? first.type : '');
 		if (idx >= 0)
@@ -2174,10 +2235,11 @@ class ChartingState extends MusicBeatState {
 	/** Re-snaps every note in the chart to the current grid snap. **/
 	function adaptNotesToSnap():Void {
 		undoStack.snapshot(model, 'Adapt Notes');
-		var moved:Int = model.snapAllNotes(snap.value);
+		var div:Int = activeSnap();
+		var moved:Int = model.snapAllNotes(div);
 		model.markDirty();
 		selection.prune(model.chart.noteList);
-		UIToast.show('Adapted $moved notes to ${snap.label()}');
+		UIToast.show('Adapted $moved notes to 1/$div');
 	}
 
 	function clearSection():Void {
@@ -2446,7 +2508,7 @@ class ChartingState extends MusicBeatState {
 		var line:Int = patternLine;
 		if (line < 0 || line >= model.chart.strumLines.length)
 			line = defaultPatternLine();
-		placePatternAt(line, model.floorTime(noteField.viewTime, snap.value));
+		placePatternAt(line, model.floorTime(noteField.viewTime, activeSnap()));
 	}
 
 	/**
@@ -2905,11 +2967,10 @@ class ChartingState extends MusicBeatState {
 		eventVal2.text = (sub.length > 2 && sub[2] != null) ? Std.string(sub[2]) : '';
 	}
 
-	/** The event group occupying the snap cell that starts at `t`, or `null`. **/
-	function eventGroupNear(t:Float):Array<Dynamic> {
-		var unit:Float = model.snapMs(model.sectionAt(t), snap.value);
+	/** The event group sitting on an exact time (used to re-find one right after placing it). **/
+	function eventGroupAt(t:Float):Array<Dynamic> {
 		var scratch:Array<Dynamic> = [];
-		model.eventsBetween(t - 1, t + unit - 1, scratch);
+		model.eventsBetween(t - 1, t + 1, scratch);
 		return (scratch.length > 0) ? scratch[0] : null;
 	}
 
@@ -3123,7 +3184,7 @@ class ChartingState extends MusicBeatState {
 			return;
 		var col:Int = noteField.laneColumn(lane);
 		noteField.confirmReceptor(lane);
-		var t:Float = model.floorTime(noteField.viewTime, snap.value);
+		var t:Float = model.floorTime(noteField.viewTime, activeSnap());
 		var existing:SongNote = model.noteAt(t, line, col);
 		if (existing != null) {
 			undoStack.snapshot(model, 'Vortex Remove');
@@ -3142,7 +3203,7 @@ class ChartingState extends MusicBeatState {
 	/** Placement time under the pointer: floored to the snap cell, or raw while Shift is held. **/
 	function placeTimeAt(my:Float):Float {
 		var raw:Float = noteField.timeAtY(my);
-		var t:Float = FlxG.keys.pressed.SHIFT ? raw : model.floorTime(raw, snap.value);
+		var t:Float = FlxG.keys.pressed.SHIFT ? raw : model.floorTime(raw, activeSnap());
 		return (t < 0) ? 0 : t;
 	}
 
@@ -3168,7 +3229,7 @@ class ChartingState extends MusicBeatState {
 
 		var wheel:Int = FlxG.mouse.wheel;
 		if (wheel != 0 && inside)
-			noteField.scrollBySnap(-wheel, snap.value);
+			noteField.scrollBySnap(-wheel, activeSnap());
 
 		// Ctrl+LMB drag = box select
 		if (boxing) {
@@ -3217,7 +3278,9 @@ class ChartingState extends MusicBeatState {
 						scripts.call('onNotePlaced', [placingNote.time, placingNote.column, placingNote.strumLine]);
 				} else if (lane == 0) {
 					var t:Float = placeTimeAt(my);
-					var group:Array<Dynamic> = eventGroupNear(t);
+					// picked by where the mark is drawn, not by the snap cell -- an off-grid event stays
+					// clickable at any snap/zoom
+					var group:Array<Dynamic> = noteField.eventUnder(mx, my);
 					if (group != null) {
 						undoStack.snapshot(model, 'Remove Event');
 						if (group == selectedEventGroup)
@@ -3230,7 +3293,7 @@ class ChartingState extends MusicBeatState {
 						undoStack.snapshot(model, 'Place Event');
 						var idx:Int = (eventDrop != null) ? eventDrop.selectedIndex : 0;
 						model.addEvent(t, eventsList[idx][0], (eventVal1 != null) ? eventVal1.text : '', (eventVal2 != null) ? eventVal2.text : '');
-						selectedEventGroup = eventGroupNear(t);
+						selectedEventGroup = eventGroupAt(t);
 						selectedEventSub = 0;
 						if (scripts.hasScripts)
 							scripts.call('onEventPlaced', [t, eventsList[idx][0]]);
@@ -3263,7 +3326,7 @@ class ChartingState extends MusicBeatState {
 					selection.setAll([hit]);
 				openNoteContext(mx, my);
 			} else if (noteField.laneAt(mx) == 0) {
-				var group:Array<Dynamic> = eventGroupNear(model.floorTime(noteField.timeAtY(my), snap.value));
+				var group:Array<Dynamic> = noteField.eventUnder(mx, my);
 				if (group != null) {
 					selectedEventGroup = group;
 					selectedEventSub = 0;
@@ -3393,13 +3456,13 @@ class ChartingState extends MusicBeatState {
 		var upHeld:Bool = EditorKeybinds.pressed('step_up');
 		var downHeld:Bool = EditorKeybinds.pressed('step_down');
 		if (EditorKeybinds.justPressed('step_up') || EditorKeybinds.justPressed('step_down')) {
-			noteField.scrollBySnap(EditorKeybinds.justPressed('step_up') ? -1 : 1, snap.value);
+			noteField.scrollBySnap(EditorKeybinds.justPressed('step_up') ? -1 : 1, activeSnap());
 			scrollHold = -0.35;
 		} else if (upHeld || downHeld) {
 			scrollHold += elapsed;
 			while (scrollHold >= 0.05) {
 				scrollHold -= 0.05;
-				noteField.scrollBySnap(upHeld ? -1 : 1, snap.value);
+				noteField.scrollBySnap(upHeld ? -1 : 1, activeSnap());
 			}
 		}
 
