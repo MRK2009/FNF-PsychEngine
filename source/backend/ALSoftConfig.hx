@@ -117,6 +117,44 @@ import lime.system.JNI;
 		}
 	}
 
+	/** The buffering preset that is actually live this session (driven by `appliedBuffer`). **/
+	public static function currentPreset():{periods:Int, periodSize:Int} {
+		return preset(appliedBuffer);
+	}
+
+	/**
+		Best-effort estimate of the audio output buffering latency in milliseconds, derived from the live
+		OpenAL-Soft config: `periods * period_size / mixRate`. This is the buffered-output delay, not the
+		full device path (OpenAL's binding doesn't expose the driver's `AL_SOFT_source_latency`), so treat
+		it as a starting point for the audio offset rather than an exact figure.
+
+		Android refines `period_size` and the rate from the device's native params when available.
+		Returns `null` on targets without OpenAL-Soft (e.g. html5).
+	**/
+	public static function outputLatencyMs():Null<Int> {
+		#if (desktop || android)
+		final p = currentPreset();
+		var frames:Int = p.periodSize;
+		var rate:Float = 48000;
+
+		#if android
+		final native = queryNativeParams();
+		if (native != null) {
+			if (native.frames > 0)
+				frames = native.frames;
+			if (native.rate > 0)
+				rate = native.rate;
+		}
+		#end
+
+		if (rate <= 0)
+			return null;
+		return Math.round((p.periods * frames / rate) * 1000);
+		#else
+		return null;
+		#end
+	}
+
 	#if android
 	/**
 		Reads the device's native output sample rate and frames-per-buffer via

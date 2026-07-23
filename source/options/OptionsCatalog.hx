@@ -42,7 +42,8 @@ class OptionsCatalog {
 			{name: phrase('Performance'), desc: 'Quality and framerate trade-offs.', rows: performanceRows()},
 			{name: phrase('Audio'), desc: 'Volume, pause music and audio sync.', rows: audioRows()},
 			{name: phrase('Freeplay'), desc: 'Freeplay menu extras.', rows: freeplayRows()},
-			{name: phrase('Controls'), desc: 'Rebind keyboard / controller controls.', rows: [Action('Rebind...', 'Rebind keyboard / controller controls.', 'controls')]},
+			{name: phrase('Controls'), desc: 'Rebind keyboard / controller controls.', rows: [Action('Rebind...', 'Rebind keyboard / controller controls.',
+				'controls')]},
 			{name: phrase('System'), desc: 'Engine, updates and mod behavior.', rows: systemRows()}
 		];
 		return list;
@@ -54,8 +55,8 @@ class OptionsCatalog {
 		rows.push(Setting(new Option('Downscroll', 'If checked, notes go Down instead of Up, simple enough.', 'downScroll', BOOL)));
 		rows.push(Setting(new Option('Middlescroll', 'If checked, your notes get centered.', 'middleScroll', BOOL)));
 		rows.push(Setting(new Option('Opponent Notes', 'If unchecked, opponent notes get hidden.', 'opponentStrums', BOOL)));
-		rows.push(Setting(new Option('Ghost Tapping', "If checked, you won't get misses from pressing keys\nwhile there are no notes able to be hit.", 'ghostTapping',
-			BOOL)));
+		rows.push(Setting(new Option('Ghost Tapping', "If checked, you won't get misses from pressing keys\nwhile there are no notes able to be hit.",
+			'ghostTapping', BOOL)));
 		rows.push(Setting(new Option('Sustains as One Note',
 			"If checked, Hold Notes can't be pressed if you miss,\nand count as a single Hit/Miss.\nUncheck this if you prefer the old Input System.",
 			'guitarHeroSustains', BOOL)));
@@ -77,8 +78,8 @@ class OptionsCatalog {
 		judge.maxValue = 9;
 		rows.push(Setting(judge));
 
-		var od:Option = new Option('osu! Overall Difficulty', 'osu!mania only: the OD value the hit windows derive from.\nHigher = tighter windows.',
-			'osuOD', FLOAT);
+		var od:Option = new Option('osu! Overall Difficulty', 'osu!mania only: the OD value the hit windows derive from.\nHigher = tighter windows.', 'osuOD',
+			FLOAT);
 		od.scrollSpeed = 3;
 		od.minValue = 0;
 		od.maxValue = 10;
@@ -86,26 +87,29 @@ class OptionsCatalog {
 		od.decimals = 1;
 		rows.push(Setting(od));
 
-		rows.push(Setting(new Option('Save Replays', 'If checked, your ranked plays record a replay\nwatchable from their score in Freeplay.', 'saveReplays', BOOL)));
+		rows.push(Setting(new Option('Save Replays', 'If checked, your ranked plays record a replay\nwatchable from their score in Freeplay.', 'saveReplays',
+			BOOL)));
 
 		rows.push(Setting(new Option('Hit Error Bar:',
-			'Shows where your taps land inside the hit windows.\nosu! draws colored window segments, Etterna a minimal tick bar.',
-			'hitErrorBar', STRING, ['Off', 'osu!', 'Etterna'])));
+			'Shows where your taps land inside the hit windows.\nosu! draws colored window segments, Etterna a minimal tick bar.', 'hitErrorBar', STRING,
+			['Off', 'osu!', 'Etterna'])));
 
 		rows.push(Setting(new Option('Hit Timing Display', 'If checked, shows each hit\'s millisecond offset next to the judgement.', 'hitMsDisplay', BOOL)));
 
 		rows.push(Section(phrase('Timing')));
 
-		var ratingOffset:Option = new Option('Rating Offset', 'Changes how late/early you have to hit for a "Sick!"\nHigher values mean you have to hit later.',
-			'ratingOffset', INT);
+		var ratingOffset:Option = new Option('Rating Offset',
+			'Changes how late/early you have to hit for a "Sick!"\nHigher values mean you have to hit later.', 'ratingOffset', INT);
 		ratingOffset.displayFormat = '%vms';
 		ratingOffset.scrollSpeed = 20;
 		ratingOffset.minValue = -30;
 		ratingOffset.maxValue = 30;
 		rows.push(Setting(ratingOffset));
 
-		rows.push(Setting(window('Sick! Hit Window', 'Changes the amount of time you have\nfor hitting a "Sick!" in milliseconds.', 'sickWindow', 15, 15.0, 45.0)));
-		rows.push(Setting(window('Good Hit Window', 'Changes the amount of time you have\nfor hitting a "Good" in milliseconds.', 'goodWindow', 30, 15.0, 90.0)));
+		rows.push(Setting(window('Sick! Hit Window', 'Changes the amount of time you have\nfor hitting a "Sick!" in milliseconds.', 'sickWindow', 15, 15.0,
+			45.0)));
+		rows.push(Setting(window('Good Hit Window', 'Changes the amount of time you have\nfor hitting a "Good" in milliseconds.', 'goodWindow', 30, 15.0,
+			90.0)));
 		rows.push(Setting(window('Bad Hit Window', 'Changes the amount of time you have\nfor hitting a "Bad" in milliseconds.', 'badWindow', 60, 15.0, 135.0)));
 
 		var safeFrames:Option = new Option('Safe Frames', 'Changes how many frames you have for\nhitting a note earlier or late.', 'safeFrames', FLOAT);
@@ -133,7 +137,6 @@ class OptionsCatalog {
 		};
 		rows.push(Setting(scrollType));
 
-		// Constant speed takes a wider raw value (shown plain); multiplicative caps at 3 and shows an X.
 		var scrollSpeed:Option = gsOption('Scroll Speed', 'Note scroll speed multiplier.', 'scrollspeed', FLOAT, 1.0);
 		scrollSpeed.scrollSpeed = 2.0;
 		scrollSpeed.minValue = 0.35;
@@ -194,8 +197,7 @@ class OptionsCatalog {
 			ClientPrefs.data.noteSkin = ClientPrefs.defaultData.noteSkin;
 		noteSkins.insert(0, ClientPrefs.defaultData.noteSkin);
 		rows.push(Setting(new Option('Note Skins:', 'Select your prefered Note skin.', 'noteSkin', STRING, noteSkins)));
-		rows.push(Setting(new Option('Override Skin Colours',
-			"Ignore the colours a note skin ships and use your own arrow colours instead.",
+		rows.push(Setting(new Option('Override Skin Colours', "Ignore the colours a note skin ships and use your own arrow colours instead.",
 			'overrideSkinColors', BOOL)));
 		rows.push(Setting(new Option('Force Selected Skin',
 			"Locks your chosen note skin: mods can't replace it via chart arrowSkin, per-note textures, or their own same-named assets.\nCustom note types keep their own look.",
@@ -213,7 +215,6 @@ class OptionsCatalog {
 		uiSkins.insert(0, ClientPrefs.defaultData.uiSkin);
 		rows.push(Setting(new Option('UI Skin:', 'Select your prefered judgement UI skin\n(rating popups, combo, countdown).', 'uiSkin', STRING, uiSkins)));
 
-		// "From Noteskin" defers to the active note skin's own splash; "Psych" is the base atlas.
 		var noteSplashes:Array<String> = Mods.mergeAllTextsNamed('images/noteSplashes/list.txt');
 		if (!noteSplashes.contains(objects.NoteSplash.BASE_SKIN))
 			noteSplashes.insert(0, objects.NoteSplash.BASE_SKIN);
@@ -239,7 +240,8 @@ class OptionsCatalog {
 		rows.push(Section(phrase('Note Colours')));
 		rows.push(Action('Edit Colors...', 'Open the colour picker to set per-lane note colours.', 'noteColors'));
 		rows.push(Setting(new Option('Per-keycount Colours',
-			"If checked, each keycount can have its own lane colours.\nIf unchecked, every keycount uses the shared base palette.", 'noteColorPerKeycount', BOOL)));
+			"If checked, each keycount can have its own lane colours.\nIf unchecked, every keycount uses the shared base palette.", 'noteColorPerKeycount',
+			BOOL)));
 		rows.push(Setting(new Option('One Colour for All Notes', 'If checked, every note in every keycount uses a single colour.', 'noteColorOneColor', BOOL)));
 
 		var cfg:backend.NoteSkinConfig.NoteSkinData = null;
@@ -247,7 +249,8 @@ class OptionsCatalog {
 		if (skin != null)
 			cfg = backend.NoteSkinConfig.forCurrentKeys(skin);
 
-		linkRow(rows, cfg, 'splash', 'Link Splash Colour', "Note splashes take the note's colour\n(otherwise they keep the skin's own colour).", 'linkSplashColor');
+		linkRow(rows, cfg, 'splash', 'Link Splash Colour', "Note splashes take the note's colour\n(otherwise they keep the skin's own colour).",
+			'linkSplashColor');
 		linkRow(rows, cfg, 'holds', 'Link Hold Colour', "Hold/sustain pieces take the note's colour.", 'linkSustainColor');
 		linkRow(rows, cfg, 'pressed', 'Link Pressed Colour', "The pressed strum animation takes the note's colour.", 'linkPressedColor');
 		linkRow(rows, cfg, 'confirm', 'Link Confirm Colour', "The confirm strum animation takes the note's colour.", 'linkConfirmColor');
@@ -288,9 +291,7 @@ class OptionsCatalog {
 			'cacheOnGPU', BOOL)));
 
 		#if desktop
-		var widescreen:Option = new Option('Widescreen',
-			"If checked, removes black bars on the sides in windowed mode",
-			'widescreen', BOOL);
+		var widescreen:Option = new Option('Widescreen', "If checked, removes black bars on the sides in windowed mode", 'widescreen', BOOL);
 		widescreen.onChange = function() backend.FullScreenScaleMode.enabled = ClientPrefs.data.widescreen;
 		rows.push(Setting(widescreen));
 		#end
@@ -306,14 +307,14 @@ class OptionsCatalog {
 		rows.push(Setting(framerate));
 
 		var uncapFramerate:Option = new Option('Uncap FPS',
-			"Render as fast as your hardware allows. The Framerate cap above is ignored while this is on, but the game's logic still runs at "
-			+ ClientPrefs.FRAMERATE_MAX + " updates/sec. May introduce weird behaviors.", 'uncapFramerate', BOOL);
+			"Render as fast as your hardware allows. The Framerate cap above is ignored while this is on, but the game's logic still runs at " +
+			ClientPrefs.FRAMERATE_MAX + " updates/sec. May introduce weird behaviors.",
+			'uncapFramerate', BOOL);
 		uncapFramerate.onChange = onChangeFramerate;
 		rows.push(Setting(uncapFramerate));
 		#end
 
 		#if !mobile
-		// showFPS lives in DebugPrefs (its own save file), not ClientPrefs.data - bindDebugOption reroutes get/set.
 		var showFPS:Option = new Option('FPS Counter', 'If unchecked, hides FPS Counter.', 'showFPS', BOOL);
 		FPSCounterSettingsSubState.bindDebugOption(showFPS);
 		showFPS.onChange = function() if (Main.fpsVar != null)
@@ -343,19 +344,26 @@ class OptionsCatalog {
 			['None', 'Tea Time', 'Breakfast', 'Breakfast (Pico)'])));
 
 		#if (desktop || android)
-		rows.push(Setting(new Option('Audio Buffer',
-			"Lower = less audio delay, but may crackle on weaker hardware.\nTakes effect after restarting the game.", 'audioBuffer', STRING,
-			['Low', 'Balanced', 'Safe'])));
+		rows.push(Setting(new Option('Audio Buffer', "Lower = less audio delay, but may crackle on weaker hardware.\nTakes effect after restarting the game.",
+			'audioBuffer', STRING, ['Low', 'Balanced', 'Safe'])));
 		#end
 
-		var offset:Option = new Option('Audio Offset', 'Delay to line the song up with what you see + hear.', 'noteOffset', INT);
+		var offset:Option = new Option('Audio Offset', 'Judgement delay to line the song up with when you hit. Affects scoring.', 'noteOffset', INT);
 		offset.displayFormat = '%vms';
 		offset.scrollSpeed = 200;
 		offset.minValue = -500;
 		offset.maxValue = 500;
 		rows.push(Setting(offset));
 
-		rows.push(Action('Calibrate...', 'Calibrate the audio offset by feel with a beat test.', 'noteOffset'));
+		var visual:Option = new Option('Visual Offset', 'Shifts where notes appear vs the receptors. Display only - does not affect scoring.', 'visualOffset',
+			INT);
+		visual.displayFormat = '%vms';
+		visual.scrollSpeed = 200;
+		visual.minValue = -500;
+		visual.maxValue = 500;
+		rows.push(Setting(visual));
+
+		rows.push(Action('Calibrate Offsets...', 'Calibrate the audio + visual offsets by tapping to the beat and notes.', 'noteOffset'));
 		return rows;
 	}
 
@@ -386,7 +394,6 @@ class OptionsCatalog {
 		rows.push(Setting(new Option('Check for Updates', 'On Release builds, turn this on to check for updates when you start the game.', 'checkForUpdates',
 			BOOL)));
 
-		// The pref stores 'stable'/'bleeding'; the dropdown shows friendly labels, so get/set translate.
 		var channel:Option = new Option('Update Channel', 'Stable: official release builds.\nBleeding Edge: latest dev prereleases (may be unstable).',
 			'updateChannel', STRING, ['Stable', 'Bleeding Edge']);
 		channel.getValue = function():Dynamic return (ClientPrefs.data.updateChannel == 'bleeding') ? 'Bleeding Edge' : 'Stable';

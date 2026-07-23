@@ -52,6 +52,7 @@ import states.TitleState;
 	// Off by default -- with it off the music bar shows the song and the user presses Play.
 	public var freeplayPreview:Bool = false;
 	public var noteOffset:Int = 0;
+	public var visualOffset:Int = 0;
 	public var arrowRGB:Array<Array<FlxColor>> = [
 		[0xFFC24B99, 0xFFFFFFFF, 0xFF3C1F56],
 		[0xFF00FFFF, 0xFFFFFFFF, 0xFF1542B7],

@@ -3426,8 +3426,9 @@ class PlayState extends MusicBeatState {
 		if (opponentField == null)
 			return;
 		var songPos:Float = Conductor.songPosition;
-		// One shared SV lookup per frame; every note positions against this (== songPos when SV is off).
-		var scrollNow:Float = scrollVelocity.posAt(songPos);
+		var visualPos:Float = songPos + ClientPrefs.data.visualOffset;
+		// One shared SV lookup per frame; every note positions against this (== visualPos when SV is off).
+		var scrollNow:Float = scrollVelocity.posAt(visualPos);
 		var sp:Float = songSpeed / playbackRate;
 		var ahead:Float = spawnTime * playbackRate;
 		if (songSpeed < 1)
@@ -3439,7 +3440,7 @@ class PlayState extends MusicBeatState {
 			// Margin so the judgement miss (at noteKillOffset) always fires before the field
 			// reclaims a late player note -- otherwise late notes vanish with no miss.
 			f.killBehind = noteKillOffset + 500;
-			f.update(songPos, scrollNow);
+			f.update(visualPos, scrollNow);
 		}
 		if (!startedCountdown || inCutscene)
 			return;
