@@ -48,6 +48,7 @@ class NoteSkinEditorState extends MusicBeatState {
 	static inline var TAB_LOOK:Int = 2;
 	static inline var TAB_PIXEL:Int = 3;
 	static inline var TAB_OFFSETS:Int = 4;
+	static inline var TAB_OSU:Int = 5;
 
 	static final BPM_STEPS:Array<Float> = [90, 120, 150, 180, 210];
 	static final SPEED_STEPS:Array<Float> = [1.2, 1.8, 2.4, 3.0, 3.6];
@@ -161,7 +162,8 @@ class NoteSkinEditorState extends MusicBeatState {
 			{label: 'IMG', tooltipFallback: draft.atlas ? 'Frame prefixes' : 'Image names'},
 			{label: 'LOOK', tooltipFallback: 'Scale, angles, colouring'},
 			{label: 'PIX', tooltipFallback: 'Pixel art mode'},
-			{label: 'OFFS', tooltipFallback: 'Per-element offsets'}
+			{label: 'OFFS', tooltipFallback: 'Per-element offsets'},
+			{label: 'OSU', tooltipFallback: 'osu!mania sizing & hit position'}
 		];
 	}
 
@@ -666,6 +668,8 @@ class NoteSkinEditorState extends MusicBeatState {
 				buildPixelPanel(flow);
 			case TAB_OFFSETS:
 				buildOffsetsPanel(flow);
+			case TAB_OSU:
+				buildOsuPanel(flow);
 			default:
 				buildSkinPanel(flow);
 		}
@@ -931,17 +935,13 @@ class NoteSkinEditorState extends MusicBeatState {
 			draft.touch();
 			restyle();
 		}));
-		flow.add(numRow('Fit column:', w, num(draft.config.fitColumnWidth, 0), 0.05, 2, 0, 2, function(v:Float):Void {
-			draft.config.fitColumnWidth = (v <= 0) ? null : v;
-			draft.touch();
-			restyle();
-		}));
-		flow.add(dockLabel('Fit column 0 = off; otherwise the fraction of the lane each element fills.', w, 10));
 		flow.add(tip(numRow('Column gap:', w, num(draft.config.columnGap, 0), 1, 0, -80, 200, function(v:Float):Void {
 			draft.config.columnGap = (v == 0) ? null : v;
 			draft.touch();
 			rebuildSim();
 		}), 'Extra px between lanes, added on top of the engine spacing'));
+		if (!draft.atlas)
+			flow.add(dockLabel('osu!mania sizing & hit position live in the OSU tab.', w, 10));
 
 		flow.header(new UIAccordion('Animation', w, true));
 		flow.add(numRow('Anim FPS:', w, num(draft.config.fps, 24), 1, 0, 0, 60, function(v:Float):Void {
@@ -1054,6 +1054,73 @@ class NoteSkinEditorState extends MusicBeatState {
 				restyle();
 			}), 'Tint the splash with the lane colour even if the player has splash linking off'));
 		}
+	}
+
+	/**
+		The OSU rail tab: osu!mania-style column sizing (`Fit column`, `Column width`) and hit placement
+		(`Hit position`, `Flip receptor Y`). Folder skins only -- classic atlas skins route through
+		`ClassicNoteSkin`, which reads none of these.
+	**/
+	function buildOsuPanel(flow:DockFlow):Void {
+		var w:Float = dockW();
+
+		if (draft.atlas) {
+			flow.add(dockLabel('osu!mania options apply to folder skins only (individual image files), not classic atlas skins.',
+				w, 11));
+			return;
+		}
+
+		flow.header(new UIAccordion('Sizing', w, true));
+		flow.add(tip(numRow('Fit column:', w, num(draft.config.fitColumnWidth, 0), 0.05, 2, 0, 2, function(v:Float):Void {
+			draft.config.fitColumnWidth = (v <= 0) ? null : v;
+			draft.touch();
+			restyle();
+		}), 'osu!mania column fill: each element fills the lane width instead of scaling by native pixels'));
+		flow.add(dockLabel('0 = off; otherwise the fraction of the lane each element fills (1 = whole column).', w, 10));
+		flow.add(tip(numRow('Column width (osu):', w, num(draft.config.columnWidth, 0), 1, 0, 0, 512, function(v:Float):Void {
+			draft.config.columnWidth = (v <= 0) ? null : v;
+			draft.touch();
+			restyle();
+		}), 'osu ColumnWidth (osu!px). With Fit column on, sizes the receptor HEIGHT off this instead of stretching to its own aspect. 0 = off'));
+		flow.add(dockLabel('Only affects receptors under Fit column: they fill the lane width but scale height off this, so a tall column key isn\'t stretched.',
+			w, 10));
+
+		flow.header(new UIAccordion('Hit position', w, true));
+		flow.add(tip(new UICheckbox('Hit position (osu HitPosition)', w, draft.config.hitAlign != null, function(v:Bool):Void {
+			draft.config.hitAlign = v ? num(draft.config.hitAlign, 0.5) : null;
+			draft.touch();
+			buildLeftDock(); // show/hide the value row
+		}), 'Where on the receptor a note should be for a perfect hit (moves the note, not the receptor art)'));
+		if (draft.config.hitAlign != null) {
+			flow.add(numRow('  Hit point (0 top - 1 bottom):', w, num(draft.config.hitAlign, 0.5), 0.02, 2, 0, 1, function(v:Float):Void {
+				draft.config.hitAlign = v;
+				draft.touch();
+				restyle();
+			}));
+			flow.add(dockLabel('Where notes converge for a perfect hit: 0 = top of the receptor art, 0.5 = centre, 1 = bottom. The receptor art stays put; the note press point moves onto this spot.',
+				w, 10));
+		}
+		var flipMode:String = NoteSkinConfig.receptorFlipMode(draft.config);
+		var flipIdx:Int = switch (flipMode) {
+			case 'upscroll': 1;
+			case 'downscroll': 2;
+			case 'always': 3;
+			default: 0;
+		};
+		var flipDrop:UIDropdown = new UIDropdown('Flip receptor Y:', w, function(id:Int, _):Void {
+			draft.config.receptorFlipY = switch (id) {
+				case 1: 'upscroll';
+				case 2: 'downscroll';
+				case 3: 'always';
+				default: null;
+			};
+			draft.touch();
+			restyle();
+		});
+		flipDrop.setItems(['Off', 'On upscroll', 'On downscroll', 'Always']);
+		flipDrop.select(flipIdx);
+		flipDrop.tooltip = 'Vertically flip the receptor art, like osu flips its key art per scroll direction (hit position is auto-mirrored)';
+		flow.add(flipDrop);
 	}
 
 	function buildPixelPanel(flow:DockFlow):Void {

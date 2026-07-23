@@ -298,6 +298,14 @@ class ClassicNoteSkin implements INoteSkin {
 			var off:Array<Float> = NoteSkinConfig.offsetFor(vcfg.holdOffsets, column);
 			v.offsetX = off[0];
 			v.offsetY = off[1];
+			// Tail cap: its own `endOffsets` when present, else the body's (no nudge).
+			var eoff:Array<Float> = (vcfg.endOffsets != null) ? NoteSkinConfig.offsetFor(vcfg.endOffsets, column) : off;
+			v.endOffsetX = eoff[0];
+			v.endOffsetY = eoff[1];
+		} else {
+			// No config -> the tail rides the body offset (which carries the head-center shift); no nudge.
+			v.endOffsetX = v.offsetX;
+			v.endOffsetY = v.offsetY;
 		}
 		v.ok = true;
 		return v;

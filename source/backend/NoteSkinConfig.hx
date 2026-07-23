@@ -33,6 +33,9 @@ typedef NoteSkinData = {
 	@:optional var scale:Dynamic; // Float, or per-lane object
 	@:optional var pixelScale:Dynamic; // scale used while rendering pixel art (Float, or per-lane); falls back to `scale`
 	@:optional var fitColumnWidth:Dynamic; // osu!mania-style: fit each element's width to the lane column instead of scaling by native pixels. `true` fills the whole column; a number is a fraction (0.9 = small gap). Decouples receptor size from note size.
+	@:optional var hitAlign:Dynamic; // osu!mania `HitPosition` analog: which point of the RECEPTOR art a note should be at for a perfect hit -- 0/"top", 0.5/"center", 1/"bottom", or a fraction (per-lane object OK). Moves the NOTE/hold press point onto that spot (the receptor art is NOT moved), so a tall column receptor whose hit zone isn't centred still catches its notes. Unset = default lane-centre press point.
+	@:optional var receptorFlipY:Dynamic; // Vertically flips the RECEPTOR art (osu!mania's per-scroll key flip). `true`/"always", "upscroll", or "downscroll" pick when to flip; false/unset never does. osu key art is drawn for downscroll, so the converter emits "upscroll". `hitAlign` is auto-inverted while flipped so the hit target still lands on the line.
+	@:optional var columnWidth:Dynamic; // osu!mania `ColumnWidth` (osu!px, per-lane object OK). Only used with `fitColumnWidth`: the RECEPTOR fills the lane WIDTH but scales its HEIGHT off this column width (not its own aspect), matching how osu sizes tall column keys. Unset = uniform width-fit (the note's behaviour).
 	@:optional var fps:Dynamic; // anim fps (Int, or per-lane object)
 	@:optional var hiRes:Bool; // hint: skin ships @2x assets (@2x is auto-detected regardless)
 	@:optional var endOffsets:Dynamic; // sustain-tail offsets (per-lane); falls back to holdOffsets
@@ -894,6 +897,22 @@ class NoteSkinConfig {
 	}
 
 	/**
+		Whether `fitColumnWidth` sizing is ACTIVE for a skin (`true`, or a positive fraction). Same gate as
+		`fitScaleFor` but without needing a frame width. Callers that build the frames use this to decide
+		NOT to square-pad the art first: osu!mania-style column fitting measures the element's true (native)
+		width, so padding a non-square note/key up to a square before measuring would under-scale its width
+		(a tall key would render as a thin sliver instead of filling the lane). See `fitScaleFor`.
+	**/
+	public static function fitsColumnWidth(cfg:NoteSkinData):Bool {
+		if (cfg == null || cfg.fitColumnWidth == null)
+			return false;
+		if (Std.isOfType(cfg.fitColumnWidth, Bool))
+			return cfg.fitColumnWidth == true;
+		var n:Float = Std.parseFloat(Std.string(cfg.fitColumnWidth));
+		return !Math.isNaN(n) && n > 0;
+	}
+
+	/**
 		osu!mania sizing: when `fitColumnWidth` is set, an element is scaled uniformly so its (unscaled)
 		frame width fills the lane's column width (`160 * noteSizes[keyCount]`) rather than scaling the
 		image's native pixels by `scale`. This is how osu!mania normalises every note/key to the column,
@@ -922,6 +941,67 @@ class NoteSkinConfig {
 		var kc:Int = Mania.clamp(keyCount);
 		var colW:Float = 160 * Mania.noteSizes[kc - 1];
 		return (colW * mult) / frameWidth;
+	}
+
+	/**
+		The hit-position fraction for a lane, or `NaN` when the skin sets none (keep the default lane-centre
+		press point). `0`/`"top"` marks the top edge of the receptor art as the perfect-hit spot, `1`/`"bottom"`
+		the bottom edge, `0.5`/`"center"` the middle -- osu!mania's `HitPosition` analog. The receptor art is
+		left in place; the NOTE landing point moves onto this spot (see `Receptor.hitBonus`), so a skin whose
+		hit zone is off-centre (e.g. an arrow at the bottom of a tall column image) still catches its notes.
+		Per-lane objects are supported.
+		@param col the 0-based lane
+	**/
+	public static function hitAlignFor(cfg:NoteSkinData, col:Int):Float {
+		if (cfg == null || cfg.hitAlign == null)
+			return Math.NaN;
+		var raw:Dynamic = rawForColumn(cfg.hitAlign, col);
+		if (raw == null)
+			return Math.NaN;
+		if (Std.isOfType(raw, String)) {
+			switch (Std.string(raw).toLowerCase()) {
+				case 'top': return 0;
+				case 'center' | 'centre' | 'middle': return 0.5;
+				case 'bottom': return 1;
+				default:
+					var n:Float = Std.parseFloat(Std.string(raw));
+					return Math.isNaN(n) ? Math.NaN : clamp01(n);
+			}
+		}
+		return clamp01(num(raw));
+	}
+
+	static inline function clamp01(v:Float):Float
+		return v < 0 ? 0 : (v > 1 ? 1 : v);
+
+	/**
+		The osu!mania source column width (osu!px) a receptor lane was authored for, or `NaN` when unset.
+		Used only under `fitColumnWidth` to size the receptor's HEIGHT off the column instead of its own
+		width (osu keys fill the column width but keep their native height). See `FolderNoteSkin.applyReceptor`.
+		@param col the 0-based lane
+	**/
+	public static function receptorColumnWidth(cfg:NoteSkinData, col:Int):Float {
+		if (cfg == null || cfg.columnWidth == null)
+			return Math.NaN;
+		return numForColumn(cfg.columnWidth, col, Math.NaN);
+	}
+
+	/**
+		When the receptor art should be vertically flipped (osu!mania flips its key art per scroll
+		direction): `"always"`, `"upscroll"`, `"downscroll"`, or `null` for never. `true` maps to
+		`"always"`, `false` to `null`. The Receptor resolves this against the live scroll direction.
+	**/
+	public static function receptorFlipMode(cfg:NoteSkinData):String {
+		if (cfg == null || cfg.receptorFlipY == null)
+			return null;
+		if (Std.isOfType(cfg.receptorFlipY, Bool))
+			return (cfg.receptorFlipY == true) ? 'always' : null;
+		return switch (Std.string(cfg.receptorFlipY).toLowerCase()) {
+			case 'always' | 'true': 'always';
+			case 'upscroll' | 'up': 'upscroll';
+			case 'downscroll' | 'down': 'downscroll';
+			default: null;
+		}
 	}
 
 	public static function boolForColumn(field:Dynamic, col:Int, fallback:Bool):Bool {

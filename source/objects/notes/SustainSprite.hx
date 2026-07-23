@@ -89,6 +89,11 @@ final class SustainSprite extends FlxSprite {
 
 	public var offsetX:Float = 0;
 	public var offsetY:Float = 0;
+
+	/** Tail-cap offset from the skin's `endOffsets` (falls back to `holdOffsets` = the body's, so no nudge). **/
+	public var tailOffsetX:Float = 0;
+	public var tailOffsetY:Float = 0;
+
 	public var centerOnStrum:Bool = true;
 	public var multAlpha:Float = 0.6;
 	public var multSpeed:Float = 1;
@@ -146,6 +151,8 @@ final class SustainSprite extends FlxSprite {
 		clipRect = null;
 		tail.clipRect = null;
 
+		var skinHoldAlpha:Float = 0.6; // the skin's `holdAlpha` (folder skins set it below); default dimmer 0.6
+
 		var rgbOff:Bool = data.disableRGB || (PlayState.SONG != null && PlayState.SONG.disableNoteRGB);
 		if (rgbShader == null)
 			rgbShader = new RGBShaderReference(this, NoteDefaults.initializeGlobalRGBShader(column));
@@ -164,6 +171,8 @@ final class SustainSprite extends FlxSprite {
 			texture = data.texture;
 			offsetX = 0;
 			offsetY = 0;
+			tailOffsetX = 0;
+			tailOffsetY = 0;
 			pixel = PlayState.isPixelStage;
 		} else {
 			@:bypassAccessor texture = null;
@@ -176,8 +185,11 @@ final class SustainSprite extends FlxSprite {
 			Paths.pinModRoot = prevPin;
 			offsetX = v.offsetX;
 			offsetY = v.offsetY;
+			tailOffsetX = v.endOffsetX;
+			tailOffsetY = v.endOffsetY;
 			centerOnStrum = v.centerOnStrum;
 			pixel = v.pixel;
+			skinHoldAlpha = v.holdAlpha;
 		}
 		if (rgbOff) {
 			rgbShader.enabled = false;
@@ -199,8 +211,9 @@ final class SustainSprite extends FlxSprite {
 			hasTail = false; // declared true but the frames aren't there
 		tail.visible = hasTail;
 
-		// Holds default to a dimmer 0.6; a load-time/compat script override on the note replaces it.
-		multAlpha = (data.multAlpha != 1) ? data.multAlpha : 0.6;
+		// Holds default to the skin's `holdAlpha` (a dimmer 0.6 when the skin sets none); a load-time/compat
+		// script override on the note (`data.multAlpha`) still wins.
+		multAlpha = (data.multAlpha != 1) ? data.multAlpha : skinHoldAlpha;
 		multSpeed = data.multSpeed;
 		alpha = multAlpha;
 		tail.alpha = alpha;
@@ -238,6 +251,10 @@ final class SustainSprite extends FlxSprite {
 		var neg:Float = strum.downScroll ? 1 : -1;
 		var rate:Float = songSpeed * multSpeed;
 		var half:Float = Mania.swagWidth * 0.5;
+		// The head/end landing point along the axis; `hitBonus` shifts it onto the receptor's hit-position
+		// zone (0 unless the skin sets `hitAlign`), matching the note head. `half` is still the PERPENDICULAR
+		// lane centre below, which the press point must not affect.
+		var hit:Float = half + strum.hitBonus;
 
 		var uX:Float = strum.axisX;
 		var uY:Float = strum.axisY;
@@ -251,8 +268,8 @@ final class SustainSprite extends FlxSprite {
 
 		// Note-centre position along the scroll axis for the head and the hold end, using the SAME
 		// mapping as the note head (a note's centre sits half a note-width past its raw scroll point).
-		var headCenter:Float = offsetY + neg * (0.45 * (scrollNow - data.scrollPos) * rate) + half;
-		var endCenter:Float = offsetY + neg * (0.45 * (scrollNow - data.endScrollPos) * rate) + half;
+		var headCenter:Float = offsetY + neg * (0.45 * (scrollNow - data.scrollPos) * rate) + hit;
+		var endCenter:Float = offsetY + neg * (0.45 * (scrollNow - data.endScrollPos) * rate) + hit;
 
 		// Direction from the head toward the end along the axis (mirror-safe for up/down scroll).
 		var dir:Float = (endCenter >= headCenter) ? 1 : -1;
@@ -306,15 +323,18 @@ final class SustainSprite extends FlxSprite {
 		var tcx:Float = strum.x + uX * tailCenter + uY * tperp;
 		var tcy:Float = strum.y + uY * tailCenter - uX * tperp;
 		tail.angle = copyAngle ? strum.axisAngle + offsetAngle : tail.angle;
-		tail.x = tcx - tail.width / 2;
-		tail.y = tcy - tail.height / 2;
+		// `endOffsets` nudges the cap independently of the body -- applied as the delta from the body's
+		// `holdOffsets` (which it already inherits via `tperp`/`tcy`), so an unset endOffsets (== holdOffsets)
+		// leaves the cap exactly on the trail.
+		tail.x = tcx - tail.width / 2 + (tailOffsetX - offsetX);
+		tail.y = tcy - tail.height / 2 + (tailOffsetY - offsetY);
 
 		// Held: hide the tail cap once its receptor-facing edge reaches the receptor centre, so the cap can't
 		// scroll past/under the receptor in the last frames before the note is reclaimed (the receptor covers
 		// the flat end). `receptorAlong` is where the head sat when it was hit.
 		tail.visible = hasTail;
 		if (data.hit && hasTail) {
-			var receptorAlong:Float = offsetY + half;
+			var receptorAlong:Float = offsetY + hit;
 			var receptorFacingEdge:Float = tipAlong - dir * tailLen;
 			if ((receptorFacingEdge - receptorAlong) * dir < 0)
 				tail.visible = false;

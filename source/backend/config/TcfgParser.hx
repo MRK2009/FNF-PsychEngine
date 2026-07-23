@@ -40,7 +40,7 @@ class TcfgParser {
 					keys = {};
 				Reflect.setField(keys, keycountReg.matched(1), parseConfig(lines, i + 1, end));
 			} else {
-				applyGroup(root, lines[i].key, lines, i + 1, end);
+				applyGroup(root, lines[i].key, lines[i].value, lines, i + 1, end);
 			}
 			i = end;
 		}
@@ -55,19 +55,25 @@ class TcfgParser {
 		var i:Int = start;
 		while (i < end) {
 			var e:Int = TcfgLexer.blockEnd(lines, i, end);
-			applyGroup(out, lines[i].key, lines, i + 1, e);
+			applyGroup(out, lines[i].key, lines[i].value, lines, i + 1, e);
 			i = e;
 		}
 		return out;
 	}
 
-	static function applyGroup(out:Dynamic, group:String, lines:Array<Line>, start:Int, end:Int):Void {
+	static function applyGroup(out:Dynamic, group:String, headerValue:Null<String>, lines:Array<Line>, start:Int, end:Int):Void {
 		switch (group) {
 			case 'images':
 				eachMember(lines, start, end, function(k, v) Reflect.setField(out, elemField(k), v));
 			case 'general':
 				eachMember(lines, start, end, function(k, v) Reflect.setField(out, (k == 'hi-res') ? 'hiRes' : k, v));
 			case 'animated', 'colorable':
+				// A bare `colorable: true` (the "all elements" bool shorthand) has an inline value; keep it a
+				// scalar. Only a childful `colorable:` block builds the per-element map.
+				if (headerValue != null) {
+					Reflect.setField(out, group, TcfgLexer.parseValue(headerValue));
+					return;
+				}
 				var map:Dynamic = {};
 				eachMember(lines, start, end, function(k, v) Reflect.setField(map, elemField(k), v));
 				Reflect.setField(out, group, map);

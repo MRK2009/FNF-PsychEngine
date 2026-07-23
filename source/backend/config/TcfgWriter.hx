@@ -65,6 +65,9 @@ class TcfgWriter {
 		add(gen, node, 'holdsOverHeads', 'holdsOverHeads');
 		add(gen, node, 'headOverlap', 'headOverlap');
 		add(gen, node, 'fitColumnWidth', 'fitColumnWidth');
+		add(gen, node, 'hitAlign', 'hitAlign');
+		add(gen, node, 'receptorFlipY', 'receptorFlipY');
+		add(gen, node, 'columnWidth', 'columnWidth');
 		emitGroup('general', gen, b, indent);
 
 		emitElemMap('animated', Reflect.field(node, 'animated'), b, indent);
@@ -104,10 +107,16 @@ class TcfgWriter {
 			b.add(tabs(indent) + key + ': ' + ser(value) + '\n');
 	}
 
-	// animated/colorable: flat element -> bool maps (holds->holdBody, ends->holdEnd).
+	// animated/colorable: flat element -> bool maps (holds->holdBody, ends->holdEnd). Either may instead be
+	// a plain bool -- the "all elements" shorthand the runtime and editor use -- in which case it's emitted
+	// as a scalar (`Reflect.fields` on a Bool would crash the write, taking the whole file with it).
 	static function emitElemMap(group:String, node:Dynamic, b:StringBuf, indent:Int):Void {
 		if (node == null)
 			return;
+		if (!isObj(node)) {
+			b.add(tabs(indent) + group + ': ' + ser(node) + '\n');
+			return;
+		}
 		b.add(tabs(indent) + group + ':\n');
 		for (f in Reflect.fields(node)) {
 			var name:String = (f == 'holds') ? 'holdBody' : (f == 'ends') ? 'holdEnd' : f;

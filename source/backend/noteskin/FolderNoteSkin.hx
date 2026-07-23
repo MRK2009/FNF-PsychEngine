@@ -60,8 +60,12 @@ class FolderNoteSkin implements INoteSkin {
 			return fallback.applyNote(spr, rgb, column, keyCount, animName);
 		noteFrames = NoteSkinConfig.staticFrame(noteFrames, NoteSkinConfig.animatedFor(cfg, 'notes'));
 
+		// osu!mania column-fit skins measure the element's TRUE width, so don't square-pad first (padding a
+		// tall key up to a square would make `fitColumnWidth` render it as a thin sliver). Square-pad only
+		// for the normal (native-pixel) skins that rely on it for rotation-safe, uniform centering.
+		var square:Bool = !NoteSkinConfig.fitsColumnWidth(cfg);
 		var factor:Float = NoteSkinConfig.applyAnims(spr, [
-			{name: 'note', keys: noteFrames, fps: laneFps, loop: false, angle: note.angle, square: true}
+			{name: 'note', keys: noteFrames, fps: laneFps, loop: false, angle: note.angle, square: square}
 		]);
 
 		var colorable:Bool = NoteSkinConfig.colorableFor(cfg, 'notes');
@@ -141,9 +145,14 @@ class FolderNoteSkin implements INoteSkin {
 		var off:Array<Float> = NoteSkinConfig.offsetFor(cfg.holdOffsets, col);
 		v.offsetX = off[0];
 		v.offsetY = off[1];
+		// Tail cap: its own `endOffsets` when the skin ships them, else the body's `holdOffsets` (no nudge).
+		var eoff:Array<Float> = (cfg.endOffsets != null) ? NoteSkinConfig.offsetFor(cfg.endOffsets, col) : off;
+		v.endOffsetX = eoff[0];
+		v.endOffsetY = eoff[1];
 		v.scaleFactor = bodyScale;
 		v.pixel = NoteSkinConfig.pixelRender;
 		v.colorable = holdsSupported;
+		v.holdAlpha = NoteSkinConfig.numForColumn(cfg.holdAlpha, col, 0.6);
 		v.ok = true;
 		return v;
 	}
@@ -216,10 +225,13 @@ class FolderNoteSkin implements INoteSkin {
 			confirmF = NoteSkinConfig.staticFrame(confirmF, NoteSkinConfig.animatedFor(cfg, 'confirm'));
 
 		var laneFps:Int = NoteSkinConfig.fpsForColumn(cfg, c);
+		// See applyNote: osu!mania column-fit skins keep their native (unpadded) frame so a tall key fills
+		// the lane width instead of being squeezed into a square and rendering as a sliver.
+		var square:Bool = !NoteSkinConfig.fitsColumnWidth(cfg);
 		var factor:Float = NoteSkinConfig.applyAnims(spr, [
-			{name: 'static', keys: staticF, fps: laneFps, loop: false, angle: staticA, square: true},
-			{name: 'pressed', keys: pressedF, fps: laneFps, loop: false, angle: pressedA, square: true},
-			{name: 'confirm', keys: confirmF, fps: confirmF.length > 1 ? laneFps : 24, loop: false, angle: confirmA, square: true}
+			{name: 'static', keys: staticF, fps: laneFps, loop: false, angle: staticA, square: square},
+			{name: 'pressed', keys: pressedF, fps: laneFps, loop: false, angle: pressedA, square: square},
+			{name: 'confirm', keys: confirmF, fps: confirmF.length > 1 ? laneFps : 24, loop: false, angle: confirmA, square: square}
 		]);
 
 		v.colorPerAnim = true;
@@ -233,13 +245,26 @@ class FolderNoteSkin implements INoteSkin {
 		v.offsetX = soff[0];
 		v.offsetY = soff[1];
 		v.laneCenter = true;
+		v.hitAlign = NoteSkinConfig.hitAlignFor(cfg, c);
+		v.receptorFlip = NoteSkinConfig.receptorFlipMode(cfg);
 
 		var scaleBase:Float = NoteSkinConfig.scaleForColumn(cfg, c) * Mania.noteSizes[kc - 1] / Mania.noteSizes[Mania.DEFAULT - 1];
 		var fit:Float = NoteSkinConfig.fitScaleFor(cfg, spr.frameWidth, kc);
-		var scaleFinal:Float = (fit > 0) ? fit : scaleBase * factor;
-		spr.scale.set(scaleFinal, scaleFinal);
+		var scaleX:Float = (fit > 0) ? fit : scaleBase * factor;
+		var scaleY:Float = scaleX;
+		if (fit > 0) {
+			// osu!mania keys fill the column WIDTH but keep their native texture HEIGHT (the key sprite is
+			// `RelativeSizeAxes.X` only -- height is NOT aspect-locked to width). Reproduce that: scale height
+			// off the source column width instead of the frame width, so a narrow-but-tall column key isn't
+			// stretched vertically the way a uniform width-fit does. `x1.6` is osu's POSITION_SCALE_FACTOR
+			// (its skin.ini ColumnWidth is in osu!px; the note art it fills is in that px space x1.6).
+			var colW:Float = NoteSkinConfig.receptorColumnWidth(cfg, c);
+			if (!Math.isNaN(colW) && colW > 0)
+				scaleY = (160 * Mania.noteSizes[kc - 1] / (colW * 1.6)) * factor;
+		}
+		spr.scale.set(scaleX, scaleY);
 		spr.updateHitbox();
-		v.scaleFactor = scaleFinal;
+		v.scaleFactor = scaleX;
 		v.pixel = NoteSkinConfig.pixelRender;
 
 		if (lastAnim != null && spr.animation.getByName(lastAnim) != null)

@@ -20,7 +20,21 @@ final class Receptor extends FlxSprite {
 	public var player:Int = 0;
 
 	public var direction:Float = 90;
-	public var downScroll:Bool = false;
+
+	/**
+		Scroll direction. Both the osu key `flip` and the `hitBonus` press point depend on it, but callers set
+		it AFTER `build()` (gameplay: ctor then `r.downScroll = ...`; editor: `layout()`), so changing it must
+		force `syncFrameCentering` to re-run past its frame-size early-out -- otherwise the flip/hitBonus stay
+		at the value computed for the wrong direction until something else re-syncs (a note hit).
+	**/
+	public var downScroll(default, set):Bool = false;
+
+	function set_downScroll(value:Bool):Bool {
+		if (value != downScroll)
+			_lastFrameW = -1;
+		return downScroll = value;
+	}
+
 	public var sustainReduce:Bool = true;
 	public var rotateNotes:Bool = false;
 
@@ -49,6 +63,29 @@ final class Receptor extends FlxSprite {
 
 	/** When set, each anim frame is re-centered on the fixed lane width (folder skins). **/
 	public var laneCenter:Bool = false;
+
+	/**
+		Hit-position fraction (osu!mania `HitPosition` analog), or `NaN` for the default lane-centre press
+		point. Marks WHERE on this receptor's art (0 = top, 1 = bottom) a note should be for a perfect hit;
+		the receptor art itself is NOT moved -- instead `hitBonus` shifts the note/hold landing point onto
+		that spot. Set from a folder skin's `hitAlign`; the osu skin converter auto-detects it from the art.
+	**/
+	public var hitAlign:Float = Math.NaN;
+
+	/**
+		Extra along-axis distance (px) from the default note landing point (`swagWidth/2` past the strum
+		origin) to this receptor's `hitAlign` press point. `0` when no hit position is set. Read by
+		`NoteSprite.follow` / `SustainSprite.follow` so notes and holds converge on the receptor's hit zone
+		without the receptor art being repositioned. Recomputed in `syncFrameCentering`.
+	**/
+	public var hitBonus:Float = 0;
+
+	/**
+		Vertical-flip mode for the receptor art (osu!mania's per-scroll key flip): `"always"`,
+		`"upscroll"`, `"downscroll"`, or `null` for never. Resolved against `downScroll` each frame; when
+		it flips, `hitAlign` is auto-inverted so the hit target still lands on the judgement line.
+	**/
+	public var receptorFlip:String = null;
 
 	public var staticColorable:Bool = false;
 	public var pressedColorable:Bool = true;
@@ -103,6 +140,9 @@ final class Receptor extends FlxSprite {
 	public function build():Void {
 		var lastAnim:String = (animation.curAnim != null) ? animation.curAnim.name : null;
 		laneCenter = false;
+		hitAlign = Math.NaN;
+		hitBonus = 0;
+		receptorFlip = null;
 		colorPerAnim = false;
 
 		// Pin asset resolution to the active skin's owner so a folder skin in any mod (or a forced skin)
@@ -114,12 +154,22 @@ final class Receptor extends FlxSprite {
 		var v:NoteVisual = NoteSkinService.current().applyReceptor(this, rgbShader, column, keyCount, lastAnim);
 		Paths.pinModRoot = prevPin;
 		laneCenter = v.laneCenter;
+		hitAlign = v.hitAlign;
+		receptorFlip = v.receptorFlip;
 		colorPerAnim = v.colorPerAnim;
 		staticColorable = v.staticColorable;
 		pressedColorable = v.pressedColorable;
 		confirmColorable = v.confirmColorable;
 		skinOffsetX = v.offsetX;
 		skinOffsetY = v.offsetY;
+
+		// Re-center NOW (offsets + hitBonus), not just next frame: applyReceptor already set the static
+		// frame + scale, and the notes read `hitBonus` in their own `follow` which runs BEFORE the receptor's
+		// update() each frame. Deferring the recompute left notes reading a stale hitBonus after a live edit
+		// (a rebuild) until something else forced a re-sync -- e.g. a note hit calling playAnim. Force it here
+		// so an edit takes effect immediately. `-1` makes the (frame-size-gated) recompute actually run.
+		_lastFrameW = _lastFrameH = -1;
+		syncFrameCentering();
 	}
 
 	/** Applies the initial on-screen placement for this column/side (matches the legacy strum layout). **/
@@ -191,6 +241,28 @@ final class Receptor extends FlxSprite {
 		centerOrigin();
 		if (laneCenter)
 			offset.x = (frameWidth - Mania.swagWidth) / 2;
+
+		// osu!mania flips its key art vertically depending on scroll direction; mirror that here (its art is
+		// drawn for downscroll, so the converter asks to flip on upscroll).
+		var flip:Bool = switch (receptorFlip) {
+			case 'always': true;
+			case 'upscroll': !downScroll;
+			case 'downscroll': downScroll;
+			default: false;
+		};
+		if (flipY != flip)
+			flipY = flip;
+
+		// Hit position: WITHOUT moving the receptor art, report how far the note's press point should sit
+		// past the default landing point (`swagWidth/2` along the axis -- a note centre sits half a lane
+		// past its raw scroll point). `hitAlign` is the fraction of the receptor art (0 top .. 1 bottom;
+		// mirrored when flipped) that marks the perfect-hit zone; `NoteSprite`/`SustainSprite` add this
+		// `hitBonus` so notes converge on that spot of the art instead of the lane centre.
+		if (!Math.isNaN(hitAlign)) {
+			var a:Float = flip ? (1 - hitAlign) : hitAlign;
+			hitBonus = a * frameHeight * scale.y - Mania.swagWidth * 0.5;
+		} else
+			hitBonus = 0;
 	}
 
 	override function update(elapsed:Float) {

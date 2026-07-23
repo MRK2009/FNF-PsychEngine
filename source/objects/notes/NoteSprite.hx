@@ -230,7 +230,7 @@ final class NoteSprite extends FlxSprite {
 		if (copyAlpha)
 			alpha = strum.alpha * multAlpha;
 
-		var along:Float = offsetY + distance + height / 2;
+		var along:Float = offsetY + distance + height / 2 + strum.hitBonus;
 		var perp:Float = offsetX + (centerOnStrum ? Mania.swagWidth / 2 : width / 2);
 		var cx:Float = strum.x + uX * along + uY * perp;
 		var cy:Float = strum.y + uY * along - uX * perp;
