@@ -57,6 +57,13 @@ class MobileCharacterEditorState extends MobileEditorBase {
 	var curAnim:Int = 0;
 
 	var animBtn:UIButton;
+
+	// ANIMATIONS page fields, held so selecting another animation can refill them in place.
+	var animNameIn:UITextInput;
+	var animSymbolIn:UITextInput;
+	var animFpsStepper:UIStepper;
+	var animIndicesIn:UITextInput;
+	var animLoopCheck:UICheckbox;
 	var silhouetteBtn:UIButton;
 
 	final _bounds:FlxRect = FlxRect.get();
@@ -294,6 +301,7 @@ class MobileCharacterEditorState extends MobileEditorBase {
 		curAnim = 0;
 		if (animBtn != null)
 			animBtn.label = 'ANIM: ${anims().length > 0 ? anims()[0].anim : '-'}';
+		syncAnimFields();
 		updateStatus();
 	}
 
@@ -312,12 +320,14 @@ class MobileCharacterEditorState extends MobileEditorBase {
 		character.playAnim(anims()[curAnim].anim, true);
 		if (animBtn != null)
 			animBtn.label = 'ANIM: ${anims()[curAnim].anim}';
+		syncAnimFields();
 		updateStatus();
 	}
 
 	function commitOffset():Void {
 		if (character == null || anims().length < 1)
 			return;
+		markDirty();
 		var a:AnimArray = anims()[curAnim];
 		var authored:Array<Float> = character.getAuthoredOffset();
 		a.offsets[0] = Std.int(authored[0]);
@@ -424,7 +434,7 @@ class MobileCharacterEditorState extends MobileEditorBase {
 		shell.addLeft('< EXIT', exitEditor);
 		shell.railGap(true);
 		shell.addLeft('OPEN', openCharacterFile);
-		shell.addLeft('SAVE', saveCharacter, true);
+		shell.addLeft('SAVE', function() saveCharacter(), true);
 		shell.railGap(true);
 		shell.addLeft('GHOST', openGhostPage);
 		silhouetteBtn = shell.addLeft('SILHOU: ON', toggleSilhouettes);
@@ -514,6 +524,7 @@ class MobileCharacterEditorState extends MobileEditorBase {
 
 			var img:UITextInput = new UITextInput('Image file name:', w, character.imageFile, function(v:String) {
 				character.imageFile = v;
+				markDirty();
 			});
 			img.controlWidth = 220;
 			img.y = y;
@@ -533,6 +544,7 @@ class MobileCharacterEditorState extends MobileEditorBase {
 
 			var sc:UIStepper = new UIStepper('Scale:', w, character.jsonScale, 0.1, function(v:Float) {
 				character.jsonScale = v;
+				markDirty();
 				character.scale.set(v, v);
 				character.updateHitbox();
 				reapplyCurrentOffset();
@@ -547,6 +559,7 @@ class MobileCharacterEditorState extends MobileEditorBase {
 
 			var player:UICheckbox = new UICheckbox('Playable Character', w, character.isPlayer, function(v:Bool) {
 				character.isPlayer = v;
+				markDirty();
 				character.flipX = (character.originalFlipX != character.isPlayer);
 				reapplyCurrentOffset();
 				updateCharacterPositions();
@@ -558,6 +571,7 @@ class MobileCharacterEditorState extends MobileEditorBase {
 
 			var flip:UICheckbox = new UICheckbox('Flip X', w, character.originalFlipX, function(v:Bool) {
 				character.originalFlipX = v;
+				markDirty();
 				character.flipX = (character.originalFlipX != character.isPlayer);
 				reapplyCurrentOffset();
 			});
@@ -567,6 +581,7 @@ class MobileCharacterEditorState extends MobileEditorBase {
 
 			var aa:UICheckbox = new UICheckbox('No antialiasing', w, character.noAntialiasing, function(v:Bool) {
 				character.noAntialiasing = v;
+				markDirty();
 				character.antialiasing = !v && ClientPrefs.data.antialiasing;
 			});
 			aa.y = y;
@@ -575,6 +590,7 @@ class MobileCharacterEditorState extends MobileEditorBase {
 
 			var swf:UICheckbox = new UICheckbox('SWF Mode (atlas)', w, character.swfMode, function(v:Bool) {
 				character.swfMode = v;
+				markDirty();
 				if (character.isAnimateAtlas) {
 					var lastAnim:String = character.getAnimationName();
 					clearGhost();
@@ -590,6 +606,23 @@ class MobileCharacterEditorState extends MobileEditorBase {
 		});
 	}
 
+	/**
+		Refills the ANIMATIONS page's editable fields from the selected animation, so picking one from
+		the list (or cycling with the rail button) loads its symbol / framerate / indices / loop instead
+		of leaving whichever animation was current when the page was built.
+	**/
+	function syncAnimFields():Void {
+		if (animNameIn == null || shell == null || !shell.drawerOpen || shell.pageTitle != 'ANIMATIONS')
+			return;
+
+		var a:AnimArray = (anims().length > 0) ? anims()[curAnim] : null;
+		animNameIn.text = (a != null) ? a.anim : '';
+		animSymbolIn.text = (a != null && a.name != null) ? a.name : '';
+		animFpsStepper.value = (a != null) ? a.fps : 24;
+		animIndicesIn.text = (a != null && a.indices != null) ? a.indices.join(',') : '';
+		animLoopCheck.checked = (a != null && a.loop);
+	}
+
 	function openAnimPage():Void {
 		shell.openPage('ANIMATIONS', function(pane:UIScrollPane):Float {
 			var w:Float = shell.pageWidth();
@@ -597,47 +630,48 @@ class MobileCharacterEditorState extends MobileEditorBase {
 
 			var cur:AnimArray = (anims().length > 0) ? anims()[curAnim] : null;
 
-			var animIn:UITextInput = new UITextInput('Animation name:', w, cur != null ? cur.anim : '', null);
-			animIn.controlWidth = 200;
-			animIn.y = y;
-			pane.content.addChild(animIn);
+			animNameIn = new UITextInput('Animation name:', w, cur != null ? cur.anim : '', null);
+			animNameIn.controlWidth = 200;
+			animNameIn.y = y;
+			pane.content.addChild(animNameIn);
 			y += 52;
 
-			var symbolIn:UITextInput = new UITextInput('Symbol/Prefix:', w, cur != null ? cur.name : '', null);
-			symbolIn.controlWidth = 200;
-			symbolIn.y = y;
-			pane.content.addChild(symbolIn);
+			animSymbolIn = new UITextInput('Symbol/Prefix:', w, cur != null ? cur.name : '', null);
+			animSymbolIn.controlWidth = 200;
+			animSymbolIn.y = y;
+			pane.content.addChild(animSymbolIn);
 			y += 52;
 
-			var fps:UIStepper = new UIStepper('Framerate:', w, cur != null ? cur.fps : 24, 1, null);
-			fps.min = 0;
-			fps.max = 240;
-			fps.decimals = 0;
-			fps.y = y;
-			pane.content.addChild(fps);
+			animFpsStepper = new UIStepper('Framerate:', w, cur != null ? cur.fps : 24, 1, null);
+			animFpsStepper.min = 0;
+			animFpsStepper.max = 240;
+			animFpsStepper.decimals = 0;
+			animFpsStepper.y = y;
+			pane.content.addChild(animFpsStepper);
 			y += 54;
 
-			var indicesIn:UITextInput = new UITextInput('Indices (0,1 or 0-5):', w, cur != null ? cur.indices.join(',') : '', null);
-			indicesIn.controlWidth = 170;
-			indicesIn.y = y;
-			pane.content.addChild(indicesIn);
+			animIndicesIn = new UITextInput('Indices (0,1 or 0-5):', w, cur != null ? cur.indices.join(',') : '', null);
+			animIndicesIn.controlWidth = 170;
+			animIndicesIn.y = y;
+			pane.content.addChild(animIndicesIn);
 			y += 52;
 
-			var loop:UICheckbox = new UICheckbox('Looped', w, cur != null && cur.loop, null);
-			loop.y = y;
-			pane.content.addChild(loop);
+			animLoopCheck = new UICheckbox('Looped', w, cur != null && cur.loop, null);
+			animLoopCheck.y = y;
+			pane.content.addChild(animLoopCheck);
 			y += 46;
 
 			var halfW:Float = (w - 10) / 2;
 			var addBtn:UIButton = new UIButton('Add / Update', halfW, 40, function() {
-				addOrUpdate(animIn.text.trim(), symbolIn.text.trim(), Std.int(fps.value), loop.checked, parseIndices(indicesIn.text));
+				addOrUpdate(animNameIn.text.trim(), animSymbolIn.text.trim(), Std.int(animFpsStepper.value), animLoopCheck.checked,
+					parseIndices(animIndicesIn.text));
 				openAnimPage();
 			}, true);
 			addBtn.y = y;
 			pane.content.addChild(addBtn);
 
 			var remBtn:UIButton = new UIButton('Remove', halfW, 40, function() {
-				removeAnim(animIn.text.trim());
+				removeAnim(animNameIn.text.trim());
 				openAnimPage();
 			});
 			remBtn.danger = true;
@@ -650,6 +684,9 @@ class MobileCharacterEditorState extends MobileEditorBase {
 			hdr.y = y;
 			pane.content.addChild(hdr);
 			y += 24;
+			// No accent on the rows: picking one does not rebuild the page, so the highlight stuck to
+			// whichever row was current when it opened. The rail button and status strip name the
+			// animation that is actually playing.
 			for (i in 0...anims().length) {
 				var idx:Int = i;
 				var a:AnimArray = anims()[i];
@@ -657,8 +694,9 @@ class MobileCharacterEditorState extends MobileEditorBase {
 					curAnim = idx;
 					character.playAnim(a.anim, true);
 					animBtn.label = 'ANIM: ${a.anim}';
+					syncAnimFields();
 					updateStatus();
-				}, i == curAnim);
+				});
 				row.fontSize = 13;
 				row.y = y;
 				pane.content.addChild(row);
@@ -673,7 +711,10 @@ class MobileCharacterEditorState extends MobileEditorBase {
 			var w:Float = shell.pageWidth();
 			var y:Float = 6;
 
-			var sing:UIStepper = new UIStepper('Sing Anim length:', w, character.singDuration, 0.1, function(v:Float) character.singDuration = v);
+			var sing:UIStepper = new UIStepper('Sing Anim length:', w, character.singDuration, 0.1, function(v:Float) {
+				character.singDuration = v;
+				markDirty();
+			});
 			sing.min = 0;
 			sing.max = 999;
 			sing.decimals = 1;
@@ -683,6 +724,7 @@ class MobileCharacterEditorState extends MobileEditorBase {
 
 			var icon:UITextInput = new UITextInput('Health icon:', w, character.healthIcon, function(v:String) {
 				character.healthIcon = v;
+				markDirty();
 				if (healthIcon != null)
 					healthIcon.changeIcon(v, false);
 			});
@@ -693,6 +735,7 @@ class MobileCharacterEditorState extends MobileEditorBase {
 
 			var iconColor:UIButton = new UIButton('Get Icon Color', w, 40, function() {
 				var coolColor:FlxColor = FlxColor.fromInt(CoolUtil.dominantColor(healthIcon));
+				markDirty();
 				character.healthColorArray[0] = coolColor.red;
 				character.healthColorArray[1] = coolColor.green;
 				character.healthColorArray[2] = coolColor.blue;
@@ -708,6 +751,7 @@ class MobileCharacterEditorState extends MobileEditorBase {
 				var ch:Int = i;
 				var st:UIStepper = new UIStepper(labels[i], w, character.healthColorArray[i], 1, function(v:Float) {
 					character.healthColorArray[ch] = Std.int(v);
+					markDirty();
 					updateHealthBar();
 				});
 				st.min = 0;
@@ -720,6 +764,7 @@ class MobileCharacterEditorState extends MobileEditorBase {
 
 			var px:UIStepper = new UIStepper('Char X:', w, character.positionArray[0], 5, function(v:Float) {
 				character.positionArray[0] = v;
+				markDirty();
 				updateCharacterPositions();
 			});
 			px.min = -9000;
@@ -731,6 +776,7 @@ class MobileCharacterEditorState extends MobileEditorBase {
 
 			var py:UIStepper = new UIStepper('Char Y:', w, character.positionArray[1], 5, function(v:Float) {
 				character.positionArray[1] = v;
+				markDirty();
 				updateCharacterPositions();
 			});
 			py.min = -9000;
@@ -742,6 +788,7 @@ class MobileCharacterEditorState extends MobileEditorBase {
 
 			var cx:UIStepper = new UIStepper('Camera X:', w, character.cameraPosition[0], 5, function(v:Float) {
 				character.cameraPosition[0] = v;
+				markDirty();
 				updatePointerPos();
 			});
 			cx.min = -9000;
@@ -753,6 +800,7 @@ class MobileCharacterEditorState extends MobileEditorBase {
 
 			var cy:UIStepper = new UIStepper('Camera Y:', w, character.cameraPosition[1], 5, function(v:Float) {
 				character.cameraPosition[1] = v;
+				markDirty();
 				updatePointerPos();
 			});
 			cy.min = -9000;
@@ -763,13 +811,19 @@ class MobileCharacterEditorState extends MobileEditorBase {
 			y += 52;
 
 			var vocals:UITextInput = new UITextInput('Vocals postfix:', w, character.vocalsFile != null ? character.vocalsFile : '',
-				function(v:String) character.vocalsFile = v);
+				function(v:String) {
+				character.vocalsFile = v;
+				markDirty();
+			});
 			vocals.controlWidth = 200;
 			vocals.y = y;
 			pane.content.addChild(vocals);
 			y += 52;
 
-			var loopHold:UICheckbox = new UICheckbox('Loop sing on hold', w, character.loopSingOnHold, function(v:Bool) character.loopSingOnHold = v);
+			var loopHold:UICheckbox = new UICheckbox('Loop sing on hold', w, character.loopSingOnHold, function(v:Bool) {
+				character.loopSingOnHold = v;
+				markDirty();
+			});
 			loopHold.y = y;
 			pane.content.addChild(loopHold);
 			return y + 44;
@@ -932,6 +986,7 @@ class MobileCharacterEditorState extends MobileEditorBase {
 	function addOrUpdate(name:String, symbol:String, fps:Int, loop:Bool, indices:Array<Int>):Void {
 		if (name.length < 1)
 			return;
+		markDirty();
 
 		var lastOffsets:Array<Int> = [0, 0];
 		for (a in anims().copy())
@@ -969,6 +1024,7 @@ class MobileCharacterEditorState extends MobileEditorBase {
 	function removeAnim(name:String):Void {
 		if (character == null)
 			return;
+		markDirty();
 		for (a in anims().copy())
 			if (a.anim == name) {
 				var resetAnim:Bool = (a.anim == character.getAnimationName());
@@ -1026,6 +1082,7 @@ class MobileCharacterEditorState extends MobileEditorBase {
 			vocals_file: null
 		};
 
+		markDirty();
 		character.loadCharacterFile(template);
 		character.missingCharacter = false;
 		character.color = FlxColor.WHITE;
@@ -1052,6 +1109,7 @@ class MobileCharacterEditorState extends MobileEditorBase {
 		if (name == null || name.length < 1)
 			return;
 		charName = name;
+		unsavedProgress = false;
 		addCharacter();
 		updatePointerPos();
 		if (healthIcon != null)
@@ -1086,7 +1144,7 @@ class MobileCharacterEditorState extends MobileEditorBase {
 		shell.setStatus('CHAR: $charName    anim: ${a != null ? a.anim : '-'}    offset: ${a != null ? a.offsets : []}    ZOOM $zoomTxt');
 	}
 
-	function saveCharacter():Void {
+	function saveCharacter(?onSaved:Void->Void):Void {
 		var json:Dynamic = {
 			"animations": character.animationsArray,
 			"image": character.imageFile,
@@ -1104,7 +1162,12 @@ class MobileCharacterEditorState extends MobileEditorBase {
 			"_editor_isPlayer": character.isPlayer
 		};
 		var data:String = PsychJsonPrinter.print(json, ['offsets', 'position', 'healthbar_colors', 'camera_position', 'indices']);
-		saveFile('$charName.json', data);
+		saveFile('$charName.json', data, onSaved);
+	}
+
+	// The unsaved-changes exit prompt (MobileEditorBase) saves through this hook.
+	override function saveDocument(?onSaved:Void->Void):Void {
+		saveCharacter(onSaved);
 	}
 
 	function openCharacterFile():Void {
@@ -1112,6 +1175,7 @@ class MobileCharacterEditorState extends MobileEditorBase {
 			try {
 				var cf:Dynamic = haxe.Json.parse(data);
 				charName = baseName(path);
+				unsavedProgress = false;
 				character.imageFile = cf.image;
 				character.jsonScale = (cf.scale != null) ? cf.scale : 1;
 				character.singDuration = (cf.sing_duration != null) ? cf.sing_duration : 4;

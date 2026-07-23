@@ -55,9 +55,15 @@ class MobileMenuCharacterEditorState extends MobileEditorBase {
 		buildChrome();
 
 		setupCanvas();
-		gestures.onDragMove = function(_x:Float, _y:Float, dx:Float, dy:Float):Void {
-			characterFile.position[0] += Std.int(dx);
-			characterFile.position[1] += Std.int(dy);
+		// A canvas press is always an offset drag here (there is nothing to pan): without claiming it in
+		// onDragStart the gesture layer routes it to onPan and onDragMove never fires at all.
+		gestures.onDragStart = function(_x:Float, _y:Float):Bool return true;
+		// onDragMove hands over (dx, dy, x, y): the first two are the frame delta. The position array is a
+		// draw OFFSET (subtracted), so it moves against the finger for the character to follow it.
+		gestures.onDragMove = function(dx:Float, dy:Float, _x:Float, _y:Float):Void {
+			characterFile.position[0] -= Std.int(dx);
+			characterFile.position[1] -= Std.int(dy);
+			markDirty();
 			updateOffset();
 		};
 
@@ -79,31 +85,69 @@ class MobileMenuCharacterEditorState extends MobileEditorBase {
 			'SLOT      pick which menu slot to edit (opp / bf / gf)',
 			'SETTINGS  image, idle/confirm anims, scale, flip, AA',
 			'DRAG      move the character (position offset)',
-			'ACTION BAR nudge the position, play confirm',
+			'ACTION BAR  nudge the position, play confirm',
 			'SAVE      writes <image>.json'
 		]));
 
+		// Signs match the desktop editor's arrow keys: the position array is a draw offset, so moving the
+		// character left means a LARGER offset.
 		shell.setActionBar([
-			{label: '< ', cb: function() nudge(-1, 0)},
-			{label: ' >', cb: function() nudge(1, 0)},
-			{label: '^', cb: function() nudge(0, -1)},
-			{label: 'v', cb: function() nudge(0, 1)},
+			{label: '< ', cb: function() nudge(1, 0)},
+			{label: ' >', cb: function() nudge(-1, 0)},
+			{label: '^', cb: function() nudge(0, 1)},
+			{label: 'v', cb: function() nudge(0, -1)},
 			{label: 'CONFIRM', cb: playConfirm}
 		]);
 		shell.showActionBar(true);
 	}
 
+	/**
+		Moves to the next menu slot and edits THAT slot's character file (the previous slot goes back to
+		its stock look). Editing kept the loaded file on the new slot before, which silently pasted the
+		last-opened character over every slot you visited.
+	**/
 	function cycleSlot():Void {
-		charType = (charType + 1) % 3;
-		slotBtn.label = 'SLOT: ${slotNames[charType]}';
-		reloadSelectedCharacter();
-		if (shell.drawerOpen)
-			openSettingsPage();
+		confirmDiscard('Edit the ${slotNames[(charType + 1) % 3]} slot', function():Void {
+			charType = (charType + 1) % 3;
+			slotBtn.label = 'SLOT: ${slotNames[charType]}';
+			loadSlotFile(defaultCharacters[charType]);
+			unsavedProgress = false;
+			updateCharacters();
+			if (shell.drawerOpen)
+				openSettingsPage();
+		});
+	}
+
+	/**
+		Reads `images/menucharacters/<name>.json` into the edited file, keeping the current one when the
+		slot's character has no (readable) definition.
+		@param name the menu character name (dad / bf / gf)
+	**/
+	function loadSlotFile(name:String):Void {
+		var path:String = Paths.getPath('images/menucharacters/$name.json', TEXT);
+		try {
+			#if MODS_ALLOWED
+			if (!FileSystem.exists(path))
+				return;
+			var loaded:MenuCharacterFile = cast haxe.Json.parse(File.getContent(path));
+			#else
+			if (!openfl.utils.Assets.exists(path))
+				return;
+			var loaded:MenuCharacterFile = cast haxe.Json.parse(openfl.utils.Assets.getText(path));
+			#end
+			if (loaded == null)
+				return;
+			if (loaded.position == null)
+				loaded.position = [0, 0];
+			characterFile = loaded;
+		} catch (e:Dynamic)
+			UIToast.show('Could not load $name.json: ${Std.string(e)}');
 	}
 
 	function nudge(dx:Int, dy:Int):Void {
 		characterFile.position[0] += dx * 5;
 		characterFile.position[1] += dy * 5;
+		markDirty();
 		updateOffset();
 	}
 
@@ -120,6 +164,7 @@ class MobileMenuCharacterEditorState extends MobileEditorBase {
 
 			var img:UITextInput = new UITextInput('Image file name:', w, characterFile.image, function(v:String) {
 				characterFile.image = v;
+				markDirty();
 				reloadSelectedCharacter();
 			});
 			img.y = y;
@@ -128,6 +173,7 @@ class MobileMenuCharacterEditorState extends MobileEditorBase {
 
 			var idle:UITextInput = new UITextInput('Idle anim (.XML):', w, characterFile.idle_anim, function(v:String) {
 				characterFile.idle_anim = v;
+				markDirty();
 				reloadSelectedCharacter();
 			});
 			idle.y = y;
@@ -136,6 +182,7 @@ class MobileMenuCharacterEditorState extends MobileEditorBase {
 
 			var conf:UITextInput = new UITextInput('Start Press anim:', w, characterFile.confirm_anim, function(v:String) {
 				characterFile.confirm_anim = v;
+				markDirty();
 				reloadSelectedCharacter();
 			});
 			conf.y = y;
@@ -144,6 +191,7 @@ class MobileMenuCharacterEditorState extends MobileEditorBase {
 
 			var sc:UIStepper = new UIStepper('Scale:', w, characterFile.scale, 0.05, function(v:Float) {
 				characterFile.scale = v;
+				markDirty();
 				reloadSelectedCharacter();
 			});
 			sc.min = 0.1;
@@ -155,6 +203,7 @@ class MobileMenuCharacterEditorState extends MobileEditorBase {
 
 			var flip:UICheckbox = new UICheckbox('Flip X', w, characterFile.flipX == true, function(c:Bool) {
 				characterFile.flipX = c;
+				markDirty();
 				grpWeekCharacters.members[charType].flipX = c;
 			});
 			flip.y = y;
@@ -163,6 +212,7 @@ class MobileMenuCharacterEditorState extends MobileEditorBase {
 
 			var aa:UICheckbox = new UICheckbox('Antialiasing', w, characterFile.antialiasing != false, function(c:Bool) {
 				characterFile.antialiasing = c;
+				markDirty();
 				grpWeekCharacters.members[charType].antialiasing = c;
 			});
 			aa.y = y;
@@ -170,9 +220,10 @@ class MobileMenuCharacterEditorState extends MobileEditorBase {
 			y += 44;
 
 			var hint:UILabel = new UILabel('Drag the character on the canvas to set its position.', 13, 2);
+			hint.wrapWidth = w;
 			hint.y = y;
 			pane.content.addChild(hint);
-			return y + 30;
+			return y + hint.measure() + 8;
 		});
 	}
 
@@ -211,12 +262,18 @@ class MobileMenuCharacterEditorState extends MobileEditorBase {
 		saveFile('${characterFile.image}.json', haxe.Json.stringify(characterFile, '\t'));
 	}
 
+	// The unsaved-changes exit prompt (MobileEditorBase) saves through this hook.
+	override function saveDocument(?onSaved:Void->Void):Void {
+		saveFile('${characterFile.image}.json', haxe.Json.stringify(characterFile, '	'), onSaved);
+	}
+
 	function openCharacter():Void {
 		openFile('Menu_Dad.json', 'Open a menu character', function(data:String, _:String):Void {
 			try {
 				characterFile = cast haxe.Json.parse(data);
 				if (characterFile.position == null)
 					characterFile.position = [0, 0];
+				unsavedProgress = false;
 				reloadSelectedCharacter();
 				if (shell.drawerOpen)
 					openSettingsPage();

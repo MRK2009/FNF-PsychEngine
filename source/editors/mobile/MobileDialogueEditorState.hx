@@ -113,22 +113,15 @@ class MobileDialogueEditorState extends MobileEditorBase {
 
 			var charInput:UITextInput = new UITextInput('Character:', w, line.portrait, function(v:String) {
 				line.portrait = v;
-				reloadCharacter();
+				markDirty();
+				loadPortrait(v);
 			});
 			charInput.y = y;
 			pane.content.addChild(charInput);
 			y += 56;
 
-			var textInput:UITextInput = new UITextInput('Text:', w, line.text, function(v:String) {
-				line.text = (v != null) ? v : '';
-				daText.text = line.text;
-				daText.resetDialogue();
-			});
-			textInput.y = y;
-			pane.content.addChild(textInput);
-			y += 56;
-
 			var speed:UIStepper = new UIStepper('Speed (ms):', w, (line.speed != null) ? line.speed : 0.05, 0.005, function(v:Float) {
+				markDirty();
 				if (Math.isNaN(v) || v < 0.001)
 					v = 0.0;
 				line.speed = v;
@@ -143,6 +136,7 @@ class MobileDialogueEditorState extends MobileEditorBase {
 
 			var angry:UICheckbox = new UICheckbox('Angry Textbox', w, line.boxState == 'angry', function(c:Bool) {
 				line.boxState = c ? 'angry' : 'normal';
+				markDirty();
 				updateTextBox();
 			});
 			angry.y = y;
@@ -151,6 +145,7 @@ class MobileDialogueEditorState extends MobileEditorBase {
 
 			var soundInput:UITextInput = new UITextInput('Sound file name:', w, (line.sound != null) ? line.sound : '', function(v:String) {
 				line.sound = v;
+				markDirty();
 				daText.sound = (v != null) ? v : '';
 			});
 			soundInput.y = y;
@@ -158,9 +153,29 @@ class MobileDialogueEditorState extends MobileEditorBase {
 			y += 56;
 
 			var hint:UILabel = new UILabel('Use PREV / NEXT on the action bar to move between lines.', 13, 2);
+			hint.wrapWidth = w;
 			hint.y = y;
 			pane.content.addChild(hint);
-			return y + 30;
+			y += hint.measure() + 14;
+
+			// The spoken line last and roomy: it is the longest field by far, so it gets a wrapping box
+			// at the bottom of the page where it can grow without pushing everything else off-screen.
+			var textCap:UILabel = new UILabel('Text:', 13, 2);
+			textCap.y = y;
+			pane.content.addChild(textCap);
+			y += textCap.measure() + 4;
+
+			var textInput:UITextInput = new UITextInput('', w, line.text, function(v:String) {
+				line.text = (v != null) ? v : '';
+				markDirty();
+				daText.text = line.text;
+				daText.resetDialogue();
+			});
+			textInput.multiline = true;
+			textInput.resize(w, 180);
+			textInput.y = y;
+			pane.content.addChild(textInput);
+			return y + 188;
 		});
 	}
 
@@ -177,6 +192,7 @@ class MobileDialogueEditorState extends MobileEditorBase {
 
 	function addLine():Void {
 		dialogueFile.dialogue.insert(curSelected + 1, copyDefaultLine());
+		markDirty();
 		changeText(1);
 	}
 
@@ -186,6 +202,7 @@ class MobileDialogueEditorState extends MobileEditorBase {
 			return;
 		}
 		dialogueFile.dialogue.remove(dialogueFile.dialogue[curSelected]);
+		markDirty();
 		changeText();
 	}
 
@@ -193,8 +210,7 @@ class MobileDialogueEditorState extends MobileEditorBase {
 		curSelected = FlxMath.wrap(curSelected + add, 0, dialogueFile.dialogue.length - 1);
 		var line:DialogueLine = dialogueFile.dialogue[curSelected];
 
-		character.reloadCharacterJson(line.portrait);
-		reloadCharacter();
+		loadPortrait(line.portrait);
 
 		daText.text = (line.text != null) ? line.text : '';
 		daText.delay = (line.speed != null) ? line.speed : 0.05;
@@ -221,6 +237,16 @@ class MobileDialogueEditorState extends MobileEditorBase {
 		DialogueBoxPsych.updateBoxOffsets(box);
 	}
 
+	/**
+		Swaps the previewed portrait to another dialogue character json (the LINE page's Character field
+		only re-applied the OLD json before, so a retyped portrait never actually loaded).
+		@param name the portrait json name
+	**/
+	function loadPortrait(name:String):Void {
+		character.reloadCharacterJson((name != null && name.length > 0) ? name : DialogueCharacter.DEFAULT_CHARACTER);
+		reloadCharacter();
+	}
+
 	function reloadCharacter():Void {
 		character.frames = Paths.getSparrowAtlas('dialogue/' + character.jsonFile.image);
 		character.reloadAnimations();
@@ -238,8 +264,15 @@ class MobileDialogueEditorState extends MobileEditorBase {
 
 		character.x += character.jsonFile.position[0];
 		character.y += character.jsonFile.position[1];
+
+		// playAnim() with no name picks a RANDOM animation, which left the status strip naming a
+		// different one than the portrait was actually playing. Start on the first, explicitly.
 		curAnim = 0;
-		character.playAnim();
+		if (character.jsonFile.animations != null && character.jsonFile.animations.length > 0)
+			character.playAnim(character.jsonFile.animations[0].anim);
+		else
+			character.playAnim();
+		updateStatus();
 	}
 
 	function scrollAnim():Void {
@@ -250,15 +283,32 @@ class MobileDialogueEditorState extends MobileEditorBase {
 		updateStatus();
 	}
 
+	/** The animation the portrait is really playing (the json name, without the idle postfix). **/
+	function currentAnimName():String {
+		if (character.animation.curAnim != null) {
+			var name:String = character.animation.curAnim.name;
+			if (StringTools.endsWith(name, '-IDLE'))
+				name = name.substr(0, name.length - 5);
+			if (character.dialogueAnimations.exists(name))
+				return name;
+		}
+		if (character.jsonFile != null && character.jsonFile.animations != null && curAnim < character.jsonFile.animations.length)
+			return character.jsonFile.animations[curAnim].anim;
+		return '?';
+	}
+
 	function updateStatus():Void {
-		var animName:String = (character.jsonFile != null
-			&& character.jsonFile.animations != null
-			&& curAnim < character.jsonFile.animations.length) ? character.jsonFile.animations[curAnim].anim : '?';
-		shell.setStatus('DIALOGUE EDITOR    line ${curSelected + 1}/${dialogueFile.dialogue.length}    portrait: ${dialogueFile.dialogue[curSelected].portrait}    anim: $animName');
+		var portrait:String = dialogueFile.dialogue[curSelected].portrait;
+		shell.setStatus('DIALOGUE EDITOR    line ${curSelected + 1}/${dialogueFile.dialogue.length}    portrait: $portrait    anim: ${currentAnimName()}');
 	}
 
 	function saveDialogue():Void {
 		saveFile('dialogue.json', haxe.Json.stringify(dialogueFile, '\t'));
+	}
+
+	// The unsaved-changes exit prompt (MobileEditorBase) saves through this hook.
+	override function saveDocument(?onSaved:Void->Void):Void {
+		saveFile('dialogue.json', haxe.Json.stringify(dialogueFile, '\t'), onSaved);
 	}
 
 	function openDialogue():Void {
@@ -268,6 +318,7 @@ class MobileDialogueEditorState extends MobileEditorBase {
 				if (dialogueFile.dialogue == null || dialogueFile.dialogue.length < 1)
 					dialogueFile.dialogue = [copyDefaultLine()];
 				curSelected = 0;
+				unsavedProgress = false;
 				changeText();
 			} catch (e:Dynamic) {
 				UIToast.show('Load failed: ${Std.string(e)}');

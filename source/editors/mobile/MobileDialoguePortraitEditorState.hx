@@ -14,6 +14,7 @@ import smidr.widgets.UICheckbox;
 import smidr.widgets.UIDropdown;
 import smidr.widgets.UILabel;
 import smidr.widgets.UIScrollPane;
+import smidr.widgets.UISlider;
 import smidr.widgets.UIStepper;
 import smidr.widgets.UITextInput;
 import smidr.overlays.UIToast;
@@ -35,7 +36,14 @@ class MobileDialoguePortraitEditorState extends MobileEditorBase {
 	var curSelectedAnim:String = null;
 	var offsetMode:Int = 0;
 
+	// Reference ghosts, off by default (the desktop editor also starts with them hidden): the LIVE
+	// portrait is what the current mode's offsets move, the ghosts are the other pose to line up against.
+	var showLoopGhost:Bool = false;
+	var showIdleGhost:Bool = false;
+	var ghostAlpha:Float = 0.6;
+
 	var modeBtn:UIButton;
+	var ghostBtn:UIButton;
 
 	override function create():Void {
 		initPsychCamera();
@@ -51,15 +59,17 @@ class MobileDialoguePortraitEditorState extends MobileEditorBase {
 		mainGroup.add(character);
 
 		ghostLoop = new DialogueCharacter();
-		ghostLoop.alpha = 0.5;
+		ghostLoop.alpha = ghostAlpha;
 		ghostLoop.color = FlxColor.RED;
 		ghostLoop.isGhost = true;
+		ghostLoop.visible = false;
 		mainGroup.add(ghostLoop);
 
 		ghostIdle = new DialogueCharacter();
-		ghostIdle.alpha = 0.5;
+		ghostIdle.alpha = ghostAlpha;
 		ghostIdle.color = FlxColor.BLUE;
 		ghostIdle.isGhost = true;
+		ghostIdle.visible = false;
 		mainGroup.add(ghostIdle);
 
 		box = new FlxSprite(70, 370);
@@ -73,18 +83,26 @@ class MobileDialoguePortraitEditorState extends MobileEditorBase {
 		box.updateHitbox();
 		add(box);
 
-		loadPortrait(characterName);
+		// Chrome FIRST: loading a portrait walks all the way down to updateStatus, which needs the shell
+		// (it null-referenced and killed the editor on entry).
 		buildChrome();
+		loadPortrait(characterName);
 
 		setupCanvas();
-		gestures.onDragMove = function(_x:Float, _y:Float, dx:Float, dy:Float):Void {
+		// A canvas press is always an offset drag here (there is nothing to pan): without claiming it in
+		// onDragStart the gesture layer routes it to onPan and onDragMove never fires at all.
+		gestures.onDragStart = function(_x:Float, _y:Float):Bool return true;
+		// onDragMove hands over (dx, dy, x, y): the first two are the frame delta. Offsets are subtracted
+		// when drawn, so they move against the finger for the ghost to follow it.
+		gestures.onDragMove = function(dx:Float, dy:Float, _x:Float, _y:Float):Void {
 			var a:DialogueAnimArray = currentAnim();
 			if (a == null)
 				return;
 
 			var arr:Array<Int> = (offsetMode == 0) ? a.loop_offsets : a.idle_offsets;
-			arr[0] += Std.int(dx);
-			arr[1] += Std.int(dy);
+			arr[0] -= Std.int(dx);
+			arr[1] -= Std.int(dy);
+			markDirty();
 			applyOffsets();
 		};
 
@@ -101,29 +119,97 @@ class MobileDialoguePortraitEditorState extends MobileEditorBase {
 		shell.addRight('PORTRAIT', openPortraitPage);
 		shell.addRight('ANIMS', openAnimPage);
 		modeBtn = shell.addRight('OFF: LOOP', toggleMode);
+		ghostBtn = shell.addRight('GHOSTS: OFF', openGhostPage);
 		shell.railGap(false);
 		shell.addRight('? GUIDE', function() shell.showGuide([
 			'PORTRAIT  load a portrait json, image, scale, dialogue side',
 			'ANIMS     add / update / remove animations, pick one',
-			'OFF: MODE toggle loop (red) vs idle (blue) offset',
-			'DRAG      move the current-mode offset (ghost)',
-			'ACTION BAR nudge the offset',
+			'OFF: MODE  toggle which offset you edit: loop or idle',
+			'GHOSTS    overlay the loop (red) / idle (blue) pose to line up against',
+			'DRAG      move the current-mode offset',
+			'ACTION BAR  nudge the offset',
 			'SAVE      writes <name>.json'
 		]));
 
+		// Signs match the desktop editor's arrow keys: offsets are subtracted when drawn, so moving the
+		// portrait left means a LARGER offset.
 		shell.setActionBar([
-			{label: '< ', cb: function() nudge(-1, 0)},
-			{label: ' >', cb: function() nudge(1, 0)},
-			{label: '^', cb: function() nudge(0, -1)},
-			{label: 'v', cb: function() nudge(0, 1)}
+			{label: '< ', cb: function() nudge(1, 0)},
+			{label: ' >', cb: function() nudge(-1, 0)},
+			{label: '^', cb: function() nudge(0, 1)},
+			{label: 'v', cb: function() nudge(0, -1)}
 		]);
 		shell.showActionBar(true);
 	}
 
+	/** Switches which offset the portrait (and the nudge/drag) edits: the loop pose or the idle pose. **/
 	function toggleMode():Void {
 		offsetMode = 1 - offsetMode;
 		modeBtn.label = 'OFF: ${offsetMode == 0 ? 'LOOP' : 'IDLE'}';
-		updateStatus();
+		// The live portrait plays the pose being edited, so its offsets are what you see moving.
+		if (curSelectedAnim != null)
+			character.playAnim(curSelectedAnim, offsetMode == 1);
+		applyOffsets();
+	}
+
+	/** Ghost overlay controls, mirroring the character editor's GHOST page. **/
+	function openGhostPage():Void {
+		shell.openPage('GHOSTS', function(pane:UIScrollPane):Float {
+			var w:Float = shell.pageWidth();
+			var y:Float = 6;
+
+			var loopBox:UICheckbox = new UICheckbox('Show loop ghost (red)', w, showLoopGhost, function(c:Bool) {
+				showLoopGhost = c;
+				applyGhosts();
+			});
+			loopBox.y = y;
+			pane.content.addChild(loopBox);
+			y += 52;
+
+			var idleBox:UICheckbox = new UICheckbox('Show idle ghost (blue)', w, showIdleGhost, function(c:Bool) {
+				showIdleGhost = c;
+				applyGhosts();
+			});
+			idleBox.y = y;
+			pane.content.addChild(idleBox);
+			y += 58;
+
+			var opacity:UISlider = new UISlider('Opacity:', w, 0.1, 1, ghostAlpha, function(v:Float) {
+				ghostAlpha = v;
+				applyGhosts();
+			});
+			opacity.y = y;
+			pane.content.addChild(opacity);
+			y += 60;
+
+			var clear:UIButton = new UIButton('Hide both', w, 44, function() {
+				showLoopGhost = false;
+				showIdleGhost = false;
+				applyGhosts();
+				openGhostPage();
+			});
+			clear.danger = true;
+			clear.y = y;
+			pane.content.addChild(clear);
+			y += 54;
+
+			var hint:UILabel = new UILabel('The portrait itself shows the offset you are editing; the ghosts are the other pose, held still to line it up against.',
+				13, 2);
+			hint.wrapWidth = w;
+			hint.y = y;
+			pane.content.addChild(hint);
+			return y + hint.measure() + 8;
+		});
+	}
+
+	/** Pushes the ghost toggles + opacity onto the two overlay sprites and the rail button. **/
+	function applyGhosts():Void {
+		ghostLoop.visible = showLoopGhost;
+		ghostIdle.visible = showIdleGhost;
+		ghostLoop.alpha = ghostAlpha;
+		ghostIdle.alpha = ghostAlpha;
+		if (ghostBtn != null)
+			ghostBtn.label = 'GHOSTS: ' + (showLoopGhost || showIdleGhost ? 'ON' : 'OFF');
 	}
 
 	function nudge(dx:Int, dy:Int):Void {
@@ -134,6 +220,7 @@ class MobileDialoguePortraitEditorState extends MobileEditorBase {
 		var arr:Array<Int> = (offsetMode == 0) ? a.loop_offsets : a.idle_offsets;
 		arr[0] += dx * 5;
 		arr[1] += dy * 5;
+		markDirty();
 		applyOffsets();
 	}
 
@@ -144,6 +231,7 @@ class MobileDialoguePortraitEditorState extends MobileEditorBase {
 
 			var name:UITextInput = new UITextInput('Portrait json:', w, characterName, function(v:String) {
 				characterName = v.trim();
+				markDirty();
 				loadPortrait(characterName);
 			});
 			name.y = y;
@@ -152,6 +240,7 @@ class MobileDialoguePortraitEditorState extends MobileEditorBase {
 
 			var img:UITextInput = new UITextInput('Image (dialogue/...):', w, character.jsonFile.image, function(v:String) {
 				character.jsonFile.image = v.trim();
+				markDirty();
 				reloadCharacter();
 			});
 			img.y = y;
@@ -160,6 +249,7 @@ class MobileDialoguePortraitEditorState extends MobileEditorBase {
 
 			var sc:UIStepper = new UIStepper('Scale:', w, character.jsonFile.scale, 0.05, function(v:Float) {
 				character.jsonFile.scale = v;
+				markDirty();
 				reloadCharacter();
 			});
 			sc.min = 0.1;
@@ -171,6 +261,7 @@ class MobileDialoguePortraitEditorState extends MobileEditorBase {
 
 			var pos:UIDropdown = new UIDropdown('Dialogue side:', w, function(_:Int, v:String) {
 				character.jsonFile.dialogue_pos = v;
+				markDirty();
 				reloadCharacter();
 			});
 			pos.setItems(['left', 'center', 'right']);
@@ -228,7 +319,7 @@ class MobileDialoguePortraitEditorState extends MobileEditorBase {
 
 			for (a in character.jsonFile.animations) {
 				var an:String = a.anim;
-				var row:UIButton = new UIButton(an, w, 40, function() selectAnim(an), an == curSelectedAnim);
+				var row:UIButton = new UIButton(an, w, 40, function() selectAnim(an));
 				row.y = y;
 				pane.content.addChild(row);
 				y += 46;
@@ -252,7 +343,7 @@ class MobileDialoguePortraitEditorState extends MobileEditorBase {
 		if (a != null) {
 			ghostLoop.playAnim(a.anim);
 			ghostIdle.playAnim(a.anim, true);
-			character.playAnim(a.anim);
+			character.playAnim(a.anim, offsetMode == 1);
 		}
 		applyOffsets();
 	}
@@ -276,6 +367,7 @@ class MobileDialoguePortraitEditorState extends MobileEditorBase {
 				idle_offsets: [0, 0]
 			});
 		}
+		markDirty();
 		character.reloadAnimations();
 		ghostLoop.reloadAnimations();
 		ghostIdle.reloadAnimations();
@@ -286,6 +378,7 @@ class MobileDialoguePortraitEditorState extends MobileEditorBase {
 		for (a in character.jsonFile.animations.copy())
 			if (a.anim.trim() == name)
 				character.jsonFile.animations.remove(a);
+		markDirty();
 		character.reloadAnimations();
 		ghostLoop.reloadAnimations();
 		ghostIdle.reloadAnimations();
@@ -329,10 +422,16 @@ class MobileDialoguePortraitEditorState extends MobileEditorBase {
 			return;
 		ghostLoop.offset.set(a.loop_offsets[0], a.loop_offsets[1]);
 		ghostIdle.offset.set(a.idle_offsets[0], a.idle_offsets[1]);
+		// The portrait carries the offsets of the pose being edited, so nudging/dragging moves IT and not
+		// just a ghost -- the ghosts are optional references.
+		var live:Array<Int> = (offsetMode == 0) ? a.loop_offsets : a.idle_offsets;
+		character.offset.set(live[0], live[1]);
 		updateStatus();
 	}
 
 	function updateStatus():Void {
+		if (shell == null)
+			return;
 		var a:DialogueAnimArray = currentAnim();
 		var off:String = (a != null) ? (offsetMode == 0 ? 'loop ${a.loop_offsets}' : 'idle ${a.idle_offsets}') : '-';
 		shell.setStatus('PORTRAIT EDITOR    $characterName    anim: ${curSelectedAnim != null ? curSelectedAnim : '-'}    mode: ${offsetMode == 0 ? 'LOOP' : 'IDLE'} $off');
@@ -342,11 +441,17 @@ class MobileDialoguePortraitEditorState extends MobileEditorBase {
 		saveFile('$characterName.json', haxe.Json.stringify(character.jsonFile, '\t'));
 	}
 
+	// The unsaved-changes exit prompt (MobileEditorBase) saves through this hook.
+	override function saveDocument(?onSaved:Void->Void):Void {
+		saveFile('$characterName.json', haxe.Json.stringify(character.jsonFile, '	'), onSaved);
+	}
+
 	function openPortrait():Void {
 		openFile('$characterName.json', 'Open a portrait json', function(data:String, path:String):Void {
 			try {
 				character.jsonFile = cast haxe.Json.parse(data);
 				characterName = baseName(path);
+				unsavedProgress = false;
 				reloadCharacter();
 			} catch (e:Dynamic) {
 				UIToast.show('Load failed: ${Std.string(e)}');

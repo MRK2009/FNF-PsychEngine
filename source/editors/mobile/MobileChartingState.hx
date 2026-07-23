@@ -139,7 +139,10 @@ class MobileChartingState extends MobileEditorBase {
 		noteField.overlay.cameras = [gridCam];
 		gridCam.zoom = fitZoom();
 
-		model.onChanged = function():Void noteField.onModelChanged();
+		model.onChanged = function():Void {
+			markDirty();
+			noteField.onModelChanged();
+		};
 		selection.onChanged = refreshActionBar;
 
 		buildChrome();
@@ -226,7 +229,7 @@ class MobileChartingState extends MobileEditorBase {
 		shell.addLeft('REDO', doRedo);
 		shell.addLeft('PASTE', pasteClipboard);
 		shell.railGap(true);
-		shell.addLeft('SAVE', saveChart, true);
+		shell.addLeft('FILE', openFilePage, true);
 
 		typeBtn = shell.addRight(typeLabel(), openTypePage);
 		snapBtn = shell.addRight('SNAP ${snap.label()}', openSnapPage);
@@ -264,7 +267,7 @@ class MobileChartingState extends MobileEditorBase {
 			'HOLD A NOTE   delete it',
 			'EVENT LANE    tap to place / edit, hold to remove',
 			'MULTI         tap-add notes, then copy / delete / retype',
-			'LEFT RAIL     play, TEST, sections, undo/redo, paste',
+			'LEFT RAIL     play, TEST, sections, undo/redo, paste, file',
 			'RIGHT RAIL    note type, snap, events, strumlines, section, settings'
 		], function() {
 			if (firstRun) {
@@ -506,12 +509,7 @@ class MobileChartingState extends MobileEditorBase {
 				rem.x = third * 2 + 20;
 				rem.y = y;
 				pane.content.addChild(rem);
-				y += 64;
-
-				var sep:UILabel = new UILabel('---------------------------------', 12, 0);
-				sep.y = y;
-				pane.content.addChild(sep);
-				y += 24;
+				y += 88; // breathing room before the next strumline block
 			}
 
 			var add:UIButton = new UIButton('+ ADD STRUMLINE', w, 60, function() {
@@ -905,6 +903,21 @@ class MobileChartingState extends MobileEditorBase {
 			pane.content.addChild(reload);
 			y += 70;
 
+			return y + 8;
+		});
+	}
+
+	/** Save / open / new: everything that touches the chart file, off the rail's FILE button. **/
+	function openFilePage():Void {
+		shell.openPage('FILE', function(pane:UIScrollPane):Float {
+			var w:Float = shell.pageWidth();
+			var y:Float = 6;
+
+			var state:UILabel = new UILabel(unsavedProgress ? 'Unsaved changes' : 'All changes saved', 14, unsavedProgress ? 0 : 2);
+			state.y = y;
+			pane.content.addChild(state);
+			y += 34;
+
 			var save:UIButton = new UIButton('SAVE CHART', w, 60, saveChart, true);
 			save.fontSize = 16;
 			save.y = y;
@@ -917,13 +930,13 @@ class MobileChartingState extends MobileEditorBase {
 			pane.content.addChild(saveAs);
 			y += 70;
 
-			var openBtn:UIButton = new UIButton('OPEN CHART... (file browser)', w, 60, openChart);
+			var openBtn:UIButton = new UIButton('OPEN CHART... (file browser)', w, 60, function() confirmDiscard('Open another chart', openChart));
 			openBtn.fontSize = 16;
 			openBtn.y = y;
 			pane.content.addChild(openBtn);
 			y += 70;
 
-			var fresh:UIButton = new UIButton('NEW CHART (clears everything)', w, 60, newChart);
+			var fresh:UIButton = new UIButton('NEW CHART (clears everything)', w, 60, function() confirmDiscard('Start a new chart', newChart));
 			fresh.danger = true;
 			fresh.fontSize = 16;
 			fresh.y = y;
@@ -1332,6 +1345,7 @@ class MobileChartingState extends MobileEditorBase {
 		noteField.setViewTime(0);
 		refreshActionBar();
 		updateStatus();
+		unsavedProgress = false;
 		shell.closeDrawer();
 	}
 
@@ -1358,10 +1372,10 @@ class MobileChartingState extends MobileEditorBase {
 	function saveChartAs():Void {
 		var data:String = PsychJsonPrinter.print(backend.Song.buildPsychV2(cast model.chart, model.chart), backend.Song.PSYCH_V2_INLINE,
 			backend.Song.PSYCH_V2_KEY_ORDER);
-		fileDialog.save(Paths.formatToSongPath(model.chart.song) + '.json', data,
-			function():Void UIToast.show('Saved: ${fileDialog.path}'),
-			null,
-			function():Void UIToast.show('Save failed'));
+		fileDialog.save(Paths.formatToSongPath(model.chart.song) + '.json', data, function():Void {
+			unsavedProgress = false;
+			UIToast.show('Saved: ${fileDialog.path}');
+		}, null, function():Void UIToast.show('Save failed'));
 	}
 
 	function playtest():Void {
@@ -1412,6 +1426,7 @@ class MobileChartingState extends MobileEditorBase {
 				sys.FileSystem.createDirectory('charts');
 			var path:String = 'charts/$name.json';
 			sys.io.File.saveContent(path, data);
+			unsavedProgress = false;
 			UIToast.show('Saved to $path');
 		} catch (e:Dynamic) {
 			UIToast.show('Save failed: ${Std.string(e)}');
@@ -1419,9 +1434,14 @@ class MobileChartingState extends MobileEditorBase {
 		#end
 	}
 
-	// exitEditor() is provided by MobileEditorBase (switch to the editors menu + restore the menu music).
+	// The unsaved-changes exit prompt lives in MobileEditorBase; it saves through this hook.
+	override function saveDocument(?onSaved:Void->Void):Void {
+		saveChart();
+		if (onSaved != null)
+			onSaved();
+	}
 
-	// Android back: dismiss a live selection before the base exits (guide/drawer are handled by the base).
+	// Android back: dismiss a live selection before the base exits (prompt/guide/drawer are handled by the base).
 	override function onBackButtonExtra():Bool {
 		if (selection.count > 0) {
 			selection.clear();

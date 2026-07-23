@@ -10,7 +10,7 @@ import smidr.overlays.UIToast;
 /**
  * Shared base for the touch-native editors. Owns the `MobileEditorShell` chrome, an optional
  * gesture-driven preview camera, the exit-to-menu flow, and the Android back-button routing
- * (guide -> drawer -> subclass hook -> exit). Subclasses build their content (canvas + rails + drawer
+ * (prompt -> guide -> drawer -> subclass hook -> exit). Subclasses build their content (canvas + rails + drawer
  * pages) in `create()` and override the hooks below; `update`/`destroy` chain up for the common bits.
  *
  * Pure-form editors leave the canvas fields null; canvas editors call `setupCanvas()` for a full-screen
@@ -30,16 +30,28 @@ class MobileEditorBase extends MusicBeatState {
 		every mobile editor so open + save-as go through the system picker, not a fixed path. **/
 	final fileDialog:FileDialogHandler = new FileDialogHandler();
 
+	/** Set by the subclass on every edit, cleared on save/load; gates the exit confirmation. **/
+	var unsavedProgress:Bool = false;
+
+	/** Flags the document as edited (call from every mutation). **/
+	inline function markDirty():Void
+		unsavedProgress = true;
+
 	/**
 	 * Saves `data` through the system file picker (Android SAF "save as" / desktop save dialog). No-op
 	 * while a previous dialog is still open.
 	 * @param fileName the default file name (e.g. `bf.json`)
 	 * @param data the file contents
 	 */
-	function saveFile(fileName:String, data:String):Void {
+	function saveFile(fileName:String, data:String, ?onSaved:Void->Void):Void {
 		if (!fileDialog.completed)
 			return;
-		fileDialog.save(fileName, data, function():Void UIToast.show('Saved: ${fileDialog.path}'), null, function():Void UIToast.show('Save failed'));
+		fileDialog.save(fileName, data, function():Void {
+			unsavedProgress = false;
+			UIToast.show('Saved: ${fileDialog.path}');
+			if (onSaved != null)
+				onSaved();
+		}, null, function():Void UIToast.show('Save failed'));
 	}
 
 	/**
@@ -70,10 +82,64 @@ class MobileEditorBase extends MusicBeatState {
 		gestures = new EditorCanvasGestures(FlxRect.get(0, 0, FlxG.width, FlxG.height));
 	}
 
-	/** Returns to the editors menu (restoring the menu music). **/
+	/**
+	 * Leaves the editor, asking first when the document has unsaved edits. SAVE & EXIT waits for the
+	 * save to actually complete (the file picker is asynchronous), so a cancelled picker keeps the
+	 * editor open with the edits intact.
+	 */
 	function exitEditor():Void {
+		if (!unsavedProgress || shell == null) {
+			leaveEditor();
+			return;
+		}
+		shell.showPrompt('UNSAVED CHANGES', 'There are edits here that were never saved. Leave the editor anyway?', [
+			{
+				label: 'SAVE & EXIT',
+				accent: true,
+				cb: function():Void saveDocument(leaveEditor)
+			},
+			{label: 'DISCARD & EXIT', danger: true, cb: leaveEditor},
+			{label: 'KEEP EDITING', cb: function():Void {}}
+		]);
+	}
+
+	/** Returns to the editors menu (restoring the menu music), no questions asked. **/
+	function leaveEditor():Void {
 		MusicBeatState.switchState(new editors.MasterEditorMenu());
 		FlxG.sound.playMusic(Paths.music('freakyMenu'));
+	}
+
+	/**
+	 * Guards an action that replaces the edited document (New / Open / switching slot) behind the same
+	 * unsaved-changes question. Runs `action` straight away when there is nothing to lose.
+	 * @param what the action, phrased for the prompt body ("Open another chart")
+	 * @param action run once the user accepts
+	 */
+	function confirmDiscard(what:String, action:Void->Void):Void {
+		if (!unsavedProgress || shell == null) {
+			action();
+			return;
+		}
+		shell.showPrompt('UNSAVED CHANGES', '$what? The edits here were never saved.', [
+			{
+				label: 'SAVE FIRST',
+				accent: true,
+				cb: function():Void saveDocument(action)
+			},
+			{label: 'DISCARD', danger: true, cb: action},
+			{label: 'CANCEL', cb: function():Void {}}
+		]);
+	}
+
+	/**
+	 * Writes the edited document (the subclass' SAVE action), calling `onSaved` once it landed. The
+	 * default does nothing but report success, so an editor that never sets `unsavedProgress` needs
+	 * no override.
+	 * @param onSaved run after a successful save
+	 */
+	function saveDocument(?onSaved:Void->Void):Void {
+		if (onSaved != null)
+			onSaved();
 	}
 
 	/**
@@ -87,7 +153,9 @@ class MobileEditorBase extends MusicBeatState {
 	override function update(elapsed:Float):Void {
 		#if android
 		if (mobile.backend.BackButton.justPressed) {
-			if (shell != null && shell.guideOpen)
+			if (shell != null && shell.promptOpen)
+				shell.closePrompt();
+			else if (shell != null && shell.guideOpen)
 				shell.closeGuide();
 			else if (shell != null && shell.drawerOpen)
 				shell.closeDrawer();

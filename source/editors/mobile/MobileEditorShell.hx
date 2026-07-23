@@ -55,11 +55,15 @@ class MobileEditorShell {
 	final drawerTitle:UILabel;
 	final drawerPane:UIScrollPane;
 
+	/** Title of the page last built into the drawer, so an editor can tell which one is on screen. **/
+	public var pageTitle(default, null):String = '';
+
 	final actionBar:Sprite;
 	var actionBarBg:UIPanel;
 	var actionX:Float = 0;
 
 	var guideModal:UIModal = null;
+	var promptModal:UIModal = null;
 
 	public function new() {
 		UITheme.applyMobilePreset();
@@ -176,6 +180,7 @@ class MobileEditorShell {
 	**/
 	public function openPage(title:String, build:UIScrollPane->Float):Void {
 		drawerTitle.text = title;
+		pageTitle = title;
 		var i:Int = drawerPane.content.numChildren;
 		while (--i >= 0) {
 			var c = drawerPane.content.getChildAt(i);
@@ -216,9 +221,15 @@ class MobileEditorShell {
 		}
 		actionBar.removeChildren();
 
-		var btnW:Float = 140;
 		var btnH:Float = 66;
 		var pad:Float = 10;
+		// The bar must stay between the thumb rails: with many actions the buttons shrink to fit
+		// instead of sliding under (and behind) the right rail, where they can't be tapped.
+		var avail:Float = FlxG.width - safeL - safeR - RAIL_W * 2 - 16;
+		var btnW:Float = 140;
+		var maxBtnW:Float = (avail - pad) / items.length - pad;
+		if (items.length > 0 && maxBtnW < btnW)
+			btnW = Math.max(64, maxBtnW);
 		var totalW:Float = items.length * (btnW + pad) + pad;
 
 		actionBarBg = new UIPanel(totalW, btnH + pad * 2, 0xE61E1E26);
@@ -247,24 +258,75 @@ class MobileEditorShell {
 
 	// ---- Gesture guide ----
 
-	/** Shows the touch-controls guide modal. `onDismiss` fires when it closes. **/
+	/**
+		Shows the touch-controls guide modal. Each line is split at its first run of two-or-more
+		spaces into a gesture column and a description column, both word-wrapped, so long entries
+		stay inside the panel instead of running off it. `onDismiss` fires when it closes.
+	**/
 	public function showGuide(lines:Array<String>, ?onDismiss:Void->Void):Void {
 		if (guideModal != null)
 			return;
-		var m:UIModal = new UIModal('TOUCH CONTROLS', 660, 130 + lines.length * 44);
-		var y:Float = 8;
+
+		final pad:Float = UITheme.px(20);
+		final gap:Float = UITheme.px(14);
+		final titleH:Float = UITheme.px(40);
+		final btnH:Float = UITheme.px(46);
+
+		var panelW:Float = Math.min(920, FlxG.width - safeL - safeR - 80);
+		var innerW:Float = panelW - pad * 2;
+		var keyW:Float = innerW * 0.34;
+		var descW:Float = innerW - keyW - gap;
+
+		var m:UIModal = new UIModal('TOUCH CONTROLS', panelW, titleH + btnH + pad * 3);
+
+		var pane:UIScrollPane = new UIScrollPane(innerW, btnH);
+		pane.x = pad;
+		pane.y = 0;
+
+		var y:Float = 0;
 		for (line in lines) {
-			var l:UILabel = new UILabel(line, 17, 0);
-			l.x = 26;
-			l.y = y;
-			m.body.addChild(l);
-			y += 44;
+			var key:String = line;
+			var desc:String = '';
+			var cut:Int = columnSplit(line);
+			if (cut > 0) {
+				key = StringTools.rtrim(line.substr(0, cut));
+				desc = StringTools.ltrim(line.substr(cut));
+			}
+
+			var keyLbl:UILabel = new UILabel(key, 15, 0);
+			keyLbl.wrapWidth = keyW;
+			var rowH:Float = keyLbl.measure();
+			keyLbl.y = y;
+			pane.content.addChild(keyLbl);
+
+			if (desc.length > 0) {
+				var descLbl:UILabel = new UILabel(desc, 15, 2);
+				descLbl.wrapWidth = descW;
+				var descH:Float = descLbl.measure();
+				descLbl.x = keyW + gap;
+				descLbl.y = y;
+				pane.content.addChild(descLbl);
+				if (descH > rowH)
+					rowH = descH;
+			}
+
+			y += rowH + UITheme.px(10);
 		}
-		var ok:UIButton = new UIButton('GOT IT', 240, 56, function() m.close(), true);
-		ok.fontSize = 17;
-		ok.x = (660 - 240) / 2;
-		ok.y = y + 8;
+
+		var maxPaneH:Float = FlxG.height - safeT - safeB - titleH - btnH - pad * 4;
+		var paneH:Float = Math.min(y, maxPaneH);
+		pane.resize(innerW, paneH);
+		pane.refreshContent(y);
+		m.body.addChild(pane);
+
+		var okW:Float = UITheme.px(200);
+		var ok:UIButton = new UIButton('GOT IT', okW, btnH, function() m.close(), true);
+		ok.fontSize = 15;
+		ok.x = (panelW - okW) / 2;
+		ok.y = paneH + pad;
 		m.body.addChild(ok);
+
+		m.resize(panelW, titleH + paneH + pad * 2 + btnH);
 		m.onClosed = function() {
 			guideModal = null;
 			if (onDismiss != null)
@@ -272,6 +334,12 @@ class MobileEditorShell {
 		};
 		guideModal = m;
 		m.open();
+	}
+
+	/** Index of the first run of two-or-more spaces (the gesture/description column break), or -1. **/
+	static function columnSplit(line:String):Int {
+		var i:Int = line.indexOf('  ');
+		return (i > 0) ? i : -1;
 	}
 
 	public var guideOpen(get, never):Bool;
@@ -285,9 +353,99 @@ class MobileEditorShell {
 			guideModal.close();
 	}
 
+	// ---- Prompt ----
+
+	/**
+		Shows a finger-sized question modal: a wrapped message over one big button per choice
+		(laid out in a row, or stacked when they would not fit). The picked callback fires after
+		the modal closes so the caller may switch state from it. `onCancel` fires when the modal
+		is dismissed by the backdrop / Escape / Android back instead.
+		@param title the header text
+		@param message the question body
+		@param choices the buttons, left to right
+		@param onCancel fired on dismissal without a choice
+	**/
+	public function showPrompt(title:String, message:String, choices:Array<{label:String, cb:Void->Void, ?danger:Bool, ?accent:Bool}>,
+			?onCancel:Void->Void):Void {
+		if (promptModal != null)
+			return;
+
+		final pad:Float = UITheme.px(20);
+		final gap:Float = UITheme.px(10);
+		final titleH:Float = UITheme.px(40);
+		final btnH:Float = UITheme.px(56);
+
+		var panelW:Float = Math.min(760, FlxG.width - safeL - safeR - 80);
+		var innerW:Float = panelW - pad * 2;
+
+		var m:UIModal = new UIModal(title, panelW, titleH + btnH + pad * 3);
+
+		var msg:UILabel = new UILabel(message, 15, 0);
+		msg.wrapWidth = innerW;
+		var msgH:Float = msg.measure();
+		msg.x = pad;
+		msg.y = 0;
+		m.body.addChild(msg);
+
+		// One row while every button keeps a usable width; otherwise a stack.
+		var count:Int = choices.length;
+		var rowW:Float = (count > 0) ? (innerW - gap * (count - 1)) / count : innerW;
+		var stacked:Bool = rowW < UITheme.px(150);
+
+		var y:Float = msgH + pad;
+		var x:Float = pad;
+		var picked:Void->Void = null;
+
+		for (choice in choices) {
+			var cb:Void->Void = choice.cb;
+			var b:UIButton = new UIButton(choice.label, stacked ? innerW : rowW, btnH, function():Void {
+				picked = cb;
+				m.close();
+			}, choice.accent == true);
+			if (choice.danger == true)
+				b.danger = true;
+			b.fontSize = 14;
+			b.x = stacked ? pad : x;
+			b.y = y;
+			m.body.addChild(b);
+			if (stacked)
+				y += btnH + gap;
+			else
+				x += rowW + gap;
+		}
+
+		var buttonsH:Float = stacked ? (count * (btnH + gap) - gap) : btnH;
+		m.resize(panelW, titleH + msgH + pad * 2 + buttonsH);
+		m.onClosed = function():Void {
+			promptModal = null;
+			if (picked != null)
+				picked();
+			else if (onCancel != null)
+				onCancel();
+		};
+		promptModal = m;
+		m.open();
+	}
+
+	public var promptOpen(get, never):Bool;
+
+	inline function get_promptOpen():Bool {
+		return promptModal != null;
+	}
+
+	public function closePrompt():Void {
+		if (promptModal != null)
+			promptModal.close();
+	}
+
 	public function dispose():Void {
 		if (guideModal != null)
 			guideModal.close();
+		if (promptModal != null) {
+			promptModal.onClosed = null;
+			promptModal.close();
+			promptModal = null;
+		}
 		FlxSmidr.dispose();
 		UITheme.clearMobilePreset();
 	}

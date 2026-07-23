@@ -24,6 +24,11 @@ using StringTools;
  * output so the two interop.
  */
 class MobileWeekEditorState extends MobileEditorBase {
+	/** The story-menu preview band the background art and the week title live in. **/
+	static inline var BAND_Y:Float = 90;
+
+	static inline var BAND_H:Float = 300;
+
 	var weekFile:WeekFile;
 	var fileName:String = 'week1';
 
@@ -52,9 +57,17 @@ class MobileWeekEditorState extends MobileEditorBase {
 	}
 
 	function buildPreview():Void {
-		var bgYellow:FlxSprite = new FlxSprite(0, 90).makeGraphic(FlxG.width, 300, 0xFFF9CF51);
+		var bgYellow:FlxSprite = new FlxSprite(0, BAND_Y).makeGraphic(FlxG.width, Std.int(BAND_H), 0xFFF9CF51);
 		bgYellow.scrollFactor.set();
 		add(bgYellow);
+
+		// The story-menu background art, same lookup the desktop editor and Story Menu use, scaled into
+		// the (shorter) preview band. Stays hidden while the asset name names nothing.
+		bg = new FlxSprite(0, BAND_Y);
+		bg.antialiasing = ClientPrefs.data.antialiasing;
+		bg.scrollFactor.set();
+		bg.visible = false;
+		add(bg);
 
 		titleTxt = new FlxText(0, 110, FlxG.width, '', 48);
 		titleTxt.setFormat(Paths.font('vcr.ttf'), 48, FlxColor.BLACK, CENTER);
@@ -72,7 +85,41 @@ class MobileWeekEditorState extends MobileEditorBase {
 		add(charTxt);
 	}
 
+	/**
+		Loads `images/menubackgrounds/menu_<weekBackground>` into the preview band, letterboxed to its
+		width. Hides the sprite when the week names no background (or one that isn't there).
+	**/
+	function reloadBG():Void {
+		var assetName:String = weekFile.weekBackground;
+		if (assetName == null || assetName.length < 1) {
+			bg.visible = false;
+			return;
+		}
+
+		var found:Bool = #if MODS_ALLOWED FileSystem.exists(Paths.modsImages('menubackgrounds/menu_' + assetName))
+			|| #end openfl.utils.Assets.exists(Paths.getPath('images/menubackgrounds/menu_$assetName.png', IMAGE), IMAGE);
+		if (!found) {
+			bg.visible = false;
+			return;
+		}
+
+		try {
+			bg.loadGraphic(Paths.image('menubackgrounds/menu_$assetName'));
+			// Contain: the story-menu art is wider than the preview band is tall, so fit whichever axis
+			// runs out first and centre the result in the band.
+			var fit:Float = Math.min(FlxG.width / bg.frameWidth, BAND_H / bg.frameHeight);
+			bg.scale.set(fit, fit);
+			bg.updateHitbox();
+			bg.x = (FlxG.width - bg.width) / 2;
+			bg.y = BAND_Y + (BAND_H - bg.height) / 2;
+			bg.visible = true;
+		} catch (e:Dynamic) {
+			bg.visible = false;
+		}
+	}
+
 	function refreshPreview():Void {
+		reloadBG();
 		titleTxt.text = (weekFile.storyName != null && weekFile.storyName.length > 0) ? weekFile.storyName : fileName;
 		var songs:Array<String> = [];
 		for (s in weekFile.songs)
@@ -106,15 +153,34 @@ class MobileWeekEditorState extends MobileEditorBase {
 		]));
 	}
 
-	inline function field(pane:UIScrollPane, y:Float, label:String, value:String, onChange:String->Void):Float {
-		var t:UITextInput = new UITextInput(label, shell.pageWidth(), value != null ? value : '', onChange);
-		t.y = y;
+	/**
+		A labelled field, stacked: the caption on its own line above a full-width box. Side-by-side rows
+		put the box at 42% of the width, which the longer week captions ("Week Before (unlocks after):")
+		run straight into on the narrow drawer.
+	**/
+	function field(pane:UIScrollPane, y:Float, label:String, value:String, onChange:String->Void):Float {
+		var w:Float = shell.pageWidth();
+
+		var cap:UILabel = new UILabel(label, 13, 2);
+		cap.wrapWidth = w;
+		var capH:Float = cap.measure();
+		cap.y = y;
+		pane.content.addChild(cap);
+
+		var t:UITextInput = new UITextInput('', w, value != null ? value : '', function(v:String):Void {
+			markDirty();
+			onChange(v);
+		});
+		t.y = y + capH + 2;
 		pane.content.addChild(t);
-		return y + 56;
+		return y + capH + 2 + t.h + 12;
 	}
 
 	inline function toggle(pane:UIScrollPane, y:Float, label:String, checked:Bool, onChange:Bool->Void):Float {
-		var c:UICheckbox = new UICheckbox(label, shell.pageWidth(), checked, onChange);
+		var c:UICheckbox = new UICheckbox(label, shell.pageWidth(), checked, function(v:Bool):Void {
+			markDirty();
+			onChange(v);
+		});
 		c.y = y;
 		pane.content.addChild(c);
 		return y + 44;
@@ -132,7 +198,10 @@ class MobileWeekEditorState extends MobileEditorBase {
 				refreshPreview();
 			});
 			y = field(pane, y, 'Week Name:', weekFile.weekName, function(v) weekFile.weekName = v.trim());
-			y = field(pane, y, 'Background Asset:', weekFile.weekBackground, function(v) weekFile.weekBackground = v.trim());
+			y = field(pane, y, 'Background Asset:', weekFile.weekBackground, function(v) {
+				weekFile.weekBackground = v.trim();
+				refreshPreview();
+			});
 			return y;
 		});
 	}
@@ -144,7 +213,13 @@ class MobileWeekEditorState extends MobileEditorBase {
 			for (s in weekFile.songs)
 				if (s != null && s[0] != null)
 					lines.push(Std.string(s[0]));
-			var t:UITextInput = new UITextInput('Songs:', shell.pageWidth(), lines.join(', '), function(v:String) {
+			var cap:UILabel = new UILabel('Songs:', 13, 2);
+			cap.wrapWidth = shell.pageWidth();
+			y += cap.measure() + 2;
+			cap.y = 6;
+			pane.content.addChild(cap);
+			var t:UITextInput = new UITextInput('', shell.pageWidth(), lines.join(', '), function(v:String) {
+				markDirty();
 				var parts:Array<String> = v.split(',');
 				var out:Array<Dynamic> = [];
 				for (p in parts) {
@@ -168,11 +243,12 @@ class MobileWeekEditorState extends MobileEditorBase {
 			});
 			t.y = y;
 			pane.content.addChild(t);
-			y += 56;
+			y += t.h + 12;
 			var hint:UILabel = new UILabel('Comma-separated song folder names, in play order.', 13, 2);
+			hint.wrapWidth = shell.pageWidth();
 			hint.y = y;
 			pane.content.addChild(hint);
-			return y + 30;
+			return y + hint.measure() + 8;
 		});
 	}
 
@@ -218,11 +294,18 @@ class MobileWeekEditorState extends MobileEditorBase {
 		WeekEditorState.unsavedProgress = false;
 	}
 
+	// The unsaved-changes exit prompt (MobileEditorBase) saves through this hook.
+	override function saveDocument(?onSaved:Void->Void):Void {
+		saveFile('$fileName.json', haxe.Json.stringify(weekFile, '\t'), onSaved);
+		WeekEditorState.unsavedProgress = false;
+	}
+
 	function openWeek():Void {
 		openFile('week.json', 'Open a week file', function(data:String, path:String):Void {
 			try {
 				weekFile = cast haxe.Json.parse(data);
 				fileName = baseName(path);
+				unsavedProgress = false;
 				refreshPreview();
 			} catch (e:Dynamic) {
 				UIToast.show('Load failed: ${Std.string(e)}');
