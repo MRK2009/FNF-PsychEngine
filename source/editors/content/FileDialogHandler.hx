@@ -122,6 +122,41 @@ class FileDialogHandler extends FlxBasic {
 		_fileRef.browseEx(OPEN, defaultName, title, filter);
 	}
 
+	/**
+		Picks a file and reports only its `path` -- the contents are never read, so this is what binary
+		files (audio, images) use: `open` would pull the whole file in as a String.
+		@param defaultName the name the dialog opens on
+		@param title the dialog title
+		@param filter the extensions to offer; defaults to every file
+		@param onComplete fired with `path` set
+		@param onCancel fired when the user backs out
+		@param onError fired when the dialog fails
+	**/
+	public function browse(?defaultName:String = null, ?title:String = null, ?filter:Array<FileFilter> = null, ?onComplete:Void->Void,
+			?onCancel:Void->Void, ?onError:Void->Void) {
+		#if mobile
+		// The mobile pickers hand back document contents, not a filesystem path there is nothing to copy.
+		flixel.FlxG.log.warn('Browsing for a file is not supported on mobile.');
+		if (onCancel != null)
+			onCancel();
+		return;
+		#else
+		if (!completed)
+			throw new Exception('You must finish previous operation before starting a new one.');
+
+		this._dialogMode = OPEN;
+		_startUp(onComplete, onCancel, onError);
+		#if mac
+		filter = [];
+		#end
+
+		removeEvents();
+		_currentEvent = onLoadDirectoryComplete; // path only, no contents
+		_fileRef.addEventListener(#if desktop Event.SELECT #else Event.COMPLETE #end, _currentEvent);
+		_fileRef.browseEx(OPEN, defaultName, title, filter);
+		#end
+	}
+
 	public function openDirectory(?title:String = null, ?onComplete:Void->Void, ?onCancel:Void->Void, ?onError:Void->Void) {
 		#if android
 		// SAF tree access (persistable directory grants) is a different beast; not worth it yet.

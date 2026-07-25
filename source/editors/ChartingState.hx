@@ -11,6 +11,7 @@ import openfl.geom.ColorTransform;
 import openfl.geom.Rectangle;
 import editors.charting.audio.FlxChartAudio;
 import editors.charting.audio.IChartAudio;
+import backend.tools.MediaConverter;
 import editors.charting.data.ChartEditorModel;
 import editors.charting.data.ChartFiles;
 import editors.charting.data.ClipboardModel;
@@ -1978,17 +1979,194 @@ class ChartingState extends MusicBeatState {
 		});
 
 		flow.header(new UIAccordion("Audio Files", colW));
-		flow.add(new UIButton("Reload Audio", colW, UITheme.px(28), function():Void {
-			backend.Song.loadedSongName = model.chart.songKey();
-			audio.load(backend.Song.loadedSongName, model.chart.needsVoices);
-			applyAudioVolumes();
-			audio.setRate(RATE_VALUES[rateIndex]);
-			noteField.maxTime = audio.loaded ? audio.length : -1;
-			applyWaveConfig();
-			UIToast.show(audio.loaded ? 'Audio loaded' : 'No audio found in "${backend.Song.loadedSongName}"');
-			updateTimeLabel();
-		}));
+		#if sys
+		addHintRow(flow, colW, 'Copied into ${audioDir()}/');
+		for (slot in AUDIO_SLOTS) {
+			var file:String = slot.file;
+			var label:String = slot.label;
+			var have:Bool = audioSlotExists(file);
+			var button:UIButton = new UIButton('${have ? "Replace" : "Set"} $label...', colW, UITheme.px(28),
+				function():Void browseForAudio(file, label));
+			button.tooltip = canConvertAudio() ? 'Pick any audio file; anything that is not .${Paths.SOUND_EXT} is converted with ffmpeg' : 'Pick a .${Paths.SOUND_EXT} file';
+			flow.add(button);
+		}
+		#end
+		flow.add(new UIButton("Reload Audio", colW, UITheme.px(28), function():Void reloadAudio(true)));
 	}
+
+	/** The audio a song package can hold, in the order the SONG tab offers them. **/
+	static final AUDIO_SLOTS:Array<{label:String, file:String}> = [
+		{label: 'Instrumental', file: 'Inst'},
+		{label: 'Player Vocals', file: 'Voices-Player'},
+		{label: 'Opponent Vocals', file: 'Voices-Opponent'}
+	];
+
+	/** Extensions the audio picker offers; everything but the engine's own goes through ffmpeg. **/
+	static inline var AUDIO_EXTENSIONS:String = 'ogg;mp3;wav;flac;m4a;aac;opus;wma;aiff';
+
+	/**
+		Whether a picked file that isn't already the engine's format can be transcoded: the converter tools
+		have to be built in AND ffmpeg has to be installed.
+		@return true when a non-`${Paths.SOUND_EXT}` pick will work
+	**/
+	inline function canConvertAudio():Bool {
+		#if (sys && CONVERTERS_ALLOWED)
+		return MediaConverter.hasFfmpeg();
+		#else
+		return false;
+		#end
+	}
+
+	/**
+		Where this song's audio belongs. Audio always lives under `songs/`, whatever layout the chart uses:
+		beside the chart when that already sits in a `songs/` package, in the sibling `songs/<key>/` when the
+		chart is in the pre-package `data/<key>/`, and in the current mod's package otherwise -- including
+		for a base-game song, whose assets are never written to.
+		@return the directory path
+	**/
+	function audioDir():String {
+		var key:String = model.chart.songKey();
+		#if sys
+		var dir:String = ChartFiles.folderOf(backend.Song.chartPath);
+		if (dir != null && !dir.startsWith('assets/')) {
+			if (dir.endsWith('/songs/$key'))
+				return dir;
+			if (dir.endsWith('/data/$key'))
+				return dir.substr(0, dir.length - '/data/$key'.length) + '/songs/$key';
+		}
+		#end
+		return packageDir(key);
+	}
+
+	/**
+		Whether the song package already holds one of the audio files.
+		@param file the file base name (`Inst`, `Voices-Player`, ...)
+		@return true when it exists on disk
+	**/
+	function audioSlotExists(file:String):Bool {
+		#if sys
+		return sys.FileSystem.exists('${audioDir()}/$file.${Paths.SOUND_EXT}');
+		#else
+		return false;
+		#end
+	}
+
+	/**
+		Re-reads the song package's audio and re-fits everything that depends on its length.
+		@param toast whether to report the outcome
+	**/
+	function reloadAudio(toast:Bool):Void {
+		backend.Song.loadedSongName = model.chart.songKey();
+		audio.load(backend.Song.loadedSongName, model.chart.needsVoices);
+		applyAudioVolumes();
+		audio.setRate(RATE_VALUES[rateIndex]);
+		noteField.maxTime = audio.loaded ? audio.length : -1;
+		applyWaveConfig();
+		updateTimeLabel();
+		if (toast)
+			UIToast.show(audio.loaded ? 'Audio loaded' : 'No audio found in "${backend.Song.loadedSongName}"');
+	}
+
+	#if sys
+	/** A conversion running on a worker thread; polled by `update` so the reload happens on the main one. **/
+	var audioImport:{label:String, target:String, done:Bool, ok:Bool} = null;
+
+	/**
+		Picks an audio file for one of the package's slots and installs it.
+		@param file the file base name (`Inst`, `Voices-Player`, ...)
+		@param label the human name, for the dialog and its toasts
+	**/
+	function browseForAudio(file:String, label:String):Void {
+		if (audioImport != null) {
+			UIToast.show('Still converting ${audioImport.label}...');
+			return;
+		}
+		fileDialog.browse(null, 'Choose the $label', [new openfl.net.FileFilter('Audio', AUDIO_EXTENSIONS)], function():Void {
+			installAudio(fileDialog.path, file, label);
+		});
+	}
+
+	/**
+		Copies a picked audio file into the song package, transcoding it with ffmpeg when it isn't already
+		the engine's format. The transcode runs on a worker thread; `update` finishes the import.
+		@param source the picked file
+		@param file the file base name in the package
+		@param label the human name, for the toasts
+	**/
+	function installAudio(source:String, file:String, label:String):Void {
+		if (source == null || source.length == 0)
+			return;
+
+		var dir:String = audioDir();
+		var target:String = '$dir/$file.${Paths.SOUND_EXT}';
+		try {
+			if (!sys.FileSystem.exists(dir))
+				sys.FileSystem.createDirectory(dir);
+		} catch (e:Dynamic) {
+			UIToast.show('Could not create $dir: $e');
+			return;
+		}
+
+		// A replaced file must not come back out of the sound cache, which is keyed by resolved path.
+		forgetCachedSound(target);
+
+		var ext:String = haxe.io.Path.extension(source).toLowerCase();
+		if (ext == Paths.SOUND_EXT) {
+			try {
+				sys.io.File.copy(source, target);
+				reloadAudio(false);
+				UIToast.show('$label set');
+				buildLeftPanel(currentPanel()); // the slot's button now reads "Replace"
+			} catch (e:Dynamic)
+				UIToast.show('Could not copy the $label: $e');
+			return;
+		}
+
+		if (!canConvertAudio()) {
+			UIToast.show('.$ext needs ffmpeg -- install it under Converter Tools, or pick a .${Paths.SOUND_EXT}');
+			return;
+		}
+
+		#if CONVERTERS_ALLOWED
+		// Off the main thread: a full song transcodes in seconds, and the editor should keep drawing.
+		UIToast.show('Converting $label from .$ext...');
+		var job = {label: label, target: target, done: false, ok: false};
+		audioImport = job;
+		sys.thread.Thread.create(function():Void {
+			var ok:Bool = false;
+			try
+				ok = MediaConverter.convertAudio(source, target, '192k')
+			catch (e:Dynamic)
+				ok = false;
+			job.ok = ok;
+			job.done = true;
+		});
+		#end
+	}
+
+	/** Drops a sound from `Paths`' cache so a replaced file is actually re-read from disk. **/
+	function forgetCachedSound(path:String):Void {
+		var wanted:String = path.replace('\\', '/');
+		for (key in Paths.currentTrackedSounds.keys())
+			if (key.replace('\\', '/') == wanted)
+				Paths.currentTrackedSounds.remove(key);
+	}
+
+	/** Finishes a conversion once its thread reports back, on the main thread. **/
+	function pollAudioImport():Void {
+		if (audioImport == null || !audioImport.done)
+			return;
+		var job = audioImport;
+		audioImport = null;
+		if (job.ok) {
+			forgetCachedSound(job.target);
+			reloadAudio(false);
+			UIToast.show('${job.label} converted and set');
+			buildLeftPanel(currentPanel()); // the slot's button now reads "Replace"
+		} else
+			UIToast.show('Converting the ${job.label} failed -- see the log');
+	}
+	#end
 
 	function characterList():Array<String> {
 		#if MODS_ALLOWED
@@ -3415,6 +3593,9 @@ class ChartingState extends MusicBeatState {
 		super.update(elapsed);
 
 		syncStrumIcons();
+		#if sys
+		pollAudioImport();
+		#end
 
 		if (!fileDialog.completed)
 			return;
