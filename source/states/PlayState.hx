@@ -84,6 +84,9 @@ typedef UnderlayBand = {
 
 	/** Padding either side of the span. **/
 	var pad:Float;
+
+	/** The width last applied to the sprite, so the graphic is only resized when the lanes actually move. **/
+	var width:Float;
 };
 
 class PlayState extends MusicBeatState {
@@ -3588,7 +3591,7 @@ class PlayState extends MusicBeatState {
 		band.scrollFactor.set();
 		band.alpha = alpha;
 		band.y = 0;
-		strumUnderlays.push({sprite: band, first: first, last: last, pad: pad});
+		strumUnderlays.push({sprite: band, first: first, last: last, pad: pad, width: -1});
 		underlayGroup.add(band);
 	}
 
@@ -3615,8 +3618,11 @@ class PlayState extends MusicBeatState {
 		for (band in strumUnderlays) {
 			if (band.first == null || band.last == null)
 				continue;
+			// Compared against the width we asked for, NOT the sprite's: `setGraphicSize` takes ints, so a
+			// fractional lane span never matched and the graphic was being resized every single frame.
 			var width:Float = (band.last.x - band.first.x) + band.last.width + band.pad * 2;
-			if (Math.abs(band.sprite.width - width) > 0.5) {
+			if (Math.abs(band.width - width) > 0.5) {
+				band.width = width;
 				band.sprite.setGraphicSize(Std.int(width), FlxG.height);
 				band.sprite.updateHitbox();
 			}
@@ -3691,37 +3697,81 @@ class PlayState extends MusicBeatState {
 				theirs[at]++;
 		}
 
-		// Second pass: move the notes the priority says the played line should carry.
+		// Second pass: every primary-line note lands on exactly ONE side -- the played line when the
+		// priority keeps it, the automated line when it doesn't. Only MOVING the kept ones would leave a
+		// dropped note where it was, so a section the other side wins ends up carrying both sides at once:
+		// double the sprites, and duplicate notes on the same column at the same time.
 		for (i in 0...notes.length) {
 			var s:Int = section[i];
 			if (s < 0)
 				continue;
 			var note:NoteData = notes[i];
 			var isMine:Bool = (note.strumLine == target);
-			if (!keepOnPlayedLine(priority, isMine, mine[s], theirs[s]))
+			var want:Int = playsOnPlayedLine(priority, isMine, mine[s], theirs[s]) ? target : other;
+			if (note.strumLine == want)
 				continue;
-			if (isMine)
+			// A line with fewer columns can't hold the note: moving it there would leave it with no
+			// receptor to follow, so it stays where it can actually be played.
+			if (note.column >= strumLines[want].keyCount)
 				continue;
 			note.originLine = note.strumLine;
-			note.strumLine = target;
-			note.mustPress = (controlledLine != null) ? controlledLine.isPlayer : true;
+			note.strumLine = want;
 		}
+
+		dropStackedNotes(notes);
+	}
+
+	/** How close two notes must be to count as the same one when the sides are folded together. **/
+	static inline var STACK_WINDOW:Float = 5;
+
+	/**
+		Drops notes that would sit on the same line and column at the same moment. Folding two sides onto
+		one line stacks them wherever both charted the same lane -- unavoidable under `Everything` -- and a
+		stack can't be played: one note takes the press and the rest are guaranteed misses, while every one
+		of them still spawns, scrolls and gets judged.
+		@param notes the time-sorted note list, edited in place
+	**/
+	function dropStackedNotes(notes:Array<NoteData>):Void {
+		var kept:Array<NoteData> = [];
+		for (note in notes) {
+			var stacked:Bool = false;
+			var j:Int = kept.length;
+			while (--j >= 0) {
+				var seen:NoteData = kept[j];
+				if (note.time - seen.time > STACK_WINDOW)
+					break; // time-sorted: nothing further back can be close enough
+				if (seen.strumLine == note.strumLine && seen.column == note.column) {
+					stacked = true;
+					break;
+				}
+			}
+			if (!stacked)
+				kept.push(note);
+		}
+		if (kept.length == notes.length)
+			return;
+
+		notes.splice(0, notes.length);
+		for (note in kept)
+			notes.push(note);
 	}
 
 	/**
-		Whether a note ends up on the played line under a Play All Notes priority.
+		Whether a note ends up on the played line under a Play All Notes priority. Each section first
+		decides which side it keeps, then every note in it goes to the played line or the automated one --
+		so the two sides never both occupy the played line.
 		@param priority the priority setting
-		@param isMine whether the note is already on the played line
+		@param isMine whether the note is charted on the played line
 		@param mine how many notes the played line has this section
 		@param theirs how many the other line has
 		@return true when the played line should carry it
 	**/
-	function keepOnPlayedLine(priority:String, isMine:Bool, mine:Int, theirs:Int):Bool {
+	function playsOnPlayedLine(priority:String, isMine:Bool, mine:Int, theirs:Int):Bool {
 		return switch (priority) {
 			case 'Everything': true; // no filtering: every note lands on one line
-			case 'Opponent': isMine ? (theirs == 0) : true;
-			case 'Density': isMine ? (mine >= theirs) : (theirs > mine);
-			default: isMine ? true : (mine == 0); // Player: only borrow where the played line is empty
+			case 'Opponent': isMine ? (theirs == 0) : true; // theirs always; mine only where they have none
+			case 'Density': (theirs > mine) != isMine; // the denser side takes the section outright
+			default: isMine ? true : (mine == 0); // Player: borrow only where the played line is empty
 		}
 	}
 
