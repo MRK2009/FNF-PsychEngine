@@ -1499,8 +1499,10 @@ class PlayState extends MusicBeatState {
 			// The package's standalone events file, in EITHER the legacy grouped shape
 			// ([time, [[name, v1, v2], ...]]) OR the psych_v2 object shape ({t, name, values}).
 			// eventsFromV2 normalizes both to the grouped shape makeEvent consumes.
-			// `events-<difficulty>.json` wins over the package-wide `events.json`.
-			var eventsChart:SwagSong = Song.getRoleChart(songName, SongPaths.EVENTS, Difficulty.getString(storyDifficulty, false));
+			// `events-<difficulty>.json` wins over the package-wide `events.json`; a chart that already
+			// folded the file in (the editor, so it can edit them) is skipped so nothing fires twice.
+			var eventsChart:SwagSong = SONG.eventsMerged ? null : Song.getRoleChart(songName, SongPaths.EVENTS,
+				Difficulty.getString(storyDifficulty, false));
 			if (eventsChart != null)
 				for (event in Song.eventsFromV2(eventsChart.events)) // Event Notes
 					for (i in 0...event[1].length)

@@ -8,6 +8,7 @@ import backend.SongChart.SongNote;
 import editors.charting.audio.FlxChartAudio;
 import editors.charting.audio.IChartAudio;
 import editors.charting.data.ChartEditorModel;
+import editors.charting.data.ChartFiles;
 import editors.charting.data.ClipboardModel;
 import editors.charting.data.EditorPrefs;
 import editors.charting.data.SelectionModel;
@@ -1345,11 +1346,164 @@ class MobileChartingState extends MobileEditorBase {
 	}
 
 	/** Launches the edited chart in gameplay (charting mode), like the desktop editor's playtest. **/
-	/** Blanks the chart in place, keeping the loaded song's audio (mirrors the desktop New Chart). **/
+	/**
+	 * Asks for the new song's identity, grid and strumlines, then blanks the chart onto it (the drawer-page
+	 * form of the desktop New Chart dialog).
+	 */
 	function newChart():Void {
-		backend.Song.chartPath = null;
-		adoptChart(editors.ChartingState.makeBlankChart());
-		UIToast.show('New chart');
+		var opts:editors.ChartingState.NewChartOptions = editors.ChartingState.defaultNewOptions();
+		if (Difficulty.list.length < 1)
+			Difficulty.resetList();
+		var diffIndex:Int = Std.int(Math.min(Math.max(0, PlayState.storyDifficulty), Difficulty.list.length - 1));
+		var folderEdited:Bool = false;
+
+		var build:Void->Void = null;
+		build = function():Void {
+			shell.openPage('NEW CHART', function(pane:UIScrollPane):Float {
+				var w:Float = shell.pageWidth();
+				var y:Float = 4;
+
+				var folderInput:UITextInput = new UITextInput('Folder', w, opts.folder, function(v:String):Void {
+					folderEdited = true;
+					opts.folder = Paths.formatToSongPath(v);
+				});
+				var nameInput:UITextInput = new UITextInput('Song Name', w, opts.song, function(v:String):Void {
+					opts.song = v;
+					if (!folderEdited) {
+						opts.folder = Paths.formatToSongPath(v);
+						folderInput.text = opts.folder;
+					}
+				});
+				nameInput.controlWidth = 260;
+				nameInput.y = y;
+				pane.content.addChild(nameInput);
+				y += 54;
+
+				folderInput.controlWidth = 260;
+				folderInput.y = y;
+				pane.content.addChild(folderInput);
+				y += 54;
+
+				var diffDrop:UIDropdown = new UIDropdown('Difficulty', w, function(i:Int, _:String):Void diffIndex = i);
+				diffDrop.fontSize = 15;
+				diffDrop.controlWidth = 220;
+				diffDrop.setItems(Difficulty.list.copy());
+				diffDrop.select(diffIndex);
+				diffDrop.y = y;
+				pane.content.addChild(diffDrop);
+				y += 44;
+
+				var keyStepper:UIStepper = new UIStepper('Key Count', w, opts.keyCount, 1, function(v:Float):Void opts.keyCount = Std.int(v));
+				keyStepper.min = 1;
+				keyStepper.max = 9;
+				keyStepper.y = y;
+				pane.content.addChild(keyStepper);
+				y += 54;
+
+				var bpmStepper:UIStepper = new UIStepper('BPM', w, opts.bpm, 1, function(v:Float):Void opts.bpm = v);
+				bpmStepper.min = 1;
+				bpmStepper.max = 999;
+				bpmStepper.decimals = 2;
+				bpmStepper.y = y;
+				pane.content.addChild(bpmStepper);
+				y += 54;
+
+				// Time signature reads as one row: "Time Signature: [beats] / [note value]".
+				var ctrl:Float = 104;
+				var beatsStepper:UIStepper = new UIStepper('Time Signature', w - ctrl - 22, opts.beats, 1, function(v:Float):Void opts.beats = v);
+				beatsStepper.min = 1;
+				beatsStepper.max = 32;
+				beatsStepper.controlWidth = ctrl;
+				beatsStepper.y = y;
+				pane.content.addChild(beatsStepper);
+
+				var slash:UILabel = new UILabel('/', 15, 1);
+				slash.x = w - ctrl - 14;
+				slash.y = y + 6;
+				pane.content.addChild(slash);
+
+				var denomStepper:UIStepper = new UIStepper('', ctrl, opts.denominator, 1, function(v:Float):Void opts.denominator = Std.int(v));
+				denomStepper.min = 1;
+				denomStepper.max = 16;
+				denomStepper.controlWidth = ctrl;
+				denomStepper.x = w - ctrl;
+				denomStepper.y = y;
+				pane.content.addChild(denomStepper);
+				y += 62;
+
+				var header:UILabel = new UILabel('Strumlines', 15, 0);
+				header.y = y;
+				pane.content.addChild(header);
+				y += 30;
+
+				var chars:Array<String> = characterList();
+				for (i in 0...opts.lines.length) {
+					var line = opts.lines[i];
+					if (line.character != null && line.character.length > 0 && chars.indexOf(line.character) < 0)
+						chars.unshift(line.character);
+
+					var idInput:UITextInput = new UITextInput('ID', w, line.id, function(v:String):Void line.id = v);
+					idInput.controlWidth = 200;
+					idInput.y = y;
+					pane.content.addChild(idInput);
+					y += 54;
+
+					var charDrop:UIDropdown = new UIDropdown('Character', w, function(_:Int, value:String):Void line.character = value);
+					charDrop.fontSize = 15;
+					charDrop.controlWidth = 260;
+					charDrop.setItems(chars.copy());
+					charDrop.select(Std.int(Math.max(0, chars.indexOf(line.character))));
+					charDrop.y = y;
+					pane.content.addChild(charDrop);
+					y += 44;
+
+					var roleDrop:UIDropdown = new UIDropdown('Role', w, function(index:Int, _:String):Void line.type = (index == 0) ? 1 : ((index == 1) ? 0 : 2));
+					roleDrop.fontSize = 15;
+					roleDrop.controlWidth = 220;
+					roleDrop.setItems(['Player', 'CPU (Opponent)', 'Extra']);
+					roleDrop.select(line.type == 1 ? 0 : (line.type == 0 ? 1 : 2));
+					roleDrop.y = y;
+					pane.content.addChild(roleDrop);
+					y += 44;
+
+					var vis:UICheckbox = new UICheckbox('Render arrows in gameplay', w, line.visible, function(checked:Bool):Void line.visible = checked);
+					vis.y = y;
+					pane.content.addChild(vis);
+					y += 46;
+
+					var idx:Int = i;
+					var del:UIButton = new UIButton('REMOVE STRUMLINE', w, 48, function() {
+						opts.lines.splice(idx, 1);
+						build();
+					});
+					del.fontSize = 14;
+					del.y = y;
+					pane.content.addChild(del);
+					y += 62;
+				}
+
+				var add:UIButton = new UIButton('ADD STRUMLINE', w, 52, function() {
+					opts.lines.push({id: 'line${opts.lines.length}', character: 'bf', type: 2, visible: true});
+					build();
+				});
+				add.y = y;
+				pane.content.addChild(add);
+				y += 64;
+
+				var create:UIButton = new UIButton('CREATE CHART', w, 56, function() {
+					shell.closeDrawer();
+					PlayState.storyDifficulty = diffIndex;
+					backend.Song.chartPath = null;
+					backend.Song.loadedSongName = opts.folder;
+					adoptChart(editors.ChartingState.makeBlankChart(opts));
+					UIToast.show('New chart: ${opts.song}');
+				});
+				create.y = y;
+				pane.content.addChild(create);
+				return y + 68;
+			});
+		};
+		build();
 	}
 
 	/** Swaps the whole editor onto a different chart (new/open), reloading its song's audio. **/
@@ -1359,6 +1513,8 @@ class MobileChartingState extends MobileEditorBase {
 		undoStack.reset();
 		selection.clear();
 		PlayState.SONG = chart;
+		// A package that keeps its events in their own file: edit them here, write them back there.
+		eventsSidecar = ChartFiles.adoptEvents(chart, backend.Song.chartPath, Difficulty.getString(false));
 		model.load(chart);
 		model.ensureSectionCount(16);
 		audio.load(backend.Song.loadedSongName, chart.needsVoices);
@@ -1402,8 +1558,7 @@ class MobileChartingState extends MobileEditorBase {
 
 	/** Saves the chart through the system file picker (Downloads, Drive, anywhere browsable). **/
 	function saveChartAs():Void {
-		var data:String = PsychJsonPrinter.print(backend.Song.buildPsychV2(cast model.chart, model.chart), backend.Song.PSYCH_V2_INLINE,
-			backend.Song.PSYCH_V2_KEY_ORDER);
+		var data:String = ChartFiles.chartJson(model.chart, eventsSidecar != null);
 		fileDialog.save('chart-${Paths.formatToSongPath(Difficulty.getString(false))}.json', data, function():Void {
 			unsavedProgress = false;
 			UIToast.show('Saved: ${fileDialog.path}');
@@ -1448,11 +1603,13 @@ class MobileChartingState extends MobileEditorBase {
 			UIToast.show('Nothing to redo');
 	}
 
+	/** The package's events file when it keeps them out of the chart, folded in on load. Null = in the chart. **/
+	var eventsSidecar:String = null;
+
 	function saveChart():Void {
 		#if sys
 		try {
-			var data:String = PsychJsonPrinter.print(backend.Song.buildPsychV2(cast model.chart, model.chart), backend.Song.PSYCH_V2_INLINE,
-				backend.Song.PSYCH_V2_KEY_ORDER);
+			var data:String = ChartFiles.chartJson(model.chart, eventsSidecar != null);
 			// Written as a song package (`charts/<folder>/chart-<difficulty>.json`) so the result can be
 			// dropped straight into a mod's `songs/` beside the audio.
 			var name:String = model.chart.songKey();
@@ -1462,6 +1619,10 @@ class MobileChartingState extends MobileEditorBase {
 				sys.FileSystem.createDirectory('charts/$name');
 			var path:String = 'charts/$name/chart-${Paths.formatToSongPath(Difficulty.getString(false))}.json';
 			sys.io.File.saveContent(path, data);
+			if (eventsSidecar != null) {
+				eventsSidecar = ChartFiles.beside(eventsSidecar, path);
+				ChartFiles.writeEvents(eventsSidecar, model.chart);
+			}
 			unsavedProgress = false;
 			UIToast.show('Saved to $path');
 		} catch (e:Dynamic) {

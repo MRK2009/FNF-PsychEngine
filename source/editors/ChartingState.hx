@@ -12,6 +12,7 @@ import openfl.geom.Rectangle;
 import editors.charting.audio.FlxChartAudio;
 import editors.charting.audio.IChartAudio;
 import editors.charting.data.ChartEditorModel;
+import editors.charting.data.ChartFiles;
 import editors.charting.data.ClipboardModel;
 import editors.charting.data.EditorKeybinds;
 import editors.charting.data.ChartPattern;
@@ -50,6 +51,25 @@ import smidr.widgets.UIStepper;
 import smidr.widgets.UITextInput;
 import smidr.overlays.UIToast;
 import smidr.overlays.UITooltip;
+
+/** One strumline as the New Chart dialog collects it, before the chart exists. **/
+typedef NewChartLine = {
+	var id:String;
+	var character:String;
+	var type:Int;
+	var visible:Bool;
+}
+
+/** Everything the New Chart dialog collects: the song's identity, its grid and its strumlines. **/
+typedef NewChartOptions = {
+	var song:String;
+	var folder:String;
+	var keyCount:Int;
+	var bpm:Float;
+	var beats:Float;
+	var denominator:Int;
+	var lines:Array<NewChartLine>;
+}
 
 /**
 	The chart editor. Owns and wires every decoupled part: the retained OpenFL UI layer
@@ -342,50 +362,71 @@ class ChartingState extends MusicBeatState {
 	}
 
 	/**
-		A minimal empty chart: opponent/player/gf strumlines and four default 4/4 sections.
+		The starting point for a new chart: the classic opponent/player/hidden-gf setup in 4/4.
+		@return freshly built defaults, safe to mutate
+	**/
+	public static function defaultNewOptions():NewChartOptions {
+		return {
+			song: 'Test',
+			folder: 'test',
+			keyCount: 4,
+			bpm: 150,
+			beats: 4,
+			denominator: 4,
+			lines: [
+				{id: 'opponent', character: 'dad', type: 0, visible: true},
+				{id: 'player', character: 'bf', type: 1, visible: true},
+				{id: 'gf', character: 'gf', type: 2, visible: false}
+			]
+		};
+	}
+
+	/**
+		A minimal empty chart: the configured strumlines and four sections.
+		@param opts the song's identity, grid and strumlines; null uses `defaultNewOptions`
 		@return the chart, ready for `model.load`
 	**/
-	public static function makeBlankChart():SongChart {
+	public static function makeBlankChart(?opts:NewChartOptions):SongChart {
+		if (opts == null)
+			opts = defaultNewOptions();
+
 		var chart:SongChart = new SongChart();
-		chart.song = 'Test';
-		chart.bpm = 150;
+		chart.song = opts.song;
+		chart.folder = (opts.folder != null && opts.folder.length > 0) ? opts.folder : null;
+		chart.bpm = opts.bpm;
 		chart.speed = 1;
-		chart.keyCount = 4;
-		chart.strumLines.push({
-			index: 0,
-			id: 'opponent',
-			type: 0,
-			isPlayer: false,
-			visible: true,
-			characters: ['dad'],
-			keyCount: 4
-		});
-		chart.strumLines.push({
-			index: 1,
-			id: 'player',
-			type: 1,
-			isPlayer: true,
-			visible: true,
-			characters: ['bf'],
-			keyCount: 4
-		});
-		chart.strumLines.push({
-			index: 2,
-			id: 'gf',
-			type: 2,
-			isPlayer: false,
-			visible: false,
-			characters: ['gf'],
-			keyCount: 4
-		});
+		chart.keyCount = opts.keyCount;
+		chart.timeSignature = [Std.int(opts.beats), opts.denominator];
+
+		for (i in 0...opts.lines.length) {
+			var line = opts.lines[i];
+			chart.strumLines.push({
+				index: i,
+				id: line.id,
+				type: line.type,
+				isPlayer: (line.type == 1),
+				visible: line.visible,
+				characters: [line.character],
+				keyCount: opts.keyCount
+			});
+		}
+		chart.syncPrimaryFromLines();
+
+		var camera:Int = 0;
+		for (i in 0...chart.strumLines.length)
+			if (chart.strumLines[i].isPlayer) {
+				camera = i;
+				break;
+			}
+
 		var i:Int = 0;
 		while (i < 4) {
 			chart.sections.push({
-				cameraTarget: 1,
-				bpm: 150,
+				cameraTarget: camera,
+				bpm: opts.bpm,
 				changeBPM: false,
-				beats: 4,
-				denominator: 4
+				beats: opts.beats,
+				denominator: opts.denominator
 			});
 			i++;
 		}
@@ -973,12 +1014,217 @@ class ChartingState extends MusicBeatState {
 		]);
 	}
 
+	/**
+		Asks for the new song's identity, grid and strumlines before blanking the editor: display name,
+		package folder (where saving will land), difficulty, key count, BPM, time signature, and the
+		strumlines the chart starts with.
+	**/
 	function newChart():Void {
+		var W:Float = 520;
+		var H:Float = 560;
+		var modal:UIModal = new UIModal("New Chart", W, H);
+		var opts:NewChartOptions = defaultNewOptions();
+
+		if (Difficulty.list.length < 1)
+			Difficulty.resetList();
+		var diffIndex:Int = clampIndex(PlayState.storyDifficulty, Difficulty.list.length);
+		var folderEdited:Bool = false;
+
+		var pane:UIScrollPane = new UIScrollPane(W - 32, H - 40 - 76);
+		pane.x = 16;
+		pane.y = 4;
+		modal.body.addChild(pane);
+
+		var build:Void->Void = null;
+		build = function():Void {
+			var child:Int = pane.content.numChildren;
+			while (--child >= 0) {
+				var widget = pane.content.getChildAt(child);
+				if (widget is UIComponent)
+					(cast widget : UIComponent).dispose();
+			}
+			pane.content.removeChildren();
+			var colW:Float = W - 48;
+			var half:Float = (colW - 8) / 2;
+			var y:Float = 6;
+
+			var folderInput:UITextInput = new UITextInput("Folder", colW, opts.folder, function(v:String):Void {
+				folderEdited = true;
+				opts.folder = Paths.formatToSongPath(v);
+			});
+			var nameInput:UITextInput = new UITextInput("Song Name", colW, opts.song, function(v:String):Void {
+				opts.song = v;
+				// The folder follows the name until it is edited by hand -- it is where the chart is saved.
+				if (!folderEdited) {
+					opts.folder = Paths.formatToSongPath(v);
+					folderInput.text = opts.folder;
+				}
+			});
+			nameInput.controlWidth = UITheme.px(220);
+			nameInput.y = y;
+			pane.content.addChild(nameInput);
+			y += 44;
+
+			folderInput.controlWidth = UITheme.px(220);
+			folderInput.tooltip = "The song package folder: songs/<folder>/";
+			folderInput.y = y;
+			pane.content.addChild(folderInput);
+			y += 44;
+
+			var diffDrop:UIDropdown = new UIDropdown("Difficulty", colW, function(i:Int, _:String):Void diffIndex = i);
+			diffDrop.controlWidth = UITheme.px(220);
+			diffDrop.setItems(Difficulty.list.copy());
+			diffDrop.select(diffIndex);
+			diffDrop.y = y;
+			pane.content.addChild(diffDrop);
+			y += 44;
+
+			var keyStepper:UIStepper = new UIStepper("Key Count", half, opts.keyCount, 1, function(v:Float):Void opts.keyCount = Std.int(v));
+			keyStepper.min = Mania.MIN;
+			keyStepper.max = Mania.MAX;
+			keyStepper.controlWidth = UITheme.px(70);
+			keyStepper.y = y;
+			pane.content.addChild(keyStepper);
+
+			var bpmStepper:UIStepper = new UIStepper("BPM", half, opts.bpm, 1, function(v:Float):Void opts.bpm = v);
+			bpmStepper.min = 1;
+			bpmStepper.max = 999;
+			bpmStepper.decimals = 2;
+			bpmStepper.controlWidth = UITheme.px(70);
+			bpmStepper.x = half + 8;
+			bpmStepper.y = y;
+			pane.content.addChild(bpmStepper);
+			y += 42;
+
+			// Time signature reads as one row: "Time Signature: [beats] / [note value]".
+			var ctrl:Float = UITheme.px(70);
+			var beatsStepper:UIStepper = new UIStepper("Time Signature", colW - ctrl - 20, opts.beats, 1, function(v:Float):Void opts.beats = v);
+			beatsStepper.min = 1;
+			beatsStepper.max = 32;
+			beatsStepper.controlWidth = ctrl;
+			beatsStepper.y = y;
+			pane.content.addChild(beatsStepper);
+
+			var slash:UILabel = new UILabel("/", 13, 1);
+			slash.x = colW - ctrl - 14;
+			slash.y = y + 4;
+			pane.content.addChild(slash);
+
+			var denomStepper:UIStepper = new UIStepper("", ctrl, opts.denominator, 1, function(v:Float):Void opts.denominator = Std.int(v));
+			denomStepper.min = 1;
+			denomStepper.max = 16;
+			denomStepper.tooltip = "Note value: 4 = quarter notes";
+			denomStepper.controlWidth = ctrl;
+			denomStepper.x = colW - ctrl;
+			denomStepper.y = y;
+			pane.content.addChild(denomStepper);
+			y += 50;
+
+			var header:UILabel = new UILabel("STRUMLINES", 11, 2);
+			header.y = y;
+			pane.content.addChild(header);
+			y += 22;
+
+			var chars:Array<String> = characterList();
+			for (i in 0...opts.lines.length) {
+				var line = opts.lines[i];
+				for (name in [line.character])
+					if (name != null && name.length > 0 && chars.indexOf(name) < 0)
+						chars.unshift(name);
+
+				var idInput:UITextInput = new UITextInput("ID", half, line.id, function(v:String):Void line.id = v);
+				idInput.controlWidth = UITheme.px(90);
+				idInput.tooltip = "opponent / player / gf are the lines the engine binds by name";
+				idInput.y = y;
+				pane.content.addChild(idInput);
+
+				var charDrop:UIDropdown = new UIDropdown("Character", half, function(_:Int, value:String):Void line.character = value);
+				charDrop.controlWidth = UITheme.px(120);
+				charDrop.setItems(chars.copy());
+				charDrop.select(Std.int(Math.max(0, chars.indexOf(line.character))));
+				charDrop.x = half + 8;
+				charDrop.y = y;
+				pane.content.addChild(charDrop);
+				y += 42;
+
+				var roleDrop:UIDropdown = new UIDropdown("Role", half, function(idx:Int, _:String):Void line.type = (idx == 0) ? 1 : (idx == 1 ? 0 : 2));
+				roleDrop.controlWidth = UITheme.px(120);
+				roleDrop.setItems(["Player", "CPU (Opponent)", "Extra"]);
+				roleDrop.select(line.type == 1 ? 0 : (line.type == 0 ? 1 : 2));
+				roleDrop.y = y;
+				pane.content.addChild(roleDrop);
+
+				var vis:UICheckbox = new UICheckbox("Visible", half - 92, line.visible, function(v:Bool):Void line.visible = v);
+				vis.x = half + 8;
+				vis.y = y;
+				pane.content.addChild(vis);
+
+				var idx:Int = i;
+				var del:UIButton = new UIButton("Remove", 84, 26, function():Void {
+					opts.lines.splice(idx, 1);
+					build();
+				});
+				del.x = W - 48 - 84;
+				del.y = y;
+				pane.content.addChild(del);
+				y += 48;
+			}
+
+			var add:UIButton = new UIButton("Add Strumline", 140, 26, function():Void {
+				opts.lines.push({id: 'line${opts.lines.length}', character: 'bf', type: 2, visible: true});
+				build();
+			});
+			add.y = y;
+			pane.content.addChild(add);
+			y += 34;
+
+			pane.refreshContent(y);
+		};
+		build();
+
+		var create:UIButton = new UIButton("Create", 110, 28, function():Void {
+			modal.close();
+			PlayState.storyDifficulty = diffIndex;
+			createBlankChart(opts);
+		}, true);
+		create.x = W - 126;
+		create.y = H - 40 - 44;
+		modal.body.addChild(create);
+		modal.open();
+	}
+
+	/**
+		Blanks the editor onto a fresh chart and points it at its package folder, so the first save lands
+		beside the song's audio.
+		@param opts what the New Chart dialog collected
+	**/
+	function createBlankChart(opts:NewChartOptions):Void {
 		backend.Song.chartPath = null;
-		// Keep the currently-loaded song so the blank chart auto-fills sections across it and is
-		// immediately navigable (adoptChart reloads its audio + fills to the song end).
-		adoptChart(makeBlankChart());
-		UIToast.show('New chart');
+		backend.Song.loadedSongName = opts.folder;
+		adoptChart(makeBlankChart(opts));
+
+		#if (sys && MODS_ALLOWED)
+		var dir:String = packageDir(opts.folder);
+		try {
+			if (!sys.FileSystem.exists(dir))
+				sys.FileSystem.createDirectory(dir);
+		} catch (e:Dynamic) {}
+		UIToast.show('New chart in $dir');
+		#else
+		UIToast.show('New chart: ${opts.song}');
+		#end
+	}
+
+	/** The song package folder a new chart saves into, inside the current mod when there is one. **/
+	function packageDir(folder:String):String {
+		#if MODS_ALLOWED
+		var mod:String = Mods.currentModDirectory;
+		if (mod != null && mod.length > 0)
+			return Paths.mods('$mod/songs/$folder');
+		return Paths.mods('songs/$folder');
+		#else
+		return 'songs/$folder';
+		#end
 	}
 
 	/** Swaps the whole editor onto a different chart (new/open). **/
@@ -993,6 +1239,8 @@ class ChartingState extends MusicBeatState {
 		editSection = 0;
 		PlayState.SONG = chart;
 		ensureGfLine(chart);
+		// A package that keeps its events in their own file: edit them here, write them back there.
+		eventsSidecar = ChartFiles.adoptEvents(chart, backend.Song.chartPath, Difficulty.getString(false));
 		model.load(chart);
 		audio.load(backend.Song.loadedSongName, chart.needsVoices);
 		audio.setVolumes(EditorPrefs.instVol, EditorPrefs.mainVol, EditorPrefs.oppVol);
@@ -1013,9 +1261,37 @@ class ChartingState extends MusicBeatState {
 			scripts.call('onChartLoaded', [chart.song]);
 	}
 
+	/** The package's events file when it keeps them out of the chart, folded in on load. Null = in the chart. **/
+	var eventsSidecar:String = null;
+
 	/** Serializes the chart as deterministic psych_v2 JSON. **/
 	function buildV2Json():String {
-		return PsychJsonPrinter.print(backend.Song.buildPsychV2(cast model.chart, model.chart), backend.Song.PSYCH_V2_INLINE, backend.Song.PSYCH_V2_KEY_ORDER);
+		return ChartFiles.chartJson(model.chart, eventsSidecar != null);
+	}
+
+	/**
+		Writes the package files that belong beside a saved chart: its events, when the package keeps them
+		in their own file, and the metadata once the META tab has been opened.
+		@param chartPath the path the chart was just written to
+	**/
+	function saveSidecars(chartPath:String):Void {
+		#if sys
+		var diffName:String = Difficulty.getString(false);
+		try {
+			if (eventsSidecar != null) {
+				eventsSidecar = ChartFiles.beside(eventsSidecar, chartPath);
+				ChartFiles.writeEvents(eventsSidecar, model.chart);
+			}
+			// Only once the META tab actually holds something -- saving a chart shouldn't drop an empty
+			// metadata.json into a package that never had one.
+			if (metaWorking != null && Reflect.fields(metaWorking).length > 0) {
+				var metaPath:String = ChartFiles.metadataTarget(chartPath, diffName);
+				if (metaPath != null)
+					ChartFiles.writeMetadata(metaPath, metaWorking);
+			}
+		} catch (e:Dynamic)
+			UIToast.show('Package files not saved: $e');
+		#end
 	}
 
 	/**
@@ -1059,6 +1335,7 @@ class ChartingState extends MusicBeatState {
 		if (!forceDialog && path != null && path.length > 0) {
 			try {
 				sys.io.File.saveContent(path, data);
+				saveSidecars(path);
 				UIToast.show('Saved: $path');
 				if (scripts.hasScripts)
 					scripts.call('onSave', [path]);
@@ -1068,6 +1345,7 @@ class ChartingState extends MusicBeatState {
 		}
 		fileDialog.save(dialogFileName(), data, function():Void {
 			backend.Song.chartPath = fileDialog.path.replace('\\', '/');
+			saveSidecars(backend.Song.chartPath);
 			UIToast.show('Saved: ${fileDialog.path}');
 			if (scripts.hasScripts)
 				scripts.call('onSave', [backend.Song.chartPath]);
@@ -1833,24 +2111,13 @@ class ChartingState extends MusicBeatState {
 	**/
 	function saveMetaFile():Void {
 		#if sys
-		if (backend.Song.chartPath == null) {
+		var metaPath:String = ChartFiles.metadataTarget(backend.Song.chartPath, Difficulty.getString(false));
+		if (metaPath == null) {
 			UIToast.show('Save the chart first so the editor knows where metadata.json lives');
 			return;
 		}
-		for (field in ['songName', 'artist', 'charter', 'source']) {
-			var v:Dynamic = Reflect.field(metaWorking, field);
-			if (v == null || Std.string(v).length < 1)
-				Reflect.deleteField(metaWorking, field);
-		}
-		if (metaWorking.tags != null && metaWorking.tags.length < 1)
-			Reflect.deleteField(metaWorking, 'tags');
-
-		var p:String = backend.Song.chartPath.replace('\\', '/');
-		var dir:String = p.substr(0, p.lastIndexOf('/'));
-		var diffFile:String = '$dir/metadata-${Paths.formatToSongPath(Difficulty.getString(false))}.json';
-		var metaPath:String = sys.FileSystem.exists(diffFile) ? diffFile : '$dir/metadata.json';
 		try {
-			sys.io.File.saveContent(metaPath, haxe.Json.stringify(metaWorking, null, '\t'));
+			ChartFiles.writeMetadata(metaPath, metaWorking);
 			UIToast.show('Metadata saved: $metaPath');
 		} catch (e:Dynamic)
 			UIToast.show('Error saving metadata: $e');

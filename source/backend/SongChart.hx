@@ -110,6 +110,10 @@ class SongChart {
 		scripts and editor consume; the psych_v2 reader/writer convert to/from the `{t,name,values}` form. **/
 	public var events:Array<Dynamic> = [];
 
+	/** Set when a loader has already folded the package's standalone events file into `events` (the chart
+		editor does, so it can edit them), so the runtime doesn't load that file on top a second time. **/
+	public var eventsMerged:Bool = false;
+
 	/** The strumlines the chart is played on: their roles, characters, key counts and vocal tracks. **/
 	public var strumLines:Array<StrumLineData> = [];
 

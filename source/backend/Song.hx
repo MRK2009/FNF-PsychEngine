@@ -224,7 +224,7 @@ class Song {
 		@param events the legacy events array
 		@return the psych_v2 event objects
 	**/
-	static function eventsToV2(events:Array<Dynamic>):Array<Dynamic> {
+	public static function eventsToV2(events:Array<Dynamic>):Array<Dynamic> {
 		var out:Array<Dynamic> = [];
 		if (events == null)
 			return out;
