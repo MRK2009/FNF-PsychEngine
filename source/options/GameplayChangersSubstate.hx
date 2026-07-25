@@ -65,6 +65,12 @@ class GameplayChangersSubstate extends MusicBeatSubstate {
 		optionsArray.push(new GameplayOption('Instakill on Miss', 'instakill', BOOL, false));
 		optionsArray.push(new GameplayOption('Practice Mode', 'practice', BOOL, false));
 		optionsArray.push(new GameplayOption('Botplay', 'botplay', BOOL, false));
+		optionsArray.push(new GameplayOption('Play Opponent Strumline', 'opponentplay', BOOL, false));
+		optionsArray.push(new GameplayOption('Play All Notes', 'doublechart', BOOL, false));
+
+		var priority:GameplayOption = new GameplayOption('Play All Notes Priority', 'doublechartpriority', STRING, 'Player');
+		priority.options = ['Player', 'Opponent', 'Density', 'Everything'];
+		optionsArray.push(priority);
 	}
 
 	public function getOptionByName(name:String) {

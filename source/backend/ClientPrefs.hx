@@ -10,6 +10,9 @@ import states.TitleState;
 	public var downScroll:Bool = false;
 	public var middleScroll:Bool = false;
 	public var opponentStrums:Bool = true;
+
+	/** Opacity of the dark band drawn behind each strumline; `0` draws none. **/
+	public var strumUnderlay:Float = 0;
 	// NOTE: the debug/performance counter settings (showFPS + fps*) live in
 	// backend.DebugPrefs, in their own save file, so mod scripts can't tamper
 	// with them via ClientPrefs.data. See DebugPrefs for the field list.
@@ -156,7 +159,9 @@ import states.TitleState;
 		'instakill' => false,
 		'practice' => false,
 		'botplay' => false,
-		'opponentplay' => false
+		'opponentplay' => false,
+		'doublechart' => false,
+		'doublechartpriority' => 'Player'
 	];
 
 	public var comboOffset:Array<Int> = [0, 0, 0, 0];

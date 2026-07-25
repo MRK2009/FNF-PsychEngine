@@ -39,6 +39,13 @@ final class NoteData {
 	/** True for the player side (derived from the note's strumline `isPlayer`). **/
 	public var mustPress:Bool = false;
 
+	/**
+		The strumline this note was charted on, when a modifier has moved it to another one (Play All
+		Notes). `-1` when it is still on its own line. The judgement path sings THIS line's character, so a
+		borrowed note animates whoever it was written for.
+	**/
+	public var originLine:Int = -1;
+
 	/** Sustain length in ms; `0` for a tap. **/
 	public var length:Float = 0;
 

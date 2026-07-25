@@ -67,6 +67,9 @@ class OptionsCatalog {
 			"If checked, hold trails draw on top of the note heads instead of below them.\nA note skin can override this.", 'sustainsOverNotes', BOOL)));
 		rows.push(Setting(new Option('Disable Reset Button', "If checked, pressing Reset won't do anything.", 'noReset', BOOL)));
 
+		rows.push(Setting(percent('Strumline Underlay',
+			"Darkens the lanes behind each strumline to make the notes easier to read.\nSet to 0% to draw nothing.", 'strumUnderlay')));
+
 		rows.push(Section(phrase('Scoring')));
 
 		rows.push(Setting(new Option('Scoring System:',

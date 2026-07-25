@@ -580,6 +580,20 @@ class SongChart {
 		return s;
 	}
 
+	/**
+		Each section's start time in ms, walked from the chart's own timing.
+		@return the start times, one per section
+	**/
+	public function sectionStarts():Array<Float> {
+		var out:Array<Float> = [];
+		var at:Float = 0;
+		for (sc in sections) {
+			out.push(at);
+			at += (sc.beats * Conductor.stepsPerBeat(sc.denominator)) * ((60 / sc.bpm * 1000) / 4);
+		}
+		return out;
+	}
+
 	/** First section whose start time is <= `time` (sections ascending; buckets flat notes into sections). **/
 	static inline function sectionForTime(starts:Array<Float>, time:Float):Int {
 		var idx:Int = 0;

@@ -1966,6 +1966,7 @@ class PlayState extends MusicBeatState {
 
 		if (generatedMusic) {
 			updateFields(); // NoteSystem V2
+			updateStrumUnderlays();
 
 			if (!inCutscene) {
 				if (!cpuControlled)
@@ -3277,18 +3278,58 @@ class PlayState extends MusicBeatState {
 		// camera targets); instantiate receptors/field only for the ones the chart marks visible. The role
 		// doesn't decide this -- an ADDITIONAL line (gf, an extra singer) renders like any other when it is
 		// marked visible, and the ones left hidden run silently through `silentLines`.
+		// Play Opponent Strumline swaps which of the two primary lines counts as the human's. Everything
+		// that asks "is this the player's line?" -- input, judgement, middlescroll centring, auto-hit,
+		// `mustPress` -- keys off the runtime flag, so the swap needs no special case anywhere else. The
+		// CHART's own `isPlayer` is untouched: it still says which side the song was written for.
+		var chartPlayer:Int = -1;
+		var chartOpponent:Int = -1;
+		for (sd in SONG.strumLines) {
+			if (!sd.visible)
+				continue;
+			if (sd.isPlayer) {
+				if (chartPlayer < 0)
+					chartPlayer = sd.index;
+			} else if (chartOpponent < 0 && sd.type != backend.SongChart.StrumLineType.ADDITIONAL)
+				chartOpponent = sd.index;
+		}
+		var swapSides:Bool = ClientPrefs.getGameplaySetting('opponentplay') && chartPlayer >= 0 && chartOpponent >= 0;
+		playingOpponentSide = swapSides;
+
 		strumLines = [];
+		controlledLine = null;
 		var visibleLines:Array<StrumLine> = [];
 		for (sd in SONG.strumLines) {
-			var line:StrumLine = new StrumLine(sd.index, sd.id, sd.isPlayer, sd.keyCount, sd.visible);
+			var human:Bool = sd.isPlayer;
+			if (swapSides) {
+				if (sd.index == chartPlayer)
+					human = false;
+				else if (sd.index == chartOpponent)
+					human = true;
+			}
+
+			var line:StrumLine = new StrumLine(sd.index, sd.id, human, sd.keyCount, sd.visible);
 			line.type = sd.type;
 			line.vocalsSuffix = sd.vocalsSuffix;
 			line.downScroll = ClientPrefs.data.downScroll;
-			line.cpuControlled = sd.isPlayer ? cpuControlled : true;
+			line.cpuControlled = human ? cpuControlled : true;
 			line.characters = [for (name in sd.characters) resolveStrumCharacter(name)];
 			strumLines.push(line);
+			if (human && controlledLine == null)
+				controlledLine = line;
 			if (sd.visible && visibleLines.length < SongChart.MAX_VISIBLE_LINES)
 				visibleLines.push(line);
+		}
+
+		// Runs before the notes are bucketed below, so a moved note lands in the right field.
+		applyPlayAllNotes(chart.notes);
+
+		// `mustPress` means "the human presses this", so it follows the runtime lines rather than the
+		// chart -- both modifiers move notes between sides after `NoteData.generate` derived it.
+		for (data in chart.notes) {
+			var owner:StrumLine = (data.strumLine >= 0 && data.strumLine < strumLines.length) ? strumLines[data.strumLine] : null;
+			if (owner != null)
+				data.mustPress = owner.isPlayer;
 		}
 
 		// Auto-spread the visible lines across the play area (2-line case == the classic 25%/75%).
@@ -3331,6 +3372,7 @@ class PlayState extends MusicBeatState {
 		}
 
 		// Legacy-compatible aliases: scripts, the compat layer, splashes and the judgement path read these.
+		// `player*` is the line the human plays, which under Play Opponent Strumline is the opponent's.
 		opponentField = (firstOpp != null) ? firstOpp.field : null;
 		playerField = (firstPlayer != null) ? firstPlayer.field : null;
 		opponentReceptors = (firstOpp != null) ? firstOpp.receptors : [];
@@ -3343,6 +3385,9 @@ class PlayState extends MusicBeatState {
 		// `holdsOverHeads` only lifts the trail once it is actually being HELD, which is the moment the
 		// trail should read as passing over the receptor.
 		var overHeads:Bool = backend.NoteSkinConfig.holdsOverHeads();
+		// Behind every note layer, so the bands only darken the background.
+		buildStrumUnderlays(visibleLines);
+
 		for (line in visibleLines)
 			noteGroup.add(line.field.sustainGroup);
 		if (!overHeads)
@@ -3455,6 +3500,200 @@ class PlayState extends MusicBeatState {
 	/** The strumline a note belongs to (or `null` if its index is out of range). **/
 	inline function lineOf(data:NoteData):StrumLine
 		return (data.strumLine >= 0 && data.strumLine < strumLines.length) ? strumLines[data.strumLine] : null;
+
+	/** The strumline the human is playing: the chart's player line, or the opponent's under that modifier. **/
+	public var controlledLine:StrumLine = null;
+
+	/** True while the human plays the side whose vocals are the opponent track. **/
+	var playingOpponentSide:Bool = false;
+
+	/**
+		The vocal track that follows the human's judgement -- muted on a miss, restored on a hit. Under Play
+		Opponent Strumline that is the opponent's track, unless the song ships a single shared one.
+		@return the track to duck
+	**/
+	inline function playedVocals():FlxSound {
+		return (playingOpponentSide && opponentVocals != null && opponentVocals.length > 0) ? opponentVocals : vocals;
+	}
+
+	/** One dark band per rendered strumline (the Strumline Underlay option); empty when it is off. **/
+	public var strumUnderlays:Array<FlxSprite> = [];
+
+	/** Padding either side of a strumline's lanes, so the band reads as a lane block rather than a strip. **/
+	static inline var UNDERLAY_PAD:Float = 25;
+
+	/**
+		Builds the underlay bands behind the rendered strumlines. They sit in `noteGroup` under everything
+		else on the HUD, so notes and receptors draw over them, and follow their lanes each frame.
+		@param lines the rendered strumlines
+	**/
+	function buildStrumUnderlays(lines:Array<StrumLine>):Void {
+		strumUnderlays = [];
+		var alpha:Float = ClientPrefs.data.strumUnderlay;
+		if (alpha <= 0)
+			return;
+
+		for (line in lines) {
+			if (!wantsUnderlay(line))
+				continue;
+			var band:FlxSprite = new FlxSprite();
+			band.makeGraphic(1, 1, FlxColor.BLACK);
+			band.scrollFactor.set();
+			band.alpha = alpha;
+			band.setGraphicSize(Std.int(underlayWidth(line)), FlxG.height);
+			band.updateHitbox();
+			band.y = 0;
+			strumUnderlays.push(band);
+			noteGroup.add(band);
+		}
+		updateStrumUnderlays();
+	}
+
+	/**
+		Whether a strumline gets an underlay. Middlescroll splits the automated lines across both edges of
+		the screen, so a single band behind them would cover the stage; hidden opponent arrows get none
+		either.
+		@param line the strumline
+		@return true when a band should be drawn for it
+	**/
+	function wantsUnderlay(line:StrumLine):Bool {
+		if (line.receptors == null || line.receptors.length == 0)
+			return false;
+		if (line.isPlayer)
+			return true;
+		return ClientPrefs.data.opponentStrums && !ClientPrefs.data.middleScroll;
+	}
+
+	/** The width a strumline's band spans: its lane block plus the padding on both sides. **/
+	inline function underlayWidth(line:StrumLine):Float {
+		var first:Receptor = line.receptors[0];
+		var last:Receptor = line.receptors[line.receptors.length - 1];
+		return (last.x - first.x) + last.width + UNDERLAY_PAD * 2;
+	}
+
+	/**
+		Keeps each band over its lanes -- scripts move receptors mid-song, and a key-count change rebuilds
+		them entirely.
+	**/
+	function updateStrumUnderlays():Void {
+		if (strumUnderlays.length == 0)
+			return;
+		var at:Int = 0;
+		for (line in strumLines) {
+			if (line.field == null || !wantsUnderlay(line))
+				continue;
+			if (at >= strumUnderlays.length)
+				break;
+			var band:FlxSprite = strumUnderlays[at++];
+			var width:Float = underlayWidth(line);
+			if (Math.abs(band.width - width) > 0.5) {
+				band.setGraphicSize(Std.int(width), FlxG.height);
+				band.updateHitbox();
+			}
+			band.x = line.receptors[0].x - UNDERLAY_PAD;
+		}
+	}
+
+	/**
+		The character a judged note animates: the line it was CHARTED on when a modifier moved it (so a
+		borrowed note still sings for whoever it was written for), else the line it is played on.
+		@param data the note being judged
+		@param fallback the character to use when the note's line has none
+		@return the singer
+	**/
+	function singerFor(data:NoteData, fallback:Character):Character {
+		if (data.gfNote)
+			return gf;
+		var index:Int = (data.originLine >= 0) ? data.originLine : data.strumLine;
+		var line:StrumLine = (index >= 0 && index < strumLines.length) ? strumLines[index] : null;
+		var char:Character = (line != null) ? line.cameraCharacter() : null;
+		return (char != null) ? char : fallback;
+	}
+
+	/**
+		Play All Notes: folds every primary-line note onto the line the human plays, so one strumline
+		carries the whole chart. Which side a section keeps when both have notes is the priority setting --
+		Player, Opponent, the denser side, or Everything (no filtering at all). Runs once at load, before
+		the fields bucket the notes; each moved note remembers `originLine` so it still animates its own
+		character.
+		@param notes the decoded note list, edited in place
+	**/
+	function applyPlayAllNotes(notes:Array<NoteData>):Void {
+		if (!ClientPrefs.getGameplaySetting('doublechart') || notes == null || notes.length == 0)
+			return;
+
+		var target:Int = -1;
+		var other:Int = -1;
+		for (line in strumLines) {
+			if (line.type == backend.SongChart.StrumLineType.ADDITIONAL)
+				continue;
+			if (controlledLine != null && line == controlledLine)
+				target = line.index;
+			else if (other < 0)
+				other = line.index;
+		}
+		if (target < 0 || other < 0)
+			return;
+
+		var priority:String = Std.string(ClientPrefs.getGameplaySetting('doublechartpriority'));
+		var starts:Array<Float> = SONG.sectionStarts();
+		var mine:Array<Int> = [];
+		var theirs:Array<Int> = [];
+		var section:Array<Int> = [];
+
+		// First pass: bucket the notes by section and count each side's.
+		var at:Int = 0;
+		for (note in notes) {
+			if (note.strumLine != target && note.strumLine != other) {
+				section.push(-1); // gf / extra lines are left alone
+				continue;
+			}
+			while (at < starts.length - 1 && note.time >= starts[at + 1])
+				at++;
+			while (mine.length <= at) {
+				mine.push(0);
+				theirs.push(0);
+			}
+			section.push(at);
+			if (note.strumLine == target)
+				mine[at]++;
+			else
+				theirs[at]++;
+		}
+
+		// Second pass: move the notes the priority says the played line should carry.
+		for (i in 0...notes.length) {
+			var s:Int = section[i];
+			if (s < 0)
+				continue;
+			var note:NoteData = notes[i];
+			var isMine:Bool = (note.strumLine == target);
+			if (!keepOnPlayedLine(priority, isMine, mine[s], theirs[s]))
+				continue;
+			if (isMine)
+				continue;
+			note.originLine = note.strumLine;
+			note.strumLine = target;
+			note.mustPress = (controlledLine != null) ? controlledLine.isPlayer : true;
+		}
+	}
+
+	/**
+		Whether a note ends up on the played line under a Play All Notes priority.
+		@param priority the priority setting
+		@param isMine whether the note is already on the played line
+		@param mine how many notes the played line has this section
+		@param theirs how many the other line has
+		@return true when the played line should carry it
+	**/
+	function keepOnPlayedLine(priority:String, isMine:Bool, mine:Int, theirs:Int):Bool {
+		return switch (priority) {
+			case 'Everything': true; // no filtering: every note lands on one line
+			case 'Opponent': isMine ? (theirs == 0) : true;
+			case 'Density': isMine ? (mine >= theirs) : (theirs > mine);
+			default: isMine ? true : (mine == 0); // Player: only borrow where the played line is empty
+		}
+	}
 
 	/**
 		Chart character name -> the live `Character` playing it. Keyed by BOTH the name the strumline asked
@@ -3934,7 +4173,7 @@ class PlayState extends MusicBeatState {
 		var data:NoteData = note.data;
 		lastJudgedNote = data;
 		var line:StrumLine = lineOf(data);
-		var singer:Character = data.gfNote ? gf : ((line != null) ? line.cameraCharacter() : dad);
+		var singer:Character = singerFor(data, (line != null && line.cameraCharacter() != null) ? line.cameraCharacter() : dad);
 		var result:Dynamic = callOnLuas('opponentNoteHitPre', [-1, data.column, data.type, data.isSustain()]);
 		if (notStopped(result))
 			result = callOnHScript('opponentNoteHitPre', [cbArg(note)]);
@@ -3997,7 +4236,7 @@ class PlayState extends MusicBeatState {
 
 		if (!data.hitCausesMiss) {
 			if (!data.noAnimation)
-				singChar(data.gfNote ? gf : boyfriend, data, data.gfNote ? 'cheer' : 'hey');
+				singChar(singerFor(data, boyfriend), data, data.gfNote ? 'cheer' : 'hey');
 
 			if (!cpuControlled) {
 				var spr:Receptor = playerReceptors[data.column];
@@ -4005,7 +4244,7 @@ class PlayState extends MusicBeatState {
 					spr.playAnim('confirm', true);
 			} else
 				strumPlayAnim(playerReceptors, data.column, Conductor.stepCrochet * 1.25 / 1000 / playbackRate);
-			vocals.volume = 1;
+			playedVocals().volume = 1;
 
 				combo++;
 				if (combo > 9999)
@@ -4119,7 +4358,7 @@ class PlayState extends MusicBeatState {
 					rec.playAnim('confirm', true);
 				rec.resetAnim = 0;
 			}
-			vocals.volume = 1;
+			playedVocals().volume = 1;
 		}
 
 		if (songPos >= end)
@@ -4181,7 +4420,9 @@ class PlayState extends MusicBeatState {
 		totalPlayed++;
 		RecalculateRating(true);
 
-		var char:Character = boyfriend;
+		// The line the note was charted on animates the miss, so a borrowed or opponent-played note still
+		// belongs to its own character.
+		var char:Character = (data != null) ? singerFor(data, boyfriend) : boyfriend;
 		if ((data != null && data.gfNote) || (SONG.notes[curSection] != null && SONG.notes[curSection].gfSection))
 			char = gf;
 
@@ -4194,7 +4435,7 @@ class PlayState extends MusicBeatState {
 				gf.specialAnim = true;
 			}
 		}
-		vocals.volume = 0;
+		playedVocals().volume = 0;
 	}
 
 	/**
@@ -4227,7 +4468,7 @@ class PlayState extends MusicBeatState {
 	// NoteSystem V2
 	function popUpScore(data:NoteData):Void {
 		var noteDiff:Float = Math.abs(data.time - Conductor.songPosition + ClientPrefs.data.ratingOffset);
-		vocals.volume = 1;
+		playedVocals().volume = 1;
 
 		if (!ClientPrefs.data.comboStacking && comboGroup.members.length > 0) {
 			var i:Int = comboGroup.members.length;
