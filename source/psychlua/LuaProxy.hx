@@ -42,6 +42,14 @@ class ProxyState {
  *    field is tagged so subsequent reads skip the method machinery.
  *  - Transient values (method returns, `new` instances) are pushed UN-cached (ephemeral):
  *    no map/cache/env work, and they GC normally instead of being pinned.
+ *
+ * A consequence worth knowing when writing scripts: an ephemeral proxy is a FRESH userdata every
+ * read, so `field.active[i]` hands back a different value each frame for the same note. `==` still
+ * answers correctly (`proxyEq` compares the Haxe objects), but a Lua TABLE KEY does not -- Lua 5.1
+ * indexes userdata keys by identity and never consults `__eq`. Keying per-object state by a proxy
+ * therefore misses every lookup, re-runs whatever the entry was meant to do once per frame, and pins
+ * each frame's proxy in the table forever. Key by something stable off the object instead (a note's
+ * time and column, an id field).
  */
 class LuaProxy {
 	/**

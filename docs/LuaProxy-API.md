@@ -53,6 +53,13 @@ being optimized and iterated on, so:
 - **Proxy behaviour can change between engine versions** — caching, how
   containers are pushed, what's 1-based vs native, edge cases around `nil` and
   iteration. Pin your engine version if a mod depends on subtle proxy details.
+- **A proxy is not a table key.** Reading an object out of a field or an array
+  (`field.active[i]`, `note.data`) hands you a *fresh* proxy every time. `==`
+  still compares the real objects, but Lua 5.1 indexes userdata keys by identity
+  and never consults `__eq` — so `state[note] = ...` misses every lookup, re-runs
+  per frame whatever it was meant to do once, and pins each frame's proxy in the
+  table for the rest of the song. Key per-object state by something stable off
+  the object (a note's time and column, an id) instead.
 - **The objects and methods you reach through it are not Psych's API.** When you
   write `game.boyfriend.scale.set(...)` or `FlxG.sound:play(...)`, you're calling
   straight into **Flixel / OpenFL / Lime**. Those libraries get upgraded, and a
