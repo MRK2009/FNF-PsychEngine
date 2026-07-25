@@ -142,11 +142,13 @@ class BaseStage extends FlxBasic {
 
 	public function setDefaultGF(name:String) // Fix for the Chart Editor on Base Game stages
 	{
-		var gfVersion:String = PlayState.SONG.gfVersion;
-		if (gfVersion == null || gfVersion.length < 1) {
-			gfVersion = name;
-			PlayState.SONG.gfVersion = gfVersion;
-		}
+		// The gf STRUMLINE owns the character now; the scalar mirror follows it.
+		var chart:SongChart = PlayState.SONG;
+		var line:SongChart.StrumLineData = chart.gfLine();
+		if (line != null && SongChart.lineCharacter(line, null) == null)
+			chart.setLineCharacter(line, name);
+		if (chart.gfVersion == null || chart.gfVersion.length < 1)
+			chart.gfVersion = name;
 	}
 
 	public function getStageObject(name:String) // Objects can only be accessed *after* create(), use createPost() if you want to mess with them on init

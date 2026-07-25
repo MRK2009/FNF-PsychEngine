@@ -510,14 +510,22 @@ class PlayState extends MusicBeatState {
 		add(luaDebugGroup);
 		#end
 
-		if (!stageData.hide_girlfriend)
-		{
-			if (SONG.gfVersion == null || SONG.gfVersion.trim().length == 0) SONG.gfVersion = 'gf';
-			gf = addCharacterToList(SONG.gfVersion, 2, false);
-		}
+		// Characters come off the chart's STRUMLINES (psych_v2 ties them to their line); the legacy
+		// player1/player2/gfVersion mirrors are derived from those same lines for pre-strumline consumers.
+		var gfName:String = SONG.gfCharacter();
+		var dadName:String = SONG.opponentCharacter();
+		var bfName:String = SONG.playerCharacter();
+		SONG.syncPrimaryFromLines();
 
-		dad = addCharacterToList(SONG.player2, 1, false);
-		boyfriend = addCharacterToList(SONG.player1, 0, false);
+		if (!stageData.hide_girlfriend)
+			gf = addCharacterToList(gfName, 2, false);
+
+		dad = addCharacterToList(dadName, 1, false);
+		boyfriend = addCharacterToList(bfName, 0, false);
+
+		bindStrumCharacter(gfName, gf);
+		bindStrumCharacter(dadName, dad);
+		bindStrumCharacter(bfName, boyfriend);
 
 		if (stageData.objects != null && stageData.objects.length > 0) {
 			var list:Map<String, FlxSprite> = StageData.addObjectsToState(stageData.objects, !stageData.hide_girlfriend ? gfGroup : null, dadGroup,
@@ -1533,23 +1541,92 @@ class PlayState extends MusicBeatState {
 		eventsPushed.push(event.event);
 	}
 
+	/** Set by `resolveCharTarget`: the strumline a "Change Character" value targets, or -1 for none. **/
+	var charTargetLine:Int = -1;
+
+	/** Set by `resolveCharTarget`: the character slot to swap in (0 = bf, 1 = dad, 2 = gf). **/
+	var charTargetType:Int = 0;
+
+	/** The strumline holding a legacy character slot's character. **/
+	inline function lineForCharType(type:Int):backend.SongChart.StrumLineData {
+		return switch (type) {
+			case 1: SONG.opponentLine();
+			case 2: SONG.gfLine();
+			default: SONG.playerLine();
+		}
+	}
+
+	/** The legacy character slot a strumline feeds (0 = bf, 1 = dad, 2 = gf). **/
+	function charTypeOfLine(line:backend.SongChart.StrumLineData):Int {
+		if (line == null)
+			return 0;
+		if (line.isPlayer)
+			return 0;
+		return (line == SONG.gfLine()) ? 2 : 1;
+	}
+
+	/**
+		Resolves a "Change Character" target into `charTargetLine` + `charTargetType`. psych_v2 ties characters
+		to their strumline, so the value may name one -- any line id (`player`, `opponent`, `gf`, or a custom
+		one) or `line:<index>`/`strum:<index>`. The legacy `bf`/`dad`/`gf` aliases and the plain numeric
+		character slot still resolve exactly as they used to.
+		@param value the event's value 1
+	**/
+	function resolveCharTarget(value:String):Void {
+		charTargetLine = -1;
+		charTargetType = 0;
+		if (value == null)
+			return;
+
+		var name:String = value.trim().toLowerCase();
+		var explicit:Bool = false;
+		if (name.startsWith('line:')) {
+			name = name.substr(5).trim();
+			explicit = true;
+		} else if (name.startsWith('strum:')) {
+			name = name.substr(6).trim();
+			explicit = true;
+		}
+
+		if (name.length > 0) {
+			for (sd in SONG.strumLines)
+				if (sd.id != null && sd.id.toLowerCase() == name) {
+					charTargetLine = sd.index;
+					charTargetType = charTypeOfLine(sd);
+					return;
+				}
+
+			var num:Null<Int> = Std.parseInt(name);
+			if (num != null) {
+				if (explicit) { // `line:2` -- an absolute strumline index
+					if (num >= 0 && num < SONG.strumLines.length) {
+						var sd:backend.SongChart.StrumLineData = SONG.strumLines[num];
+						charTargetLine = sd.index;
+						charTargetType = charTypeOfLine(sd);
+					}
+					return;
+				}
+				charTargetType = (num == 1 || num == 2) ? num : 0; // legacy: the slot itself
+			} else {
+				charTargetType = switch (name) {
+					case 'gf' | 'girlfriend': 2;
+					case 'dad' | 'opponent': 1;
+					default: 0;
+				}
+			}
+		}
+
+		var line:backend.SongChart.StrumLineData = lineForCharType(charTargetType);
+		if (line != null)
+			charTargetLine = line.index;
+	}
+
 	// called by every event with the same name
 	function eventPushedUnique(event:EventNote) {
 		switch (event.event) {
 			case "Change Character":
-				var charType:Int = 0;
-				switch (event.value1.toLowerCase()) {
-					case 'gf' | 'girlfriend':
-						charType = 2;
-					case 'dad' | 'opponent':
-						charType = 1;
-					default:
-						var parsed:Null<Int> = Std.parseInt(event.value1);
-						charType = (parsed != null) ? parsed : 0;
-				}
-
-				var newCharacter:String = event.value2;
-				addCharacterToList(newCharacter, charType);
+				resolveCharTarget(event.value1);
+				addCharacterToList(event.value2, charTargetType);
 
 			case 'Play Sound':
 				Paths.sound(event.value1); // Precache sound
@@ -2021,7 +2098,7 @@ class PlayState extends MusicBeatState {
 			opponentVocals.pause();
 
 		#if DISCORD_ALLOWED DiscordClient.resetClientID(); #end
-		MusicBeatState.switchState(new CharacterEditorState(SONG.player2));
+		MusicBeatState.switchState(new CharacterEditorState((dad != null) ? dad.curCharacter : SONG.opponentCharacter()));
 	}
 
 	public var isDead:Bool = false; // Don't mess with this on Lua!!!
@@ -2233,13 +2310,9 @@ class PlayState extends MusicBeatState {
 				}
 
 			case 'Change Character':
-				var type:Int = switch (value1.toLowerCase().trim())
-				{
-					case 'gf' | 'girlfriend': 2;
-					case 'dad' | 'opponent': 1;
-					default:
-						Std.parseInt(value1) ?? 0;
-				}
+				resolveCharTarget(value1);
+				var type:Int = charTargetType;
+				var targetLine:Int = charTargetLine;
 
 				var characterName:String = 'boyfriend';
 				var character:Character = boyfriend;
@@ -2259,6 +2332,19 @@ class PlayState extends MusicBeatState {
 						icon = null;
 				}
 
+				// A targeted strumline swaps the character IT is bound to (extra lines can share a slot).
+				if (targetLine >= 0 && targetLine < strumLines.length) {
+					var bound:Array<Character> = strumLines[targetLine].characters;
+					if (bound.length > 0 && bound[0] != null)
+						character = bound[0];
+				}
+				// The strumline owns the character in psych_v2, so keep the chart data (and the legacy
+				// mirrors derived off it) truthful even when the line has no live character bound yet.
+				// Skipped in charting mode: there the chart object IS the editor's, and a playtest must
+				// never write an event's swap back into the file being edited.
+				if (!chartingMode && targetLine >= 0 && targetLine < SONG.strumLines.length)
+					SONG.setLineCharacter(SONG.strumLines[targetLine], value2);
+
 				if (character != null)
 				{
 					if (character.curCharacter != value2)
@@ -2268,6 +2354,7 @@ class PlayState extends MusicBeatState {
 
 						var newCharacter:Character = characterMap[value2];
 						newCharacter.alpha = 1;
+						bindStrumCharacter(value2, newCharacter);
 
 						var lastAlpha:Float = character.alpha;
 						character.alpha = .0001;
@@ -3365,15 +3452,39 @@ class PlayState extends MusicBeatState {
 	inline function lineOf(data:NoteData):StrumLine
 		return (data.strumLine >= 0 && data.strumLine < strumLines.length) ? strumLines[data.strumLine] : null;
 
+	/**
+		Chart character name -> the live `Character` playing it. Keyed by BOTH the name the strumline asked
+		for and the name the built `Character` ended up with, so a line still binds when its json was missing
+		and `Character` fell back to the default.
+	**/
+	var strumCharacters:Map<String, Character> = new Map<String, Character>();
+
+	/**
+		Binds a chart character name to a live character so the strumlines can resolve it.
+		@param name the name the chart asked for
+		@param char the built character (no-op when `null`)
+	**/
+	function bindStrumCharacter(name:String, char:Character):Void {
+		if (char == null)
+			return;
+		if (name != null && name.length > 0)
+			strumCharacters.set(name, char);
+		if (char.curCharacter != null)
+			strumCharacters.set(char.curCharacter, char);
+	}
+
 	/** Resolves a strumline character name to one of PlayState's live characters (bf/dad/gf). **/
 	function resolveStrumCharacter(name:String):Character {
-		if (name == null)
+		if (name == null || name.length == 0)
 			return null;
-		if (dad != null && (name == SONG.player2 || dad.curCharacter == name))
+		var char:Character = strumCharacters.get(name);
+		if (char != null)
+			return char;
+		if (dad != null && dad.curCharacter == name)
 			return dad;
-		if (boyfriend != null && (name == SONG.player1 || boyfriend.curCharacter == name))
+		if (boyfriend != null && boyfriend.curCharacter == name)
 			return boyfriend;
-		if (gf != null && (name == SONG.gfVersion || gf.curCharacter == name))
+		if (gf != null && gf.curCharacter == name)
 			return gf;
 		return null;
 	}

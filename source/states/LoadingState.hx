@@ -475,7 +475,7 @@ class LoadingState extends MusicBeatState {
 		songsToPrepare = [];
 		initialThreadCompleted = false;
 
-		var song:SwagSong = PlayState.SONG;
+		var song:backend.SongChart = PlayState.SONG;
 		var folder:String = Paths.formatToSongPath(Song.loadedSongName);
 
 		/* one sequential prep task off the main thread: build the asset lists, then kick off the
@@ -542,12 +542,12 @@ class LoadingState extends MusicBeatState {
 
 				songsToPrepare.push('$folder/Inst');
 
-				var player1:String = song.player1;
-				var player2:String = song.player2;
-				var gfVersion:String = song.gfVersion;
+				// Characters come off the strumlines (psych_v2 ties them there), so extra lines get
+				// preloaded too instead of only the three legacy slots.
+				var player1:String = song.playerCharacter();
+				var player2:String = song.opponentCharacter();
+				var gfVersion:String = song.gfCharacter();
 				var prefixVocals:String = song.needsVoices ? '$folder/Voices' : null;
-				if (gfVersion == null)
-					gfVersion = 'gf';
 
 				dontPreloadDefaultVoices = false;
 				preloadCharacter(player1, prefixVocals);
@@ -561,10 +561,23 @@ class LoadingState extends MusicBeatState {
 				}
 
 				/* chars parsed sequentially -> no concurrent pushes into the prepare lists */
-				if (player2 != player1)
+				var preloaded:Array<String> = [player1];
+				if (player2 != player1) {
 					preloadCharacter(player2, prefixVocals);
-				if (stageData != null && !stageData.hide_girlfriend && gfVersion != player2 && gfVersion != player1)
-					preloadCharacter(gfVersion);
+					preloaded.push(player2);
+				}
+				var hideGf:Bool = (stageData != null && stageData.hide_girlfriend);
+				if (!preloaded.contains(gfVersion)) {
+					if (!hideGf)
+						preloadCharacter(gfVersion);
+					preloaded.push(gfVersion); // a hidden gf is never built -- don't let the line loop pull it in
+				}
+				for (line in song.strumLines)
+					for (char in line.characters)
+						if (char != null && char.length > 0 && !preloaded.contains(char)) {
+							preloadCharacter(char);
+							preloaded.push(char);
+						}
 			} catch (e:Dynamic) {
 				trace('ERROR! while preparing song: $e');
 			}

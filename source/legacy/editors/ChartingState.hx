@@ -73,7 +73,7 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 		['Camera Follow Pos', "Value 1: X\nValue 2: Y\n\nThe camera won't change the follow point\nafter using this, for getting it back\nto normal, leave both values blank."],
 		['Alt Idle Animation', "Sets a specified postfix after the idle animation name.\nYou can use this to trigger 'idle-alt' if you set\nValue 2 to -alt\n\nValue 1: Character to set (Dad, BF or GF)\nValue 2: New postfix (Leave it blank to disable)"],
 		['Screen Shake', "Value 1: Camera shake\nValue 2: HUD shake\n\nEvery value works as the following example: \"1, 0.05\".\nThe first number (1) is the duration.\nThe second number (0.05) is the intensity."],
-		['Change Character', "Value 1: Character to change (Dad, BF, GF)\nValue 2: New character's name"],
+		['Change Character', "Value 1: Character to change.\nA strumline id (opponent, player, gf or a\ncustom one) or line:<index>, and the old\nDad/BF/GF names still work.\nValue 2: New character's name"],
 		['Change Scroll Speed', "Value 1: Scroll Speed Multiplier (1 is default)\nValue 2: Time it takes to change fully in seconds."],
 		['Change Key Amount', "Multikey: rebuilds the lanes to a new key count (1-9).\nValue 1: New key count (number of columns per side)."],
 		['Set Property', "Value 1: Variable name\nValue 2: New value"],

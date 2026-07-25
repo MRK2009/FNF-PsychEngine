@@ -74,6 +74,11 @@ class SongChart {
 	public var needsVoices:Bool = true;
 	public var speed:Float = 1;
 	public var offset:Float = 0;
+
+	/** Legacy (`psych_v1`) character metadata. psych_v2 charts tie characters to their STRUMLINE
+		(`strumLines[].characters`) and neither read nor write these keys; they are kept mirrored off the
+		lines by `syncPrimaryFromLines` purely so v1 exports, scripts and the icon/preload paths that
+		predate strumlines keep resolving. **/
 	public var player1:String = 'bf';
 	public var player2:String = 'dad';
 	public var gfVersion:String = 'gf';
@@ -122,10 +127,10 @@ class SongChart {
 	public static inline var LEGACY_GF:Int = 2;
 
 	/**
-		Re-points the primary opponent/player/gf strumlines at the current `player2`/`player1`/`gfVersion`
-		metadata. The character pickers edit only the scalar metadata; the runtime binds sing animations to
-		the native `strumLines[].characters`, so without this a live editor playtest keeps the old character
-		(only a full reload re-derives the lines through `fromLegacy`). Extra/custom lines are untouched.
+		Legacy (`psych_v1`) path: re-points the primary opponent/player/gf strumlines at the current
+		`player2`/`player1`/`gfVersion` metadata. The legacy editor's character pickers edit only that scalar
+		metadata; the runtime binds sing animations to the native `strumLines[].characters`, so without this a
+		live playtest keeps the old character. Extra/custom lines are untouched.
 	**/
 	public function syncPrimaryCharacters():Void {
 		for (sd in strumLines) {
@@ -136,6 +141,100 @@ class SongChart {
 				default:
 			}
 		}
+	}
+
+	/** The first strumline carrying `id`, or `null`. **/
+	public function lineById(id:String):StrumLineData {
+		if (id == null)
+			return null;
+		for (sd in strumLines)
+			if (sd.id == id)
+				return sd;
+		return null;
+	}
+
+	/** The first strumline of `type` (a `StrumLineType`), or `null`. **/
+	public function lineOfType(type:Int):StrumLineData {
+		for (sd in strumLines)
+			if (sd.type == type)
+				return sd;
+		return null;
+	}
+
+	/** The strumline the human plays: the `player`-id line, else the first PLAYER line. **/
+	public function playerLine():StrumLineData {
+		var line:StrumLineData = lineById('player');
+		return (line != null) ? line : lineOfType(PLAYER);
+	}
+
+	/** The main opponent strumline: the `opponent`-id line, else the first OPPONENT line. **/
+	public function opponentLine():StrumLineData {
+		var line:StrumLineData = lineById('opponent');
+		return (line != null) ? line : lineOfType(OPPONENT);
+	}
+
+	/** The gf strumline: the `gf`-id line, else the fixed legacy gf slot when that line is an extra one. **/
+	public function gfLine():StrumLineData {
+		var line:StrumLineData = lineById('gf');
+		if (line != null)
+			return line;
+		line = (strumLines.length > LEGACY_GF) ? strumLines[LEGACY_GF] : null;
+		return (line != null && line.type == ADDITIONAL) ? line : null;
+	}
+
+	/**
+		Fills a strumline's character from pre-strumline metadata, only when the line declares none.
+		@param line the strumline (no-op when `null`)
+		@param character the legacy metadata name (no-op when empty)
+	**/
+	static function backfillLineCharacter(line:StrumLineData, character:String):Void {
+		if (line == null || character == null || character.length == 0)
+			return;
+		if (lineCharacter(line, null) == null)
+			line.characters = [character];
+	}
+
+	/** A strumline's (first) character name, or `fallback` when the line is missing or characterless. **/
+	public static function lineCharacter(line:StrumLineData, fallback:String):String {
+		if (line == null || line.characters == null || line.characters.length == 0)
+			return fallback;
+		var name:String = line.characters[0];
+		return (name != null && name.length > 0) ? name : fallback;
+	}
+
+	/** The player strumline's character (`bf` when unset). **/
+	public inline function playerCharacter():String
+		return lineCharacter(playerLine(), 'bf');
+
+	/** The opponent strumline's character (`dad` when unset). **/
+	public inline function opponentCharacter():String
+		return lineCharacter(opponentLine(), 'dad');
+
+	/** The gf strumline's character (`gf` when unset). **/
+	public inline function gfCharacter():String
+		return lineCharacter(gfLine(), 'gf');
+
+	/**
+		Pulls the legacy `player1`/`player2`/`gfVersion` mirrors back off the strumlines -- the psych_v2
+		source of truth. The inverse of `syncPrimaryCharacters`, and what every psych_v2 load/edit calls so
+		the pre-strumline consumers (v1 export, icons, preloading, scripts) stay coherent.
+	**/
+	public function syncPrimaryFromLines():Void {
+		player1 = playerCharacter();
+		player2 = opponentCharacter();
+		gfVersion = gfCharacter();
+	}
+
+	/**
+		Points a strumline at a character, keeping the legacy mirrors in sync.
+		@param line the strumline (no-op when `null`)
+		@param character the character name
+	**/
+	public function setLineCharacter(line:StrumLineData, character:String):Void {
+		if (line == null)
+			return;
+		line.characters = [character];
+		syncPrimaryFromLines();
 	}
 
 	/**
@@ -286,7 +385,8 @@ class SongChart {
 
 	/**
 		Parses a raw psych_v2 chart object into the native model. Direct inverse of `Song.buildPsychV2`:
-		reads metadata, the `strumlines`, flat absolute `notes` (`t/s/d/l/k/a/g`) and timing `sections`.
+		reads metadata, the `strumlines` (which own the characters -- there is no `player1`/`player2`/
+		`gfVersion` in this format), flat absolute `notes` (`t/s/d/l/k/a/g`) and timing `sections`.
 		Note lengths are taken verbatim (v2 authors already step-aligned). The legacy `notes` projection
 		stays lazy (built on first access). Running bpm is tracked so every section's `bpm` mirrors
 		`fromLegacy`.
@@ -305,9 +405,6 @@ class SongChart {
 		if (meta.speed != null) chart.speed = meta.speed;
 		chart.needsVoices = (meta.needsVoices != false);
 		if (meta.offset != null) chart.offset = meta.offset;
-		if (meta.player1 != null) chart.player1 = meta.player1;
-		if (meta.player2 != null) chart.player2 = meta.player2;
-		if (meta.gfVersion != null) chart.gfVersion = meta.gfVersion;
 		if (meta.stage != null) chart.stage = meta.stage;
 		chart.format = 'psych_v2';
 		if (meta.timeSignature != null) chart.timeSignature = meta.timeSignature;
@@ -339,6 +436,14 @@ class SongChart {
 				});
 			}
 		}
+		// psych_v2 no longer stores player1/player2/gfVersion -- the strumlines own their characters. Files
+		// written before that still carry them, so they only fill in a line that declares no character; the
+		// legacy mirrors are then derived back off the lines for the pre-strumline consumers.
+		backfillLineCharacter(chart.playerLine(), meta.player1);
+		backfillLineCharacter(chart.opponentLine(), meta.player2);
+		backfillLineCharacter(chart.gfLine(), meta.gfVersion);
+		chart.syncPrimaryFromLines();
+
 		// keyCount for multikey globals: the first player line's, else the first line's.
 		if (chart.strumLines.length > 0) {
 			chart.keyCount = chart.strumLines[0].keyCount;

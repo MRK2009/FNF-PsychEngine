@@ -43,7 +43,7 @@ class Song {
 		'name', 'values', 'v1', 'v2', // event
 		'section', 'cameraTarget', // section (specific)
 		'id', 'type', 'characters', 'keyCount', 'visible', 'vocalsSuffix', // strumline
-		'song', 'speed', 'needsVoices', 'offset', 'player1', 'player2', 'gfVersion', 'stage', // metadata
+		'song', 'speed', 'needsVoices', 'offset', 'stage', // metadata
 		'arrowSkin', 'splashSkin', 'disableNoteRGB', 'gameOverChar', 'gameOverSound', 'gameOverLoop', 'gameOverEnd',
 		'timeSignature', 'changeBPM', 'bpm', 'changeSpeed', // shared (metadata + section)
 		'changeScrollVelocity', 'scrollVelocity', 'changeKeyCount', // section (SV + key-count changes)
@@ -201,7 +201,10 @@ class Song {
 		for `Json.stringify`. Direct inverse of `SongChart.fromV2`: strumlines, flat absolute notes
 		(`t/s/d`, plus `l/k/a/g` only when non-default) and timing sections (`cameraTarget`, plus
 		`timeSignature` when not 4/4 and `changeBPM`/`bpm`).
-		@param song the metadata source (song name, bpm, characters, stage, events)
+
+		Characters are NOT written to the metadata: psych_v2 ties them to their strumline
+		(`strumlines[].characters`), which is the only place they are read back from.
+		@param song the metadata source (song name, bpm, stage, events)
 		@param chart the native model to serialize
 		@return the psych_v2 object tree
 	**/
@@ -278,9 +281,6 @@ class Song {
 			speed: song.speed,
 			needsVoices: song.needsVoices,
 			offset: song.offset,
-			player1: song.player1,
-			player2: song.player2,
-			gfVersion: song.gfVersion,
 			stage: song.stage
 		};
 		if (song.timeSignature != null)

@@ -899,10 +899,14 @@ class MobileChartingState extends MobileEditorBase {
 				y += 54;
 			}
 
-			var gfInput:UITextInput = new UITextInput('GF Version', w, (model.chart.gfVersion != null) ? model.chart.gfVersion : '', function(v:String):Void {
+			// The gf character lives on the gf STRUMLINE (psych_v2 stores it nowhere else); this is the
+			// shortcut for it, the strumlines page edits every line's character.
+			var gfLine:backend.SongChart.StrumLineData = model.chart.gfLine();
+			var gfInput:UITextInput = new UITextInput('GF Version', w, backend.SongChart.lineCharacter(gfLine, ''), function(v:String):Void {
+				if (gfLine == null)
+					return;
 				undoStack.snapshotCoalesced(model, 'GF Version');
-				model.chart.gfVersion = v;
-				model.markDirty();
+				model.setLineCharacter(gfLine.index, v);
 			});
 			gfInput.controlWidth = 240;
 			gfInput.y = y;

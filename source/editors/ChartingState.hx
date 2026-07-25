@@ -336,7 +336,7 @@ class ChartingState extends MusicBeatState {
 			type: 2,
 			isPlayer: false,
 			visible: false,
-			characters: [(chart.gfVersion != null) ? chart.gfVersion : 'gf'],
+			characters: [(chart.gfVersion != null && chart.gfVersion.length > 0) ? chart.gfVersion : 'gf'],
 			keyCount: chart.keyCount
 		});
 	}
@@ -2404,7 +2404,7 @@ class ChartingState extends MusicBeatState {
 	**/
 	function iconBitmap(char:String):BitmapData {
 		if (char == null || char == '')
-			char = model.chart.player1;
+			char = model.chart.playerCharacter();
 		if (char == null || char == '')
 			return null;
 		if (iconBitmapCache.exists(char))
