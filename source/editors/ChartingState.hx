@@ -232,11 +232,8 @@ class ChartingState extends MusicBeatState {
 	/** When on, clicking the grid drops the selected pattern instead of placing a single note. **/
 	var patternArmed:Bool = false;
 
-	/** The pattern group shown in the PTRN tab. **/
-	var patternGroup:String = 'Streams';
-
-	/** The named variation last picked from the preset list. **/
-	var patternPreset:Int = 0;
+	/** The row picked in the pattern list (a family, or one of its named variations). **/
+	var patternEntry:Int = 0;
 
 	/** The knobs the selected pattern is shaped with. **/
 	var patternParams:editors.charting.data.ChartPattern.PatternParams = ChartPattern.defaultParams();
@@ -2965,56 +2962,25 @@ class ChartingState extends MusicBeatState {
 		flow.header(new UIAccordion("Patterns", colW));
 		addHintRow(flow, colW, "Density comes from the snap: stairs at 1/16 are a roll.");
 
-		var groupNames:Array<String> = ChartPattern.groups();
-		var groupDrop:UIDropdown = new UIDropdown("Group", colW, function(i:Int, name:String):Void {
-			patternGroup = name;
-			var first:Int = firstPatternIn(name);
-			if (first >= 0)
-				patternId = first;
-			invalidatePattern();
-			buildLeftPanel(currentPanel());
-		});
-		groupDrop.controlWidth = UITheme.px(130);
-		groupDrop.setItems(groupNames);
-		groupDrop.select(Std.int(Math.max(0, groupNames.indexOf(patternGroup))));
-		flow.add(groupDrop);
-
-		var inGroup:Array<Int> = [];
-		var inGroupNames:Array<String> = [];
-		for (i in 0...ChartPattern.DEFS.length)
-			if (ChartPattern.DEFS[i].group == patternGroup) {
-				inGroup.push(i);
-				inGroupNames.push(ChartPattern.DEFS[i].name);
-			}
-		if (inGroup.indexOf(patternId) < 0 && inGroup.length > 0)
-			patternId = inGroup[0];
-
+		var entries:Array<editors.charting.data.ChartPattern.PatternEntry> = ChartPattern.entries();
+		var kc:Int = patternKeyCount();
 		var patDrop:UIDropdown = new UIDropdown("Pattern", colW, function(i:Int, _:String):Void {
-			patternId = inGroup[i];
+			patternEntry = i;
+			var entry = entries[i];
+			patternId = entry.def;
+			if (entry.apply != null)
+				entry.apply(patternParams);
+			ChartPattern.clampParams(patternId, patternKeyCount(), patternParams);
 			invalidatePattern();
 			buildLeftPanel(currentPanel());
 		});
-		patDrop.controlWidth = UITheme.px(130);
-		patDrop.setItems(inGroupNames);
-		patDrop.select(Std.int(Math.max(0, inGroup.indexOf(patternId))));
+		patDrop.controlWidth = UITheme.px(150);
+		patDrop.tooltip = "The family, or one of its named variations";
+		patDrop.setItems([for (e in entries) e.label]);
+		patDrop.select(clampIndex(patternEntry, entries.length));
 		flow.add(patDrop);
 
-		var presetNames:Array<String> = [for (p in ChartPattern.PRESETS) p.name];
-		var presetDrop:UIDropdown = new UIDropdown("Preset", colW, function(i:Int, _:String):Void {
-			var preset = ChartPattern.PRESETS[i];
-			patternPreset = i;
-			patternId = ChartPattern.indexOf(preset.id);
-			patternGroup = ChartPattern.DEFS[patternId].group;
-			preset.apply(patternParams);
-			invalidatePattern();
-			buildLeftPanel(currentPanel());
-		});
-		presetDrop.controlWidth = UITheme.px(130);
-		presetDrop.tooltip = "Fills the knobs below for a named variation";
-		presetDrop.setItems(presetNames);
-		presetDrop.select(clampIndex(patternPreset, presetNames.length));
-		flow.add(presetDrop);
-
+		ChartPattern.clampParams(patternId, kc, patternParams);
 		buildPatternParams(flow, colW);
 
 		var lenStep:UIStepper = new UIStepper("Length (steps)", colW, patternLength, 1, function(v:Float):Void {
@@ -3083,58 +3049,66 @@ class ChartingState extends MusicBeatState {
 		}
 
 		if (def.uses.contains('dir')) {
+			var dirs:Array<String> = ChartPattern.directions(patternId);
 			var dirDrop:UIDropdown = new UIDropdown("Direction", colW, function(i:Int, _:String):Void {
 				patternParams.direction = i;
 				invalidatePattern();
 			});
 			dirDrop.controlWidth = UITheme.px(110);
-			dirDrop.setItems(['Up', 'Down', 'Alternate']);
-			dirDrop.select(clampIndex(patternParams.direction, 3));
+			dirDrop.setItems(dirs);
+			dirDrop.select(clampIndex(patternParams.direction, dirs.length));
 			flow.add(dirDrop);
 		}
 
+		// Each knob is bounded to where this family still reads as itself -- see `ChartPattern.range`.
 		if (def.uses.contains('size')) {
+			var r = ChartPattern.range(patternId, 'size', kc, patternParams);
 			var sizeStep:UIStepper = new UIStepper("Chord Size", colW, patternParams.chordSize, 1, function(v:Float):Void {
 				patternParams.chordSize = Std.int(v);
 				invalidatePattern();
 			});
-			sizeStep.min = 1;
-			sizeStep.max = kc;
+			sizeStep.min = r.min;
+			sizeStep.max = r.max;
 			sizeStep.tooltip = "2 = jump, 3 = hand, 4 = quad";
 			flow.add(sizeStep);
 		}
 
-		if (def.uses.contains('every')) {
-			var everyStep:UIStepper = new UIStepper("Every (steps)", colW, patternParams.every, 1, function(v:Float):Void {
-				patternParams.every = Std.int(v);
-				invalidatePattern();
-			});
-			everyStep.min = 1;
-			everyStep.max = 32;
-			everyStep.tooltip = "Steps between chords / repeats / accents";
-			flow.add(everyStep);
-		}
-
 		if (def.uses.contains('run')) {
+			var r = ChartPattern.range(patternId, 'run', kc, patternParams);
 			var runStep:UIStepper = new UIStepper("Run Length", colW, patternParams.runLength, 1, function(v:Float):Void {
 				patternParams.runLength = Std.int(v);
 				invalidatePattern();
+				buildLeftPanel(currentPanel()); // the spacing floor moves with it
 			});
-			runStep.min = 2;
-			runStep.max = 32;
+			runStep.min = r.min;
+			runStep.max = r.max;
 			runStep.tooltip = "Notes per sub-run (a jack of 2-3 is a mini-jack)";
 			flow.add(runStep);
 		}
 
 		if (def.uses.contains('hold')) {
+			var r = ChartPattern.range(patternId, 'hold', kc, patternParams);
 			var holdStep:UIStepper = new UIStepper("Hold (steps)", colW, patternParams.holdSteps, 1, function(v:Float):Void {
 				patternParams.holdSteps = Std.int(v);
 				invalidatePattern();
+				buildLeftPanel(currentPanel()); // the spacing floor moves with it
 			});
-			holdStep.min = 1;
-			holdStep.max = 64;
+			holdStep.min = r.min;
+			holdStep.max = r.max;
 			holdStep.tooltip = "How long each long note is held";
 			flow.add(holdStep);
+		}
+
+		if (def.uses.contains('every')) {
+			var r = ChartPattern.range(patternId, 'every', kc, patternParams);
+			var everyStep:UIStepper = new UIStepper("Every (steps)", colW, patternParams.every, 1, function(v:Float):Void {
+				patternParams.every = Std.int(v);
+				invalidatePattern();
+			});
+			everyStep.min = r.min;
+			everyStep.max = r.max;
+			everyStep.tooltip = "Steps between chords / repeats / accents";
+			flow.add(everyStep);
 		}
 
 		if (def.uses.contains('mirror'))
@@ -3142,14 +3116,6 @@ class ChartingState extends MusicBeatState {
 				patternParams.mirror = v;
 				invalidatePattern();
 			}));
-	}
-
-	/** The first pattern belonging to a group, or -1. **/
-	function firstPatternIn(group:String):Int {
-		for (i in 0...ChartPattern.DEFS.length)
-			if (ChartPattern.DEFS[i].group == group)
-				return i;
-		return -1;
 	}
 
 	/** The column count the pattern is being shaped for (the target line's). **/

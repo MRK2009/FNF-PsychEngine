@@ -31,6 +31,26 @@ typedef PatternParams = {
 	var mirror:Bool;
 };
 
+/** One row in the editor's pattern list: a family, plus what makes it a named variation of it. **/
+typedef PatternEntry = {
+	/** What the list shows, group included. **/
+	var label:String;
+
+	var name:String;
+
+	/** Index into `ChartPattern.DEFS`. **/
+	var def:Int;
+
+	/** Fills the knobs for a named variation; `null` for a family's own entry. **/
+	var apply:Null<PatternParams->Void>;
+};
+
+/** The range a knob may take for a pattern, past which the family stops being itself. **/
+typedef PatternRange = {
+	var min:Int;
+	var max:Int;
+};
+
 /** One entry in the pattern catalog. **/
 typedef PatternDef = {
 	var id:String;
@@ -524,27 +544,12 @@ class ChartPattern {
 	];
 
 	/**
-		The familiar pattern names from the VSRG vocabulary, each mapping onto a family in `DEFS` plus the
-		parameters that make it that variation. Picking one fills the panel's knobs in.
+		The named variations worth a menu entry of their own: a family plus the parameters that make it
+		that variation. Names that are just the family under another word (a "Stream" is Stairs, a "Roll"
+		is Stairs at a fine snap) are left out -- the family already says it.
 	**/
 	public static final PRESETS:Array<{name:String, id:String, apply:PatternParams->Void}> = [
-		{name: 'Stream', id: 'stairs', apply: function(p) {}},
-		{name: 'Roll (fine snap)', id: 'stairs', apply: function(p) {}},
 		{name: 'Grace', id: 'broken-stairs', apply: function(p) p.runLength = 3},
-		{name: 'Broken Stairs', id: 'broken-stairs', apply: function(p) p.runLength = 4},
-		{name: 'Delay Stairs', id: 'delay-stairs', apply: function(p) p.chordSize = 2},
-		{name: 'Chevron', id: 'chevron', apply: function(p) p.runLength = 4},
-		{name: 'Whirlwind', id: 'whirlwind', apply: function(p) {}},
-		{name: 'Inward', id: 'inward', apply: function(p) {}},
-		{name: 'Outward', id: 'outward', apply: function(p) {}},
-		{
-			name: 'Burst',
-			id: 'burst',
-			apply: function(p) {
-				p.runLength = 4;
-				p.every = 8;
-			}
-		},
 		{
 			name: 'Jumpstream',
 			id: 'chord-stream',
@@ -593,48 +598,128 @@ class ChartPattern {
 				p.every = 1;
 			}
 		},
-		{
-			name: 'Chord Jack',
-			id: 'chord-jack',
-			apply: function(p) {
-				p.chordSize = 2;
-				p.every = 1;
-			}
-		},
-		{name: 'Anchor', id: 'anchor', apply: function(p) p.every = 2},
-		{name: 'Jack', id: 'jack', apply: function(p) p.runLength = 4},
-		{name: 'Mini-Jack', id: 'jack', apply: function(p) p.runLength = 3},
-		{name: 'Trill', id: 'trill', apply: function(p) {}},
-		{name: 'Split Trill', id: 'split-trill', apply: function(p) {}},
-		{name: 'Jump Trill', id: 'jump-trill', apply: function(p) p.chordSize = 2},
-		{name: 'Gallop', id: 'gallop', apply: function(p) p.every = 3},
-		{
-			name: 'Shield',
-			id: 'shield',
-			apply: function(p) {
-				p.holdSteps = 3;
-				p.every = 4;
-			}
-		},
-		{
-			name: 'Inverted Shield',
-			id: 'inverted-shield',
-			apply: function(p) {
-				p.holdSteps = 3;
-				p.every = 5;
-			}
-		},
-		{name: 'Inverse (Full LN)', id: 'inverse', apply: function(p) p.holdSteps = 4},
-		{
-			name: 'Staccato',
-			id: 'staccato',
-			apply: function(p) {
-				p.holdSteps = 1;
-				p.every = 2;
-			}
-		},
-		{name: 'LN Obstruction', id: 'ln-obstruction', apply: function(p) p.holdSteps = 8}
+		{name: 'Mini-Jack', id: 'jack', apply: function(p) p.runLength = 3}
 	];
+
+	/**
+		The editor's pattern list: every family, plus the named variations, in one flat set. The label
+		carries the group so the list still reads as organised without a second control to narrow it.
+		@return the entries, rebuilt each call
+	**/
+	public static function entries():Array<PatternEntry> {
+		var out:Array<PatternEntry> = [];
+		for (i in 0...DEFS.length) {
+			var def:PatternDef = DEFS[i];
+			out.push({
+				label: '${def.group} / ${def.name}',
+				name: def.name,
+				def: i,
+				apply: null
+			});
+			for (preset in PRESETS)
+				if (preset.id == def.id && preset.name != def.name)
+					out.push({
+						label: '${def.group} / ${preset.name}',
+						name: preset.name,
+						def: i,
+						apply: preset.apply
+					});
+		}
+		return out;
+	}
+
+	/**
+		The range a knob may take for a pattern. The bounds are what keeps each family distinct: a chevron
+		two lanes wide is a trill, a chord stream that chords every step is just chords, a staccato held
+		for eight steps is an ordinary long note. Anything outside a family's range belongs to another
+		family that is already in the list.
+		@param index the pattern's index in `DEFS`
+		@param ui the knob (`size`/`every`/`run`/`hold`)
+		@param keyCount the target line's column count
+		@param params the current knobs, for the bounds that depend on another one
+		@return the inclusive range
+	**/
+	public static function range(index:Int, ui:String, keyCount:Int, params:PatternParams):PatternRange {
+		var id:String = (index >= 0 && index < DEFS.length) ? DEFS[index].id : '';
+		var kc:Int = (keyCount < 1) ? 1 : keyCount;
+		return switch (ui) {
+			case 'size': switch (id) {
+					// A one-note "chord" is a plain stream, so every chord family starts at 2.
+					case 'jump-trill': {min: 2, max: atLeast(Std.int(kc / 2), 2)};
+					case 'inverse': {min: 1, max: kc};
+					default: {min: 2, max: atLeast(kc, 2)};
+				}
+			case 'every': switch (id) {
+					// Chording every step is the Chords family; gallop needs room to drop a beat.
+					case 'chord-stream': {min: 2, max: 16};
+					case 'anchor': {min: 2, max: 16};
+					case 'gallop': {min: 3, max: 16};
+					case 'staccato': {min: 2, max: 32};
+					case 'burst': {min: atLeast(params.runLength + 1, 3), max: 64};
+					case 'shield': {min: atLeast(params.holdSteps + 2, 3), max: 64};
+					case 'inverted-shield': {min: atLeast(params.holdSteps + 2, 4), max: 64};
+					default: {min: 1, max: 32};
+				}
+			case 'run': switch (id) {
+					// Two lanes out and back is a trill, not a chevron.
+					case 'chevron': {min: 3, max: atLeast(kc, 3)};
+					default: {min: 2, max: 32};
+				}
+			case 'hold': switch (id) {
+					// Past a couple of steps it stops reading as a pluck.
+					case 'staccato': {min: 1, max: 2};
+					case 'ln-obstruction': {min: 4, max: 64};
+					default: {min: 1, max: 64};
+				}
+			default: {min: 0, max: 0};
+		}
+	}
+
+	/**
+		The directions a pattern offers. Most walk one way or the other; only the families where turning
+		around produces something the list doesn't already hold offer `Alternate` -- stairs that turn
+		around ARE the Zigzag entry, and a chevron already turns by itself.
+		@param index the pattern's index in `DEFS`
+		@return the direction labels, indexed the way `PatternParams.direction` is
+	**/
+	public static function directions(index:Int):Array<String> {
+		var id:String = (index >= 0 && index < DEFS.length) ? DEFS[index].id : '';
+		return switch (id) {
+			case 'chord-stream' | 'gallop' | 'shield' | 'inverted-shield' | 'staccato': ['Up', 'Down', 'Alternate'];
+			default: ['Up', 'Down'];
+		}
+	}
+
+	/**
+		Pulls every knob into the selected pattern's ranges, so switching family can't leave a value that
+		would degenerate the shape.
+		@param index the pattern's index in `DEFS`
+		@param keyCount the target line's column count
+		@param params the knobs, edited in place
+	**/
+	public static function clampParams(index:Int, keyCount:Int, params:PatternParams):Void {
+		if (index < 0 || index >= DEFS.length)
+			return;
+		var uses:Array<String> = DEFS[index].uses;
+		if (uses.contains('size'))
+			params.chordSize = inRange(params.chordSize, range(index, 'size', keyCount, params));
+		if (uses.contains('run'))
+			params.runLength = inRange(params.runLength, range(index, 'run', keyCount, params));
+		if (uses.contains('hold'))
+			params.holdSteps = inRange(params.holdSteps, range(index, 'hold', keyCount, params));
+		// `every` can depend on run/hold, so it settles last.
+		if (uses.contains('every'))
+			params.every = inRange(params.every, range(index, 'every', keyCount, params));
+		if (params.direction >= directions(index).length)
+			params.direction = 0;
+		if (params.startLane >= keyCount)
+			params.startLane = -1;
+	}
+
+	/** Clamps a value into a range. **/
+	public static inline function inRange(value:Int, r:PatternRange):Int {
+		return (value < r.min) ? r.min : ((value > r.max) ? r.max : value);
+	}
 
 	/** @return fresh default parameters **/
 	public static function defaultParams():PatternParams {
