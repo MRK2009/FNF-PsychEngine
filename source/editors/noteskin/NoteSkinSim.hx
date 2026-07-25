@@ -110,27 +110,59 @@ class NoteSkinSim {
 		layout();
 	}
 
-	/** Re-lays the receptors (and re-follows the alive notes) without regenerating the pattern. **/
+	/**
+		Re-lays the receptors (and re-follows the alive notes) without regenerating the pattern.
+
+		The placement is `Receptor.playerPosition` ITSELF -- the gameplay function, run against the same
+		`Mania` state -- and the finished lane block is then slid into the preview panel as a unit. Nothing
+		here re-derives lane spacing, the per-keycount nudge or the skin offsets, so the preview cannot
+		space or nudge lanes differently from `PlayState.buildReceptors`. The slide is measured against the
+		same function run with the skin offsets zeroed, so an offset still shows as real displacement from
+		the preview's strum line instead of being normalised away.
+	**/
 	public function layout():Void {
-		// Mirror `Receptor.playerPosition` EXACTLY: 4K packs lanes at `swagWidth` with no gap, every
-		// other keycount adds `STRUM_GAP` and a per-keycount Y nudge. Using one rule for both (as this
-		// did) makes the preview space lanes differently from gameplay, so a skin tuned here is
-		// mis-aligned in game.
-		var kc:Int = keyCount;
-		var skinGap:Float = backend.NoteSkinConfig.columnGap();
-		var step:Float = ((kc == Mania.DEFAULT) ? Mania.swagWidth : (Mania.swagWidth + Mania.STRUM_GAP)) + skinGap;
-		var spanW:Float = step * (kc - 1) + Mania.swagWidth;
-		var startX:Float = centerX - spanW / 2;
-		var baseY:Float = lineY + ((kc == Mania.DEFAULT) ? 0 : Mania.noteOffsetsY[Mania.clamp(kc) - 1]);
+		if (receptors.length == 0)
+			return;
+		if (Mania.current != keyCount)
+			Mania.apply(keyCount);
+
 		for (col in 0...receptors.length) {
 			var r:Receptor = receptors[col];
 			if (r == null)
 				continue;
-			r.downScroll = downScroll;
-			r.x = startX + step * col + r.skinOffsetX;
-			r.y = baseY + r.skinOffsetY;
+			r.downScroll = downScroll; // must precede playerPosition: the y nudge follows the direction
+			r.setPosition(0, 0);
+			r.playerPosition();
+		}
+
+		var first:Receptor = receptors[0];
+		var last:Receptor = receptors[receptors.length - 1];
+		var spanW:Float = (last.x - first.x) + Mania.swagWidth;
+
+		// Where gameplay would put lane 0 with no skin offsets -- the preview's strum-line origin.
+		var offX:Float = first.skinOffsetX;
+		var offY:Float = first.skinOffsetY;
+		first.skinOffsetX = 0;
+		first.skinOffsetY = 0;
+		first.setPosition(0, 0);
+		first.playerPosition();
+		var baseX:Float = first.x;
+		var baseY:Float = first.y;
+		first.skinOffsetX = offX;
+		first.skinOffsetY = offY;
+		first.setPosition(0, 0);
+		first.playerPosition();
+
+		var dx:Float = (centerX - spanW / 2) - baseX;
+		var dy:Float = lineY - baseY;
+		for (r in receptors) {
+			if (r == null)
+				continue;
+			r.x += dx;
+			r.y += dy;
 			r.refreshAxis();
 		}
+
 		if (field != null) {
 			field.downScroll = downScroll;
 			field.speed = speed;

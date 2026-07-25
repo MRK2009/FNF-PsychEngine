@@ -424,6 +424,12 @@ each holding an `[x, y]`, or an array of `[x, y]` pairs indexed by column).
 | `holdEnd` | `endOffsets` | **legacy/compat only** (see note) |
 | `splash` | `splashOffsets` | note splash |
 
+**Scroll direction:** `strums` moves the receptor relative to the strum line, so its **y is measured
+along the scroll direction** -- positive is the way the notes travel. Tune the receptor's position in
+either direction and it lands identically in the other; you never need a second set of numbers for
+downscroll. The other elements (`notes`, `holdBody`, `splash`) centre art on the receptor and follow it,
+so their offsets mean the same thing in both directions and are not mirrored.
+
 **Important:** the modern folder renderer applies `holdOffsets` to the entire sustain (body and tail
 share it) and does **not** read `endOffsets` separately. `endOffsets` is only honored by the
 `compatibilityMode`/legacy sustain path, where it overrides `holdOffsets` for the tail piece. For a

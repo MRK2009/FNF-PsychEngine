@@ -1264,6 +1264,10 @@ class NoteSkinEditorState extends MusicBeatState {
 		var cur:Array<Float> = readOffset();
 		flow.add(numRow('X:', w, cur[0], 1, 0, -400, 400, function(v:Float):Void writeOffset(v, readOffset()[1])));
 		flow.add(numRow('Y:', w, cur[1], 1, 0, -400, 400, function(v:Float):Void writeOffset(readOffset()[0], v)));
+		// The strum's Y is measured along the scroll direction, so one tuned position fits both; the note /
+		// hold / splash offsets centre art on the strum and are the same either way.
+		if (OFF_FIELDS[curOffElem] == 'strumOffsets')
+			flow.add(dockLabel('Y follows the scroll direction: tune it once, it fits up and down.', w, 10));
 		flow.add(new UIButton('Reset this target', w, UITheme.px(26), function():Void {
 			writeOffset(0, 0);
 			buildLeftDock();

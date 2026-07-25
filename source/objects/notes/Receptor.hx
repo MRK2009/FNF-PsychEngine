@@ -53,7 +53,18 @@ final class Receptor extends FlxSprite {
 	public var resetAnim:Float = 0;
 
 	public var skinOffsetX:Float = 0;
+
+	/**
+		The skin's y nudge for this receptor, measured **along the scroll direction** rather than in screen
+		space: positive moves the receptor the way the notes travel. Upscroll keeps the raw value (notes
+		fall, so it reads as screen-down); downscroll mirrors it. A placement tuned in one direction
+		therefore lands identically in the other -- see `offsetAlongScroll`.
+	**/
 	public var skinOffsetY:Float = 0;
+
+	/** `skinOffsetY` resolved into screen space for the current scroll direction. **/
+	public inline function offsetAlongScroll():Float
+		return downScroll ? -skinOffsetY : skinOffsetY;
 
 	public var rgbShader:RGBShaderReference;
 	public var useRGBShader:Bool = true;
@@ -172,7 +183,11 @@ final class Receptor extends FlxSprite {
 		syncFrameCentering();
 	}
 
-	/** Applies the initial on-screen placement for this column/side (matches the legacy strum layout). **/
+	/**
+		Applies the initial on-screen placement for this column/side (matches the legacy strum layout).
+		Additive, so callers position the strum line first and this walks the lane out from it. `downScroll`
+		must already be set: the skin's y nudge follows the scroll direction.
+	**/
 	public function playerPosition():Void {
 		final kc:Int = Mania.current;
 		// A skin may widen/narrow the lane spacing; additive, and 4K gets it too (it has no base gap).
@@ -182,7 +197,7 @@ final class Receptor extends FlxSprite {
 			x += 50;
 			x += ((FlxG.width / 2) * player);
 			x += skinOffsetX;
-			y += skinOffsetY;
+			y += offsetAlongScroll();
 			return;
 		}
 
@@ -195,7 +210,7 @@ final class Receptor extends FlxSprite {
 		x -= (step * (kc - 1) / 2 - center4K);
 		y += Mania.noteOffsetsY[kc - 1];
 		x += skinOffsetX;
-		y += skinOffsetY;
+		y += offsetAlongScroll();
 	}
 
 	/**
