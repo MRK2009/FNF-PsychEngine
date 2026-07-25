@@ -154,7 +154,41 @@ final class NoteData {
 		Visual effects (Hurt Note tint, splash texture) are applied by the drawable from `this.type`.
 		@param value the note-type name (`''` for a normal note)
 	**/
+	/**
+		Clears everything a note TYPE can write, back to the plain-note defaults.
+
+		`applyType` runs this first, which makes applying a type idempotent and makes clearing one actually
+		undo it. That matters wherever `NoteData` is pooled -- the chart editor recycles them -- because
+		otherwise a recycled note keeps the last type's texture, palette, hitsound and health, and the type's
+		look turns up on whichever plain note happened to reuse the object.
+
+		`gfNote` is deliberately left alone: it also comes from the chart's gf sections, and its owner
+		assigns it around this call.
+	**/
+	public function clearTypeState():Void {
+		texture = null;
+		disableRGB = false;
+		animSuffix = '';
+		ignore = false;
+		lowPriority = false;
+		hitCausesMiss = false;
+		noAnimation = false;
+		noMissAnimation = false;
+		hitsound = 'hitsound';
+		hitsoundDisabled = false;
+		hitsoundForce = false;
+		splashDisabled = false;
+		ratingDisabled = false;
+		hitHealth = 0.02;
+		missHealth = 0.1;
+		earlyHitMult = 1;
+		lateHitMult = 1;
+		if (extraData != null)
+			extraData.clear();
+	}
+
 	public function applyType(value:String):Void {
+		clearTypeState();
 		type = (value == null) ? '' : value;
 		if (type.length < 1)
 			return;
@@ -224,9 +258,12 @@ final class NoteData {
 			note.scrollPos = note.time;
 			note.endScrollPos = note.time + sn.length;
 
-			note.animSuffix = sn.altAnim ? '-alt' : '';
 			note.gfNote = sn.gfNote;
+			// After the type, which clears the suffix and may set its own ('Alt Animation'); a section's
+			// altAnim still wins.
 			note.applyType(sn.type);
+			if (sn.altAnim)
+				note.animSuffix = '-alt';
 
 			var key:String = Std.string(Math.round(note.time)) + '|' + note.column + '|' + note.strumLine + '|' + note.type + '|' + note.length;
 			if (seen.exists(key))

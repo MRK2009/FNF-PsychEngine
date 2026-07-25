@@ -997,9 +997,10 @@ final class EditorNoteField {
 		data.strumLine = note.strumLine;
 		data.length = note.length;
 		data.gfNote = note.gfNote;
-		data.type = '';
-		if (note.type != null && note.type.length > 0)
-			data.applyType(note.type);
+		// Always through applyType, even for a plain note: it clears what the PREVIOUS note's type wrote on
+		// this recycled object, which is otherwise inherited (texture, palette, hitsound) by whatever note
+		// pops it out of the pool.
+		data.applyType(note.type);
 		live.data = data;
 
 		var kc:Int = lineKeyCount(note.strumLine);
