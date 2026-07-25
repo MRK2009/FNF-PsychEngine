@@ -232,6 +232,23 @@ class ChartingState extends MusicBeatState {
 	/** When on, clicking the grid drops the selected pattern instead of placing a single note. **/
 	var patternArmed:Bool = false;
 
+	/** The pattern group shown in the PTRN tab. **/
+	var patternGroup:String = 'Streams';
+
+	/** The named variation last picked from the preset list. **/
+	var patternPreset:Int = 0;
+
+	/** The knobs the selected pattern is shaped with. **/
+	var patternParams:editors.charting.data.ChartPattern.PatternParams = ChartPattern.defaultParams();
+
+	/** Seeds the random choices, so the preview and the placement it commits are the same shape. **/
+	var patternSeed:Int = 1;
+
+	/** The built pattern behind the preview, rebuilt only when something about it changes. **/
+	var patternCache:Array<PatternNote> = null;
+
+	var patternCacheKeys:Int = -1;
+
 	final fileDialog:FileDialogHandler = new FileDialogHandler();
 
 	/** Seconds between autosave checks (only writes when the chart changed). **/
@@ -2943,19 +2960,66 @@ class ChartingState extends MusicBeatState {
 		return 0;
 	}
 
-	/** PTRN tab: pick a preset VSRG pattern and drop it onto a line at the playhead. **/
+	/** PTRN tab: pick a VSRG pattern family, shape it, and drop it onto a line. **/
 	function buildPatternsPanel(flow:DockFlow, colW:Float):Void {
 		flow.header(new UIAccordion("Patterns", colW));
-		addHintRow(flow, colW, "Drops an osu!mania-style preset at the playhead.");
+		addHintRow(flow, colW, "Density comes from the snap: stairs at 1/16 are a roll.");
 
-		var patDrop:UIDropdown = new UIDropdown("Pattern", colW, function(i:Int, _:String):Void patternId = i);
+		var groupNames:Array<String> = ChartPattern.groups();
+		var groupDrop:UIDropdown = new UIDropdown("Group", colW, function(i:Int, name:String):Void {
+			patternGroup = name;
+			var first:Int = firstPatternIn(name);
+			if (first >= 0)
+				patternId = first;
+			invalidatePattern();
+			buildLeftPanel(currentPanel());
+		});
+		groupDrop.controlWidth = UITheme.px(130);
+		groupDrop.setItems(groupNames);
+		groupDrop.select(Std.int(Math.max(0, groupNames.indexOf(patternGroup))));
+		flow.add(groupDrop);
+
+		var inGroup:Array<Int> = [];
+		var inGroupNames:Array<String> = [];
+		for (i in 0...ChartPattern.DEFS.length)
+			if (ChartPattern.DEFS[i].group == patternGroup) {
+				inGroup.push(i);
+				inGroupNames.push(ChartPattern.DEFS[i].name);
+			}
+		if (inGroup.indexOf(patternId) < 0 && inGroup.length > 0)
+			patternId = inGroup[0];
+
+		var patDrop:UIDropdown = new UIDropdown("Pattern", colW, function(i:Int, _:String):Void {
+			patternId = inGroup[i];
+			invalidatePattern();
+			buildLeftPanel(currentPanel());
+		});
 		patDrop.controlWidth = UITheme.px(130);
-		patDrop.setItems(ChartPattern.NAMES);
-		patDrop.select(clampIndex(patternId, ChartPattern.NAMES.length));
+		patDrop.setItems(inGroupNames);
+		patDrop.select(Std.int(Math.max(0, inGroup.indexOf(patternId))));
 		flow.add(patDrop);
+
+		var presetNames:Array<String> = [for (p in ChartPattern.PRESETS) p.name];
+		var presetDrop:UIDropdown = new UIDropdown("Preset", colW, function(i:Int, _:String):Void {
+			var preset = ChartPattern.PRESETS[i];
+			patternPreset = i;
+			patternId = ChartPattern.indexOf(preset.id);
+			patternGroup = ChartPattern.DEFS[patternId].group;
+			preset.apply(patternParams);
+			invalidatePattern();
+			buildLeftPanel(currentPanel());
+		});
+		presetDrop.controlWidth = UITheme.px(130);
+		presetDrop.tooltip = "Fills the knobs below for a named variation";
+		presetDrop.setItems(presetNames);
+		presetDrop.select(clampIndex(patternPreset, presetNames.length));
+		flow.add(presetDrop);
+
+		buildPatternParams(flow, colW);
 
 		var lenStep:UIStepper = new UIStepper("Length (steps)", colW, patternLength, 1, function(v:Float):Void {
 			patternLength = Std.int(v < 1 ? 1 : v);
+			invalidatePattern();
 		});
 		lenStep.min = 1;
 		lenStep.max = 256;
@@ -2981,9 +3045,159 @@ class ChartingState extends MusicBeatState {
 		flow.add(lineDrop);
 
 		flow.add(new UIButton("Place at Playhead", colW, UITheme.px(28), placePattern));
-		var mouseToggle:UICheckbox = new UICheckbox("Place with Mouse", colW, patternArmed, function(v:Bool):Void patternArmed = v);
-		mouseToggle.tooltip = "While on, click the grid to drop the pattern at that lane and time";
+		flow.add(new UIButton("Reroll Variation", colW, UITheme.px(26), function():Void {
+			patternSeed = FlxG.random.int(1, 0x3FFFFFF);
+			invalidatePattern();
+		}));
+		var mouseToggle:UICheckbox = new UICheckbox("Place with Mouse", colW, patternArmed, function(v:Bool):Void {
+			patternArmed = v;
+			if (!v)
+				noteField.hidePatternGhost();
+		});
+		mouseToggle.tooltip = "While on, the grid previews the pattern and a click drops it";
 		flow.add(mouseToggle);
+	}
+
+	/**
+		Adds the knobs the selected pattern actually reads -- a chord stream shows its chord size, a jack
+		shows its repeat count, a shield shows its hold length.
+		@param flow the dock column
+		@param colW the column width
+	**/
+	function buildPatternParams(flow:DockFlow, colW:Float):Void {
+		var def = ChartPattern.DEFS[clampIndex(patternId, ChartPattern.DEFS.length)];
+		var kc:Int = patternKeyCount();
+
+		if (def.uses.contains('start')) {
+			var lanes:Array<String> = ['Random'];
+			for (c in 0...kc)
+				lanes.push('Lane ${c + 1}');
+			var laneDrop:UIDropdown = new UIDropdown("Start Lane", colW, function(i:Int, _:String):Void {
+				patternParams.startLane = i - 1;
+				invalidatePattern();
+			});
+			laneDrop.controlWidth = UITheme.px(110);
+			laneDrop.setItems(lanes);
+			laneDrop.select(clampIndex(patternParams.startLane + 1, lanes.length));
+			flow.add(laneDrop);
+		}
+
+		if (def.uses.contains('dir')) {
+			var dirDrop:UIDropdown = new UIDropdown("Direction", colW, function(i:Int, _:String):Void {
+				patternParams.direction = i;
+				invalidatePattern();
+			});
+			dirDrop.controlWidth = UITheme.px(110);
+			dirDrop.setItems(['Up', 'Down', 'Alternate']);
+			dirDrop.select(clampIndex(patternParams.direction, 3));
+			flow.add(dirDrop);
+		}
+
+		if (def.uses.contains('size')) {
+			var sizeStep:UIStepper = new UIStepper("Chord Size", colW, patternParams.chordSize, 1, function(v:Float):Void {
+				patternParams.chordSize = Std.int(v);
+				invalidatePattern();
+			});
+			sizeStep.min = 1;
+			sizeStep.max = kc;
+			sizeStep.tooltip = "2 = jump, 3 = hand, 4 = quad";
+			flow.add(sizeStep);
+		}
+
+		if (def.uses.contains('every')) {
+			var everyStep:UIStepper = new UIStepper("Every (steps)", colW, patternParams.every, 1, function(v:Float):Void {
+				patternParams.every = Std.int(v);
+				invalidatePattern();
+			});
+			everyStep.min = 1;
+			everyStep.max = 32;
+			everyStep.tooltip = "Steps between chords / repeats / accents";
+			flow.add(everyStep);
+		}
+
+		if (def.uses.contains('run')) {
+			var runStep:UIStepper = new UIStepper("Run Length", colW, patternParams.runLength, 1, function(v:Float):Void {
+				patternParams.runLength = Std.int(v);
+				invalidatePattern();
+			});
+			runStep.min = 2;
+			runStep.max = 32;
+			runStep.tooltip = "Notes per sub-run (a jack of 2-3 is a mini-jack)";
+			flow.add(runStep);
+		}
+
+		if (def.uses.contains('hold')) {
+			var holdStep:UIStepper = new UIStepper("Hold (steps)", colW, patternParams.holdSteps, 1, function(v:Float):Void {
+				patternParams.holdSteps = Std.int(v);
+				invalidatePattern();
+			});
+			holdStep.min = 1;
+			holdStep.max = 64;
+			holdStep.tooltip = "How long each long note is held";
+			flow.add(holdStep);
+		}
+
+		if (def.uses.contains('mirror'))
+			flow.add(new UICheckbox("Mirror", colW, patternParams.mirror, function(v:Bool):Void {
+				patternParams.mirror = v;
+				invalidatePattern();
+			}));
+	}
+
+	/** The first pattern belonging to a group, or -1. **/
+	function firstPatternIn(group:String):Int {
+		for (i in 0...ChartPattern.DEFS.length)
+			if (ChartPattern.DEFS[i].group == group)
+				return i;
+		return -1;
+	}
+
+	/** The column count the pattern is being shaped for (the target line's). **/
+	function patternKeyCount():Int {
+		var lines = model.chart.strumLines;
+		var line:Int = (patternLine >= 0 && patternLine < lines.length) ? patternLine : defaultPatternLine();
+		return (line >= 0 && line < lines.length) ? lines[line].keyCount : 4;
+	}
+
+	/** Drops the built pattern so the next preview or placement regenerates it. **/
+	inline function invalidatePattern():Void {
+		patternCache = null;
+	}
+
+	/**
+		The selected pattern, built for the target line and cached. The cache is what both the ghost and
+		the placement read, so a randomised variation can't change between seeing it and dropping it.
+		@return the note offsets
+	**/
+	function builtPattern():Array<PatternNote> {
+		var kc:Int = patternKeyCount();
+		var keys:Int = patternId * 7919 + kc * 613 + patternLength * 31 + patternSeed;
+		if (patternCache == null || patternCacheKeys != keys) {
+			patternCache = ChartPattern.build(patternId, kc, patternLength, patternParams, patternSeed);
+			patternCacheKeys = keys;
+		}
+		return patternCache;
+	}
+
+	/**
+		Draws the armed pattern where it would land, using the SAME built shape the click will place.
+		@param line the strumline under the cursor
+		@param startTime the (snapped) start time in ms
+	**/
+	function showPatternGhost(line:Int, startTime:Float):Void {
+		var lines = model.chart.strumLines;
+		if (line < 0 || line >= lines.length) {
+			noteField.hidePatternGhost();
+			return;
+		}
+		var kc:Int = lines[line].keyCount;
+		var startSteps:Float = noteField.stepsOf(startTime);
+		var per:Float = snapSteps();
+		var cells:Array<{line:Int, column:Int, steps:Float, lenSteps:Float}> = [];
+		for (pn in builtPattern())
+			if (pn.col >= 0 && pn.col < kc)
+				cells.push({line: line, column: pn.col, steps: startSteps + pn.step * per, lenSteps: pn.len * per});
+		noteField.showPatternGhost(cells);
 	}
 
 	/** Places the selected pattern at the playhead on the chosen target line (button entry point). **/
@@ -3006,7 +3220,7 @@ class ChartingState extends MusicBeatState {
 			return;
 		}
 		var kc:Int = lines[line].keyCount;
-		var offsets:Array<PatternNote> = ChartPattern.build(patternId, kc, patternLength);
+		var offsets:Array<PatternNote> = builtPattern();
 		if (offsets.length == 0)
 			return;
 
@@ -3024,7 +3238,9 @@ class ChartingState extends MusicBeatState {
 			var t:Float = noteField.timeOfSteps(startSteps + pn.step * per);
 			if (model.noteAt(t, line, pn.col) != null)
 				continue;
-			placed.push(model.addNote(t, line, pn.col));
+			// A pattern's hold length is in snap steps, like its note offsets.
+			var hold:Float = (pn.len > 0) ? (noteField.timeOfSteps(startSteps + (pn.step + pn.len) * per) - t) : 0;
+			placed.push(model.addNote(t, line, pn.col, hold));
 		}
 		// grow sections if the pattern runs past the current chart end (still refresh-suppressed)
 		if (placed.length > 0) {
@@ -3041,7 +3257,7 @@ class ChartingState extends MusicBeatState {
 			if (scripts != null && scripts.hasScripts)
 				for (note in placed)
 					scripts.call('onNotePlaced', [note.time, note.column, note.strumLine]);
-			UIToast.show('Placed ${placed.length} notes (${ChartPattern.NAMES[patternId]})');
+			UIToast.show('Placed ${placed.length} notes (${ChartPattern.DEFS[patternId].name})');
 		} else
 			UIToast.show('Nothing placed (spots occupied or off-lane)');
 	}
@@ -3735,14 +3951,20 @@ class ChartingState extends MusicBeatState {
 			return;
 		}
 
-		// armed pattern: a grid click drops the whole pattern at that lane/time
-		if (patternArmed && FlxG.mouse.justPressed && inside && !UIPointer.downOnUI && !FlxG.keys.pressed.CONTROL) {
+		// armed pattern: the grid previews the shape, and a click drops it at that lane/time
+		if (patternArmed && inside && !UIPointer.downOnUI && !FlxG.keys.pressed.CONTROL) {
 			var line:Int = noteField.laneStrumLine(noteField.laneAt(mx));
 			if (line >= 0) {
-				placePatternAt(line, placeTimeAt(my));
-				return;
-			}
-		}
+				var at:Float = placeTimeAt(my);
+				showPatternGhost(line, at);
+				if (FlxG.mouse.justPressed) {
+					placePatternAt(line, at);
+					return;
+				}
+			} else
+				noteField.hidePatternGhost();
+		} else if (patternArmed)
+			noteField.hidePatternGhost();
 
 		if (FlxG.mouse.justPressed && inside && !UIPointer.downOnUI) {
 			var hit:SongNote = noteField.noteUnder(mx, my);

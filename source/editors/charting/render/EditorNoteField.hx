@@ -458,6 +458,64 @@ final class EditorNoteField {
 			ghostNote.visible = false;
 	}
 
+	/** Faded cells showing where an armed pattern would land; pooled and reused between frames. **/
+	final patternGhosts:Array<FlxSprite> = [];
+
+	/**
+		Previews a whole pattern on the grid: one faded cell per note, stretched into a bar for a hold.
+		@param notes the pattern's notes as `{line, column, steps, lenSteps}`, in field step units
+	**/
+	public function showPatternGhost(notes:Array<{line:Int, column:Int, steps:Float, lenSteps:Float}>):Void {
+		var viewSteps:Float = stepsOf(viewTime);
+		var used:Int = 0;
+		for (n in notes) {
+			var lane:Int = laneIndexOf(n.line, n.column);
+			if (lane < 0 || lane >= laneX.length)
+				continue;
+
+			var spr:FlxSprite = patternGhostAt(used++);
+			var y0:Float = yOfSteps(n.steps, viewSteps);
+			var y1:Float = yOfSteps(n.steps + ((n.lenSteps > 0) ? n.lenSteps : 0), viewSteps);
+			var near:Float = (y0 < y1) ? y0 : y1;
+			var far:Float = (y0 < y1) ? y1 : y0;
+			// One row per note; a hold stretches to cover its tail's row too. Downscroll grows upward,
+			// so the row sits above its step line -- the same rule the single-note ghost uses.
+			var height:Float = (far - near) + cell;
+
+			spr.setGraphicSize(Std.int(cell), Std.int(height));
+			spr.updateHitbox();
+			spr.x = laneX[lane];
+			spr.y = downscroll ? (near - cell) : near;
+			spr.alpha = (n.lenSteps > 0) ? 0.22 : 0.34;
+			spr.visible = true;
+		}
+		while (used < patternGhosts.length)
+			patternGhosts[used++].visible = false;
+	}
+
+	/** Hides the pattern preview. **/
+	public function hidePatternGhost():Void {
+		for (spr in patternGhosts)
+			spr.visible = false;
+	}
+
+	/**
+		A pooled preview cell.
+		@param index the cell's slot
+		@return the sprite, created on first use
+	**/
+	function patternGhostAt(index:Int):FlxSprite {
+		while (patternGhosts.length <= index) {
+			var spr:FlxSprite = new FlxSprite();
+			spr.makeGraphic(1, 1, FlxColor.WHITE);
+			spr.color = FlxColor.fromInt(UITheme.accent & 0xFFFFFF | 0xFF000000);
+			spr.visible = false;
+			patternGhosts.push(spr);
+			group.add(spr);
+		}
+		return patternGhosts[index];
+	}
+
 	/** Shows the box-select rectangle between two game-space corners. **/
 	public function showBoxRect(x0:Float, y0:Float, x1:Float, y1:Float):Void {
 		var lx:Float = (x0 < x1) ? x0 : x1;

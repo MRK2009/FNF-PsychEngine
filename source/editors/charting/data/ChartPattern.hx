@@ -1,138 +1,801 @@
 package editors.charting.data;
 
-/** One note within a generated pattern: a snap-step offset and a column (relative to the line). **/
+/** One note within a generated pattern: a snap-step offset, a column, and a hold length in steps. **/
 typedef PatternNote = {
 	step:Int,
-	col:Int
+	col:Int,
+	len:Int
+};
+
+/** The knobs a pattern can read. Every pattern uses a subset, listed in its `uses`. **/
+typedef PatternParams = {
+	/** Lane the shape starts on, or `-1` to pick one from the seed. **/
+	var startLane:Int;
+
+	/** 0 = up (rightwards), 1 = down (leftwards), 2 = alternate each run. **/
+	var direction:Int;
+
+	/** Notes per chord: 2 = jump, 3 = hand, 4 = quad. **/
+	var chordSize:Int;
+
+	/** Steps between chords / accents / repeats. **/
+	var every:Int;
+
+	/** Hold length in steps; 0 makes taps. **/
+	var holdSteps:Int;
+
+	/** Notes per sub-run, for the patterns built out of short runs. **/
+	var runLength:Int;
+
+	/** Mirrors every column across the lane block. **/
+	var mirror:Bool;
+};
+
+/** One entry in the pattern catalog. **/
+typedef PatternDef = {
+	var id:String;
+	var name:String;
+	var group:String;
+
+	/** Which `PatternParams` fields this pattern reads, by ui id (`start`/`dir`/`size`/`every`/`hold`/`run`/`mirror`). **/
+	var uses:Array<String>;
+
+	var build:PatternBuild->Array<PatternNote>;
+};
+
+/** Everything a pattern generator is handed. **/
+typedef PatternBuild = {
+	var keyCount:Int;
+	var steps:Int;
+	var params:PatternParams;
+	var rng:PatternRandom;
 };
 
 /**
-	Predefined VSRG note patterns (osu!mania style), generated for the active key count. A pattern is
-	a pure list of `{step, col}` offsets; the editor turns each offset into a real note by advancing
-	`step` snap units from the placement time and mapping `col` onto the target strumline.
+	A small deterministic RNG. The editor seeds it per placement so the ghost preview and the notes that
+	actually land are the same shape -- `FlxG.random` would re-roll between the two.
+**/
+class PatternRandom {
+	var state:Int;
 
-	Patterns adapt to any column count: single-lane motifs wrap/mirror across `keyCount`, and chord
-	motifs (jumps/hands/chords) scale to the available lanes.
+	public function new(seed:Int) {
+		state = (seed == 0) ? 0x9E3779B9 : seed;
+	}
+
+	/**
+		@param max the exclusive upper bound
+		@return a value in `[0, max)`
+	**/
+	public function int(max:Int):Int {
+		state = (state * 1103515245 + 12345) & 0x3FFFFFFF;
+		return (max <= 1) ? 0 : state % max;
+	}
+}
+
+/**
+	The chart editor's VSRG pattern catalog, modelled the way the patterns actually relate to each other:
+	a handful of families, each with the knobs that turn it into the named variations (a chord stream at
+	size 2/3/4 is a jump/hand/quad stream, a jack of length 3 is a mini-jack, and so on). `PRESETS` maps
+	the familiar names onto a family plus its parameters.
+
+	A pattern is a pure list of `{step, col, len}` offsets in snap-step units; the editor turns each into
+	a real note by advancing `step` snaps from the placement time. Generation is deterministic given the
+	seed, so what the preview draws is exactly what gets placed.
+
+	Note density comes from the editor's snap, not from the pattern: the same stairs at 1/16 are a roll
+	and at 1/4 are a slow stream.
 **/
 class ChartPattern {
-	/** Pattern names in menu order (index = the `id` passed to `build`). **/
-	public static final NAMES:Array<String> = [
-		"Stairs Up",
-		"Stairs Down",
-		"Zigzag",
-		"Trill",
-		"Jacks",
-		"Jumps",
-		"Jumpstream",
-		"Hands",
-		"Chords"
+	public static final DEFS:Array<PatternDef> = [
+		{
+			id: 'stairs',
+			name: 'Stairs',
+			group: 'Streams',
+			uses: ['start', 'dir', 'mirror'],
+			build: function(b:PatternBuild):Array<PatternNote> {
+				var out:Array<PatternNote> = [];
+				var start:Int = laneOf(b, b.params.startLane);
+				for (i in 0...b.steps)
+					out.push(note(b, i, start + walk(b, i)));
+				return out;
+			}
+		},
+		{
+			id: 'broken-stairs',
+			name: 'Broken Stairs',
+			group: 'Streams',
+			uses: ['start', 'dir', 'run', 'mirror'],
+			build: function(b:PatternBuild):Array<PatternNote> {
+				// One direction, chopped into short runs that each restart a lane further along.
+				var out:Array<PatternNote> = [];
+				var run:Int = atLeast(b.params.runLength, 2);
+				var start:Int = laneOf(b, b.params.startLane);
+				for (i in 0...b.steps) {
+					var runIndex:Int = Std.int(i / run);
+					var within:Int = i % run;
+					out.push(note(b, i, start + sign(b, runIndex) * (runIndex + within)));
+				}
+				return out;
+			}
+		},
+		{
+			id: 'delay-stairs',
+			name: 'Delay Stairs',
+			group: 'Streams',
+			uses: ['start', 'dir', 'size', 'mirror'],
+			build: function(b:PatternBuild):Array<PatternNote> {
+				// Several stairs running at once, each one step behind the last.
+				var out:Array<PatternNote> = [];
+				var lanes:Int = clamp(b.params.chordSize, 2, b.keyCount);
+				var start:Int = laneOf(b, b.params.startLane);
+				for (i in 0...b.steps)
+					for (s in 0...lanes) {
+						var at:Int = i - s;
+						if (at >= 0)
+							out.push(note(b, i, start + sign(b, 0) * (at + s * 2)));
+					}
+				return out;
+			}
+		},
+		{
+			id: 'zigzag',
+			name: 'Zigzag',
+			group: 'Streams',
+			uses: ['start', 'mirror'],
+			build: function(b:PatternBuild):Array<PatternNote> {
+				var out:Array<PatternNote> = [];
+				var start:Int = laneOf(b, b.params.startLane);
+				for (i in 0...b.steps)
+					out.push(note(b, i, bounce(i + start, b.keyCount)));
+				return out;
+			}
+		},
+		{
+			id: 'chevron',
+			name: 'Chevron',
+			group: 'Streams',
+			uses: ['start', 'dir', 'run', 'mirror'],
+			build: function(b:PatternBuild):Array<PatternNote> {
+				// An arrow: out to the turn, then back, repeating.
+				var out:Array<PatternNote> = [];
+				var width:Int = clamp(atLeast(b.params.runLength, 2), 2, b.keyCount);
+				var start:Int = laneOf(b, b.params.startLane);
+				var span:Int = width * 2 - 2;
+				for (i in 0...b.steps) {
+					var p:Int = (span > 0) ? (i % span) : 0;
+					var offset:Int = (p < width) ? p : span - p;
+					out.push(note(b, i, start + sign(b, 0) * offset));
+				}
+				return out;
+			}
+		},
+		{
+			id: 'inward',
+			name: 'Inward',
+			group: 'Streams',
+			uses: ['mirror'],
+			build: function(b:PatternBuild):Array<PatternNote> {
+				return edgeRun(b, true);
+			}
+		},
+		{
+			id: 'outward',
+			name: 'Outward',
+			group: 'Streams',
+			uses: ['mirror'],
+			build: function(b:PatternBuild):Array<PatternNote> {
+				return edgeRun(b, false);
+			}
+		},
+		{
+			id: 'whirlwind',
+			name: 'Whirlwind',
+			group: 'Streams',
+			uses: ['start', 'mirror'],
+			build: function(b:PatternBuild):Array<PatternNote> {
+				// The rolling order that keeps alternating hands: outer, inner, outer, inner.
+				var out:Array<PatternNote> = [];
+				var order:Array<Int> = whirlOrder(b.keyCount);
+				var start:Int = laneOf(b, b.params.startLane);
+				for (i in 0...b.steps)
+					out.push(note(b, i, start + order[i % order.length]));
+				return out;
+			}
+		},
+		{
+			id: 'burst',
+			name: 'Burst',
+			group: 'Streams',
+			uses: ['start', 'dir', 'run', 'every', 'mirror'],
+			build: function(b:PatternBuild):Array<PatternNote> {
+				// Short dense runs separated by a gap: `run` notes, then nothing until the next `every`.
+				var out:Array<PatternNote> = [];
+				var run:Int = atLeast(b.params.runLength, 2);
+				var every:Int = atLeast(b.params.every, run + 1);
+				var start:Int = laneOf(b, b.params.startLane);
+				for (i in 0...b.steps) {
+					var within:Int = i % every;
+					if (within >= run)
+						continue;
+					out.push(note(b, i, start + sign(b, Std.int(i / every)) * within));
+				}
+				return out;
+			}
+		},
+		{
+			id: 'chord-stream',
+			name: 'Chord Stream',
+			group: 'Streams',
+			uses: ['start', 'dir', 'size', 'every', 'mirror'],
+			build: function(b:PatternBuild):Array<PatternNote> {
+				// A stream that thickens into a chord every `every` steps -- jump/hand/quad stream.
+				var out:Array<PatternNote> = [];
+				var size:Int = clamp(b.params.chordSize, 2, b.keyCount);
+				var every:Int = atLeast(b.params.every, 2);
+				var start:Int = laneOf(b, b.params.startLane);
+				for (i in 0...b.steps) {
+					var lead:Int = start + walk(b, i);
+					out.push(note(b, i, lead));
+					if (i % every != 0)
+						continue;
+					for (extra in spread(b, lead, size))
+						out.push(note(b, i, extra));
+				}
+				return out;
+			}
+		},
+		{
+			id: 'chords',
+			name: 'Chords',
+			group: 'Chords',
+			uses: ['size', 'every', 'hold'],
+			build: function(b:PatternBuild):Array<PatternNote> {
+				// Straight chords on the beat; size 0 (or >= keyCount) fills every lane.
+				var out:Array<PatternNote> = [];
+				var size:Int = clamp(b.params.chordSize, 1, b.keyCount);
+				var every:Int = atLeast(b.params.every, 1);
+				var i:Int = 0;
+				while (i < b.steps) {
+					var lead:Int = (size >= b.keyCount) ? 0 : b.rng.int(b.keyCount);
+					if (size >= b.keyCount) {
+						for (c in 0...b.keyCount)
+							out.push(note(b, i, c));
+					} else {
+						out.push(note(b, i, lead));
+						for (extra in spread(b, lead, size))
+							out.push(note(b, i, extra));
+					}
+					i += every;
+				}
+				return out;
+			}
+		},
+		{
+			id: 'chord-jack',
+			name: 'Chord Jack',
+			group: 'Chords',
+			uses: ['start', 'size', 'every'],
+			build: function(b:PatternBuild):Array<PatternNote> {
+				// The SAME chord repeated -- what separates it from plain chords.
+				var out:Array<PatternNote> = [];
+				var size:Int = clamp(b.params.chordSize, 2, b.keyCount);
+				var every:Int = atLeast(b.params.every, 1);
+				var lead:Int = laneOf(b, b.params.startLane);
+				var cols:Array<Int> = [lead % b.keyCount];
+				for (extra in spread(b, lead, size))
+					cols.push(extra);
+				var i:Int = 0;
+				while (i < b.steps) {
+					for (c in cols)
+						out.push(note(b, i, c));
+					i += every;
+				}
+				return out;
+			}
+		},
+		{
+			id: 'anchor',
+			name: 'Anchor',
+			group: 'Chords',
+			uses: ['start', 'dir', 'every'],
+			build: function(b:PatternBuild):Array<PatternNote> {
+				// One lane jacks all the way through while the others stream around it.
+				var out:Array<PatternNote> = [];
+				var anchor:Int = wrap(laneOf(b, b.params.startLane), b.keyCount);
+				var every:Int = atLeast(b.params.every, 2);
+				var moving:Int = 0;
+				for (i in 0...b.steps) {
+					if (i % every == 0)
+						out.push({step: i, col: anchor, len: 0});
+					var col:Int = wrap(anchor + 1 + sign(b, 0) * moving, b.keyCount);
+					if (col == anchor)
+						col = wrap(col + 1, b.keyCount);
+					out.push({step: i, col: col, len: 0});
+					moving++;
+				}
+				return out;
+			}
+		},
+		{
+			id: 'jack',
+			name: 'Jack',
+			group: 'Jacks',
+			uses: ['start', 'run', 'every'],
+			build: function(b:PatternBuild):Array<PatternNote> {
+				// `run` repeats on one lane, then it moves on: run 2-3 is a mini-jack.
+				var out:Array<PatternNote> = [];
+				var run:Int = atLeast(b.params.runLength, 2);
+				var every:Int = atLeast(b.params.every, 1);
+				var col:Int = laneOf(b, b.params.startLane);
+				var i:Int = 0;
+				var hit:Int = 0;
+				while (i < b.steps) {
+					out.push(note(b, i, col));
+					hit++;
+					if (hit >= run) {
+						hit = 0;
+						col += 1 + b.rng.int(b.keyCount - 1);
+					}
+					i += every;
+				}
+				return out;
+			}
+		},
+		{
+			id: 'trill',
+			name: 'Trill',
+			group: 'Trills',
+			uses: ['start', 'mirror'],
+			build: function(b:PatternBuild):Array<PatternNote> {
+				var out:Array<PatternNote> = [];
+				var a:Int = laneOf(b, b.params.startLane);
+				for (i in 0...b.steps)
+					out.push(note(b, i, a + (i % 2)));
+				return out;
+			}
+		},
+		{
+			id: 'split-trill',
+			name: 'Split Trill',
+			group: 'Trills',
+			uses: ['start', 'mirror'],
+			build: function(b:PatternBuild):Array<PatternNote> {
+				// Both lanes on one hand, so it has to be trilled one-handed.
+				var out:Array<PatternNote> = [];
+				var half:Int = Std.int(b.keyCount / 2);
+				var left:Bool = (b.params.startLane < 0) ? (b.rng.int(2) == 0) : (b.params.startLane < half);
+				var a:Int = left ? 0 : Std.int(Math.max(half, b.keyCount - 2));
+				var span:Int = left ? Std.int(Math.max(1, half - 1)) : Std.int(Math.max(1, b.keyCount - 1 - a));
+				for (i in 0...b.steps)
+					out.push(note(b, i, a + ((i % 2 == 0) ? 0 : span)));
+				return out;
+			}
+		},
+		{
+			id: 'jump-trill',
+			name: 'Jump Trill',
+			group: 'Trills',
+			uses: ['start', 'size', 'mirror'],
+			build: function(b:PatternBuild):Array<PatternNote> {
+				// Two chords alternating; at size 2 in 4K it is the classic jumptrill.
+				var out:Array<PatternNote> = [];
+				var size:Int = clamp(b.params.chordSize, 2, Std.int(Math.max(2, b.keyCount / 2)));
+				var start:Int = laneOf(b, b.params.startLane);
+				for (i in 0...b.steps) {
+					var base:Int = start + ((i % 2 == 0) ? 0 : size);
+					for (c in 0...size)
+						out.push(note(b, i, base + c));
+				}
+				return out;
+			}
+		},
+		{
+			id: 'gallop',
+			name: 'Gallop',
+			group: 'Trills',
+			uses: ['start', 'dir', 'every', 'mirror'],
+			build: function(b:PatternBuild):Array<PatternNote> {
+				// Beats dropped out of a stream so the remaining notes swing.
+				var out:Array<PatternNote> = [];
+				var every:Int = atLeast(b.params.every, 3);
+				var start:Int = laneOf(b, b.params.startLane);
+				var placed:Int = 0;
+				for (i in 0...b.steps) {
+					if (i % every == every - 1)
+						continue; // the omitted beat
+					out.push(note(b, i, start + walk(b, placed)));
+					placed++;
+				}
+				return out;
+			}
+		},
+		{
+			id: 'shield',
+			name: 'Shield',
+			group: 'Long Notes',
+			uses: ['start', 'dir', 'hold', 'every', 'mirror'],
+			build: function(b:PatternBuild):Array<PatternNote> {
+				// A tap, then a hold right behind it on the next lane.
+				var out:Array<PatternNote> = [];
+				var hold:Int = atLeast(b.params.holdSteps, 2);
+				var every:Int = atLeast(b.params.every, hold + 1);
+				var start:Int = laneOf(b, b.params.startLane);
+				var i:Int = 0;
+				var n:Int = 0;
+				while (i < b.steps) {
+					out.push({step: i, col: colOf(b, start + walk(b, n)), len: 0});
+					out.push({step: i + 1, col: colOf(b, start + walk(b, n + 1)), len: hold});
+					i += every;
+					n += 2;
+				}
+				return out;
+			}
+		},
+		{
+			id: 'inverted-shield',
+			name: 'Inverted Shield',
+			group: 'Long Notes',
+			uses: ['start', 'dir', 'hold', 'every', 'mirror'],
+			build: function(b:PatternBuild):Array<PatternNote> {
+				// The mirror of a shield: a hold, then a tap the moment it ends.
+				var out:Array<PatternNote> = [];
+				var hold:Int = atLeast(b.params.holdSteps, 2);
+				var every:Int = atLeast(b.params.every, hold + 2);
+				var start:Int = laneOf(b, b.params.startLane);
+				var i:Int = 0;
+				var n:Int = 0;
+				while (i < b.steps) {
+					out.push({step: i, col: colOf(b, start + walk(b, n)), len: hold});
+					out.push({step: i + hold + 1, col: colOf(b, start + walk(b, n + 1)), len: 0});
+					i += every;
+					n += 2;
+				}
+				return out;
+			}
+		},
+		{
+			id: 'inverse',
+			name: 'Inverse (Full LN)',
+			group: 'Long Notes',
+			uses: ['hold', 'size'],
+			build: function(b:PatternBuild):Array<PatternNote> {
+				// Staggered holds that keep the lanes covered end to end.
+				var out:Array<PatternNote> = [];
+				var hold:Int = atLeast(b.params.holdSteps, 2);
+				var lanes:Int = clamp(b.params.chordSize, 1, b.keyCount);
+				var i:Int = 0;
+				while (i < b.steps) {
+					for (c in 0...lanes) {
+						var at:Int = i + ((c % 2 == 0) ? 0 : Std.int(hold / 2));
+						out.push({step: at, col: c % b.keyCount, len: hold});
+					}
+					i += hold + 1;
+				}
+				return out;
+			}
+		},
+		{
+			id: 'staccato',
+			name: 'Staccato',
+			group: 'Long Notes',
+			uses: ['start', 'dir', 'hold', 'every', 'mirror'],
+			build: function(b:PatternBuild):Array<PatternNote> {
+				// Very short holds, to force a hard hit on a plucked sound.
+				var out:Array<PatternNote> = [];
+				var hold:Int = clamp(b.params.holdSteps, 1, 2);
+				var every:Int = atLeast(b.params.every, 2);
+				var start:Int = laneOf(b, b.params.startLane);
+				var i:Int = 0;
+				var n:Int = 0;
+				while (i < b.steps) {
+					out.push({step: i, col: colOf(b, start + walk(b, n)), len: hold});
+					i += every;
+					n++;
+				}
+				return out;
+			}
+		},
+		{
+			id: 'ln-obstruction',
+			name: 'LN Obstruction',
+			group: 'Long Notes',
+			uses: ['start', 'dir', 'hold'],
+			build: function(b:PatternBuild):Array<PatternNote> {
+				// One lane held down while the rest streams, changing how the hand can play it.
+				var out:Array<PatternNote> = [];
+				var hold:Int = atLeast(b.params.holdSteps, 4);
+				var held:Int = wrap(laneOf(b, b.params.startLane), b.keyCount);
+				var i:Int = 0;
+				while (i < b.steps) {
+					out.push({step: i, col: held, len: hold});
+					i += hold + 1;
+				}
+				var moving:Int = 0;
+				for (i in 0...b.steps) {
+					var col:Int = wrap(held + 1 + sign(b, 0) * moving, b.keyCount);
+					if (col == held)
+						col = wrap(col + 1, b.keyCount);
+					out.push({step: i, col: col, len: 0});
+					moving++;
+				}
+				return out;
+			}
+		}
 	];
 
 	/**
-		Generates a pattern's note offsets. Patterns that can be built more than one way pick a random
-		variation each call (random start lane, random lane pair, random hand columns, ...), so repeated
-		placements aren't identical.
-		@param id the pattern index (into `NAMES`)
+		The familiar pattern names from the VSRG vocabulary, each mapping onto a family in `DEFS` plus the
+		parameters that make it that variation. Picking one fills the panel's knobs in.
+	**/
+	public static final PRESETS:Array<{name:String, id:String, apply:PatternParams->Void}> = [
+		{name: 'Stream', id: 'stairs', apply: function(p) {}},
+		{name: 'Roll (fine snap)', id: 'stairs', apply: function(p) {}},
+		{name: 'Grace', id: 'broken-stairs', apply: function(p) p.runLength = 3},
+		{name: 'Broken Stairs', id: 'broken-stairs', apply: function(p) p.runLength = 4},
+		{name: 'Delay Stairs', id: 'delay-stairs', apply: function(p) p.chordSize = 2},
+		{name: 'Chevron', id: 'chevron', apply: function(p) p.runLength = 4},
+		{name: 'Whirlwind', id: 'whirlwind', apply: function(p) {}},
+		{name: 'Inward', id: 'inward', apply: function(p) {}},
+		{name: 'Outward', id: 'outward', apply: function(p) {}},
+		{
+			name: 'Burst',
+			id: 'burst',
+			apply: function(p) {
+				p.runLength = 4;
+				p.every = 8;
+			}
+		},
+		{
+			name: 'Jumpstream',
+			id: 'chord-stream',
+			apply: function(p) {
+				p.chordSize = 2;
+				p.every = 2;
+			}
+		},
+		{
+			name: 'Handstream',
+			id: 'chord-stream',
+			apply: function(p) {
+				p.chordSize = 3;
+				p.every = 2;
+			}
+		},
+		{
+			name: 'Quadstream',
+			id: 'chord-stream',
+			apply: function(p) {
+				p.chordSize = 4;
+				p.every = 2;
+			}
+		},
+		{
+			name: 'Jumps',
+			id: 'chords',
+			apply: function(p) {
+				p.chordSize = 2;
+				p.every = 1;
+			}
+		},
+		{
+			name: 'Hands',
+			id: 'chords',
+			apply: function(p) {
+				p.chordSize = 3;
+				p.every = 1;
+			}
+		},
+		{
+			name: 'Quads',
+			id: 'chords',
+			apply: function(p) {
+				p.chordSize = 4;
+				p.every = 1;
+			}
+		},
+		{
+			name: 'Chord Jack',
+			id: 'chord-jack',
+			apply: function(p) {
+				p.chordSize = 2;
+				p.every = 1;
+			}
+		},
+		{name: 'Anchor', id: 'anchor', apply: function(p) p.every = 2},
+		{name: 'Jack', id: 'jack', apply: function(p) p.runLength = 4},
+		{name: 'Mini-Jack', id: 'jack', apply: function(p) p.runLength = 3},
+		{name: 'Trill', id: 'trill', apply: function(p) {}},
+		{name: 'Split Trill', id: 'split-trill', apply: function(p) {}},
+		{name: 'Jump Trill', id: 'jump-trill', apply: function(p) p.chordSize = 2},
+		{name: 'Gallop', id: 'gallop', apply: function(p) p.every = 3},
+		{
+			name: 'Shield',
+			id: 'shield',
+			apply: function(p) {
+				p.holdSteps = 3;
+				p.every = 4;
+			}
+		},
+		{
+			name: 'Inverted Shield',
+			id: 'inverted-shield',
+			apply: function(p) {
+				p.holdSteps = 3;
+				p.every = 5;
+			}
+		},
+		{name: 'Inverse (Full LN)', id: 'inverse', apply: function(p) p.holdSteps = 4},
+		{
+			name: 'Staccato',
+			id: 'staccato',
+			apply: function(p) {
+				p.holdSteps = 1;
+				p.every = 2;
+			}
+		},
+		{name: 'LN Obstruction', id: 'ln-obstruction', apply: function(p) p.holdSteps = 8}
+	];
+
+	/** @return fresh default parameters **/
+	public static function defaultParams():PatternParams {
+		return {
+			startLane: -1,
+			direction: 0,
+			chordSize: 2,
+			every: 2,
+			holdSteps: 3,
+			runLength: 4,
+			mirror: false
+		};
+	}
+
+	/** @return the group names in catalog order **/
+	public static function groups():Array<String> {
+		var out:Array<String> = [];
+		for (def in DEFS)
+			if (out.indexOf(def.group) < 0)
+				out.push(def.group);
+		return out;
+	}
+
+	/**
+		@param id the pattern's id
+		@return its index in `DEFS`, or 0 when unknown
+	**/
+	public static function indexOf(id:String):Int {
+		for (i in 0...DEFS.length)
+			if (DEFS[i].id == id)
+				return i;
+		return 0;
+	}
+
+	/**
+		Generates a pattern's note offsets.
+		@param index the pattern's index in `DEFS`
 		@param keyCount the target line's column count
 		@param steps how many snap steps the pattern spans
-		@return the `{step, col}` offsets (columns already clamped to `[0, keyCount)`)
+		@param params the pattern knobs
+		@param seed the variation seed; the same seed always yields the same shape
+		@return the offsets, columns clamped into `[0, keyCount)` and de-duplicated
 	**/
-	public static function build(id:Int, keyCount:Int, steps:Int):Array<PatternNote> {
+	public static function build(index:Int, keyCount:Int, steps:Int, params:PatternParams, seed:Int):Array<PatternNote> {
+		if (index < 0 || index >= DEFS.length)
+			index = 0;
+		var b:PatternBuild = {
+			keyCount: (keyCount < 1) ? 1 : keyCount,
+			steps: (steps < 1) ? 1 : steps,
+			params: (params != null) ? params : defaultParams(),
+			rng: new PatternRandom(seed)
+		};
+		return tidy(DEFS[index].build(b), b);
+	}
+
+	/**
+		Clamps columns into the lane block, drops notes past the pattern's span and collapses duplicates
+		landing on the same step and column.
+		@param notes the raw generator output
+		@param b the build context
+		@return the cleaned list
+	**/
+	static function tidy(notes:Array<PatternNote>, b:PatternBuild):Array<PatternNote> {
 		var out:Array<PatternNote> = [];
-		var kc:Int = (keyCount < 1) ? 1 : keyCount;
-		var n:Int = (steps < 1) ? 1 : steps;
-		var i:Int = 0;
-		switch (id) {
-			case 0: // Stairs Up: ascending run from a random start lane, wrapping
-				var start:Int = rnd(kc);
-				while (i < n) {
-					out.push({step: i, col: (start + i) % kc});
-					i++;
-				}
-			case 1: // Stairs Down: descending run from a random start lane
-				var start:Int = rnd(kc);
-				while (i < n) {
-					out.push({step: i, col: wrap(start - i, kc)});
-					i++;
-				}
-			case 2: // Zigzag: bounce across the lanes from a random phase
-				var start:Int = rnd(kc);
-				while (i < n) {
-					out.push({step: i, col: zigzag(i + start, kc)});
-					i++;
-				}
-			case 3: // Trill: alternate a random distinct lane pair
-				var a:Int = rnd(kc);
-				var b:Int = otherCol(a, kc);
-				while (i < n) {
-					out.push({step: i, col: (i % 2 == 0) ? a : b});
-					i++;
-				}
-			case 4: // Jacks: a single random lane repeated
-				var c:Int = rnd(kc);
-				while (i < n) {
-					out.push({step: i, col: c});
-					i++;
-				}
-			case 5: // Jumps: a random distinct pair each step
-				var a:Int = rnd(kc);
-				var b:Int = otherCol(a, kc);
-				while (i < n) {
-					out.push({step: i, col: a});
-					if (kc > 1)
-						out.push({step: i, col: b});
-					i++;
-				}
-			case 6: // Jumpstream: a stream from a random start with a random jump every other step
-				var start:Int = rnd(kc);
-				while (i < n) {
-					var c:Int = (start + i) % kc;
-					out.push({step: i, col: c});
-					if (kc > 1 && (i % 2 == 1))
-						out.push({step: i, col: otherCol(c, kc)});
-					i++;
-				}
-			case 7: // Hands: three random distinct lanes each step (every lane when kc < 3)
-				while (i < n) {
-					for (c in handCols(kc))
-						out.push({step: i, col: c});
-					i++;
-				}
-			case 8: // Chords: every lane on every step (only one form)
-				while (i < n) {
-					var c:Int = 0;
-					while (c < kc) {
-						out.push({step: i, col: c});
-						c++;
-					}
-					i++;
-				}
-			default:
-				out.push({step: 0, col: 0});
+		var seen:Map<Int, Bool> = new Map();
+		for (n in notes) {
+			if (n.step < 0 || n.step >= b.steps)
+				continue;
+			var col:Int = wrap(n.col, b.keyCount);
+			var key:Int = n.step * 64 + col;
+			if (seen.exists(key))
+				continue;
+			seen.set(key, true);
+			out.push({step: n.step, col: col, len: (n.len > 0) ? n.len : 0});
+		}
+		out.sort(function(a:PatternNote, c:PatternNote):Int return (a.step != c.step) ? (a.step - c.step) : (a.col - c.col));
+		return out;
+	}
+
+	/**
+		Builds one tap. The Long Notes family writes its own notes so it can set each hold's length.
+		@param b the build context
+		@param step the step offset
+		@param col the raw (unwrapped) column
+		@return the note
+	**/
+	static inline function note(b:PatternBuild, step:Int, col:Int):PatternNote {
+		return {step: step, col: colOf(b, col), len: 0};
+	}
+
+	/** The final column for a raw index: wrapped into the lane block, mirrored when asked. **/
+	static inline function colOf(b:PatternBuild, col:Int):Int {
+		var c:Int = wrap(col, b.keyCount);
+		return b.params.mirror ? (b.keyCount - 1 - c) : c;
+	}
+
+	/** The lane a pattern starts on: the chosen one, or one drawn from the seed. **/
+	static inline function laneOf(b:PatternBuild, lane:Int):Int {
+		return (lane >= 0) ? wrap(lane, b.keyCount) : b.rng.int(b.keyCount);
+	}
+
+	/** `+1` walking right, `-1` walking left; `run` picks the leg when the direction alternates. **/
+	static inline function sign(b:PatternBuild, run:Int):Int {
+		return switch (b.params.direction) {
+			case 1: -1;
+			case 2: (run % 2 == 0) ? 1 : -1;
+			default: 1;
+		}
+	}
+
+	/** How far along the walk step `i` is, honouring an alternating direction. **/
+	static function walk(b:PatternBuild, i:Int):Int {
+		if (b.params.direction != 2)
+			return sign(b, 0) * i;
+		// Alternate: run up the lanes, then back down, without repeating the turn.
+		var span:Int = (b.keyCount > 1) ? (b.keyCount * 2 - 2) : 1;
+		var p:Int = ((i % span) + span) % span;
+		return (p < b.keyCount) ? p : span - p;
+	}
+
+	/** Extra columns for a chord of `size`, spread away from the lead lane. **/
+	static function spread(b:PatternBuild, lead:Int, size:Int):Array<Int> {
+		var out:Array<Int> = [];
+		var step:Int = 1;
+		while (out.length < size - 1 && step < b.keyCount) {
+			out.push(wrap(lead + step, b.keyCount));
+			step++;
 		}
 		return out;
 	}
 
-	/** A random column in `[0, kc)`. **/
-	static inline function rnd(kc:Int):Int {
-		return (kc <= 1) ? 0 : flixel.FlxG.random.int(0, kc - 1);
+	/** Notes running from the outer lanes toward the middle, or the other way. **/
+	static function edgeRun(b:PatternBuild, inward:Bool):Array<PatternNote> {
+		var out:Array<PatternNote> = [];
+		var half:Int = Std.int(Math.max(1, Math.ceil(b.keyCount / 2)));
+		for (i in 0...b.steps) {
+			var depth:Int = i % half;
+			var offset:Int = inward ? depth : (half - 1 - depth);
+			var left:Bool = (i % 2 == 0);
+			out.push(note(b, i, left ? offset : (b.keyCount - 1 - offset)));
+		}
+		return out;
 	}
 
-	/** Wraps a (possibly negative) column into `[0, kc)`. **/
-	static inline function wrap(col:Int, kc:Int):Int {
-		return ((col % kc) + kc) % kc;
+	/** The whirlwind lane order for a key count: outer, inner, outer, inner. **/
+	static function whirlOrder(kc:Int):Array<Int> {
+		var out:Array<Int> = [];
+		var low:Int = 0;
+		var high:Int = kc - 1;
+		while (low <= high) {
+			out.push(low);
+			if (high != low)
+				out.push(high);
+			low++;
+			high--;
+		}
+		return out;
 	}
 
-	/** A random column distinct from `a`. **/
-	static function otherCol(a:Int, kc:Int):Int {
-		if (kc <= 1)
-			return 0;
-		var b:Int = flixel.FlxG.random.int(0, kc - 1);
-		return (b == a) ? (b + 1) % kc : b;
-	}
-
-	/** Triangle-wave column index: 0..kc-1..0 (single point at each end). **/
-	static function zigzag(i:Int, kc:Int):Int {
+	/** Triangle wave over the lanes: 0..kc-1..0, a single note at each turn. **/
+	static function bounce(i:Int, kc:Int):Int {
 		if (kc <= 1)
 			return 0;
 		var period:Int = 2 * (kc - 1);
@@ -140,24 +803,16 @@ class ChartPattern {
 		return (p < kc) ? p : period - p;
 	}
 
-	/** Three random distinct lanes for a "hand" (every lane when kc <= 3), sorted low to high. **/
-	static function handCols(kc:Int):Array<Int> {
-		if (kc <= 3) {
-			var all:Array<Int> = [];
-			var c:Int = 0;
-			while (c < kc) {
-				all.push(c);
-				c++;
-			}
-			return all;
-		}
-		var a:Int = rnd(kc);
-		var b:Int = otherCol(a, kc);
-		var c:Int = a;
-		while (c == a || c == b)
-			c = flixel.FlxG.random.int(0, kc - 1);
-		var arr:Array<Int> = [a, b, c];
-		arr.sort(function(x:Int, y:Int):Int return x - y);
-		return arr;
+	/** Wraps a (possibly negative) column into `[0, kc)`. **/
+	static inline function wrap(col:Int, kc:Int):Int {
+		return (kc <= 1) ? 0 : (((col % kc) + kc) % kc);
+	}
+
+	static inline function clamp(v:Int, lo:Int, hi:Int):Int {
+		return (v < lo) ? lo : ((v > hi) ? hi : v);
+	}
+
+	static inline function atLeast(v:Int, lo:Int):Int {
+		return (v < lo) ? lo : v;
 	}
 }
