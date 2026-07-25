@@ -13,6 +13,9 @@ import states.TitleState;
 
 	/** Opacity of the dark band drawn behind each strumline; `0` draws none. **/
 	public var strumUnderlay:Float = 0;
+
+	/** Draws the underlay as one band per key column instead of one behind the whole strumline. **/
+	public var strumUnderlayColumns:Bool = false;
 	// NOTE: the debug/performance counter settings (showFPS + fps*) live in
 	// backend.DebugPrefs, in their own save file, so mod scripts can't tamper
 	// with them via ClientPrefs.data. See DebugPrefs for the field list.

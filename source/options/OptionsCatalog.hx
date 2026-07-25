@@ -69,6 +69,8 @@ class OptionsCatalog {
 
 		rows.push(Setting(percent('Strumline Underlay',
 			"Darkens the lanes behind each strumline to make the notes easier to read.\nSet to 0% to draw nothing.", 'strumUnderlay')));
+		rows.push(Setting(new Option('Underlay Per Column', 'If checked, each key column gets its own band instead of one behind the whole strumline.',
+			'strumUnderlayColumns', BOOL)));
 
 		rows.push(Section(phrase('Scoring')));
 

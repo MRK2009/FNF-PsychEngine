@@ -76,6 +76,16 @@ import psychlua.HScript;
  * "function eventEarlyTrigger" - Used for making your event start a few MILLISECONDS earlier
  * "function triggerEvent" - Called when the song hits your event's timestamp, this is probably what you were looking for
 **/
+/** One Strumline Underlay band and the receptors whose span it tracks (the same one, per column). **/
+typedef UnderlayBand = {
+	var sprite:FlxSprite;
+	var first:Receptor;
+	var last:Receptor;
+
+	/** Padding either side of the span. **/
+	var pad:Float;
+};
+
 class PlayState extends MusicBeatState {
 	public static var STRUM_X = 42;
 	public static var STRUM_X_MIDDLESCROLL = -278;
@@ -585,6 +595,10 @@ class PlayState extends MusicBeatState {
 		uiGroup = new FlxSpriteGroup();
 		comboGroup = new FlxSpriteGroup();
 		noteGroup = new FlxTypedGroup<FlxBasic>();
+		// The underlay is the bottom of the HUD: the health bar, score, combo numbers and rating popups
+		// all draw over it, and so do the notes.
+		underlayGroup = new FlxTypedGroup<FlxSprite>();
+		add(underlayGroup);
 		add(comboGroup);
 		add(uiGroup);
 		add(noteGroup);
@@ -708,6 +722,7 @@ class PlayState extends MusicBeatState {
 		uiGroup.cameras = [camHUD];
 		noteGroup.cameras = [camHUD];
 		comboGroup.cameras = [camHUD];
+		underlayGroup.cameras = [camHUD];
 
 		startingSong = true;
 
@@ -1732,6 +1747,9 @@ class PlayState extends MusicBeatState {
 		playerReceptors = (firstPlayer != null) ? firstPlayer.receptors : playerReceptors;
 
 		refreshStrumAliases();
+		// The old receptors were destroyed above, so the bands are rebuilt rather than re-pointed --
+		// per-column mode also needs a different band count at the new key count.
+		buildStrumUnderlays(visibleLines);
 
 		setOnScripts('keyCount', totalColumns);
 		setOnScripts('mania', totalColumns - 1);
@@ -3516,37 +3534,62 @@ class PlayState extends MusicBeatState {
 		return (playingOpponentSide && opponentVocals != null && opponentVocals.length > 0) ? opponentVocals : vocals;
 	}
 
-	/** One dark band per rendered strumline (the Strumline Underlay option); empty when it is off. **/
-	public var strumUnderlays:Array<FlxSprite> = [];
+	/** The bottom HUD layer holding the underlay bands. **/
+	public var underlayGroup:FlxTypedGroup<FlxSprite>;
 
-	/** Padding either side of a strumline's lanes, so the band reads as a lane block rather than a strip. **/
+	/** The drawn underlay bands (the Strumline Underlay option); empty when it is off. **/
+	public var strumUnderlays:Array<UnderlayBand> = [];
+
+	/** Padding either side of a whole strumline's band, so it reads as a lane block rather than a strip. **/
 	static inline var UNDERLAY_PAD:Float = 25;
 
+	/** Padding either side of a per-column band; small, so neighbouring columns don't overlap and darken. **/
+	static inline var UNDERLAY_PAD_COLUMN:Float = 4;
+
 	/**
-		Builds the underlay bands behind the rendered strumlines. They sit in `noteGroup` under everything
-		else on the HUD, so notes and receptors draw over them, and follow their lanes each frame.
+		Builds the underlay bands behind the rendered strumlines: one per strumline, or one per column when
+		Underlay Per Column is on. They follow their receptors each frame.
 		@param lines the rendered strumlines
 	**/
 	function buildStrumUnderlays(lines:Array<StrumLine>):Void {
 		strumUnderlays = [];
+		if (underlayGroup != null)
+			underlayGroup.clear();
+
 		var alpha:Float = ClientPrefs.data.strumUnderlay;
-		if (alpha <= 0)
+		if (alpha <= 0 || underlayGroup == null)
 			return;
 
+		var perColumn:Bool = ClientPrefs.data.strumUnderlayColumns;
 		for (line in lines) {
 			if (!wantsUnderlay(line))
 				continue;
-			var band:FlxSprite = new FlxSprite();
-			band.makeGraphic(1, 1, FlxColor.BLACK);
-			band.scrollFactor.set();
-			band.alpha = alpha;
-			band.setGraphicSize(Std.int(underlayWidth(line)), FlxG.height);
-			band.updateHitbox();
-			band.y = 0;
-			strumUnderlays.push(band);
-			noteGroup.add(band);
+			if (perColumn) {
+				for (receptor in line.receptors)
+					addUnderlayBand(receptor, receptor, alpha, UNDERLAY_PAD_COLUMN);
+			} else
+				addUnderlayBand(line.receptors[0], line.receptors[line.receptors.length - 1], alpha, UNDERLAY_PAD);
 		}
 		updateStrumUnderlays();
+	}
+
+	/**
+		Adds one band spanning a receptor range.
+		@param first the leftmost receptor it covers
+		@param last the rightmost receptor it covers (the same one, per column)
+		@param alpha the option's opacity
+		@param pad the padding either side of the span
+	**/
+	function addUnderlayBand(first:Receptor, last:Receptor, alpha:Float, pad:Float):Void {
+		if (first == null || last == null)
+			return;
+		var band:FlxSprite = new FlxSprite();
+		band.makeGraphic(1, 1, FlxColor.BLACK);
+		band.scrollFactor.set();
+		band.alpha = alpha;
+		band.y = 0;
+		strumUnderlays.push({sprite: band, first: first, last: last, pad: pad});
+		underlayGroup.add(band);
 	}
 
 	/**
@@ -3564,33 +3607,20 @@ class PlayState extends MusicBeatState {
 		return ClientPrefs.data.opponentStrums && !ClientPrefs.data.middleScroll;
 	}
 
-	/** The width a strumline's band spans: its lane block plus the padding on both sides. **/
-	inline function underlayWidth(line:StrumLine):Float {
-		var first:Receptor = line.receptors[0];
-		var last:Receptor = line.receptors[line.receptors.length - 1];
-		return (last.x - first.x) + last.width + UNDERLAY_PAD * 2;
-	}
-
 	/**
 		Keeps each band over its lanes -- scripts move receptors mid-song, and a key-count change rebuilds
 		them entirely.
 	**/
 	function updateStrumUnderlays():Void {
-		if (strumUnderlays.length == 0)
-			return;
-		var at:Int = 0;
-		for (line in strumLines) {
-			if (line.field == null || !wantsUnderlay(line))
+		for (band in strumUnderlays) {
+			if (band.first == null || band.last == null)
 				continue;
-			if (at >= strumUnderlays.length)
-				break;
-			var band:FlxSprite = strumUnderlays[at++];
-			var width:Float = underlayWidth(line);
-			if (Math.abs(band.width - width) > 0.5) {
-				band.setGraphicSize(Std.int(width), FlxG.height);
-				band.updateHitbox();
+			var width:Float = (band.last.x - band.first.x) + band.last.width + band.pad * 2;
+			if (Math.abs(band.sprite.width - width) > 0.5) {
+				band.sprite.setGraphicSize(Std.int(width), FlxG.height);
+				band.sprite.updateHitbox();
 			}
-			band.x = line.receptors[0].x - UNDERLAY_PAD;
+			band.sprite.x = band.first.x - band.pad;
 		}
 	}
 
