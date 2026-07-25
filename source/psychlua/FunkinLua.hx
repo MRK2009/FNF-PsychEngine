@@ -4,6 +4,7 @@ package psychlua;
 import backend.WeekData;
 import backend.Highscore;
 import backend.Song;
+import backend.SongPaths;
 import openfl.Lib;
 import openfl.utils.Assets;
 import openfl.display.BitmapData;
@@ -139,8 +140,8 @@ class FunkinLua {
 		set('crochet', Conductor.crochet);
 		set('stepCrochet', Conductor.stepCrochet);
 		set('songLength', FlxG.sound.music.length);
-		set('songName', PlayState.SONG.song);
-		set('songPath', Paths.formatToSongPath(PlayState.SONG.song));
+		set('songName', PlayState.SONG.song); // display name (free-form)
+		set('songPath', PlayState.SONG.songKey()); // song package folder
 		set('loadedSongName', Song.loadedSongName);
 		set('loadedSongPath', Paths.formatToSongPath(Song.loadedSongName));
 		set('chartPath', Song.chartPath);
@@ -483,8 +484,7 @@ class FunkinLua {
 			if (difficultyNum == -1)
 				difficultyNum = PlayState.storyDifficulty;
 
-			var poop = Highscore.formatSong(name, difficultyNum);
-			Song.loadFromJson(poop, name);
+			Song.loadChartFor(name, Difficulty.getString(difficultyNum, false));
 			PlayState.storyDifficulty = difficultyNum;
 			FlxG.state.persistentUpdate = false;
 			LoadingState.loadAndSwitchState(new PlayState());
@@ -1345,25 +1345,33 @@ class FunkinLua {
 			return FlxColor.BLACK;
 		});
 		Lua_helper.add_callback(lua, "startDialogue", function(dialogueFile:String, ?music:String = null) {
-			var path:String;
+			// Resolved out of the song package in this order:
+			// `<file>-<difficulty>_<language>`, `<file>-<difficulty>`, `<file>_<language>`, `<file>`.
 			var songPath:String = Paths.formatToSongPath(Song.loadedSongName);
+			var suffix:String = SongPaths.difficultySuffix(Difficulty.getString(PlayState.storyDifficulty, false));
+			var names:Array<String> = [];
 			#if TRANSLATIONS_ALLOWED
-			path = Paths.getPath('data/$songPath/${dialogueFile}_${ClientPrefs.data.language}.json', TEXT);
-			#if MODS_ALLOWED
-			if (!FileSystem.exists(path))
-			#else
-			if (!Assets.exists(path, TEXT))
+			var lang:String = '_${ClientPrefs.data.language}';
+			if (suffix.length > 0)
+				names.push(dialogueFile + suffix + lang);
 			#end
+			if (suffix.length > 0)
+				names.push(dialogueFile + suffix);
+			#if TRANSLATIONS_ALLOWED
+			names.push(dialogueFile + lang);
 			#end
-			path = Paths.getPath('data/$songPath/$dialogueFile.json', TEXT);
+			names.push(dialogueFile);
+
+			var path:String = null;
+			for (name in names) {
+				path = SongPaths.findExact(songPath, name);
+				if (path != null)
+					break;
+			}
 
 			luaTrace('startDialogue: Trying to load dialogue: ' + path);
 
-			#if MODS_ALLOWED
-			if (FileSystem.exists(path))
-			#else
-			if (Assets.exists(path, TEXT))
-			#end
+			if (path != null) // SongPaths only returns readable paths
 			{
 				var shit:DialogueFile = DialogueBoxPsych.parseDialogue(path);
 				if (shit.dialogue.length > 0) {

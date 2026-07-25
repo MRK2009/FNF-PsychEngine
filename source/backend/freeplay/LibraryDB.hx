@@ -12,8 +12,8 @@ import sys.FileSystem;
  */
 typedef DBEntry = {
 	var folder:String; // owning mod directory ('' = base)
-	var songName:String;
-	var key:String; // formatToSongPath(songName)
+	var songName:String; // display name (free-form)
+	var key:String; // the song package folder (songKey)
 	var mtime:Float; // song folder last-modified time
 	var icon:String;
 	var color:Int;
@@ -52,7 +52,7 @@ typedef LibrarySnapshot = {
  * A version bump, signature mismatch or any read error simply falls back to a full scan.
  */
 class LibraryDB {
-	static inline final VERSION:Int = 2; // bumped: format changed from JSON to haxe.Serializer
+	static inline final VERSION:Int = 3; // bumped: `key` is now the song package folder, not the display name
 	static inline final FILE:String = 'freeplayLibrary.db';
 	static inline final LEGACY_JSON:String = 'freeplayLibrary.json';
 

@@ -294,13 +294,10 @@ class StoryMenuState extends MusicBeatState {
 				PlayState.isStoryMode = true;
 				selectedWeek = true;
 
-				var diffic = Difficulty.getFilePath(curDifficulty);
-				if (diffic == null)
-					diffic = '';
-
 				PlayState.storyDifficulty = curDifficulty;
 
-				Song.loadFromJson(PlayState.storyPlaylist[0].toLowerCase() + diffic, PlayState.storyPlaylist[0].toLowerCase());
+				// A week names its songs by PACKAGE folder; the chart file inside it is resolved by role.
+				Song.loadChartFor(PlayState.storyPlaylist[0], Difficulty.getString(curDifficulty, false));
 				PlayState.campaignScore = 0;
 				PlayState.campaignMisses = 0;
 			} catch (e:Dynamic) {

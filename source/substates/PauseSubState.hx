@@ -296,11 +296,10 @@ class PauseSubState extends MusicBeatSubstate {
 
 		if (controls.ACCEPT && (cantUnpause <= 0 || !controls.controllerMode)) {
 			if (menuItems == difficultyChoices) {
-				var songLowercase:String = Paths.formatToSongPath(PlayState.SONG.song);
-				var poop:String = Highscore.formatSong(songLowercase, curSelected);
+				var songLowercase:String = PlayState.SONG.songKey();
 				try {
 					if (menuItems.length - 1 != curSelected && difficultyChoices.contains(daSelected)) {
-						Song.loadFromJson(poop, songLowercase);
+						Song.loadChartFor(songLowercase, Difficulty.getString(curSelected, false));
 						PlayState.storyDifficulty = curSelected;
 						MusicBeatState.resetState();
 						FlxG.sound.music.volume = 0;

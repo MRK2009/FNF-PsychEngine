@@ -9,6 +9,7 @@ import backend.UISkinConfig.UIPlacement;
 import backend.StageData;
 import backend.WeekData;
 import backend.Song;
+import backend.SongPaths;
 import backend.SongChart;
 import backend.SongChart.StrumLineData;
 import backend.Rating;
@@ -436,9 +437,11 @@ class PlayState extends MusicBeatState {
 		#end
 
 		GameOverSubstate.resetVariables();
-		songName = Paths.formatToSongPath(SONG.song);
+		// The song PACKAGE folder -- audio, charts, events, preload and song scripts all resolve from it.
+		// The chart's `song` field is a display name and never resolves a path.
+		songName = SONG.songKey();
 		if (SONG.stage == null || SONG.stage.length < 1)
-			SONG.stage = StageData.vanillaSongStage(Paths.formatToSongPath(Song.loadedSongName));
+			SONG.stage = StageData.vanillaSongStage(songName);
 
 		curStage = SONG.stage;
 
@@ -726,7 +729,7 @@ class PlayState extends MusicBeatState {
 
 		// SONG SPECIFIC SCRIPTS
 		#if (LUA_ALLOWED || HSCRIPT_ALLOWED)
-		for (folder in Mods.directoriesWithFile(Paths.getSharedPath(), 'data/$songName/'))
+		for (folder in SongPaths.scriptDirs(songName))
 			for (file in FileSystem.readDirectory(folder)) {
 				#if LUA_ALLOWED
 				if (file.toLowerCase().endsWith('.lua'))
@@ -1467,11 +1470,10 @@ class PlayState extends MusicBeatState {
 		opponentVocals = new FlxSound();
 		try {
 			if (songData.needsVoices) {
-				var playerVocals = Paths.voices(songData.song,
-					(boyfriend.vocalsFile == null || boyfriend.vocalsFile.length < 1) ? 'Player' : boyfriend.vocalsFile);
-				vocals.loadEmbedded(playerVocals != null ? playerVocals : Paths.voices(songData.song));
+				var playerVocals = Paths.voices(songName, (boyfriend.vocalsFile == null || boyfriend.vocalsFile.length < 1) ? 'Player' : boyfriend.vocalsFile);
+				vocals.loadEmbedded(playerVocals != null ? playerVocals : Paths.voices(songName));
 
-				var oppVocals = Paths.voices(songData.song, (dad.vocalsFile == null || dad.vocalsFile.length < 1) ? 'Opponent' : dad.vocalsFile);
+				var oppVocals = Paths.voices(songName, (dad.vocalsFile == null || dad.vocalsFile.length < 1) ? 'Opponent' : dad.vocalsFile);
 				if (oppVocals != null && oppVocals.length > 0)
 					opponentVocals.loadEmbedded(oppVocals);
 			}
@@ -1486,7 +1488,7 @@ class PlayState extends MusicBeatState {
 
 		inst = new FlxSound();
 		try {
-			inst.loadEmbedded(Paths.inst(songData.song));
+			inst.loadEmbedded(Paths.inst(songName));
 		} catch (e:Dynamic) {}
 		FlxG.sound.list.add(inst);
 
@@ -1494,10 +1496,11 @@ class PlayState extends MusicBeatState {
 		noteGroup.add(notes);
 
 		try {
-			// a standalone data/<song>/events.json, in EITHER the legacy grouped shape
+			// The package's standalone events file, in EITHER the legacy grouped shape
 			// ([time, [[name, v1, v2], ...]]) OR the psych_v2 object shape ({t, name, values}).
 			// eventsFromV2 normalizes both to the grouped shape makeEvent consumes.
-			var eventsChart:SwagSong = Song.getChart('events', songName);
+			// `events-<difficulty>.json` wins over the package-wide `events.json`.
+			var eventsChart:SwagSong = Song.getRoleChart(songName, SongPaths.EVENTS, Difficulty.getString(storyDifficulty, false));
 			if (eventsChart != null)
 				for (event in Song.eventsFromV2(eventsChart.events)) // Event Notes
 					for (i in 0...event[1].length)
@@ -2719,16 +2722,16 @@ class PlayState extends MusicBeatState {
 					}
 					changedDifficulty = false;
 				} else {
-					var difficulty:String = Difficulty.getFilePath();
+					var difficulty:String = Difficulty.getString(storyDifficulty, false);
 
 					trace('LOADING NEXT SONG');
-					trace(Paths.formatToSongPath(PlayState.storyPlaylist[0]) + difficulty);
+					trace(Paths.formatToSongPath(PlayState.storyPlaylist[0]) + ' ($difficulty)');
 
 					FlxTransitionableState.skipNextTransIn = true;
 					FlxTransitionableState.skipNextTransOut = true;
 					prevCamFollow = camFollow;
 
-					Song.loadFromJson(PlayState.storyPlaylist[0] + difficulty, PlayState.storyPlaylist[0]);
+					Song.loadChartFor(PlayState.storyPlaylist[0], difficulty);
 					FlxG.sound.music.stop();
 
 					canResync = false;

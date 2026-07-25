@@ -7,6 +7,7 @@ import sys.FileSystem;
 import sys.io.File;
 import backend.Song;
 import backend.SongChart;
+import backend.SongPaths;
 import editors.content.PsychJsonPrinter;
 
 /** Which on-disk chart format a file was authored in (drives the reported migration + whether we skip). **/
@@ -49,6 +50,7 @@ typedef ConvertSummary = {
 	var failed:Int;
 	var eventsMerged:Int; // events.json files folded in + removed
 	var backedUp:Int; // files copied to the backup tree
+	var migrated:Int; // files moved from data/<song>/ into the song package beside the audio
 	var errors:Array<String>;
 }
 
@@ -59,6 +61,10 @@ typedef ConvertSummary = {
 	so the resulting chart is self-contained. Overwrites the originals in place; an optional backup
 	mirrors each touched file into `<exe>/chartConvertERBackup/<mod>/data/<song>/…` before it is changed,
 	preserving the folder layout so the user can restore by copying back.
+
+	A converted folder is then **moved into its song package** -- `songs/<song>/` beside the audio -- with
+	charts renamed to the `chart-<difficulty>.json` form (see `SongPaths`). A song whose mod has no
+	`songs/<song>/` audio folder has nothing to co-locate with and is left where it is.
 **/
 class ChartConvertJob {
 	/** The backup root beside the executable (folder layout preserved underneath). **/
@@ -161,8 +167,67 @@ class ChartConvertJob {
 						summary.errors.push('events.json (' + folder.songFolder + '): ' + Std.string(e));
 					}
 				}
+				// Only relocate a folder that converted cleanly -- a half-converted package must stay put.
+				if (allOk)
+					migrateFolder(folder, backup, summary);
 			}
 		}
+	}
+
+	/**
+		Moves a converted `data/<song>/` folder into the song package beside its audio (`songs/<song>/`),
+		renaming charts to `chart-<difficulty>.json` (the default difficulty included, so every chart states
+		its difficulty). Everything else in the folder -- metadata, preload, dialogue, song scripts -- moves
+		under its own name. A file already present at the destination is left alone and reported.
+		@param folder the converted folder
+		@param backup whether to mirror each moved file into the backup tree first
+		@param summary the running tally
+	**/
+	static function migrateFolder(folder:FolderJob, backup:Bool, summary:ConvertSummary):Void {
+		var srcDir:String = Paths.mods('${folder.mod}/data/${folder.songFolder}');
+		var dstDir:String = Paths.mods('${folder.mod}/songs/${folder.songFolder}');
+		// No audio folder in this mod: there is nothing to co-locate with, so the charts stay in data/.
+		if (!FileSystem.exists(srcDir) || !FileSystem.isDirectory(srcDir) || !FileSystem.exists(dstDir) || !FileSystem.isDirectory(dstDir))
+			return;
+
+		var key:String = Paths.formatToSongPath(folder.songFolder);
+		var chartFiles:Map<String, Bool> = new Map();
+		for (c in folder.charts)
+			chartFiles.set(c.fileName, true);
+
+		for (file in FileSystem.readDirectory(srcDir)) {
+			var src:String = '$srcDir/$file';
+			if (FileSystem.isDirectory(src))
+				continue;
+
+			// Only files the scan classified as charts are renamed; anything else keeps its own name.
+			var target:String = file;
+			if (chartFiles.exists(file)) {
+				var diff:String = SongPaths.difficultyOfFile(file, key, SongPaths.CHART);
+				if (diff != null)
+					target = 'chart-${Paths.formatToSongPath(diff)}.json';
+			}
+
+			var dst:String = '$dstDir/$target';
+			if (FileSystem.exists(dst)) {
+				summary.errors.push('${folder.songFolder}/$file: $target already exists in songs/, left in data/');
+				continue;
+			}
+			try {
+				if (backup)
+					backupFile(src, summary);
+				File.copy(src, dst);
+				FileSystem.deleteFile(src);
+				summary.migrated++;
+			} catch (e:Dynamic) {
+				summary.errors.push('${folder.songFolder}/$file: ' + Std.string(e));
+			}
+		}
+
+		try {
+			if (FileSystem.readDirectory(srcDir).length == 0)
+				FileSystem.deleteDirectory(srcDir);
+		} catch (e:Dynamic) {}
 	}
 
 	/**

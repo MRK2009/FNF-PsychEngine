@@ -195,7 +195,7 @@ class ResultsState extends MusicBeatState {
 		PlayState.isStoryMode = false;
 		PlayState.storyDifficulty = record.diff;
 		Mods.currentModDirectory = record.folder;
-		Song.loadFromJson(chartFileFromKey(record.songKey), Paths.formatToSongPath(record.songName));
+		Song.loadChartFor(songFolderOf(record.songKey, record.diff), Difficulty.getString(record.diff, false));
 		LoadingState.prepareToSong();
 		LoadingState.loadAndSwitchState(new PlayState());
 	}
@@ -208,6 +208,20 @@ class ResultsState extends MusicBeatState {
 	static function chartFileFromKey(key:String):String {
 		var r:EReg = ~/_\d+k$/;
 		return r.match(key) ? r.matchedLeft() : key;
+	}
+
+	/**
+	 * The song PACKAGE folder a score record points at. The stored key is
+	 * `<songFolder><difficulty postfix>_<keycount>k` (written from `Song.loadedSongName`), so stripping both
+	 * suffixes leaves the folder -- the display name can't be used, it no longer implies one.
+	 * @param key the score-DB songKey
+	 * @param diff the difficulty index the record was set at
+	 * @return the song package folder
+	 */
+	static function songFolderOf(key:String, diff:Int):String {
+		var base:String = chartFileFromKey(key);
+		var postfix:String = Difficulty.getFilePath(diff);
+		return (postfix.length > 0 && base.endsWith(postfix)) ? base.substr(0, base.length - postfix.length) : base;
 	}
 
 	/**

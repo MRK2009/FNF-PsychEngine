@@ -924,14 +924,14 @@ class MobileChartingState extends MobileEditorBase {
 			y += 58;
 
 			var reload:UIButton = new UIButton('RELOAD AUDIO', w, 56, function() {
-				backend.Song.loadedSongName = model.chart.song;
+				backend.Song.loadedSongName = model.chart.songKey();
 				audio.load(backend.Song.loadedSongName, model.chart.needsVoices);
 				applyVolumes();
 				audio.setRate(playRate);
 				noteField.maxTime = audio.loaded ? audio.length : -1;
 				if (audio.loaded && noteField.waveSource == null)
 					noteField.waveSource = audio.waveformSound(0);
-				UIToast.show(audio.loaded ? 'Audio loaded' : 'No audio found for "${model.chart.song}"');
+				UIToast.show(audio.loaded ? 'Audio loaded' : 'No audio found in "${backend.Song.loadedSongName}"');
 			});
 			reload.fontSize = 15;
 			reload.y = y;
@@ -1390,7 +1390,9 @@ class MobileChartingState extends MobileEditorBase {
 				}
 				// A picked document has no filesystem path; the rail SAVE keeps writing charts/<song>.json.
 				backend.Song.chartPath = null;
-				backend.Song.loadedSongName = loaded.song;
+				if (loaded.folder == null || loaded.folder.length == 0)
+					loaded.folder = backend.SongPaths.packageOfPath(fileDialog.path);
+				backend.Song.loadedSongName = loaded.songKey();
 				adoptChart(loaded);
 				UIToast.show('Loaded: ${loaded.song}');
 			} catch (e:Dynamic)
@@ -1402,7 +1404,7 @@ class MobileChartingState extends MobileEditorBase {
 	function saveChartAs():Void {
 		var data:String = PsychJsonPrinter.print(backend.Song.buildPsychV2(cast model.chart, model.chart), backend.Song.PSYCH_V2_INLINE,
 			backend.Song.PSYCH_V2_KEY_ORDER);
-		fileDialog.save(Paths.formatToSongPath(model.chart.song) + '.json', data, function():Void {
+		fileDialog.save('chart-${Paths.formatToSongPath(Difficulty.getString(false))}.json', data, function():Void {
 			unsavedProgress = false;
 			UIToast.show('Saved: ${fileDialog.path}');
 		}, null, function():Void UIToast.show('Save failed'));
@@ -1451,10 +1453,14 @@ class MobileChartingState extends MobileEditorBase {
 		try {
 			var data:String = PsychJsonPrinter.print(backend.Song.buildPsychV2(cast model.chart, model.chart), backend.Song.PSYCH_V2_INLINE,
 				backend.Song.PSYCH_V2_KEY_ORDER);
-			var name:String = Paths.formatToSongPath(model.chart.song);
+			// Written as a song package (`charts/<folder>/chart-<difficulty>.json`) so the result can be
+			// dropped straight into a mod's `songs/` beside the audio.
+			var name:String = model.chart.songKey();
 			if (!sys.FileSystem.exists('charts'))
 				sys.FileSystem.createDirectory('charts');
-			var path:String = 'charts/$name.json';
+			if (!sys.FileSystem.exists('charts/$name'))
+				sys.FileSystem.createDirectory('charts/$name');
+			var path:String = 'charts/$name/chart-${Paths.formatToSongPath(Difficulty.getString(false))}.json';
 			sys.io.File.saveContent(path, data);
 			unsavedProgress = false;
 			UIToast.show('Saved to $path');

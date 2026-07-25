@@ -382,6 +382,7 @@ class ChartConverterState extends MusicBeatState {
 			failed: 0,
 			eventsMerged: 0,
 			backedUp: 0,
+			migrated: 0,
 			errors: []
 		};
 		ChartConvertJob.convert(lastScans, backupOriginals, summary);
@@ -391,6 +392,8 @@ class ChartConverterState extends MusicBeatState {
 			msg += ', merged ' + summary.eventsMerged + ' events.json';
 		if (summary.alreadyV2 > 0)
 			msg += ', skipped ' + summary.alreadyV2 + ' already-v2';
+		if (summary.migrated > 0)
+			msg += ', moved ' + summary.migrated + ' file(s) into songs/';
 		if (backupOriginals && summary.backedUp > 0)
 			msg += ', backed up ' + summary.backedUp;
 		if (summary.failed > 0)

@@ -14,12 +14,17 @@ class ResetScoreSubState extends MusicBeatSubstate {
 	var noText:Alphabet;
 
 	var song:String;
+
+	/** The score key's song identity: the song PACKAGE folder, which the display name no longer implies. **/
+	var songKey:String;
+
 	var difficulty:Int;
 	var week:Int;
 
 	// Week -1 = Freeplay
-	public function new(song:String, difficulty:Int, character:String, week:Int = -1) {
+	public function new(song:String, difficulty:Int, character:String, week:Int = -1, ?songKey:String) {
 		this.song = song;
+		this.songKey = (songKey != null && songKey.length > 0) ? songKey : song;
 		this.difficulty = difficulty;
 		this.week = week;
 
@@ -100,7 +105,7 @@ class ResetScoreSubState extends MusicBeatSubstate {
 		} else if (controls.ACCEPT) {
 			if (onYes) {
 				if (week == -1) {
-					Highscore.resetSong(song, difficulty);
+					Highscore.resetSong(songKey, difficulty);
 				} else {
 					Highscore.resetWeek(WeekData.weeksList[week], difficulty);
 				}

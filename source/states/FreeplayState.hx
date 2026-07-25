@@ -94,7 +94,7 @@ class FreeplayState extends MusicBeatState {
 		if (library.entries.length < 1) {
 			FlxTransitionableState.skipNextTransIn = true;
 			persistentUpdate = false;
-			MusicBeatState.switchState(new states.ErrorState("NO SONGS FOUND FOR FREEPLAY\n\nAdd a song (data/<song>/<song>.json) to an enabled mod,\nor make a week.\n\nPress ACCEPT for the Week Editor.\nPress BACK to return to Main Menu.",
+			MusicBeatState.switchState(new states.ErrorState("NO SONGS FOUND FOR FREEPLAY\n\nAdd a song (songs/<song>/chart-normal.json) to an enabled mod,\nor make a week.\n\nPress ACCEPT for the Week Editor.\nPress BACK to return to Main Menu.",
 				function() MusicBeatState.switchState(new editors.WeekEditorState()), function() MusicBeatState.switchState(new states.MainMenuState())));
 			return;
 		}
@@ -528,7 +528,7 @@ class FreeplayState extends MusicBeatState {
 		} else if (controls.RESET) {
 			var e:SongEntry = listView.selectedEntry();
 			persistentUpdate = false;
-			openSubState(new ResetScoreSubState(e.songName, curDifficulty, e.icon));
+			openSubState(new ResetScoreSubState(e.songName, curDifficulty, e.icon, -1, e.songKey));
 			FlxG.sound.play(Paths.sound('scrollMenu'));
 		}
 	}
@@ -583,8 +583,7 @@ class FreeplayState extends MusicBeatState {
 
 		Mods.currentModDirectory = e.folder;
 		try {
-			var poop:String = Highscore.formatSong(e.songName.toLowerCase(), curDifficulty);
-			Song.loadFromJson(poop, e.songName.toLowerCase());
+			Song.loadChartFor(e.songKey, Difficulty.getString(curDifficulty, false));
 		} catch (err:Dynamic) {
 			FlxG.sound.play(Paths.sound('cancelMenu'));
 			return;
@@ -593,7 +592,7 @@ class FreeplayState extends MusicBeatState {
 		if (PlayState.SONG.needsVoices)
 			loadPreviewVocals();
 
-		FlxG.sound.playMusic(Paths.inst(PlayState.SONG.song), 0.8);
+		FlxG.sound.playMusic(Paths.inst(PlayState.SONG.songKey()), 0.8);
 		previewKey = e.key();
 
 		previewing = true;
@@ -716,9 +715,9 @@ class FreeplayState extends MusicBeatState {
 		vocals = new FlxSound();
 		try {
 			var playerVocals:String = getVocalFromCharacter(PlayState.SONG.player1);
-			var loaded = Paths.voices(PlayState.SONG.song, (playerVocals != null && playerVocals.length > 0) ? playerVocals : 'Player');
+			var loaded = Paths.voices(PlayState.SONG.songKey(), (playerVocals != null && playerVocals.length > 0) ? playerVocals : 'Player');
 			if (loaded == null)
-				loaded = Paths.voices(PlayState.SONG.song);
+				loaded = Paths.voices(PlayState.SONG.songKey());
 			if (loaded != null && loaded.length > 0) {
 				vocals.loadEmbedded(loaded);
 				FlxG.sound.list.add(vocals);
@@ -735,7 +734,7 @@ class FreeplayState extends MusicBeatState {
 		opponentVocals = new FlxSound();
 		try {
 			var oppVocals:String = getVocalFromCharacter(PlayState.SONG.player2);
-			var loaded = Paths.voices(PlayState.SONG.song, (oppVocals != null && oppVocals.length > 0) ? oppVocals : 'Opponent');
+			var loaded = Paths.voices(PlayState.SONG.songKey(), (oppVocals != null && oppVocals.length > 0) ? oppVocals : 'Opponent');
 			if (loaded != null && loaded.length > 0) {
 				opponentVocals.loadEmbedded(loaded);
 				FlxG.sound.list.add(opponentVocals);
@@ -753,11 +752,8 @@ class FreeplayState extends MusicBeatState {
 	function onAccept(elapsed:Float):Void {
 		var e:SongEntry = listView.selectedEntry();
 		persistentUpdate = false;
-		var songLowercase:String = Paths.formatToSongPath(e.songName);
-		var poop:String = Highscore.formatSong(songLowercase, curDifficulty);
-
 		try {
-			Song.loadFromJson(poop, songLowercase);
+			Song.loadChartFor(e.songKey, Difficulty.getString(curDifficulty, false));
 			PlayState.isStoryMode = false;
 			PlayState.storyDifficulty = curDifficulty;
 		} catch (err:haxe.Exception) {

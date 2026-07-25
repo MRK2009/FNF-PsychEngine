@@ -265,8 +265,8 @@ class FreeplayInfoPanel {
 		}
 
 		var ratings:ChartRatings = e.ratingFor(diffName);
-		var pbScore:Int = Highscore.getScore(e.songName, diffIndexOf(diffName));
-		var pbAcc:Float = Highscore.getRating(e.songName, diffIndexOf(diffName));
+		var pbScore:Int = Highscore.getScore(e.songKey, diffIndexOf(diffName));
+		var pbAcc:Float = Highscore.getRating(e.songKey, diffIndexOf(diffName));
 
 		switch (curTab) {
 			case TAB_SCORES:
@@ -356,7 +356,7 @@ class FreeplayInfoPanel {
 	function songKeyFor(e:SongEntry, diffName:String):String {
 		var r:ChartRatings = e.ratingFor(diffName);
 		var kc:Int = (r != null && r.keyCount > 0) ? r.keyCount : 4;
-		return Highscore.formatSong(e.songName, diffIndexOf(diffName)) + '_' + kc + 'k';
+		return Highscore.formatSong(e.songKey, diffIndexOf(diffName)) + '_' + kc + 'k';
 	}
 
 	/**

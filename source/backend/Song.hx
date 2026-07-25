@@ -43,45 +43,136 @@ class Song {
 		'name', 'values', 'v1', 'v2', // event
 		'section', 'cameraTarget', // section (specific)
 		'id', 'type', 'characters', 'keyCount', 'visible', 'vocalsSuffix', // strumline
-		'song', 'speed', 'needsVoices', 'offset', 'stage', // metadata
+		'song', 'folder', 'speed', 'needsVoices', 'offset', 'stage', // metadata
 		'arrowSkin', 'splashSkin', 'disableNoteRGB', 'gameOverChar', 'gameOverSound', 'gameOverLoop', 'gameOverEnd',
 		'timeSignature', 'changeBPM', 'bpm', 'changeSpeed', // shared (metadata + section)
 		'changeScrollVelocity', 'scrollVelocity', 'changeKeyCount', // section (SV + key-count changes)
 	];
 
+	/**
+		Loads a chart by file name -- the pre-package entry point, kept for callers that know the exact
+		file. `loadChartFor` is the one that resolves a package + difficulty.
+		@param jsonInput the chart file base name, without extension
+		@param folder the song package folder (defaults to `jsonInput`)
+		@return the loaded chart, also assigned to `PlayState.SONG`
+	**/
 	public static function loadFromJson(jsonInput:String, ?folder:String):SongChart {
 		if (folder == null)
 			folder = jsonInput;
 		PlayState.SONG = getChart(jsonInput, folder);
-		loadedSongName = folder;
+		finishLoad(folder, null);
+		return PlayState.SONG;
+	}
+
+	/**
+		Loads a song package's chart for a difficulty -- the layout-aware entry point. Resolves through
+		`SongPaths`, so `songs/<key>/chart-<diff>.json`, a package-wide `chart.json` and the pre-package
+		`data/<key>/<key>-<diff>.json` all work.
+		@param songKey the song package folder
+		@param diffName the difficulty name, or null for the package-wide chart
+		@return the loaded chart, also assigned to `PlayState.SONG`
+		@throws String when the package has no chart to load
+	**/
+	public static function loadChartFor(songKey:String, ?diffName:String):SongChart {
+		PlayState.SONG = getChartFor(songKey, diffName);
+		finishLoad(songKey, diffName);
+		return PlayState.SONG;
+	}
+
+	/**
+		Shared tail of the load entry points: records the loaded package + chart path, applies the package
+		metadata's display name and picks up the stage's asset directory.
+		@param songKey the song package folder that was loaded
+		@param diffName the difficulty that was loaded, for the per-difficulty metadata
+	**/
+	static function finishLoad(songKey:String, diffName:String):Void {
+		loadedSongName = Paths.formatToSongPath(songKey);
+		// The menus load inside a try/catch and expect a miss to raise, not to hand back a null SONG.
+		if (PlayState.SONG == null)
+			throw 'No chart found in song package "$loadedSongName"' + ((diffName != null) ? ' (difficulty: $diffName)' : '');
+
 		chartPath = _lastPath;
 		#if windows
 		// prevent any saving errors by fixing the path on Windows (being the only OS to ever use backslashes instead of forward slashes for paths)
-		chartPath = chartPath.replace('/', '\\');
+		if (chartPath != null)
+			chartPath = chartPath.replace('/', '\\');
 		#end
+
+		// The package metadata owns the display name -- it outranks the chart's own `song` field.
+		var meta:SongMeta.SongMetaInfo = SongMeta.load(loadedSongName, diffName);
+		if (meta != null && meta.songName != null && meta.songName.length > 0)
+			PlayState.SONG.song = meta.songName;
+
 		StageData.loadDirectory(PlayState.SONG);
-		return PlayState.SONG;
 	}
 
 	static var _lastPath:String;
 
+	/**
+		Loads one named file out of a song package (a chart file base like `bopeebo-hard`, or a role name
+		like `events`). Both package roots are searched.
+		@param jsonInput the file base name, without extension
+		@param folder the song package folder (defaults to `jsonInput`)
+		@return the parsed chart, or null when the file doesn't exist
+	**/
 	public static function getChart(jsonInput:String, ?folder:String):SongChart {
 		if (folder == null)
 			folder = jsonInput;
-		var rawData:String = null;
-
 		var formattedFolder:String = Paths.formatToSongPath(folder);
-		var formattedSong:String = Paths.formatToSongPath(jsonInput);
-		_lastPath = Paths.json('$formattedFolder/$formattedSong');
+		var path:String = SongPaths.findExact(formattedFolder, Paths.formatToSongPath(jsonInput));
+		return readChart(path, formattedFolder, jsonInput);
+	}
 
+	/**
+		Loads a song package's chart for a difficulty.
+		@param songKey the song package folder
+		@param diffName the difficulty name, or null for the package default
+		@return the parsed chart, or null when the package has no chart for it
+	**/
+	public static function getChartFor(songKey:String, ?diffName:String):SongChart {
+		var formatted:String = Paths.formatToSongPath(songKey);
+		return readChart(SongPaths.findChart(formatted, diffName), formatted, songKey);
+	}
+
+	/**
+		Loads a non-chart package role that parses as a chart object (`events`), difficulty-aware.
+		@param songKey the song package folder
+		@param role the file role
+		@param diffName the difficulty name; a suffixed file wins over the package-wide one
+		@return the parsed object, or null when the package has no such file
+	**/
+	public static function getRoleChart(songKey:String, role:String, ?diffName:String):SongChart {
+		var formatted:String = Paths.formatToSongPath(songKey);
+		return readChart(SongPaths.find(formatted, role, diffName), formatted, role);
+	}
+
+	/**
+		Reads + parses a resolved package file, tagging the chart with the package it came from.
+		@param path the resolved file path, or null
+		@param songKey the owning song package folder
+		@param nameForError the name used in conversion traces
+		@return the parsed chart, or null
+	**/
+	static function readChart(path:String, songKey:String, nameForError:String):SongChart {
+		_lastPath = path;
+		if (path == null)
+			return null;
+
+		var rawData:String = null;
 		#if MODS_ALLOWED
-		if (FileSystem.exists(_lastPath))
-			rawData = File.getContent(_lastPath);
+		if (FileSystem.exists(path))
+			rawData = File.getContent(path);
 		else
 		#end
-		rawData = Assets.getText(_lastPath);
+		rawData = Assets.getText(path);
+		if (rawData == null)
+			return null;
 
-		return rawData != null ? parseJSON(rawData, jsonInput) : null;
+		var chart:SongChart = parseJSON(rawData, nameForError);
+		// The package the chart was found in owns its assets, unless the chart explicitly points elsewhere.
+		if (chart != null && (chart.folder == null || chart.folder.length == 0))
+			chart.folder = songKey;
+		return chart;
 	}
 
 	public static function parseJSON(rawData:String, ?nameForError:String = null, ?convertTo:String = 'psych_v1'):SongChart {
@@ -283,6 +374,10 @@ class Song {
 			offset: song.offset,
 			stage: song.stage
 		};
+		// The package folder is normally the chart's own folder; it is only written when it can't be derived
+		// from the display name (a decoupled name, or a chart pointing at another package's audio).
+		if (chart.folder != null && chart.folder.length > 0 && chart.folder != Paths.formatToSongPath(song.song))
+			metadata.folder = chart.folder;
 		if (song.timeSignature != null)
 			metadata.timeSignature = song.timeSignature;
 		if (song.arrowSkin != null)

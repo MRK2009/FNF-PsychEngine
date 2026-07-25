@@ -2,6 +2,7 @@ package backend.difficulty;
 
 import backend.Song;
 import backend.Song.SwagSong;
+import backend.SongPaths;
 import backend.Highscore;
 import backend.patterns.ChartNote;
 import haxe.crypto.Md5;
@@ -90,10 +91,9 @@ class DifficultyRating {
 		return result;
 	}
 
-	/** The resolved chart file path for a song+difficulty (matches `Song.getChart`'s resolution). */
+	/** The resolved chart file path for a song package + difficulty (matches `Song.getChartFor`). */
 	static function chartPathOf(songName:String, diff:Int):String {
-		var key:String = Highscore.formatSong(songName, diff);
-		return Paths.json('${Paths.formatToSongPath(songName)}/${Paths.formatToSongPath(key)}');
+		return SongPaths.findChart(songName, Difficulty.getString(diff, false));
 	}
 
 	/** Loads + rates a chart from disk (the signature-miss path behind `ratingsFor`). */
@@ -194,11 +194,10 @@ class DifficultyRating {
 		into.push([sig[0], sig[1]]);
 	}
 
-	/** Loads the chart JSON for a song+difficulty without touching PlayState (unlike Song.loadFromJson). */
+	/** Loads the chart JSON for a song package + difficulty without touching PlayState (unlike Song.loadFor). */
 	static function loadChart(songName:String, diff:Int):Null<SwagSong> {
 		try {
-			var key:String = Highscore.formatSong(songName, diff);
-			return Song.getChart(key, songName);
+			return Song.getChartFor(songName, Difficulty.getString(diff, false));
 		} catch (e:Dynamic) {
 			return null;
 		}

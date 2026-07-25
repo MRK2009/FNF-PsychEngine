@@ -11,6 +11,7 @@ import flixel.system.FlxAssets;
 import flixel.FlxState;
 import flash.media.Sound;
 import backend.Song;
+import backend.SongPaths;
 import backend.StageData;
 import objects.Character;
 import sys.thread.Mutex;
@@ -476,7 +477,9 @@ class LoadingState extends MusicBeatState {
 		initialThreadCompleted = false;
 
 		var song:backend.SongChart = PlayState.SONG;
-		var folder:String = Paths.formatToSongPath(Song.loadedSongName);
+		// The song package folder (never the display name) -- audio, preload list and charts all live here.
+		var folder:String = song.songKey();
+		var diffName:String = Difficulty.getString(PlayState.storyDifficulty, false);
 
 		/* one sequential prep task off the main thread: build the asset lists, then kick off the
 			per-asset loaders. startThreads() always runs (even on failure) so prep can't softlock */
@@ -498,17 +501,9 @@ class LoadingState extends MusicBeatState {
 				imagesToPrepare.push(noteSplash);
 
 				try {
-					var path:String = Paths.json('$folder/preload');
-					var json:Dynamic = null;
-					#if MODS_ALLOWED
-					var moddyFile:String = Paths.modsJson('$folder/preload');
-					if (FileSystem.exists(moddyFile))
-						json = Json.parse(File.getContent(moddyFile));
-					else
-						json = Json.parse(File.getContent(path));
-					#else
-					json = Json.parse(Assets.getText(path));
-					#end
+					// `preload-<difficulty>.json` wins over the package-wide `preload.json`.
+					var raw:String = SongPaths.read(folder, SongPaths.PRELOAD, diffName);
+					var json:Dynamic = (raw != null) ? Json.parse(raw) : null;
 
 					if (json != null) {
 						var imgs:Array<String> = [];

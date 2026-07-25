@@ -14,7 +14,12 @@ import backend.difficulty.DifficultyRating.ChartRatings;
  * a warm reopen.
  */
 class SongEntry {
+	/** The song's DISPLAY name: `metadata.songName` if it has one, else the chart/folder name. Free-form. **/
 	public var songName:String;
+
+	/** The song PACKAGE folder (`songKey`) -- what every chart, audio and score lookup resolves through. **/
+	public var songKey:String;
+
 	public var folder:String; // owning mod directory ('' = base game)
 	public var week:Int;
 	public var weekName:String = '';
@@ -66,9 +71,11 @@ class SongEntry {
 	 * @param color the song's accent color
 	 * @param folder the owning mod directory, '' or null for base game
 	 * @param difficulties the declared difficulty names; null or empty falls back to ['Normal']
+	 * @param songKey the song package folder; defaults to the display name's formatted form
 	 */
-	public function new(songName:String, week:Int, icon:String, color:Int, folder:String, difficulties:Array<String>) {
+	public function new(songName:String, week:Int, icon:String, color:Int, folder:String, difficulties:Array<String>, ?songKey:String) {
 		this.songName = songName;
+		this.songKey = (songKey != null && songKey.length > 0) ? songKey : Paths.formatToSongPath(songName);
 		this.week = week;
 		this.icon = icon;
 		this.color = color;
@@ -85,7 +92,7 @@ class SongEntry {
 		return (diffName != null && ratings.exists(diffName)) ? ratings.get(diffName) : null;
 	}
 
-	/** @return the stable `folder|songName` identity used for favorites and de-duping */
+	/** @return the stable `modDirectory|songKey` identity used for favorites and de-duping */
 	public inline function key():String
-		return folder + '|' + songName;
+		return folder + '|' + songKey;
 }

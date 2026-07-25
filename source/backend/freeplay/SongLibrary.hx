@@ -1,6 +1,7 @@
 package backend.freeplay;
 
 import backend.SongMeta.SongMetaInfo;
+import backend.SongPaths;
 import backend.difficulty.ChartScanCache;
 import backend.difficulty.DifficultyRating.ChartRatings;
 import backend.freeplay.LibraryScanner.ScanRequest;
@@ -126,6 +127,7 @@ class SongLibrary {
 		var dbDirty:Bool = discoverLoose(freeplayWeek, seen, dbMap);
 		Paths.endBulkScan();
 
+		migrateFavorites();
 		rebuildGroupOptions();
 
 		scanner.start();
@@ -156,6 +158,34 @@ class SongLibrary {
 		ChartScanCache.commit();
 	}
 
+	/**
+	 * Moves favorites saved under the pre-package `modDirectory|displayName` identity onto the current
+	 * `modDirectory|songKey` one, so favoriting survives the display name being decoupled from the folder.
+	 */
+	function migrateFavorites():Void {
+		if (favorites.length < 1)
+			return;
+		var changed:Bool = false;
+		for (e in entries) {
+			var oldKey:String = e.folder + '|' + e.songName;
+			var newKey:String = e.key();
+			if (oldKey == newKey)
+				continue;
+			var idx:Int = favorites.indexOf(oldKey);
+			if (idx < 0)
+				continue;
+			if (favorites.indexOf(newKey) < 0)
+				favorites[idx] = newKey;
+			else
+				favorites.splice(idx, 1);
+			changed = true;
+		}
+		if (changed) {
+			FlxG.save.data.freeplayFavorites = favorites;
+			FlxG.save.flush();
+		}
+	}
+
 	/** Rebuilds the group filter options: ALL, FAVORITES when any exist, then each populated week. */
 	function rebuildGroupOptions():Void {
 		groupOptions = [-1];
@@ -176,6 +206,8 @@ class SongLibrary {
 	 * @param seen the de-dupe set, updated with this song's key
 	 */
 	function addWeekSong(display:String, weekNum:Int, char:String, color:Int, weekDiffs:Array<String>, seen:Map<String, Bool>):Void {
+		// A week names its songs by PACKAGE folder; the display name comes from the package's metadata when
+		// it has any (`mkEntry` -> `applyMeta`), otherwise the week's own entry stands in.
 		var key:String = Paths.formatToSongPath(display);
 		var modDir:String = (Mods.currentModDirectory != null) ? Mods.currentModDirectory : '';
 		var diffs:Array<String>;
@@ -183,12 +215,12 @@ class SongLibrary {
 		var hasMeta:Bool = false;
 
 		#if sys
-		var found = resolveSongFolder(key);
+		var found = SongPaths.resolveFolder(key);
 		if (found != null) {
-			diffs = deriveDiffs(found.listing, key, weekDiffs);
-			var rep:String = repChartFile(found.listing, key);
+			diffs = SongPaths.listingDifficulties(found.listing, key, weekDiffs);
+			var rep:String = SongPaths.listingRepChart(found.listing, key);
 			chartPath = (rep != null) ? found.dir + '/' + rep : null;
-			hasMeta = found.listing.indexOf('metadata.json') >= 0;
+			hasMeta = SongPaths.listingHasRole(found.listing, key, SongPaths.METADATA);
 		} else
 			diffs = declaredOrDefault(weekDiffs);
 		#else
@@ -197,7 +229,7 @@ class SongLibrary {
 
 		if (diffs.length < 1)
 			diffs = [Difficulty.getDefault()];
-		mkEntry(display, weekNum, char, color, modDir, diffs, chartPath, hasMeta);
+		mkEntry(display, weekNum, char, color, modDir, diffs, chartPath, hasMeta, key);
 		seen.set(modDir + '|' + key, true);
 	}
 
@@ -219,15 +251,19 @@ class SongLibrary {
 		// Re-point and restore. Gonna make a better solution for this but for this works
 		var prevMod:String = Mods.currentModDirectory;
 
+		// Both package roots: charts co-located with the audio in `songs/`, and the pre-package `data/` tree.
+		// A `songs/` folder that holds only audio has no chart and is skipped below.
 		var roots:Array<Array<String>> = [];
 		for (mod in Mods.parseList().enabled)
-			roots.push([mod, Paths.mods('$mod/data')]);
-		roots.push(['', Paths.mods('data')]);
+			for (root in ['songs', 'data'])
+				roots.push([mod, Paths.mods('$mod/$root')]);
+		for (root in ['songs', 'data'])
+			roots.push(['', Paths.mods(root)]);
 
 		for (root in roots) {
 			var modFolder:String = root[0];
 			var dataDir:String = root[1];
-	
+
 			for (entry in Paths.listDirectory(dataDir)) {
 				var key:String = Paths.formatToSongPath(entry);
 				var dedupe:String = '$modFolder|$key';
@@ -245,19 +281,19 @@ class SongLibrary {
 				}
 
 				var listing:Array<String> = Paths.listDirectory(songDir);
-				var diffs:Array<String> = deriveDiffs(listing, key, null);
-				if (diffs.length < 1)
+				var rep:String = SongPaths.listingRepChart(listing, key);
+				if (rep == null)
 					continue;
 
-				var rep:String = repChartFile(listing, key);
-				if (rep == null)
+				var diffs:Array<String> = SongPaths.listingDifficulties(listing, key, null);
+				if (diffs.length < 1)
 					continue;
 
 				seen.set(dedupe, true);
 				Mods.currentModDirectory = modFolder;
 
 				var e:SongEntry = mkEntry(entry, weekIdx, 'face', FlxColor.fromRGB(146, 113, 253), modFolder, diffs, '$songDir/$rep',
-					listing.indexOf('metadata.json') >= 0);
+					SongPaths.listingHasRole(listing, key, SongPaths.METADATA), key);
 				e.folderMtime = mtime;
 				scanned = true;
 				looseCount++;
@@ -298,7 +334,7 @@ class SongLibrary {
 	 * @return the appended entry
 	 */
 	function mkEntryFromDB(d:DBEntry, weekIdx:Int):SongEntry {
-		var e:SongEntry = new SongEntry(d.songName, weekIdx, d.icon, d.color, d.folder, d.difficulties);
+		var e:SongEntry = new SongEntry(d.songName, weekIdx, d.icon, d.color, d.folder, d.difficulties, d.key);
 		e.origIndex = entries.length;
 		e.weekName = (weekIdx >= 0 && weekIdx < weekNames.length && weekNames[weekIdx] != null) ? weekNames[weekIdx] : 'Other Songs';
 		e.chartPath = d.chartPath;
@@ -328,7 +364,7 @@ class SongLibrary {
 			out.push({
 				folder: e.folder,
 				songName: e.songName,
-				key: Paths.formatToSongPath(e.songName),
+				key: e.songKey,
 				mtime: e.folderMtime,
 				icon: e.icon,
 				color: e.color,
@@ -359,11 +395,13 @@ class SongLibrary {
 	 * @param modDir the owning mod directory
 	 * @param diffs the difficulties found on disk
 	 * @param chartPath the representative chart file path, or null
-	 * @param hasMeta whether the folder listing contained a metadata.json
+	 * @param hasMeta whether the folder listing contained any metadata file
+	 * @param songKey the song package folder; defaults to the display name's formatted form
 	 * @return the appended entry
 	 */
-	function mkEntry(display:String, week:Int, char:String, color:Int, modDir:String, diffs:Array<String>, chartPath:String, hasMeta:Bool):SongEntry {
-		var e:SongEntry = new SongEntry(display, week, char, color, modDir, diffs);
+	function mkEntry(display:String, week:Int, char:String, color:Int, modDir:String, diffs:Array<String>, chartPath:String, hasMeta:Bool,
+			?songKey:String):SongEntry {
+		var e:SongEntry = new SongEntry(display, week, char, color, modDir, diffs, songKey);
 		e.origIndex = entries.length;
 		e.weekName = (week >= 0 && week < weekNames.length && weekNames[week] != null) ? weekNames[week] : '';
 		e.chartPath = chartPath;
@@ -384,12 +422,17 @@ class SongLibrary {
 		var prevMod:String = Mods.currentModDirectory;
 		Mods.currentModDirectory = e.folder;
 
-		var info:SongMetaInfo = SongMeta.load(Paths.formatToSongPath(e.songName));
+		// The representative difficulty's `metadata-<diff>.json` stands in when the package has no
+		// un-suffixed one (and overrides it when it has both).
+		var info:SongMetaInfo = SongMeta.load(e.songKey, e.repDiff);
 		Mods.currentModDirectory = prevMod;
 
 		e.metaLoaded = true;
 		if (info == null)
 			return;
+
+		if (info.songName != null && info.songName.length > 0)
+			e.songName = info.songName;
 
 		if (info.icon != null && info.icon.length > 0)
 			e.icon = info.icon;
@@ -417,104 +460,6 @@ class SongLibrary {
 			e.difficulties = reorderDiffs(e.difficulties, info.difficulties);
 			e.repDiff = computeRepDiff(e.difficulties);
 		}
-	}
-
-	#if sys
-	/**
-	 * The first candidate data dir that actually holds a chart for the song.
-	 * @param key the formatted song key
-	 * @return the folder and its listing, or null when no candidate has a chart
-	 */
-	function resolveSongFolder(key:String):Null<{dir:String, listing:Array<String>}> {
-		for (dir in candidateDataDirs(key)) {
-			var listing:Array<String> = Paths.listDirectory(dir);
-			if (listing.length == 0)
-				continue;
-			for (f in listing)
-				if (f == '$key.json' || (f.startsWith('$key-') && f.endsWith('.json')))
-					return {dir: dir, listing: listing};
-		}
-		return null;
-	}
-
-	/**
-	 * All data dirs a song's charts could live in, in Paths precedence order.
-	 * @param key the formatted song key
-	 * @return the candidate folder paths
-	 */
-	function candidateDataDirs(key:String):Array<String> {
-		var dirs:Array<String> = [Paths.getSharedPath('data/$key')];
-		#if MODS_ALLOWED
-		for (mod in Mods.getGlobalMods())
-			dirs.push(Paths.mods('$mod/data/$key'));
-		if (Mods.currentModDirectory != null && Mods.currentModDirectory.length > 0)
-			dirs.push(Paths.mods('${Mods.currentModDirectory}/data/$key'));
-		dirs.push(Paths.mods('data/$key'));
-		#end
-		return dirs;
-	}
-	#end
-
-	/**
-	 * Difficulties for a song, derived purely from its folder listing.
-	 * @param listing the folder's file names
-	 * @param key the formatted song key
-	 * @param weekDiffs the declared difficulty order, or null for the defaults
-	 * @return the difficulties with charts on disk, declared order first, then undeclared extras
-	 */
-	function deriveDiffs(listing:Array<String>, key:String, weekDiffs:Array<String>):Array<String> {
-		var result:Array<String> = [];
-		var declared:Array<String> = [];
-
-		if (weekDiffs != null)
-			for (d in weekDiffs) {
-				var t:String = d.trim();
-				if (t.length > 0)
-					declared.push(t);
-			}
-
-		if (declared.length < 1)
-			declared = Difficulty.defaultList.copy();
-
-		var defFmt:String = Paths.formatToSongPath(Difficulty.getDefault());
-		for (d in declared) {
-			var fmt:String = Paths.formatToSongPath(d);
-			var base:String = (fmt == defFmt) ? key : '$key-$fmt';
-			if (listing.indexOf('$base.json') >= 0 && !containsDiffCI(result, d))
-				result.push(d);
-		}
-
-		for (f in listing) {
-			if (!f.endsWith('.json'))
-				continue;
-			var name:String = f.substr(0, f.length - 5);
-			var diffName:String = null;
-			if (name == key)
-				diffName = Difficulty.getDefault();
-			else if (name.startsWith('$key-'))
-				diffName = titleCase(name.substr(key.length + 1));
-			else
-				continue;
-			if (diffName.length > 0 && !containsDiffCI(result, diffName))
-				result.push(diffName);
-		}
-		return result;
-	}
-
-	/**
-	 * The representative chart file in a folder listing.
-	 * @param listing the folder's file names
-	 * @param key the formatted song key
-	 * @return the bare `key.json` if present, else the first `key-*.json`, else null
-	 */
-	function repChartFile(listing:Array<String>, key:String):String {
-		var bare:String = '$key.json';
-		if (listing.indexOf(bare) >= 0)
-			return bare;
-		for (f in listing)
-			if (f.startsWith('$key-') && f.endsWith('.json'))
-				return f;
-		return null;
 	}
 
 	/**
@@ -564,14 +509,6 @@ class SongLibrary {
 				out.push(d);
 		return out.length > 0 ? out : have;
 	}
-
-	/**
-	 * Uppercases the first character.
-	 * @param s the input string
-	 * @return the title-cased string
-	 */
-	static inline function titleCase(s:String):String
-		return s.length > 0 ? s.charAt(0).toUpperCase() + s.substr(1) : s;
 
 	/**
 	 * Case-insensitive difficulty membership test, via formatToSongPath.
@@ -683,9 +620,7 @@ class SongLibrary {
 		// Re-point and restore. Gonna make a better solution for this but for this works
 		var prevMod:String = Mods.currentModDirectory;
 		Mods.currentModDirectory = e.folder;
-		var songKey:String = Paths.formatToSongPath(e.songName);
-		var base:String = Difficulty.scoreKey(e.songName, diffName);
-		var path:String = Paths.json('$songKey/$base');
+		var path:String = SongPaths.findChart(e.songKey, diffName);
 		Mods.currentModDirectory = prevMod;
 		return path;
 	}
@@ -794,7 +729,7 @@ class SongLibrary {
 	 */
 	function bestScoreFor(e:SongEntry):Int {
 		var diffName:String = (e.difficulties.indexOf(Difficulty.getDefault()) >= 0) ? Difficulty.getDefault() : e.difficulties[0];
-		var key:String = Difficulty.scoreKey(e.songName, diffName);
+		var key:String = Difficulty.scoreKey(e.songKey, diffName);
 		return Highscore.songScores.exists(key) ? Highscore.songScores.get(key) : 0;
 	}
 
@@ -847,7 +782,7 @@ class SongLibrary {
 		var before:Int = entries.length;
 		var seen:Map<String, Bool> = new Map();
 		for (e in entries)
-			seen.set(e.folder + '|' + Paths.formatToSongPath(e.songName), true);
+			seen.set(e.key(), true);
 
 		Paths.beginBulkScan();
 		discoverLoose(freeplayWeek, seen, new Map());

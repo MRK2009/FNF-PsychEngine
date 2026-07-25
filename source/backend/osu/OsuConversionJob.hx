@@ -523,7 +523,8 @@ class OsuConversionJob {
 	}
 
 	function writeCharts():Array<String> {
-		OszArchive.ensureDir('$packDir/data/$songKey');
+		// Charts go into the song PACKAGE, beside the audio this job already wrote to songs/<key>/.
+		OszArchive.ensureDir('$packDir/songs/$songKey');
 		var entries:Array<{label:String, notes:Int}> = [];
 		var usedKeys:Map<String, Bool> = new Map();
 		var passes:Array<Int> = stdPasses();
@@ -552,7 +553,7 @@ class OsuConversionJob {
 					anyHit = true;
 
 				var fileKey:String = uniqueKey(diffKey(map, keys), usedKeys);
-				var fileName:String = '$songKey-$fileKey.json';
+				var fileName:String = 'chart-$fileKey.json';
 
 				// Safety + diagnostic: an event must be [time, [[name, v1, v2], ...]]. If any
 				// event's value slot isn't an array (the "[time, 0]" corruption), drop it so a
@@ -574,7 +575,7 @@ class OsuConversionJob {
 				// fromLegacy builds the native model from the converted SwagSong; buildPsychV2 serialises it.
 				var chartV2:backend.SongChart = backend.SongChart.fromLegacy(song);
 				var v2Obj:Dynamic = backend.Song.buildPsychV2(song, chartV2);
-				File.saveContent('$packDir/data/$songKey/$fileName',
+				File.saveContent('$packDir/songs/$songKey/$fileName',
 					PsychJsonPrinter.print(v2Obj, backend.Song.PSYCH_V2_INLINE, backend.Song.PSYCH_V2_KEY_ORDER));
 
 				var notes:Int = countNotes(song);
@@ -784,7 +785,7 @@ class OsuConversionJob {
 
 	function writeSongMetadata(diffs:Array<String>) {
 		var first:OsuBeatmap = maps[0];
-		var path:String = '$packDir/data/$songKey/metadata.json';
+		var path:String = '$packDir/songs/$songKey/metadata.json';
 		File.saveContent(path, haxe.Json.stringify({
 			songName: display,
 			icon: OsuChartConverter.BLANK_ART,

@@ -68,8 +68,16 @@ typedef ChartSection = {
 	first access (the gated "demand" v1 view). `fromLegacy`/`fromV2` populate it from either format.
 **/
 class SongChart {
-	// ---- Scalar metadata (mirrors Song.SwagSong field names so `SONG.bpm`/`.stage`/... read natively) ----
+	/** The song's DISPLAY name. Free-form -- it no longer resolves any path; `folder` does that. **/
 	public var song:String = '';
+
+	/**
+		The song package folder (`songKey`): where the audio, charts, metadata, events and song scripts live,
+		under `songs/<folder>/` or the pre-package `data/<folder>/`. Set by the loader from the folder the
+		chart was found in, or from an explicit psych_v2 `metadata.folder` when a chart points at another
+		package's audio. Everything asset-facing resolves through this, never through `song`.
+	**/
+	public var folder:String = null;
 	public var bpm:Float = 100;
 	public var needsVoices:Bool = true;
 	public var speed:Float = 1;
@@ -102,7 +110,7 @@ class SongChart {
 		scripts and editor consume; the psych_v2 reader/writer convert to/from the `{t,name,values}` form. **/
 	public var events:Array<Dynamic> = [];
 
-	// ---- Native model ----
+	/** The strumlines the chart is played on: their roles, characters, key counts and vocal tracks. **/
 	public var strumLines:Array<StrumLineData> = [];
 
 	/** Flat, absolute note list (the native gameplay note data). **/
@@ -141,6 +149,27 @@ class SongChart {
 				default:
 			}
 		}
+	}
+
+	/**
+		The song package folder, falling back to the display name's formatted form for charts that predate
+		the field (that is exactly what the old layout derived the folder from).
+		@return the songKey
+	**/
+	public function songKey():String {
+		if (folder != null && folder.length > 0)
+			return folder;
+		return Paths.formatToSongPath(song);
+	}
+
+	/**
+		The name to show for this song. The chart's own `song` field, else the package folder.
+		@return the display name
+	**/
+	public function displayName():String {
+		if (song != null && song.length > 0)
+			return song;
+		return (folder != null) ? folder : '';
 	}
 
 	/** The first strumline carrying `id`, or `null`. **/
@@ -243,6 +272,8 @@ class SongChart {
 	**/
 	function copyMetaFromLegacy(song:Song.SwagSong):Void {
 		if (song.song != null) this.song = song.song;
+		var fld:Dynamic = Reflect.field(song, 'folder');
+		if (fld != null && Std.isOfType(fld, String)) this.folder = fld;
 		this.bpm = song.bpm;
 		this.needsVoices = song.needsVoices;
 		this.speed = song.speed;
@@ -405,6 +436,7 @@ class SongChart {
 		if (meta.speed != null) chart.speed = meta.speed;
 		chart.needsVoices = (meta.needsVoices != false);
 		if (meta.offset != null) chart.offset = meta.offset;
+		if (meta.folder != null) chart.folder = meta.folder;
 		if (meta.stage != null) chart.stage = meta.stage;
 		chart.format = 'psych_v2';
 		if (meta.timeSignature != null) chart.timeSignature = meta.timeSignature;

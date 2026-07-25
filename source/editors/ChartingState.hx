@@ -1018,16 +1018,38 @@ class ChartingState extends MusicBeatState {
 		return PsychJsonPrinter.print(backend.Song.buildPsychV2(cast model.chart, model.chart), backend.Song.PSYCH_V2_INLINE, backend.Song.PSYCH_V2_KEY_ORDER);
 	}
 
-	/** Save-dialog default: the loaded chart's own path, else the mods folder root. **/
+	/**
+		Save-dialog default: the loaded chart's own path, else the song package it belongs to
+		(`mods/<mod>/songs/<folder>/chart-<difficulty>.json`).
+	**/
 	function dialogFileName():String {
 		var path:String = backend.Song.chartPath;
 		if (path != null && path.length > 0)
 			return path;
+
+		var file:String = 'chart-${Paths.formatToSongPath(Difficulty.getString(false))}.json';
 		#if MODS_ALLOWED
-		return Paths.mods() + Paths.formatToSongPath(model.chart.song) + '.json';
+		var key:String = model.chart.songKey();
+		var mod:String = Mods.currentModDirectory;
+		if (mod != null && mod.length > 0)
+			return Paths.mods('$mod/songs/$key/$file');
+		return Paths.mods('songs/$key/$file');
 		#else
-		return Paths.formatToSongPath(model.chart.song) + '.json';
+		return file;
 		#end
+	}
+
+	/**
+		Binds a freshly-opened chart to its song package -- what the audio, events and metadata resolve
+		through. An explicit `folder` on the chart wins; otherwise the file's own location does, when it sits
+		in a `songs/`/`data/` package; otherwise it falls back to the display name, as pre-package charts did.
+		@param chart the opened chart
+		@param path the file it was read from, or null
+	**/
+	function bindPackage(chart:SongChart, path:String):Void {
+		if (chart.folder == null || chart.folder.length == 0)
+			chart.folder = backend.SongPaths.packageOfPath(path);
+		backend.Song.loadedSongName = chart.songKey();
 	}
 
 	/** Ctrl+S: overwrites the known chart path; falls back to a dialog. **/
@@ -1056,7 +1078,7 @@ class ChartingState extends MusicBeatState {
 	function exportLegacyChart():Void {
 		@:privateAccess model.chart.notes = model.chart.buildLegacySections();
 		var data:String = PsychJsonPrinter.print(model.chart.toLegacySwag(), ['sectionNotes', 'events']);
-		fileDialog.save(Paths.formatToSongPath(model.chart.song) + '.json', data, function():Void UIToast.show('Legacy chart saved: ${fileDialog.path}'),
+		fileDialog.save(model.chart.songKey() + '.json', data, function():Void UIToast.show('Legacy chart saved: ${fileDialog.path}'),
 			null, function():Void UIToast.show('Error saving chart'));
 	}
 
@@ -1070,7 +1092,7 @@ class ChartingState extends MusicBeatState {
 			if (!sys.FileSystem.exists(BACKUP_DIR))
 				sys.FileSystem.createDirectory(BACKUP_DIR);
 			var stamp:String = DateTools.format(Date.now(), '%Y-%m-%d_%H-%M-%S');
-			var name:String = Paths.formatToSongPath(model.chart.song);
+			var name:String = model.chart.songKey();
 			sys.io.File.saveContent('$BACKUP_DIR/${name}_$stamp.json', buildV2Json());
 			pruneBackups();
 			autosaveAgeSecs = 0;
@@ -1118,7 +1140,7 @@ class ChartingState extends MusicBeatState {
 				return;
 			}
 			backend.Song.chartPath = null; // force Save As so the real chart isn't clobbered silently
-			backend.Song.loadedSongName = loaded.song;
+			bindPackage(loaded, null);
 			adoptChart(loaded);
 			UIToast.show('Loaded autosave: ${files[files.length - 1]}');
 		} catch (e:Dynamic)
@@ -1134,7 +1156,7 @@ class ChartingState extends MusicBeatState {
 			UIToast.show('V-Slice export failed');
 			return;
 		}
-		var chartName:String = Paths.formatToSongPath(model.chart.song);
+		var chartName:String = model.chart.songKey();
 		fileDialog.openDirectory('Choose the export folder', function():Void {
 			try {
 				var path:String = fileDialog.path.replace('\\', '/');
@@ -1181,7 +1203,7 @@ class ChartingState extends MusicBeatState {
 					chosen.events = (chosen.events != null) ? chosen.events.concat(pack.events.events) : pack.events.events;
 				var native:SongChart = SongChart.fromLegacy(chosen);
 				backend.Song.chartPath = null;
-				backend.Song.loadedSongName = native.song;
+				bindPackage(native, null);
 				adoptChart(native);
 				UIToast.show('Imported: ${native.song}');
 			} catch (e:Dynamic)
@@ -1199,7 +1221,7 @@ class ChartingState extends MusicBeatState {
 					return;
 				}
 				backend.Song.chartPath = fileDialog.path.replace('\\', '/');
-				backend.Song.loadedSongName = loaded.song;
+				bindPackage(loaded, backend.Song.chartPath);
 				adoptChart(loaded);
 				UIToast.show('Loaded: ${loaded.song}');
 			} catch (e:Dynamic)
@@ -1226,7 +1248,7 @@ class ChartingState extends MusicBeatState {
 				UIToast.show('Not a valid chart file');
 				return;
 			}
-			backend.Song.loadedSongName = loaded.song;
+			bindPackage(loaded, path);
 			adoptChart(loaded);
 			UIToast.show('Reloaded: ${loaded.song}');
 		} catch (e:Dynamic)
@@ -1590,6 +1612,17 @@ class ChartingState extends MusicBeatState {
 		name.controlWidth = UITheme.px(130);
 		flow.add(name);
 
+		var folder:UITextInput = new UITextInput("Folder", colW, (chart.folder != null) ? chart.folder : '', function(v:String):Void {
+			undoStack.snapshotCoalesced(model, 'Folder');
+			var key:String = Paths.formatToSongPath(v);
+			chart.folder = (key.length > 0) ? key : null;
+			backend.Song.loadedSongName = chart.songKey();
+			model.markDirty();
+		});
+		folder.controlWidth = UITheme.px(130);
+		flow.add(folder);
+		addHintRow(flow, colW, 'Package folder (songs/<folder>/). Blank = from the song name.');
+
 		var bpm:UIStepper = new UIStepper("Base BPM", colW, chart.bpm, 1, function(v:Float):Void {
 			undoStack.snapshotCoalesced(model, 'BPM');
 			model.setBpm(0, v, EditorPrefs.bpmAdapt);
@@ -1660,8 +1693,7 @@ class ChartingState extends MusicBeatState {
 
 		// Characters are edited per-strumline (strumline properties modal), so the SONG tab only keeps Stage.
 		flow.header(new UIAccordion("Stage", colW));
-		var shownStage:String = (chart.stage != null && chart.stage.length > 0) ? chart.stage
-			: backend.StageData.vanillaSongStage(Paths.formatToSongPath(chart.song));
+		var shownStage:String = (chart.stage != null && chart.stage.length > 0) ? chart.stage : backend.StageData.vanillaSongStage(chart.songKey());
 		addPickerRow(flow, colW, "Stage", stageList(), shownStage, function(v:String):Void {
 			undoStack.snapshot(model, 'Stage');
 			chart.stage = v;
@@ -1669,13 +1701,13 @@ class ChartingState extends MusicBeatState {
 
 		flow.header(new UIAccordion("Audio Files", colW));
 		flow.add(new UIButton("Reload Audio", colW, UITheme.px(28), function():Void {
-			backend.Song.loadedSongName = model.chart.song;
+			backend.Song.loadedSongName = model.chart.songKey();
 			audio.load(backend.Song.loadedSongName, model.chart.needsVoices);
 			applyAudioVolumes();
 			audio.setRate(RATE_VALUES[rateIndex]);
 			noteField.maxTime = audio.loaded ? audio.length : -1;
 			applyWaveConfig();
-			UIToast.show(audio.loaded ? 'Audio loaded' : 'No audio found for "${model.chart.song}"');
+			UIToast.show(audio.loaded ? 'Audio loaded' : 'No audio found in "${backend.Song.loadedSongName}"');
 			updateTimeLabel();
 		}));
 	}
@@ -1719,10 +1751,10 @@ class ChartingState extends MusicBeatState {
 		}
 	}
 
-	/** META tab: edits `data/<song>/metadata.json` (Freeplay info flyout). **/
+	/** META tab: edits the song package's `metadata.json` (Freeplay info flyout). **/
 	function buildMetaPanel(flow:DockFlow, colW:Float):Void {
 		if (metaWorking == null) {
-			var loaded:backend.SongMeta.SongMetaInfo = backend.SongMeta.load(Paths.formatToSongPath(model.chart.song));
+			var loaded:backend.SongMeta.SongMetaInfo = backend.SongMeta.load(model.chart.songKey(), Difficulty.getString(false));
 			metaWorking = (loaded != null) ? loaded : (cast {});
 		}
 		var head:UIAccordion = new UIAccordion("Metadata", colW);
@@ -1794,7 +1826,11 @@ class ChartingState extends MusicBeatState {
 			Reflect.deleteField(metaWorking, 'displayTimeSignature');
 	}
 
-	/** Writes `metadata.json` beside the chart file (requires a saved chart path). **/
+	/**
+		Writes the metadata beside the chart file, into the song package (requires a saved chart path).
+		A `metadata-<difficulty>.json` that already exists is kept as the target, so a per-difficulty
+		override is never flattened back into the package-wide file.
+	**/
 	function saveMetaFile():Void {
 		#if sys
 		if (backend.Song.chartPath == null) {
@@ -1810,7 +1846,9 @@ class ChartingState extends MusicBeatState {
 			Reflect.deleteField(metaWorking, 'tags');
 
 		var p:String = backend.Song.chartPath.replace('\\', '/');
-		var metaPath:String = p.substr(0, p.lastIndexOf('/')) + '/metadata.json';
+		var dir:String = p.substr(0, p.lastIndexOf('/'));
+		var diffFile:String = '$dir/metadata-${Paths.formatToSongPath(Difficulty.getString(false))}.json';
+		var metaPath:String = sys.FileSystem.exists(diffFile) ? diffFile : '$dir/metadata.json';
 		try {
 			sys.io.File.saveContent(metaPath, haxe.Json.stringify(metaWorking, null, '\t'));
 			UIToast.show('Metadata saved: $metaPath');
