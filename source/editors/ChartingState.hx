@@ -151,8 +151,8 @@ class ChartingState extends MusicBeatState {
 		{name: 'Wood', sound: 'metronome/wood', accentPitch: 1.4}
 	];
 
-	/** How many strumlines may render lanes at once. **/
-	public static inline var MAX_VISIBLE_LINES:Int = 6;
+	/** How many strumlines may render lanes at once -- the same limit gameplay renders under. **/
+	public static inline var MAX_VISIBLE_LINES:Int = SongChart.MAX_VISIBLE_LINES;
 
 	/** Time-signature denominators the engine actually supports (only powers of 2 keep 16/d an
 		integer step-per-beat; anything else is unsupported, so the pickers are limited to these). **/

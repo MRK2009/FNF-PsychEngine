@@ -9,11 +9,12 @@ import flixel.sound.FlxSound;
 /**
 	A first-class strumline: one lane group owning its receptors, its scrolling `NoteField`, the
 	characters that animate for it, and (for the human line) its input map. What the old implicit
-	opponent/player split becomes -- `PlayState.strumLines` holds one per active line (≤3 rendered).
+	opponent/player split becomes -- `PlayState.strumLines` holds one per active line.
 
 	Notes reference a strumline by its absolute `index`; the camera targets a strumline; gf is just a
 	strumline whose `characters` are gf. Non-`player` lines are auto-hit; a hidden line (`visible ==
-	false`) skips rendering but its characters still sing.
+	false`) skips rendering but its characters still sing. The role never decides that -- any line marked
+	visible renders, up to `SongChart.MAX_VISIBLE_LINES`.
 **/
 class StrumLine {
 	/** Absolute index in the chart's strumline list (what a note's `strumLine` refers to). **/
@@ -26,7 +27,7 @@ class StrumLine {
 
 	public var isPlayer:Bool;
 
-	/** Whether this line renders receptors/notes on screen (≤3 visible at once). **/
+	/** Whether this line renders receptors/notes on screen. **/
 	public var visible:Bool;
 
 	public var keyCount:Int;

@@ -3274,21 +3274,20 @@ class PlayState extends MusicBeatState {
 		receptorGroup = new flixel.group.FlxGroup.FlxTypedGroup<Receptor>();
 
 		// Build a StrumLine per chart strumline (characters resolved so hidden lines can still serve as
-		// camera targets); instantiate receptors/field only for the visible ones (≤3 rendered).
-		// ADDITIONAL lines (gf + extras) never render for now -- they run silently (characters sing,
-		// camera targets work) until the extra-strumline rendering pass lands.
+		// camera targets); instantiate receptors/field only for the ones the chart marks visible. The role
+		// doesn't decide this -- an ADDITIONAL line (gf, an extra singer) renders like any other when it is
+		// marked visible, and the ones left hidden run silently through `silentLines`.
 		strumLines = [];
 		var visibleLines:Array<StrumLine> = [];
 		for (sd in SONG.strumLines) {
-			var renderable:Bool = sd.visible && sd.type != backend.SongChart.StrumLineType.ADDITIONAL;
-			var line:StrumLine = new StrumLine(sd.index, sd.id, sd.isPlayer, sd.keyCount, renderable);
+			var line:StrumLine = new StrumLine(sd.index, sd.id, sd.isPlayer, sd.keyCount, sd.visible);
 			line.type = sd.type;
 			line.vocalsSuffix = sd.vocalsSuffix;
 			line.downScroll = ClientPrefs.data.downScroll;
 			line.cpuControlled = sd.isPlayer ? cpuControlled : true;
 			line.characters = [for (name in sd.characters) resolveStrumCharacter(name)];
 			strumLines.push(line);
-			if (renderable && visibleLines.length < 3)
+			if (sd.visible && visibleLines.length < SongChart.MAX_VISIBLE_LINES)
 				visibleLines.push(line);
 		}
 

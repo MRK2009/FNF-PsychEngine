@@ -13,8 +13,9 @@ enum abstract StrumLineType(Int) from Int to Int {
 }
 
 /** One strumline descriptor in the native model. `index` is its absolute id (what a note's `s` refers
-	to); `visible` lines render receptors/notes (≤3 at once), hidden lines only animate their characters.
-	`type` is the authoritative role; `isPlayer` is a cached `type == PLAYER` for the runtime. **/
+	to); `visible` lines render receptors/notes (up to `SongChart.MAX_VISIBLE_LINES`), hidden lines only
+	animate their characters -- the role has no say in it, an ADDITIONAL line renders like any other when
+	it is marked visible. `type` is the authoritative role; `isPlayer` is a cached `type == PLAYER`. **/
 typedef StrumLineData = {
 	var index:Int;
 	var id:String;
@@ -132,6 +133,9 @@ class SongChart {
 	public var notes:Array<Song.SwagSection> = [];
 
 	public function new() {}
+
+	/** How many strumlines can render receptors at once; the rest still sing + serve as camera targets. **/
+	public static inline var MAX_VISIBLE_LINES:Int = 6;
 
 	// The fixed strumline indices for translated legacy charts.
 	public static inline var LEGACY_OPPONENT:Int = 0;
