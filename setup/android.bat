@@ -29,6 +29,15 @@ if exist "!SEM!" (
 )
 
 echo.
+echo Patching hxcpp AndroidCompat.cpp ^(bsd_signal shim breaks x86_64 emulator builds^)...
+set "COMPAT=.haxelib\hxcpp\git\src\hx\AndroidCompat.cpp"
+if exist "!COMPAT!" (
+	powershell -NoProfile -Command "$f='!COMPAT!'; $c=Get-Content -Raw $f; if($c -notmatch '__LP64__'){ ((Get-Content $f) -replace '!defined\(HXCPP_ARM64\)$','!defined(HXCPP_ARM64) && !defined(__LP64__)') | Set-Content $f }"
+) else (
+	echo   WARNING: hxcpp not found -- run setup\windows.bat first.
+)
+
+echo.
 echo Finished Android setup!
 endlocal
 pause
