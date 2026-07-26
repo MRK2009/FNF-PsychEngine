@@ -1,8 +1,8 @@
 package psychlua;
 
 #if HSCRIPT_ALLOWED
-import insanity.backend.Interp;
-import insanity.backend.Exception.Error;
+import insanity.runtime.Interp;
+import insanity.runtime.Error;
 
 /**
  * insanity interpreter with one Psych-specific addition: bare-identifier
@@ -14,7 +14,7 @@ import insanity.backend.Exception.Error;
  *
  * Installed globally via `HScript.setupConfig()` (`Config.interpClass`).
  */
-@:access(insanity.backend.Interp)
+@:access(insanity.runtime.Interp)
 class PsychInterp extends Interp {
 	public var parentInstance(default, set):Dynamic = null;
 

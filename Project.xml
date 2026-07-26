@@ -227,6 +227,11 @@
 	     packages to fall back to APK-bundled assets. No-op on every other target. -->
 	<haxeflag name="--macro" value="macros.FileAccessMacro.use()" if="android" />
 
+	<!-- Generates scripting.bridges.* so mod scripts can write `class X extends FlxSprite`,
+	     `extends PlayState`, etc. The extendable base list lives in the macro. -->
+	<haxeflag name="--macro" value="macros.ScriptedBridgeMacro.generate()" if="HSCRIPT_ALLOWED" />
+	<haxeflag name="--macro" value="macros.ScriptedAbstractMacro.generate()" if="HSCRIPT_ALLOWED" />
+
 	<!-- The osu! storyboard runtime is import()-only; psychlua.LuaProxy._importAnchors is what forces it
 	     into the build. A `--macro keep()` used to sit here, but keep() ONLY adds @:keep metadata -- it
 	     never compiles an unreferenced module, so it did nothing (and the class already has @:keep). -->

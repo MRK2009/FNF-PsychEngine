@@ -5,10 +5,8 @@ import flixel.FlxState;
 import flixel.FlxSubState;
 import backend.MusicBeatState;
 import backend.MusicBeatSubstate;
-import insanity.Module;
-import insanity.Environment;
-import insanity.backend.types.Scripted.InsanityScriptedClass;
-import insanity.backend.types.Scripted.IInsanityType;
+import insanity.types.ScriptedClass;
+import insanity.types.IScriptedType;
 import backend.Mods;
 import backend.Mods.StateSourceMode;
 import psychlua.HScript;
@@ -42,12 +40,12 @@ enum ResolveScope {
  */
 class ScriptedStates {
 	#if HSCRIPT_ALLOWED
-	// The scriptable bridges are only ever created reflectively (through the
-	// insanity scripted-class registry), so nothing references them as types.
-	// This forces them to be typed -- which runs their @:autoBuild macro and
-	// registers them as extendable scripted classes. Without it the bridges
-	// would be invisible to `extends ScriptedMusicBeatState` in scripts.
-	@:keep static var __forceTyping:Array<Class<Dynamic>> = [ScriptedMusicBeatState, ScriptedMusicBeatSubstate];
+	// The generated bridges are only ever created reflectively (through the insanity
+	// scripted-class registry), so nothing references them as types. Referencing the
+	// generated registry forces all of them to be typed -- which runs their @:autoBuild
+	// macro and registers each base as extendable. Without it, `extends FlxSprite` and
+	// friends would find no bridge.
+	@:keep static var __forceTyping:Array<Class<Dynamic>> = scripting.bridges.Bridges.all;
 
 	// The most-recently-built scripted STATE (name + owning mod). Used to auto-route
 	// "exit to menu" back to the scripted state a song was launched from, so mods
@@ -149,6 +147,9 @@ class ScriptedStates {
 		#if MODS_ALLOWED
 		if (!Mods.isLaunchable(folder))
 			return false;
+		// Whatever the previous mod loaded is not this mod's; start from a clean world.
+		ScriptRegistry.dispose();
+
 		Mods.currentModDirectory = folder;
 		Mods.launchedMod = folder;
 		Mods.stateSourceMode = MOD;
@@ -182,6 +183,10 @@ class ScriptedStates {
 		activeScriptedMod = null;
 		Mods.launchedMod = null;
 		Mods.stateSourceMode = NONE;
+
+		// Drop the mod's scripted classes so the next launch reads from disk instead of
+		// inheriting another mod's world.
+		ScriptRegistry.dispose();
 
 		#if MODS_ALLOWED
 		// Back to base defaults: only GLOBAL (scriptpack / runsGlobally) mods keep
@@ -220,7 +225,9 @@ class ScriptedStates {
 		return true;
 	}
 
-	// Shared load/parse/instantiate pipeline for states and substates.
+	// Shared load/parse/instantiate pipeline for states and substates. The parsing and
+	// class-construction work lives in ScriptRegistry so states, substates and a mod's own
+	// `classes/` all share one environment -- which is what lets a state import them.
 	static function instantiate(subfolder:String, name:String, ?args:Array<Dynamic>, scope:ResolveScope = ANY):Dynamic {
 		var path:String = resolvePath(subfolder + name + '.hx', scope);
 		if (path == null) {
@@ -228,67 +235,26 @@ class ScriptedStates {
 			return null;
 		}
 
-		#if MODS_ALLOWED
-		// Reuse the mod trust gate that standalone HScripts use.
-		var modFolder:Array<String> = path.split('/');
-		if (modFolder[0] + '/' == Paths.mods()
-			&& (Mods.currentModDirectory == modFolder[1] || Mods.getGlobalMods().contains(modFolder[1]))
-			&& backend.ModSecurity.isBlocked(modFolder[1])) {
-			trace('ScriptedStates: blocked $path -- mod "${modFolder[1]}" not trusted');
-			return null;
-		}
-		#end
-
-		var failed:Bool = false;
-		var module:Module = new Module(File.getContent(path), name, [], path);
-		module.onParsingError = function(e:haxe.Exception) { failed = true; HScript.error('${e.message}', errPos(name)); };
-		module.onProgramError = function(e:haxe.Exception) { failed = true; HScript.error('${e.message}', errPos(name)); };
-		module.onTypeError = function(e:haxe.Exception, t:IInsanityType) { failed = true; HScript.error('${e.message}', errPos(name)); };
-
-		var environment:Environment = new Environment([module]);
-		injectGlobals(environment.variables);
-		environment.start();
-		if (failed)
-			return null;
-
-		var type:IInsanityType = environment.resolve(name);
-		if (type == null || !(type is InsanityScriptedClass)) {
+		var type:IScriptedType = ScriptRegistry.loadEntry(path, name);
+		if (type == null || !(type is ScriptedClass)) {
 			HScript.error('Scripted state "$name" must declare a class named "$name"', errPos(name));
 			return null;
 		}
 
-		var cls:InsanityScriptedClass = cast type;
-		module.startType(environment, cls);
-		if (cls.failed || !cls.initialized) {
-			HScript.error('Scripted state "$name" failed to initialize', errPos(name));
+		var inst:Dynamic = ScriptRegistry.build(cast type, name, args);
+		if (inst == null)
 			return null;
-		}
 
-		// Run the scripted class's methods in "safe" mode so a runtime error in
-		// create/update/beatHit/etc. is caught and logged to the debug console
-		// instead of crashing the game. Must be set after init() (which resets it
-		// from the class metadata) and before the instance is constructed.
-		cls.safe = true;
-		cls.onInstanceError = function(e:Dynamic, fun:String, ?inst:Dynamic) {
-			HScript.error('$name.$fun(): $e', errPos(name));
-		};
-
-		try {
-			var inst:Dynamic = cls.typeCreateInstance(args != null ? args : []);
-			// Tag the instance with the mod it came from so the engine can auto-scope
-			// asset/script lookups to that mod (see the preStateCreate hook in Main).
-			#if MODS_ALLOWED
-			var ownerMod:String = ownerModOf(path);
-			if (ownerMod != null) {
-				if (inst is MusicBeatState) cast(inst, MusicBeatState).scriptOwnerMod = ownerMod;
-				else if (inst is MusicBeatSubstate) cast(inst, MusicBeatSubstate).scriptOwnerMod = ownerMod;
-			}
-			#end
-			return inst;
-		} catch (e:haxe.Exception) {
-			HScript.error('Failed to instantiate scripted state "$name": ${e.message}', errPos(name));
-			return null;
+		// Tag the instance with the mod it came from so the engine can auto-scope
+		// asset/script lookups to that mod (see the preStateCreate hook in Main).
+		#if MODS_ALLOWED
+		var ownerMod:String = ownerModOf(path);
+		if (ownerMod != null) {
+			if (inst is MusicBeatState) cast(inst, MusicBeatState).scriptOwnerMod = ownerMod;
+			else if (inst is MusicBeatSubstate) cast(inst, MusicBeatSubstate).scriptOwnerMod = ownerMod;
 		}
+		#end
+		return inst;
 	}
 
 	// The mod folder a resolved script path belongs to, or null if it's a shared
@@ -311,7 +277,7 @@ class ScriptedStates {
 	//   ANY      - current mod -> global mods -> shared (Paths.modFolders order)
 	//   LAUNCHED - the launched mod folder only (no shared fallback)
 	//   GLOBALS  - global/scriptpack mods (in order) -> bare mods/ root -> shared
-	static function resolvePath(relative:String, scope:ResolveScope = ANY):String {
+	public static function resolvePath(relative:String, scope:ResolveScope = ANY):String {
 		#if MODS_ALLOWED
 		switch (scope) {
 			case LAUNCHED:
@@ -346,85 +312,6 @@ class ScriptedStates {
 		return null;
 	}
 
-	// Engine globals available inside scripted states. The instance interpreter
-	// inherits these (Environment -> Module -> class -> instance), so scripts
-	// can use them without importing. `this` (the state instance) and inherited
-	// members (add, openSubState, ...) are wired automatically by the macro.
-	static function injectGlobals(vars:Map<String, Dynamic>):Void {
-		inline function s(name:String, value:Dynamic)
-			vars.set(name, value);
-
-		#if sys
-		s('File', File);
-		s('FileSystem', FileSystem);
-		#end
-		s('FlxG', flixel.FlxG);
-		s('FlxMath', flixel.math.FlxMath);
-		s('FlxSprite', flixel.FlxSprite);
-		s('FlxText', flixel.text.FlxText);
-		s('FlxCamera', flixel.FlxCamera);
-		s('FlxTimer', flixel.util.FlxTimer);
-		s('FlxTween', flixel.tweens.FlxTween);
-		s('FlxEase', flixel.tweens.FlxEase);
-		s('FlxColor', psychlua.HScript.CustomFlxColor);
-		s('FlxSound', flixel.sound.FlxSound);
-		s('PsychCamera', backend.PsychCamera);
-		s('MusicBeatState', MusicBeatState);
-		s('MusicBeatSubstate', MusicBeatSubstate);
-		s('PlayState', PlayState);
-		s('Paths', Paths);
-		s('Conductor', Conductor);
-		s('ClientPrefs', ClientPrefs);
-		s('Alphabet', Alphabet);
-		s('FlxSpriteGroup', flixel.group.FlxSpriteGroup);
-
-		// Curated extra types. Referencing the classes here ALSO keeps them from
-		// dead-code elimination (e.g. FlxButton is otherwise never used by the
-		// engine and would be stripped), so scripts can both `new` them and use
-		// them as real field types -- no `import` and no `Dynamic` workaround.
-		s('FlxObject', flixel.FlxObject);
-		s('FlxGroup', flixel.group.FlxGroup);
-		s('FlxTypedGroup', flixel.group.FlxGroup.FlxTypedGroup);
-		s('FlxButton', flixel.ui.FlxButton);
-		s('FlxBar', flixel.ui.FlxBar);
-		s('FlxBackdrop', flixel.addons.display.FlxBackdrop);
-		s('FlxFlicker', flixel.effects.FlxFlicker);
-		// NOTE: FlxPoint/FlxRect/FlxAxes are abstracts and can't be injected as
-		// values; scripts can `import` them if needed.
-		s('FlxSort', flixel.util.FlxSort);
-		s('FlxStringUtil', flixel.util.FlxStringUtil);
-		// Common engine classes for the menu -> song flow.
-		s('Song', backend.Song);
-		s('LoadingState', states.LoadingState);
-		s('Difficulty', backend.Difficulty);
-		s('Highscore', backend.Highscore);
-		s('WeekData', backend.WeekData);
-		s('CoolUtil', backend.CoolUtil);
-
-		s('controls', Controls.instance);
-		s('getVar', function(name:String):Dynamic {
-			return MusicBeatState.getVariables().exists(name) ? MusicBeatState.getVariables().get(name) : null;
-		});
-		s('setVar', function(name:String, value:Dynamic):Dynamic {
-			MusicBeatState.getVariables().set(name, value);
-			return value;
-		});
-		s('removeVar', function(name:String):Bool {
-			if (MusicBeatState.getVariables().exists(name)) {
-				MusicBeatState.getVariables().remove(name);
-				return true;
-			}
-			return false;
-		});
-
-		// Navigation between scripted states from within a scripted state.
-		s('switchToState', function(name:String, ?args:Array<Dynamic>):Bool return switchToState(name, args));
-		s('openScriptedSubstate', function(name:String, ?args:Array<Dynamic>):Bool return openSubstate(name, args));
-		s('switchState', function(state:FlxState) MusicBeatState.switchState(state));
-		// Mod launch/exit (for a mod's scripted menus to implement BACK etc.).
-		s('exitToEngine', function() exitToEngine());
-		s('launchMod', function(folder:String):Bool return launchMod(folder));
-	}
 	#end
 }
 

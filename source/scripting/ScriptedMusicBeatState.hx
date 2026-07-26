@@ -4,30 +4,15 @@ import backend.MusicBeatState;
 
 #if HSCRIPT_ALLOWED
 /**
- * Internal bridge that makes `MusicBeatState` scriptable as a class.
+ * Back-compat alias. The real bridge is now generated as
+ * `scripting.bridges.ScriptedMusicBeatState` by `macros.ScriptedBridgeMacro`,
+ * alongside one for every other extendable base.
  *
- * insanity registers a scriptable class by its BASE class, so modders extend the
- * real base (`MusicBeatState`) and the engine instantiates THIS bridge for them:
- *
- *     class MyMenu extends MusicBeatState {   // <- the real base, not the bridge
- *         override function create() { super.create(); ... }
- *         override function update(elapsed:Float) { super.update(elapsed); ... }
- *     }
- *
- * The `insanity.IScripted` interface carries an `@:autoBuild` macro that
- * generates, for every inherited method, an override which dispatches to the
- * loaded script's matching function if it defines one, otherwise falls through
- * to `super`. So when Flixel drives this state (create/update/beatHit/...),
- * the script's overrides run.
- *
- * Instantiated by `scripting.ScriptedStates.loadState()`.
- *
- * `@:keep` is required: the class is only ever created reflectively (via the
- * scripted-class registry), so without it DCE would strip the class and the
- * `@:autoBuild` dispatch overrides would never be generated.
+ * Scripts should extend the REAL base (`class MyMenu extends MusicBeatState`);
+ * this name only exists so scripts written against the old two-bridge system
+ * keep resolving.
  */
-@:keep
-class ScriptedMusicBeatState extends MusicBeatState implements insanity.IScripted {}
+typedef ScriptedMusicBeatState = scripting.bridges.ScriptedMusicBeatState;
 #else
 class ScriptedMusicBeatState extends MusicBeatState {}
 #end
