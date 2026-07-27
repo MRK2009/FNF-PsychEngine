@@ -1688,6 +1688,7 @@ class FunkinLua {
 		}
 		trace('lua file loaded succesfully:' + scriptName);
 
+		scripting.ScriptHooks.bindLua(lua);
 		call('onCreate', []);
 	}
 

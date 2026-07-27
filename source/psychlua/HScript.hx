@@ -222,6 +222,7 @@ class HScript {
 
 		try {
 			returnValue = interp.execute(script.program);
+			scripting.ScriptHooks.bindHScript(script.variables);
 		} catch (e:haxe.Exception) {
 			failed = true;
 			returnValue = null;
