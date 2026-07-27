@@ -38,8 +38,9 @@ class CallbackHandler {
 			if (cbf == null) {
 				final last:FunkinLua = FunkinLua.lastCalledScript;
 				if (last == null || last.lua != L) {
-					if (PlayState.instance != null && PlayState.instance.luaArray != null) {
-						for (script in PlayState.instance.luaArray)
+					final host:scripting.ScriptHost = scripting.ScriptHost.current;
+					if (host != null && host.luaArray != null) {
+						for (script in host.luaArray)
 							if (script != null && script != last && script.lua == L) {
 								cbf = script.callbacks.get(fname);
 								// Mirror linc_luajit behaviour: dispatcher updates

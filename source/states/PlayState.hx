@@ -114,7 +114,10 @@ class PlayState extends MusicBeatState {
 	public var gfMap:Map<String, Character> = new Map<String, Character>();
 
 	#if HSCRIPT_ALLOWED
-	public var hscriptArray:Array<HScript> = [];
+	public var hscriptArray(get, never):Array<HScript>;
+
+	inline function get_hscriptArray():Array<HScript>
+		return scriptHost != null ? scriptHost.hscriptArray : null;
 	#end
 
 	public var BF_X:Float = 770;
@@ -351,7 +354,12 @@ class PlayState extends MusicBeatState {
 	// Lua shit
 	public static var instance:PlayState;
 
-	#if LUA_ALLOWED public var luaArray:Array<FunkinLua> = []; #end
+	#if LUA_ALLOWED
+	public var luaArray(get, never):Array<FunkinLua>;
+
+	inline function get_luaArray():Array<FunkinLua>
+		return scriptHost != null ? scriptHost.luaArray : null;
+	#end
 
 	// luaDebugGroup + addTextToDebug now live on MusicBeatState (every state gets
 	// the on-screen script-error overlay). PlayState still targets it at camOther
@@ -402,6 +410,11 @@ class PlayState extends MusicBeatState {
 
 		// for lua
 		instance = this;
+
+		#if (LUA_ALLOWED || HSCRIPT_ALLOWED)
+		scriptHost = new scripting.ScriptHost(this);
+		scriptHost.autoDispatch = false;
+		#end
 
 		PauseSubState.songName = null; // Reset to default
 		if (startReplay != null)
@@ -575,18 +588,9 @@ class PlayState extends MusicBeatState {
 
 		#if (LUA_ALLOWED || HSCRIPT_ALLOWED)
 		// "SCRIPTS FOLDER" SCRIPTS
-		for (folder in Mods.directoriesWithFile(Paths.getSharedPath(), 'scripts/'))
-			for (file in getScriptLoadOrder(folder)) {
-				#if LUA_ALLOWED
-				if (file.toLowerCase().endsWith('.lua'))
-					new FunkinLua(folder + file);
-				#end
-
-				#if HSCRIPT_ALLOWED
-				if (file.toLowerCase().endsWith('.hx'))
-					initHScript(folder + file);
-				#end
-			}
+		scriptHost.loadFolder('scripts/global/');
+		scriptHost.loadFolder('scripts/');
+		scriptHost.call(scripting.ScriptHooks.STATE_CHANGE, ['states.PlayState']);
 		#end
 
 		var camPos:FlxPoint = FlxPoint.get(girlfriendCameraOffset[0], girlfriendCameraOffset[1]);
@@ -3321,8 +3325,10 @@ class PlayState extends MusicBeatState {
 
 	public var receptorGroup:flixel.group.FlxGroup.FlxTypedGroup<Receptor>;
 
-	inline function notStopped(r:Dynamic):Bool
-		return r != LuaUtils.Function_Stop && r != LuaUtils.Function_StopHScript && r != LuaUtils.Function_StopAll;
+	inline function notStopped(r:Dynamic):Bool {
+		var control:Int = LuaUtils.controlOf(r);
+		return control != LuaUtils.CONTROL_STOP && control != LuaUtils.CONTROL_STOP_HSCRIPT && control != LuaUtils.CONTROL_STOP_ALL;
+	}
 
 	function buildNoteFields():Void {
 		// Reuse the compat early-decode (carrying any onCreatePost mutations) when present.
@@ -4802,24 +4808,11 @@ class PlayState extends MusicBeatState {
 			resetSubState();
 		}
 
-		#if LUA_ALLOWED
-		for (lua in luaArray) {
-			lua.call('onDestroy', []);
-			lua.stop();
+		#if (LUA_ALLOWED || HSCRIPT_ALLOWED)
+		if (scriptHost != null) {
+			scriptHost.destroy();
+			scriptHost = null;
 		}
-		luaArray = null;
-		FunkinLua.customFunctions.clear();
-		#end
-
-		#if HSCRIPT_ALLOWED
-		for (script in hscriptArray)
-			if (script != null) {
-				if (script.exists('onDestroy'))
-					script.call('onDestroy');
-				script.destroy();
-			}
-
-		hscriptArray = null;
 		#end
 		stagesFunc(function(stage:BaseStage) stage.destroy());
 
@@ -4950,262 +4943,49 @@ class PlayState extends MusicBeatState {
 		callOnScripts('onSectionHit');
 	}
 
-	#if (LUA_ALLOWED || HSCRIPT_ALLOWED)
-	/**
-	 * Returns the files in a `scripts/` folder in load order.
-	 *
-	 * If the folder contains an order file -- `_order.txt` (checked first) or
-	 * `_loadorder.txt` -- the script filenames listed in it load FIRST, in that
-	 * exact order; every other file follows in the normal filesystem order. Blank
-	 * lines and lines starting with `#` or `//` are ignored, matching is
-	 * case-insensitive, and listed names that don't exist are skipped with a warning.
-	 *
-	 * With no order file present, the filesystem order is returned unchanged, so
-	 * existing mods are unaffected.
-	 */
-	function getScriptLoadOrder(folder:String):Array<String> {
-		var files:Array<String> = FileSystem.readDirectory(folder);
-
-		var orderPath:String = folder + '_order.txt';
-		if (!FileSystem.exists(orderPath)) {
-			orderPath = folder + '_loadorder.txt';
-			if (!FileSystem.exists(orderPath))
-				return files; // no override -> keep filesystem order
-		}
-
-		// lowercase filename -> actual filename, for case-insensitive matching
-		var lookup:Map<String, String> = new Map();
-		for (file in files)
-			lookup.set(file.toLowerCase(), file);
-
-		var ordered:Array<String> = [];
-		var used:Map<String, Bool> = new Map();
-		for (rawLine in sys.io.File.getContent(orderPath).split('\n')) {
-			var line:String = rawLine.trim();
-			if (line.length == 0 || line.startsWith('#') || line.startsWith('//'))
-				continue;
-
-			var actual:String = lookup.get(line.toLowerCase());
-			if (actual == null) {
-				FlxG.log.warn('Script load order: "$line" listed in $orderPath was not found in $folder');
-				continue;
-			}
-			if (!used.exists(actual)) {
-				ordered.push(actual);
-				used.set(actual, true);
-			}
-		}
-
-		// everything not explicitly ordered keeps its filesystem position
-		for (file in files)
-			if (!used.exists(file))
-				ordered.push(file);
-
-		return ordered;
-	}
-	#end
-
 	#if LUA_ALLOWED
-	public function startLuasNamed(luaFile:String) {
-		#if MODS_ALLOWED
-		var luaToLoad:String = Paths.modFolders(luaFile);
-		if (!FileSystem.exists(luaToLoad))
-			luaToLoad = Paths.getSharedPath(luaFile);
-
-		if (FileSystem.exists(luaToLoad))
-		#elseif sys
-		var luaToLoad:String = Paths.getSharedPath(luaFile);
-		if (OpenFlAssets.exists(luaToLoad))
-		#end
-		{
-			for (script in luaArray)
-				if (script.scriptName == luaToLoad)
-					return false;
-
-			new FunkinLua(luaToLoad);
-			return true;
-		}
-		return false;
-	}
+	public function startLuasNamed(luaFile:String):Bool
+		return scriptHost != null && scriptHost.startLuasNamed(luaFile);
 	#end
 
 	#if HSCRIPT_ALLOWED
-	public function startHScriptsNamed(scriptFile:String) {
-		#if MODS_ALLOWED
-		var scriptToLoad:String = Paths.modFolders(scriptFile);
-		if (!FileSystem.exists(scriptToLoad))
-			scriptToLoad = Paths.getSharedPath(scriptFile);
-		#else
-		var scriptToLoad:String = Paths.getSharedPath(scriptFile);
-		#end
+	public function startHScriptsNamed(scriptFile:String):Bool
+		return scriptHost != null && scriptHost.startHScriptsNamed(scriptFile);
 
-		if (FileSystem.exists(scriptToLoad)) {
-			if (HScript.instances.exists(scriptToLoad))
-				return false;
-
-			initHScript(scriptToLoad);
-			return true;
-		}
-		return false;
-	}
-
-	public function initHScript(file:String) {
-		// insanity.Script reports parse/exec errors through HScript's static
-		// loggers instead of throwing, so we check `failed` rather than catch.
-		var newScript:HScript = new HScript(null, file);
-		if (newScript.failed) {
-			newScript.destroy();
-			return;
-		}
-		if (!newScript.blocked) {
-			if (newScript.exists('onCreate'))
-				newScript.call('onCreate');
-			trace('initialized hscript interp successfully: $file');
-		}
-		hscriptArray.push(newScript);
+	public function initHScript(file:String):Void {
+		if (scriptHost != null)
+			scriptHost.initHScript(file);
 	}
 	#end
 
-	// Read-only sentinels so per-call default arguments don't allocate.
-	// Anything assigned EMPTY_EXCLUSIONS / DEFAULT_EXCLUDE_VALUES must NOT
-	// be mutated -- the dispatchers below treat them as immutable.
-	private static final EMPTY_EXCLUSIONS:Array<String> = [];
-	private static final DEFAULT_EXCLUDE_VALUES:Array<Dynamic> = [LuaUtils.Function_Continue];
-
 	public function callOnScripts(funcToCall:String, args:Array<Dynamic> = null, ignoreStops = false, exclusions:Array<String> = null,
 			excludeValues:Array<Dynamic> = null):Dynamic {
-		var returnVal:Dynamic = LuaUtils.Function_Continue;
-		if (args == null)
-			args = [];
-		if (exclusions == null)
-			exclusions = EMPTY_EXCLUSIONS;
-		if (excludeValues == null)
-			excludeValues = DEFAULT_EXCLUDE_VALUES;
-
-		var result:Dynamic = callOnLuas(funcToCall, args, ignoreStops, exclusions, excludeValues);
-		if (result == null || excludeValues.contains(result))
-			result = callOnHScript(funcToCall, args, ignoreStops, exclusions, excludeValues);
-		return result;
+		return scriptHost != null ? scriptHost.call(funcToCall, args, ignoreStops, exclusions, excludeValues) : LuaUtils.Function_Continue;
 	}
 
 	public function callOnLuas(funcToCall:String, args:Array<Dynamic> = null, ignoreStops = false, exclusions:Array<String> = null,
 			excludeValues:Array<Dynamic> = null):Dynamic {
-		var returnVal:Dynamic = LuaUtils.Function_Continue;
-		#if LUA_ALLOWED
-		if (args == null)
-			args = [];
-		if (exclusions == null)
-			exclusions = EMPTY_EXCLUSIONS;
-		if (excludeValues == null)
-			excludeValues = DEFAULT_EXCLUDE_VALUES;
-
-		var arr:Array<FunkinLua> = null;
-		for (script in luaArray) {
-			if (script.closed) {
-				if (arr == null) arr = [];
-				arr.push(script);
-				continue;
-			}
-
-			if (exclusions.contains(script.scriptName))
-				continue;
-
-			var myValue:Dynamic = script.call(funcToCall, args);
-			if ((myValue == LuaUtils.Function_StopLua || myValue == LuaUtils.Function_StopAll)
-				&& !excludeValues.contains(myValue)
-				&& !ignoreStops) {
-				returnVal = myValue;
-				break;
-			}
-
-			if (myValue != null && !excludeValues.contains(myValue))
-				returnVal = myValue;
-
-			if (script.closed) {
-				if (arr == null) arr = [];
-				arr.push(script);
-			}
-		}
-
-		if (arr != null)
-			for (script in arr)
-				luaArray.remove(script);
-		#end
-		return returnVal;
+		return scriptHost != null ? scriptHost.callLua(funcToCall, args, ignoreStops, exclusions, excludeValues) : LuaUtils.Function_Continue;
 	}
 
 	public function callOnHScript(funcToCall:String, args:Array<Dynamic> = null, ?ignoreStops:Bool = false, exclusions:Array<String> = null,
 			excludeValues:Array<Dynamic> = null):Dynamic {
-		var returnVal:Dynamic = LuaUtils.Function_Continue;
-
-		#if HSCRIPT_ALLOWED
-		if (exclusions == null)
-			exclusions = EMPTY_EXCLUSIONS;
-		if (excludeValues == null)
-			excludeValues = DEFAULT_EXCLUDE_VALUES;
-		else if (!excludeValues.contains(LuaUtils.Function_Continue))
-			excludeValues.push(LuaUtils.Function_Continue);
-
-		var len:Int = hscriptArray.length;
-		if (len < 1)
-			return returnVal;
-
-		for (script in hscriptArray) {
-			@:privateAccess
-			if (script == null || !script.exists(funcToCall) || exclusions.contains(script.origin))
-				continue;
-
-			var callValue = script.call(funcToCall, args);
-			if (callValue != null) {
-				var myValue:Dynamic = callValue.returnValue;
-
-				if ((myValue == LuaUtils.Function_StopHScript || myValue == LuaUtils.Function_StopAll)
-					&& !excludeValues.contains(myValue)
-					&& !ignoreStops) {
-					returnVal = myValue;
-					break;
-				}
-
-				if (myValue != null && !excludeValues.contains(myValue))
-					returnVal = myValue;
-			}
-		}
-		#end
-
-		return returnVal;
+		return scriptHost != null ? scriptHost.callHScript(funcToCall, args, ignoreStops, exclusions, excludeValues) : LuaUtils.Function_Continue;
 	}
 
 	public function setOnScripts(variable:String, arg:Dynamic, exclusions:Array<String> = null) {
-		if (exclusions == null)
-			exclusions = EMPTY_EXCLUSIONS;
-		setOnLuas(variable, arg, exclusions);
-		setOnHScript(variable, arg, exclusions);
+		if (scriptHost != null)
+			scriptHost.set(variable, arg, exclusions);
 	}
 
 	public function setOnLuas(variable:String, arg:Dynamic, exclusions:Array<String> = null) {
-		#if LUA_ALLOWED
-		if (exclusions == null)
-			exclusions = EMPTY_EXCLUSIONS;
-		for (script in luaArray) {
-			if (exclusions.contains(script.scriptName))
-				continue;
-
-			script.set(variable, arg);
-		}
-		#end
+		if (scriptHost != null)
+			scriptHost.setLua(variable, arg, exclusions);
 	}
 
 	public function setOnHScript(variable:String, arg:Dynamic, exclusions:Array<String> = null) {
-		#if HSCRIPT_ALLOWED
-		if (exclusions == null)
-			exclusions = EMPTY_EXCLUSIONS;
-		for (script in hscriptArray) {
-			if (exclusions.contains(script.origin))
-				continue;
-
-			script.set(variable, arg);
-		}
-		#end
+		if (scriptHost != null)
+			scriptHost.setHScript(variable, arg, exclusions);
 	}
 
 	public var ratingName:String = '?';

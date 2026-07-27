@@ -42,6 +42,16 @@ class FunkinLua {
 	public var modFolder:String = null;
 	public var closed:Bool = false;
 
+	/**
+		Hook name -> whether this script defines a function by that name.
+
+		Without it every script paid a `getglobal` + type check + pop for every hook it does not
+		implement, on every dispatch. `onUpdate` and `onUpdatePost` alone made that `2 x scripts x 60`
+		wasted lookups a second. A `false` here is only trusted until the script defines the function
+		later (see `defineHook`), which is what `addCallback`-style runtime definitions do.
+	**/
+	var hookCache:Map<String, Bool> = new Map();
+
 	// "Real Lua" mode: when true, the legacy PsychLua callback API is NOT
 	// registered and scripts rely solely on direct object access (game.boyfriend.x,
 	// import('pkg.Class'), ...). Resolved per-script > per-mod > global. The proxy
@@ -85,7 +95,7 @@ class FunkinLua {
 
 	public function new(scriptName:String) {
 		this.scriptName = scriptName.trim();
-		var game:PlayState = PlayState.instance;
+		var host:scripting.ScriptHost = scripting.ScriptHost.current;
 
 		var myFolder:Array<String> = this.scriptName.split('/');
 		#if MODS_ALLOWED
@@ -98,8 +108,8 @@ class FunkinLua {
 		if (this.modFolder != null && backend.ModSecurity.isBlocked(this.modFolder)) {
 			closed = true;
 			lua = null;
-			if (game != null && !game.luaArray.contains(this))
-				game.luaArray.push(this); // keep array consistent so callOnLuas iteration is harmless
+			if (host != null && host.luaArray != null && !host.luaArray.contains(this))
+				host.luaArray.push(this); // keep array consistent so callOnLuas iteration is harmless
 			trace('FunkinLua: blocked ${this.scriptName} -- mod "${this.modFolder}" not trusted');
 			return;
 		}
@@ -119,8 +129,8 @@ class FunkinLua {
 
 		// LuaL.dostring(lua, CLENSE);
 
-		if (game != null)
-			game.luaArray.push(this);
+		if (host != null && host.luaArray != null)
+			host.luaArray.push(this);
 
 		// Lua shit
 		set('Function_StopLua', LuaUtils.Function_StopLua);
@@ -135,18 +145,22 @@ class FunkinLua {
 
 		// Song/Week shit
 		set('curBpm', Conductor.bpm);
-		set('bpm', PlayState.SONG.bpm);
-		set('scrollSpeed', PlayState.SONG.speed);
 		set('crochet', Conductor.crochet);
 		set('stepCrochet', Conductor.stepCrochet);
-		set('songLength', FlxG.sound.music.length);
-		set('songName', PlayState.SONG.song); // display name (free-form)
-		set('songPath', PlayState.SONG.songKey()); // song package folder
+		set('songLength', FlxG.sound.music != null ? FlxG.sound.music.length : 0);
 		set('loadedSongName', Song.loadedSongName);
 		set('loadedSongPath', Paths.formatToSongPath(Song.loadedSongName));
 		set('chartPath', Song.chartPath);
 		set('startedCountdown', false);
-		set('curStage', PlayState.SONG.stage);
+
+		if (PlayState.SONG != null) {
+			set('bpm', PlayState.SONG.bpm);
+			set('scrollSpeed', PlayState.SONG.speed);
+			set('songName', PlayState.SONG.song); // display name (free-form)
+			set('songPath', PlayState.SONG.songKey()); // song package folder
+			set('curStage', PlayState.SONG.stage);
+			set('hasVocals', PlayState.SONG.needsVoices);
+		}
 
 		set('isStoryMode', PlayState.isStoryMode);
 		set('difficulty', PlayState.storyDifficulty);
@@ -157,14 +171,14 @@ class FunkinLua {
 		set('weekRaw', PlayState.storyWeek);
 		set('week', WeekData.weeksList[PlayState.storyWeek]);
 		set('seenCutscene', PlayState.seenCutscene);
-		set('hasVocals', PlayState.SONG.needsVoices);
 
 		// Screen stuff
 		set('screenWidth', FlxG.width);
 		set('screenHeight', FlxG.height);
 
 		// PlayState-only variables
-		if (game != null)
+		var game:PlayState = (host != null && (host.owner is PlayState)) ? cast host.owner : null;
+		if (game != null && PlayState.SONG != null)
 			@:privateAccess
 		{
 			var curSection:SwagSection = PlayState.SONG.notes[game.curSection];
@@ -291,7 +305,7 @@ class FunkinLua {
 		//
 		Lua_helper.add_callback(lua, "getRunningScripts", function() {
 			var runningScripts:Array<String> = [];
-			for (script in game.luaArray)
+			for (script in host.luaArray)
 				runningScripts.push(script.scriptName);
 
 			return runningScripts;
@@ -302,21 +316,21 @@ class FunkinLua {
 				exclusions = [];
 			if (ignoreSelf && !exclusions.contains(scriptName))
 				exclusions.push(scriptName);
-			game.setOnScripts(varName, arg, exclusions);
+			host.set(varName, arg, exclusions);
 		});
 		addLocalCallback("setOnHScript", function(varName:String, arg:Dynamic, ?ignoreSelf:Bool = false, ?exclusions:Array<String> = null) {
 			if (exclusions == null)
 				exclusions = [];
 			if (ignoreSelf && !exclusions.contains(scriptName))
 				exclusions.push(scriptName);
-			game.setOnHScript(varName, arg, exclusions);
+			host.setHScript(varName, arg, exclusions);
 		});
 		addLocalCallback("setOnLuas", function(varName:String, arg:Dynamic, ?ignoreSelf:Bool = false, ?exclusions:Array<String> = null) {
 			if (exclusions == null)
 				exclusions = [];
 			if (ignoreSelf && !exclusions.contains(scriptName))
 				exclusions.push(scriptName);
-			game.setOnLuas(varName, arg, exclusions);
+			host.setLua(varName, arg, exclusions);
 		});
 
 		addLocalCallback("callOnScripts",
@@ -326,7 +340,7 @@ class FunkinLua {
 					excludeScripts = [];
 				if (ignoreSelf && !excludeScripts.contains(scriptName))
 					excludeScripts.push(scriptName);
-				return game.callOnScripts(funcName, args, ignoreStops, excludeScripts, excludeValues);
+				return host.call(funcName, args, ignoreStops, excludeScripts, excludeValues);
 			});
 		addLocalCallback("callOnLuas",
 			function(funcName:String, ?args:Array<Dynamic> = null, ?ignoreStops = false, ?ignoreSelf:Bool = true, ?excludeScripts:Array<String> = null,
@@ -335,7 +349,7 @@ class FunkinLua {
 					excludeScripts = [];
 				if (ignoreSelf && !excludeScripts.contains(scriptName))
 					excludeScripts.push(scriptName);
-				return game.callOnLuas(funcName, args, ignoreStops, excludeScripts, excludeValues);
+				return host.callLua(funcName, args, ignoreStops, excludeScripts, excludeValues);
 			});
 		addLocalCallback("callOnHScript",
 			function(funcName:String, ?args:Array<Dynamic> = null, ?ignoreStops = false, ?ignoreSelf:Bool = true, ?excludeScripts:Array<String> = null,
@@ -344,7 +358,7 @@ class FunkinLua {
 					excludeScripts = [];
 				if (ignoreSelf && !excludeScripts.contains(scriptName))
 					excludeScripts.push(scriptName);
-				return game.callOnHScript(funcName, args, ignoreStops, excludeScripts, excludeValues);
+				return host.callHScript(funcName, args, ignoreStops, excludeScripts, excludeValues);
 			});
 
 		Lua_helper.add_callback(lua, "callScript", function(luaFile:String, funcName:String, ?args:Array<Dynamic> = null) {
@@ -354,7 +368,7 @@ class FunkinLua {
 
 			var luaPath:String = findScript(luaFile);
 			if (luaPath != null)
-				for (luaInstance in game.luaArray)
+				for (luaInstance in host.luaArray)
 					if (luaInstance.scriptName == luaPath)
 						return luaInstance.call(funcName, args);
 
@@ -363,7 +377,7 @@ class FunkinLua {
 		Lua_helper.add_callback(lua, "isRunning", function(scriptFile:String) {
 			var luaPath:String = findScript(scriptFile);
 			if (luaPath != null) {
-				for (luaInstance in game.luaArray)
+				for (luaInstance in host.luaArray)
 					if (luaInstance.scriptName == luaPath)
 						return true;
 			}
@@ -371,7 +385,7 @@ class FunkinLua {
 			#if HSCRIPT_ALLOWED
 			var hscriptPath:String = findScript(scriptFile, '.hx');
 			if (hscriptPath != null) {
-				for (hscriptInstance in game.hscriptArray)
+				for (hscriptInstance in host.hscriptArray)
 					if (hscriptInstance.origin == hscriptPath)
 						return true;
 			}
@@ -427,7 +441,7 @@ class FunkinLua {
 			var luaPath:String = findScript(luaFile);
 			if (luaPath != null) {
 				if (!ignoreAlreadyRunning)
-					for (luaInstance in game.luaArray)
+					for (luaInstance in host.luaArray)
 						if (luaInstance.scriptName == luaPath) {
 							luaTrace('addLuaScript: The script "' + luaPath + '" is already running!');
 							return;
@@ -443,13 +457,13 @@ class FunkinLua {
 			var scriptPath:String = findScript(scriptFile, '.hx');
 			if (scriptPath != null) {
 				if (!ignoreAlreadyRunning)
-					for (script in game.hscriptArray)
+					for (script in host.hscriptArray)
 						if (script.origin == scriptPath) {
 							luaTrace('addHScript: The script "' + scriptPath + '" is already running!');
 							return;
 						}
 
-				PlayState.instance.initHScript(scriptPath);
+				host.initHScript(scriptPath);
 				return;
 			}
 			luaTrace("addHScript: Script doesn't exist!", false, false, FlxColor.RED);
@@ -461,7 +475,7 @@ class FunkinLua {
 			var luaPath:String = findScript(luaFile);
 			if (luaPath != null) {
 				var foundAny:Bool = false;
-				for (luaInstance in game.luaArray) {
+				for (luaInstance in host.luaArray) {
 					if (luaInstance.scriptName == luaPath) {
 						trace('Closing lua script $luaPath');
 						luaInstance.stop();
@@ -480,7 +494,7 @@ class FunkinLua {
 			var scriptPath:String = findScript(scriptFile, '.hx');
 			if (scriptPath != null) {
 				var foundAny:Bool = false;
-				for (script in game.hscriptArray) {
+				for (script in host.hscriptArray) {
 					if (script.origin == scriptPath) {
 						trace('Closing hscript $scriptPath');
 						script.destroy();
@@ -1697,26 +1711,41 @@ class FunkinLua {
 
 	public static var lastCalledScript:FunkinLua = null;
 
+	/**
+		Forgets what is cached about `func`, so the next dispatch looks the global up again.
+
+		Only needed by a script that defines a hook from inside another function, long after load;
+		a hook declared normally at the top level is already there the first time it is looked for.
+	**/
+	public function defineHook(func:String):Void {
+		hookCache.remove(func);
+	}
+
 	public function call(func:String, args:Array<Dynamic>):Dynamic {
-		if (closed)
+		if (closed || lua == null)
+			return LuaUtils.Function_Continue;
+
+		var known:Null<Bool> = hookCache.get(func);
+		if (known != null && !known)
 			return LuaUtils.Function_Continue;
 
 		lastCalledFunction = func;
 		lastCalledScript = this;
 		try {
-			if (lua == null)
-				return LuaUtils.Function_Continue;
-
 			Lua.getglobal(lua, func);
 			var type:Int = Lua.type(lua, -1);
 
 			if (type != Lua.TFUNCTION) {
-				if (type > Lua.TNIL)
-					luaTrace("ERROR (" + func + "): attempt to call a " + LuaUtils.typeToString(type) + " value", false, false, FlxColor.RED);
+				if (known == null && type > Lua.TNIL)
+					luaTrace('($func) attempt to call a ' + LuaUtils.typeToString(type) + ' value', false, false, FlxColor.RED);
 
+				hookCache.set(func, false);
 				Lua.pop(lua, 1);
 				return LuaUtils.Function_Continue;
 			}
+
+			if (known == null)
+				hookCache.set(func, true);
 
 			for (arg in args)
 				Convert.toLua(lua, arg);
@@ -1748,6 +1777,8 @@ class FunkinLua {
 		if (lua == null) {
 			return;
 		}
+
+		hookCache.remove(variable);
 
 		// Push Haxe objects as live proxies (game, characters, ...) instead of nil.
 		LuaProxy.pushHaxe(lua, data);

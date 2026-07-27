@@ -316,9 +316,11 @@ class HScript {
 		// not very tested but should work
 		#if LUA_ALLOWED
 		set('createGlobalCallback', function(name:String, func:Dynamic) {
-			for (script in PlayState.instance.luaArray)
-				if (script != null && script.lua != null && !script.closed)
-					Lua_helper.add_callback(script.lua, name, func);
+			var host:scripting.ScriptHost = scripting.ScriptHost.current;
+			if (host != null && host.luaArray != null)
+				for (script in host.luaArray)
+					if (script != null && script.lua != null && !script.closed)
+						Lua_helper.add_callback(script.lua, name, func);
 
 			FunkinLua.customFunctions.set(name, func);
 		});
@@ -364,7 +366,7 @@ class HScript {
 			function(codeToRun:String, ?varsToBring:Any = null, ?funcToRun:String = null, ?funcArgs:Array<Dynamic> = null):Dynamic {
 				initHaxeModuleCode(funk, codeToRun, varsToBring);
 				if (funk.hscript != null) {
-					final retVal:HScriptCall = funk.hscript.call(funcToRun, funcArgs);
+					final retVal:HScriptCall = funk.hscript.callDetailed(funcToRun, funcArgs);
 					if (retVal != null) {
 						return (LuaUtils.isLuaSupported(retVal.returnValue)) ? retVal.returnValue : null;
 					} else if (funk.hscript.returnValue != null) {
@@ -376,7 +378,7 @@ class HScript {
 
 		funk.addLocalCallback("runHaxeFunction", function(funcToRun:String, ?funcArgs:Array<Dynamic> = null) {
 			if (funk.hscript != null) {
-				final retVal:HScriptCall = funk.hscript.call(funcToRun, funcArgs);
+				final retVal:HScriptCall = funk.hscript.callDetailed(funcToRun, funcArgs);
 				if (retVal != null) {
 					return (LuaUtils.isLuaSupported(retVal.returnValue)) ? retVal.returnValue : null;
 				}
@@ -426,23 +428,48 @@ class HScript {
 	}
 	#end
 
-	public function call(funcToRun:String, ?args:Array<Dynamic>):HScriptCall {
+	/**
+		Runs `funcToRun` if this script defines it, and returns whatever it returned.
+
+		Quiet about a hook the script simply does not implement -- that is the normal case for
+		dispatch, where most scripts implement a handful of the engine's hooks. Real runtime
+		failures inside the function are still reported. Returns `null` for "did not run", which
+		dispatch treats the same as a function returning nothing.
+	**/
+	public function call(funcToRun:String, ?args:Array<Dynamic>):Dynamic {
 		if (funcToRun == null || script == null)
 			return null;
 
-		if (!exists(funcToRun)) {
+		var func:Dynamic = script.variables.get(funcToRun);
+		if (func == null || !Reflect.isFunction(func))
+			return null;
+
+		try {
+			return Reflect.callMethod(null, func, args ?? []);
+		} catch (e:haxe.Exception) {
+			HScript.error('${e.message}', errorPos(funcToRun));
+		}
+		return null;
+	}
+
+	/**
+		`call`, plus the resolved function and its name, for callers that want them.
+
+		Unlike `call` this reports a missing function, because its callers (the `runHaxeFunction`
+		Lua bridge) name one explicitly rather than probing for an optional hook.
+	**/
+	public function callDetailed(funcToRun:String, ?args:Array<Dynamic>):HScriptCall {
+		if (funcToRun == null || script == null)
+			return null;
+
+		var func:Dynamic = script.variables.get(funcToRun);
+		if (func == null || !Reflect.isFunction(func)) {
 			HScript.error('No function named: $funcToRun', errorPos());
 			return null;
 		}
 
 		try {
-			var func:Dynamic = script.variables.get(funcToRun); // function signature
-			if (!Reflect.isFunction(func)) {
-				// `exists()` is true for any variable; calling a non-function
-				// would throw a generic exception, so bail quietly instead.
-				return null;
-			}
-			final ret = Reflect.callMethod(null, func, args ?? []);
+			final ret:Dynamic = Reflect.callMethod(null, func, args ?? []);
 			return {funName: funcToRun, signature: func, returnValue: ret};
 		} catch (e:haxe.Exception) {
 			HScript.error('${e.message}', errorPos(funcToRun));

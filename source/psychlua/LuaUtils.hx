@@ -24,6 +24,64 @@ class LuaUtils {
 	public static final Function_StopHScript:String = "##PSYCHLUA_FUNCTIONSTOPHSCRIPT";
 	public static final Function_StopAll:String = "##PSYCHLUA_FUNCTIONSTOPALL";
 
+	/** An ordinary return value. **/
+	public static inline var CONTROL_NONE:Int = 0;
+
+	/** `Function_Continue`: nothing to say. Never becomes a hook's result. **/
+	public static inline var CONTROL_CONTINUE:Int = 1;
+
+	/**
+		`Function_Stop`: cancel the engine's default action, and skip the OTHER language's pass.
+
+		Deliberately not the same as `CONTROL_STOP_ALL`: the remaining scripts in the language that
+		returned it still get the hook. `return Function_Stop` is the standard way to cancel a note
+		hit, and a mod that cancels one must not stop a sibling script from counting it.
+	**/
+	public static inline var CONTROL_STOP:Int = 2;
+
+	/** `Function_StopLua`: stop the Lua pass. The HScript pass still runs. **/
+	public static inline var CONTROL_STOP_LUA:Int = 3;
+
+	/** `Function_StopHScript`: stop the HScript pass. The Lua pass still runs. **/
+	public static inline var CONTROL_STOP_HSCRIPT:Int = 4;
+
+	/** `Function_StopAll`: stop both passes. **/
+	public static inline var CONTROL_STOP_ALL:Int = 5;
+
+	/**
+		Classifies a hook's return value, so dispatch compares Ints instead of running the five
+		string comparisons per script per hook -- `onUpdate` and `onUpdatePost` alone do that for
+		every script sixty times a second.
+
+		The script-facing constants stay STRINGS deliberately. Making them numbers would put a
+		`Dynamic` Int-vs-Float comparison on the Lua return boundary, a coercion this codebase has
+		already been bitten by on hxcpp, and the saving is entirely internal to the dispatcher.
+
+		@param value Whatever the script handed back.
+		@return One of the `CONTROL_*` codes; `CONTROL_NONE` for an ordinary value.
+	**/
+	public static function controlOf(value:Dynamic):Int {
+		if (value == null || !(value is String))
+			return CONTROL_NONE;
+
+		var text:String = cast value;
+		if (text.length < 2 || text.charCodeAt(0) != 35)
+			return CONTROL_NONE;
+
+		if (text == Function_Continue)
+			return CONTROL_CONTINUE;
+		if (text == Function_Stop)
+			return CONTROL_STOP;
+		if (text == Function_StopLua)
+			return CONTROL_STOP_LUA;
+		if (text == Function_StopHScript)
+			return CONTROL_STOP_HSCRIPT;
+		if (text == Function_StopAll)
+			return CONTROL_STOP_ALL;
+
+		return CONTROL_NONE;
+	}
+
 	/**
 		Coerces a script-supplied colour into an `FlxColor`. Accepts an int/`FlxColor` (returned as-is),
 		or a string -- a hex like `"FF0000"`/`"#FF0000"` or a named colour (`"red"`), via `FlxColor.fromString`.

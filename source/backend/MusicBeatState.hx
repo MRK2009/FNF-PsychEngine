@@ -54,6 +54,32 @@ class MusicBeatState extends FlxState {
 	public static function getVariables()
 		return getState().variables;
 
+	#if (LUA_ALLOWED || HSCRIPT_ALLOWED)
+	/**
+		The scripts running in this state.
+
+		Every state can have them now, not only `PlayState`: a mod that wants to touch a menu no
+		longer has to script the whole state. `PlayState` builds its own host early in `create()`
+		and drives the lifecycle hooks itself; every other state gets one here.
+	**/
+	public var scriptHost:scripting.ScriptHost;
+
+	/**
+		Loads `scripts/global/` and starts this state's scripts.
+
+		`scripts/` stays gameplay-only, exactly as it was -- the loader is not recursive, so a
+		`global/` directory inside it was never read and nothing existing changes meaning.
+	**/
+	function initScriptHost():Void {
+		if (scriptHost != null)
+			return;
+
+		scriptHost = new scripting.ScriptHost(this);
+		scriptHost.loadFolder('scripts/global/');
+		scriptHost.call(scripting.ScriptHooks.STATE_CHANGE, [Type.getClassName(Type.getClass(this))]);
+	}
+	#end
+
 	// The mod folder a scripted state was loaded from (null for built-in states).
 	// Set by scripting.ScriptedStates; used to auto-scope asset/script lookups
 	// (see the preStateCreate hook in Main) so scripts never touch Mods.* manually.
@@ -104,6 +130,10 @@ class MusicBeatState extends FlxState {
 		}
 		FlxTransitionableState.skipNextTransOut = false;
 		timePassedOnState = 0;
+
+		#if (LUA_ALLOWED || HSCRIPT_ALLOWED)
+		initScriptHost();
+		#end
 	}
 
 	public function initPsychCamera():PsychCamera {
@@ -314,7 +344,17 @@ class MusicBeatState extends FlxState {
 			stage.update(elapsed);
 		}
 
+		#if (LUA_ALLOWED || HSCRIPT_ALLOWED)
+		if (scriptHost != null && scriptHost.autoDispatch)
+			scriptHost.call(scripting.ScriptHooks.UPDATE, [elapsed]);
+		#end
+
 		super.update(elapsed);
+
+		#if (LUA_ALLOWED || HSCRIPT_ALLOWED)
+		if (scriptHost != null && scriptHost.autoDispatch)
+			scriptHost.call(scripting.ScriptHooks.UPDATE_POST, [elapsed]);
+		#end
 	}
 
 	private function updateSection():Void {
@@ -435,6 +475,16 @@ class MusicBeatState extends FlxState {
 		return cast(FlxG.state, MusicBeatState);
 	}
 
+	override function destroy():Void {
+		#if (LUA_ALLOWED || HSCRIPT_ALLOWED)
+		if (scriptHost != null) {
+			scriptHost.destroy();
+			scriptHost = null;
+		}
+		#end
+		super.destroy();
+	}
+
 	public function stepHit():Void {
 		// inline stagesFunc -- per-step hot path
 		for (stage in stages) {
@@ -443,6 +493,11 @@ class MusicBeatState extends FlxState {
 			stage.curDecStep = curDecStep;
 			stage.stepHit();
 		}
+
+		#if (LUA_ALLOWED || HSCRIPT_ALLOWED)
+		if (scriptHost != null && scriptHost.autoDispatch)
+			scriptHost.call(scripting.ScriptHooks.STEP_HIT);
+		#end
 
 		if (stepsPerBeatCur > 0 && (curStep - sectionStartStep) % stepsPerBeatCur == 0)
 			beatHit();
@@ -459,6 +514,11 @@ class MusicBeatState extends FlxState {
 			stage.curDecBeat = curDecBeat;
 			stage.beatHit();
 		}
+
+		#if (LUA_ALLOWED || HSCRIPT_ALLOWED)
+		if (scriptHost != null && scriptHost.autoDispatch)
+			scriptHost.call(scripting.ScriptHooks.BEAT_HIT);
+		#end
 	}
 
 	public function sectionHit():Void {
