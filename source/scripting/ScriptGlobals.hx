@@ -183,8 +183,7 @@ class ScriptGlobals {
 			return false;
 		});
 		set('debugPrint', function(text:String, ?color:flixel.util.FlxColor):Void {
-			if (states.PlayState.instance != null)
-				states.PlayState.instance.addTextToDebug(text, color == null ? flixel.util.FlxColor.WHITE : color);
+			ScriptError.show(text, color == null ? flixel.util.FlxColor.WHITE : color);
 		});
 
 		set('switchToState', function(name:String, ?args:Array<Dynamic>):Bool return ScriptedStates.switchToState(name, args));
@@ -202,7 +201,7 @@ class ScriptGlobals {
 		set('getModSetting', function(saveTag:String, ?modName:String):Dynamic {
 			if (modName == null) {
 				if (mod == null) {
-					trace('getModSetting: Argument #2 is null and script is not inside a packed Mod folder!');
+					ScriptError.error('Script', 'getModSetting: Argument #2 is null and script is not inside a packed Mod folder!');
 					return null;
 				}
 				modName = mod;

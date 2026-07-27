@@ -484,20 +484,7 @@ class HScript {
 		if (newPos.showLine == true)
 			msgInfo += '${newPos.lineNumber}:';
 		msgInfo += ' $x';
-		trace('$level: $msgInfo');
-		#if CRASH_HANDLER
-		// Feed hard script errors (HScript + hscript-insanity scripted states, which all funnel
-		// through HScript.error) into the crash handler so they're captured as context if a real
-		// crash follows. Warnings are skipped to keep the ring buffer meaningful.
-		if (level == 'ERROR' || level == 'FATAL')
-			backend.CrashHandler.reportScriptError('HScript', msgInfo);
-		#end
-		// Show on-screen in WHATEVER state is active (scripted menus included),
-		// not just PlayState -- every MusicBeatState now has addTextToDebug.
-		if (FlxG.state != null && (FlxG.state is backend.MusicBeatState))
-			cast(FlxG.state, backend.MusicBeatState).addTextToDebug('$level: $msgInfo', color);
-		else if (PlayState.instance != null)
-			PlayState.instance.addTextToDebug('$level: $msgInfo', color);
+		scripting.ScriptError.report('HScript', level, msgInfo, color);
 	}
 }
 

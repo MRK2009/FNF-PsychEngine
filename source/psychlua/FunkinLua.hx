@@ -283,7 +283,7 @@ class FunkinLua {
 		// chase. `Std.string` because the binding takes Dynamic: debugPrint(true) / debugPrint(12)
 		// used to hand a non-String straight to a String parameter.
 		Lua_helper.add_callback(lua, "debugPrint", function(text:Dynamic = '', color:String = 'WHITE') {
-			PlayState.instance.addTextToDebug(Std.string(text), CoolUtil.colorFromString(color));
+			scripting.ScriptError.show(Std.string(text), CoolUtil.colorFromString(color));
 		});
 
 		// ── Legacy PsychLua callback API (skipped entirely in raw mode) ──────
@@ -1724,7 +1724,7 @@ class FunkinLua {
 			// Checks if it's not successful, then show a error.
 			if (status != Lua.OK) {
 				var error:String = getErrorMessage(status);
-				luaTrace("ERROR (" + func + "): " + error, false, false, FlxColor.RED);
+				luaTrace('($func) $error', false, false, FlxColor.RED);
 				return LuaUtils.Function_Continue;
 			}
 
@@ -1738,7 +1738,7 @@ class FunkinLua {
 				stop();
 			return result;
 		} catch (e:Dynamic) {
-			trace(e);
+			luaTrace('($func) $e', false, false, FlxColor.RED);
 		}
 		return LuaUtils.Function_Continue;
 	}
@@ -1863,13 +1863,23 @@ class FunkinLua {
 		return null;
 	}
 
+	/**
+		A red trace is a script failure, so it is always reported -- to the console, the log file and
+		the overlay -- rather than being hidden behind the script's own `luaDebugMode`. That gate
+		meant a Lua runtime error was invisible unless the author had already suspected one.
+		Everything else keeps the opt-in gate it always had.
+	**/
 	public static function luaTrace(text:String, ignoreCheck:Bool = false, deprecated:Bool = false, color:FlxColor = FlxColor.WHITE) {
-		if (ignoreCheck || getBool('luaDebugMode')) {
-			if (deprecated && !getBool('luaDeprecatedWarnings')) {
-				return;
-			}
-			PlayState.instance.addTextToDebug(text, color);
+		if (color == FlxColor.RED) {
+			scripting.ScriptError.report('Lua', 'ERROR', text, color);
+			return;
 		}
+
+		if (deprecated && !getBool('luaDeprecatedWarnings'))
+			return;
+
+		if (ignoreCheck || getBool('luaDebugMode'))
+			scripting.ScriptError.show(text, color);
 	}
 
 	public static function getBool(variable:String) {
