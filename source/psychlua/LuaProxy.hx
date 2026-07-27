@@ -379,13 +379,16 @@ class LuaProxy {
 			return 1;
 		}
 		try {
-			var f:Dynamic = Reflect.getProperty(obj, key);
+			// PropertyPath is the shared answer to "what is obj.key" -- the classic getProperty
+			// family resolves through it too, so the two APIs cannot drift apart again.
+			var f:Dynamic = PropertyPath.member(obj, key);
 			if (Reflect.isFunction(f)) {
 				Lua.pushvalue(L, 1);
 				Lua.pushstring(L, key);
 				Lua.pushcclosure(L, cpp.Callable.fromStaticFunction(methodCall), 2);
 				return 1;
 			}
+			// Still consulted for a non-string key, which PropertyPath cannot express.
 			if (f == null)
 				f = mapLookup(L, obj);
 			pushHaxe(L, f, false);
@@ -432,7 +435,7 @@ class LuaProxy {
 				Lua.pushnil(L);
 				return 1;
 			}
-			var v:Dynamic = isClass ? Reflect.field(obj, key) : Reflect.getProperty(obj, key);
+			var v:Dynamic = isClass ? Reflect.field(obj, key) : PropertyPath.member(obj, key);
 			if (v == null && !isClass)
 				v = mapLookup(L, obj);
 			pushHaxe(L, v);
@@ -453,7 +456,7 @@ class LuaProxy {
 				return cacheAndReturnClosure(L);
 			}
 
-			var f:Dynamic = isClass ? Reflect.field(obj, key) : Reflect.getProperty(obj, key);
+			var f:Dynamic = isClass ? Reflect.field(obj, key) : PropertyPath.member(obj, key);
 			if (Reflect.isFunction(f)) {
 				var fid:Int = st.nextFunc++;
 				st.funcs.set(fid, f);
@@ -534,7 +537,7 @@ class LuaProxy {
 		if (key == null)
 			return 0;
 		try {
-			Reflect.setProperty(obj, key, unwrap(L, 3));
+			PropertyPath.setMember(obj, key, unwrap(L, 3));
 		} catch (e:Dynamic) {
 			#if CRASH_HANDLER backend.CrashHandler.reportScriptError('LuaProxy', 'set "$key": ${Std.string(e)}'); #end
 			LuaL.error(L, '%s', 'set "$key": ${Std.string(e)}');

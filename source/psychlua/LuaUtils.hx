@@ -116,91 +116,19 @@ class LuaUtils {
 		} : null;
 	}
 
-	public static function setVarInArray(instance:Dynamic, variable:String, value:Dynamic, allowMaps:Bool = false):Any {
-		var splitProps:Array<String> = variable.split('[');
-		if (splitProps.length > 1) {
-			var target:Dynamic = null;
-			if (MusicBeatState.getVariables().exists(splitProps[0])) {
-				var retVal:Dynamic = MusicBeatState.getVariables().get(splitProps[0]);
-				if (retVal != null)
-					target = retVal;
-			} else {
-				target = Reflect.getProperty(instance, splitProps[0]);
-				// plain arrays (playerReceptors etc.) have no `members`; treat `x.members[i]`
-				// like indexing the array itself so group-style script paths keep working
-				if (target == null && splitProps[0] == 'members' && (instance is Array))
-					target = instance;
-			}
+	/**
+		Writes one member of `instance`, which may carry `[...]` indexes.
 
-			for (i in 1...splitProps.length) {
-				var raw:String = splitProps[i].substr(0, splitProps[i].length - 1);
-				// Convert numeric brackets to Int so Array indexing works; the
-				// previous code used the String key directly, which on Haxe
-				// arrays goes through Reflect.getProperty and silently returns
-				// the wrong thing.
-				var idx:Null<Int> = Std.parseInt(raw);
-				var key:Dynamic = (idx != null && Std.isOfType(target, Array)) ? (idx : Dynamic) : raw;
-				if (i >= splitProps.length - 1) // Last array
-					target[key] = value;
-				else // Anything else
-					target = target[key];
-			}
-			return target;
-		}
+		`allowMaps` no longer gates map access -- `PropertyPath` treats map content as the fallback
+		for a key that is not a real field, the same rule the direct proxy uses. It stays in the
+		signature so no script or call site changes.
+	**/
+	public static inline function setVarInArray(instance:Dynamic, variable:String, value:Dynamic, allowMaps:Bool = false):Any
+		return PropertyPath.set(instance, variable, value, allowMaps);
 
-		if (allowMaps && isMap(instance)) {
-			// trace(instance);
-			instance.set(variable, value);
-			return value;
-		}
-
-		if (instance is MusicBeatState && MusicBeatState.getVariables().exists(variable)) {
-			MusicBeatState.getVariables().set(variable, value);
-			return value;
-		}
-		Reflect.setProperty(instance, variable, value);
-		return value;
-	}
-
-	public static function getVarInArray(instance:Dynamic, variable:String, allowMaps:Bool = false):Any {
-		var splitProps:Array<String> = variable.split('[');
-		if (splitProps.length > 1) {
-			var target:Dynamic = null;
-			if (MusicBeatState.getVariables().exists(splitProps[0])) {
-				var retVal:Dynamic = MusicBeatState.getVariables().get(splitProps[0]);
-				if (retVal != null)
-					target = retVal;
-			} else {
-				target = Reflect.getProperty(instance, splitProps[0]);
-				// plain arrays (playerReceptors etc.) have no `members`; treat `x.members[i]`
-				// like indexing the array itself so group-style script paths keep working
-				if (target == null && splitProps[0] == 'members' && (instance is Array))
-					target = instance;
-			}
-
-			for (i in 1...splitProps.length) {
-				var raw:String = splitProps[i].substr(0, splitProps[i].length - 1);
-				var idx:Null<Int> = Std.parseInt(raw);
-				var key:Dynamic = (idx != null && Std.isOfType(target, Array)) ? (idx : Dynamic) : raw;
-				target = target[key];
-			}
-			return target;
-		}
-
-		if (allowMaps && isMap(instance)) {
-			// trace(instance);
-			return instance.get(variable);
-		}
-
-		if (instance is MusicBeatState && MusicBeatState.getVariables().exists(variable)) {
-			var retVal:Dynamic = MusicBeatState.getVariables().get(variable);
-			if (retVal != null)
-				return retVal;
-		}
-		if (variable == 'members' && (instance is Array))
-			return instance;
-		return Reflect.getProperty(instance, variable);
-	}
+	/** Reads one member of `instance`, which may carry `[...]` indexes. See `setVarInArray`. **/
+	public static inline function getVarInArray(instance:Dynamic, variable:String, allowMaps:Bool = false):Any
+		return PropertyPath.get(instance, variable, allowMaps);
 
 	public static function getModSetting(saveTag:String, ?modName:String = null) {
 		#if MODS_ALLOWED
@@ -286,44 +214,23 @@ class LuaUtils {
 		return false;
 	}
 
-	public static function setGroupStuff(leArray:Dynamic, variable:String, value:Dynamic, ?allowMaps:Bool = false) {
-		var split:Array<String> = variable.split('.');
-		if (split.length > 1) {
-			var obj:Dynamic = Reflect.getProperty(leArray, split[0]);
-			for (i in 1...split.length - 1)
-				obj = Reflect.getProperty(obj, split[i]);
+	/**
+		Writes a path on one member of a group.
 
-			leArray = obj;
-			variable = split[split.length - 1];
-		}
-		if (allowMaps && isMap(leArray))
-			leArray.set(variable, value);
-		else {
-			// Lenient: old/compat scripts often poke note/strum properties that were renamed or removed
-			// (e.g. `noteSplashHue`). Don't let a failed set throw and abort the rest of the caller's
-			// loop -- swallow it so the remaining items still get processed.
-			try {
-				Reflect.setProperty(leArray, variable, value);
-			} catch (e:Dynamic) {}
-		}
+		Lenient: old/compat scripts often poke note/strum properties that were renamed or removed
+		(e.g. `noteSplashHue`). A failed set must not throw and abort the rest of the caller's loop,
+		so the remaining items still get processed.
+	**/
+	public static function setGroupStuff(leArray:Dynamic, variable:String, value:Dynamic, ?allowMaps:Bool = false) {
+		try {
+			PropertyPath.set(leArray, variable, value, allowMaps);
+		} catch (e:Dynamic) {}
 		return value;
 	}
 
-	public static function getGroupStuff(leArray:Dynamic, variable:String, ?allowMaps:Bool = false) {
-		var split:Array<String> = variable.split('.');
-		if (split.length > 1) {
-			var obj:Dynamic = Reflect.getProperty(leArray, split[0]);
-			for (i in 1...split.length - 1)
-				obj = Reflect.getProperty(obj, split[i]);
-
-			leArray = obj;
-			variable = split[split.length - 1];
-		}
-
-		if (allowMaps && isMap(leArray))
-			return leArray.get(variable);
-		return Reflect.getProperty(leArray, variable);
-	}
+	/** Reads a path on one member of a group. **/
+	public static inline function getGroupStuff(leArray:Dynamic, variable:String, ?allowMaps:Bool = false)
+		return PropertyPath.get(leArray, variable, allowMaps);
 
 	/**
 		Resolves a script group path to a live `NoteField` (`game.playerField`, `opponentField`,
@@ -339,44 +246,36 @@ class LuaUtils {
 		return (resolved is objects.notes.NoteField) ? cast resolved : null;
 	}
 
-	public static function getObjectLoop(objectName:String, ?allowMaps:Bool = false):Dynamic {
-		var split:Array<String> = objectName.split('.');
-		return split.length > 1 ? getVarInArray(getPropertyLoop(split, true, allowMaps), split[split.length-1], allowMaps) : getObjectDirectly(objectName);
-	}
+	/** Resolves a whole `a.b.c` path from a script-visible root. **/
+	public static inline function getObjectLoop(objectName:String, ?allowMaps:Bool = false):Dynamic
+		return tagToObject(objectName, allowMaps);
 
+	/**
+		Walks `split` from its root, stopping one short when `getProperty` is set so the caller can
+		read or write the final segment itself.
+	**/
 	public static function getPropertyLoop(split:Array<String>, ?getProperty:Bool = true, ?allowMaps:Bool = false):Dynamic {
-		var obj:Dynamic = getObjectDirectly(split[0]);
-		var end = split.length;
-		if (getProperty)
-			end = split.length - 1;
+		var obj:Dynamic = PropertyPath.root(split[0], allowMaps);
+		var end:Int = getProperty ? split.length - 1 : split.length;
 
 		for (i in 1...end)
-			obj = getVarInArray(obj, split[i], allowMaps);
+			obj = PropertyPath.get(obj, split[i], allowMaps);
 		return obj;
 	}
 
-	public static function getObjectDirectly(objectName:String, ?allowMaps:Bool = false):Dynamic {
-		switch (objectName) {
-			case 'this' | 'instance' | 'game':
-				return PlayState.instance;
+	/** The object a path starts from: `this`/`game`, a script variable, or a field of the state. **/
+	public static inline function getObjectDirectly(objectName:String, ?allowMaps:Bool = false):Dynamic
+		return PropertyPath.root(objectName, allowMaps);
 
-			default:
-				var obj:Dynamic = MusicBeatState.getVariables().get(objectName);
-				if (obj == null)
-					obj = getVarInArray(getTargetInstance(), objectName, allowMaps);
-				return obj;
-		}
-	}
-
-	// Resolve a Lua tag like "myObj" or "myObj.subProp.target" without
-	// allocating a split array for the dotless common case. Used by the
-	// many TextFunctions getters/setters that previously did
-	// `tag.split('.')` unconditionally.
+	/**
+		Resolves a Lua tag like `myObj` or `myObj.subProp.target`, without allocating a split array
+		for the dotless common case.
+	**/
 	public static inline function tagToObject(tag:String, ?allowMaps:Bool = false):Dynamic {
 		if (tag.indexOf('.') < 0)
-			return getObjectDirectly(tag, allowMaps);
-		var split:Array<String> = tag.split('.');
-		return getVarInArray(getPropertyLoop(split, true, allowMaps), split[split.length - 1], allowMaps);
+			return PropertyPath.root(tag, allowMaps);
+		var dot:Int = tag.indexOf('.');
+		return PropertyPath.get(PropertyPath.root(tag.substr(0, dot), allowMaps), tag.substr(dot + 1), allowMaps);
 	}
 
 	public static function isOfTypes(value:Any, types:Array<Dynamic>) {

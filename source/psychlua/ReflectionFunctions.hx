@@ -11,22 +11,30 @@ import substates.GameOverSubstate;
 class ReflectionFunctions {
 	static final instanceStr:Dynamic = "##PSYCHLUA_STRINGTOOBJ";
 
+	/**
+		The object a `getProperty`/`setProperty` path starts from.
+
+		A dotless path is a member of the active state; a dotted one starts at whatever its first
+		segment names (`game`, a script variable, or a field of the state).
+	**/
+	static inline function rootOf(path:String, allowMaps:Bool):Dynamic {
+		var dot:Int = path.indexOf('.');
+		return (dot < 0) ? LuaUtils.getTargetInstance() : PropertyPath.root(path.substr(0, dot), allowMaps);
+	}
+
+	/** The part of the path `rootOf` did not consume. **/
+	static inline function pathAfterRoot(path:String):String {
+		var dot:Int = path.indexOf('.');
+		return (dot < 0) ? path : path.substr(dot + 1);
+	}
+
 	public static function implement(funk:FunkinLua) {
 		var lua:State = funk.lua;
 		Lua_helper.add_callback(lua, "getProperty", function(variable:String, ?allowMaps:Bool = false) {
-			var split:Array<String> = variable.split('.');
-			if (split.length > 1)
-				return LuaUtils.getVarInArray(LuaUtils.getPropertyLoop(split, true, allowMaps), split[split.length - 1], allowMaps);
-			return LuaUtils.getVarInArray(LuaUtils.getTargetInstance(), variable, allowMaps);
+			return PropertyPath.get(rootOf(variable, allowMaps), pathAfterRoot(variable), allowMaps);
 		});
 		Lua_helper.add_callback(lua, "setProperty", function(variable:String, value:Dynamic, ?allowMaps:Bool = false, ?allowInstances:Bool = false) {
-			var split:Array<String> = variable.split('.');
-			if (split.length > 1) {
-				LuaUtils.setVarInArray(LuaUtils.getPropertyLoop(split, true, allowMaps), split[split.length - 1],
-					allowInstances ? parseInstances(value) : value, allowMaps);
-				return value;
-			}
-			LuaUtils.setVarInArray(LuaUtils.getTargetInstance(), variable, allowInstances ? parseInstances(value) : value, allowMaps);
+			PropertyPath.set(rootOf(variable, allowMaps), pathAfterRoot(variable), allowInstances ? parseInstances(value) : value, allowMaps);
 			return value;
 		});
 		Lua_helper.add_callback(lua, "getPropertyFromClass", function(classVar:String, variable:String, ?allowMaps:Bool = false) {
@@ -35,16 +43,7 @@ class ReflectionFunctions {
 				FunkinLua.luaTrace('getPropertyFromClass: Class $classVar not found', false, false, FlxColor.RED);
 				return null;
 			}
-
-			var split:Array<String> = variable.split('.');
-			if (split.length > 1) {
-				var obj:Dynamic = LuaUtils.getVarInArray(myClass, split[0], allowMaps);
-				for (i in 1...split.length - 1)
-					obj = LuaUtils.getVarInArray(obj, split[i], allowMaps);
-
-				return LuaUtils.getVarInArray(obj, split[split.length - 1], allowMaps);
-			}
-			return LuaUtils.getVarInArray(myClass, variable, allowMaps);
+			return PropertyPath.get(myClass, variable, allowMaps);
 		});
 		Lua_helper.add_callback(lua, "setPropertyFromClass",
 			function(classVar:String, variable:String, value:Dynamic, ?allowMaps:Bool = false, ?allowInstances:Bool = false) {
@@ -53,17 +52,7 @@ class ReflectionFunctions {
 					FunkinLua.luaTrace('setPropertyFromClass: Class $classVar not found', false, false, FlxColor.RED);
 					return null;
 				}
-
-				var split:Array<String> = variable.split('.');
-				if (split.length > 1) {
-					var obj:Dynamic = LuaUtils.getVarInArray(myClass, split[0], allowMaps);
-					for (i in 1...split.length - 1)
-						obj = LuaUtils.getVarInArray(obj, split[i], allowMaps);
-
-					LuaUtils.setVarInArray(obj, split[split.length - 1], allowInstances ? parseInstances(value) : value, allowMaps);
-					return value;
-				}
-				LuaUtils.setVarInArray(myClass, variable, allowInstances ? parseInstances(value) : value, allowMaps);
+				PropertyPath.set(myClass, variable, allowInstances ? parseInstances(value) : value, allowMaps);
 				return value;
 			});
 		// Re-skin the note currently in onSpawnNote -- the v2 way to give one note a custom look from
