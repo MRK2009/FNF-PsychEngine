@@ -12,75 +12,129 @@ import psychlua.HScript.HScriptInfos;
 import scripting.ScriptedStates.ResolveScope;
 
 /**
- * Loads script-declared classes and keeps them alive as one shared world.
+ * Loads script-declared classes and keeps each mod's alive as its own world.
  *
- * A mod's own classes live under `classes/`, with folders as packages, exactly like a Haxe
- * source tree:
+ * A mod's classes live under a class root, with folders as packages, exactly like a Haxe source
+ * tree:
  *
- *     mods/MyMod/classes/taiko/TaikoNote.hx     ->  package taiko;  class TaikoNote { ... }
- *     mods/MyMod/classes/taiko/TaikoMode.hx     ->  import taiko.TaikoNote;
+ *     mods/MyMod/scripts/classes/taiko/TaikoNote.hx  ->  package taiko;  class TaikoNote { ... }
+ *     mods/MyMod/scripts/classes/taiko/TaikoMode.hx  ->  import taiko.TaikoNote;
+ *     mods/MyMod/scripts/classes/states/MyMenu.hx    ->  package states;  (a scripted state)
  *
- * Every module loaded in a session joins ONE `insanity.Environment`, which is what lets a
- * script `import` another script's class: import resolution consults the environment's type
- * collection alongside the engine's compiled types. Modules are cached per file, so a class
- * instantiated once per note is parsed once, not once per instance.
+ * Scripted states are ordinary classes in the `states` package: they get their entry points from
+ * `ScriptedStates` and are reloaded on every state entry (so `create()` starts clean), but they
+ * share their mod's world, which is what lets a state and a song script pass objects to each other.
  *
- * `states/` and `substates/` keep their own entry points in `ScriptedStates`; those modules
- * are reloaded on every state entry (so `create()` starts from a clean slate) but are added
- * to the same world, so a scripted state can import the mod's classes.
+ * **One world per mod.** Every module a mod loads joins that mod's `insanity.Environment`, which is
+ * what lets its scripts `import` each other: import resolution consults the environment's type
+ * collection alongside the engine's compiled types. Keeping worlds separate means two mods can both
+ * ship `rhythm.ScoreKeeper` without colliding, and a mod's statics die with the mod rather than
+ * leaking into the next one. Modules are cached per file, so a class instantiated once per note is
+ * parsed once, not once per instance.
  */
 class ScriptRegistry {
-	/** Source root for a mod's own classes, relative to the mod (or shared assets) folder. */
-	public static inline var CLASS_ROOT:String = 'classes/';
+	/**
+		Source roots for a mod's scripted classes, relative to the mod (or shared assets) folder,
+		best match first. Folders under a root are packages, exactly like a Haxe source tree.
 
-	static var environment:Environment = null;
+		`scripts/classes/` is the home: everything a scripter writes then lives in one place, beside
+		the ordinary scripts that use it. A top-level `classes/` is still read, lower priority, for
+		mods that keep their class library outside `scripts/`.
+	**/
+	public static var CLASS_ROOTS:Array<String> = ['scripts/classes/', 'classes/'];
 
-	/** Dotted type path -> its module, for everything loaded under `CLASS_ROOT`. */
-	static var loaded:Map<String, Module> = new Map();
+	/** Package a scripted state lives in, under a class root. **/
+	public static inline var STATE_PACKAGE:String = 'states';
 
-	/** Absolute-ish file path -> modification time when it was parsed. */
-	static var stamps:Map<String, Float> = new Map();
+	/** Package a scripted substate lives in, under a class root. **/
+	public static inline var SUBSTATE_PACKAGE:String = 'substates';
 
-	static var failedPaths:Array<String> = [];
+	/** Key for the world holding shared (non-mod) classes. **/
+	public static inline var SHARED_WORLD:String = '';
 
 	/**
-	 * Where this session's `classes/` resolve from.
-	 *
-	 * A launched mod's state is resolved with LAUNCHED scope (see `ScriptedStates.sourceScope`),
-	 * because `Mods.currentModDirectory` -- which the plain ANY scope reads -- gets repointed by
-	 * engine helpers like `WeekData.setDirectoryFromWeek`. The classes a state imports have to
-	 * come from the SAME source, or the state loads and its own library does not. `loadEntry`
-	 * records the scope it was given so everything that follows agrees with it.
-	 */
-	static var sessionScope:ResolveScope = ANY;
+		Every place a dotted class path could be, best first.
 
-	public static function world():Environment {
-		if (environment == null) {
-			environment = new Environment();
-			ScriptGlobals.inject(environment.variables);
+		@param path Dotted type path, e.g. `demo.Counter`.
+		@return Mod-relative file paths to try in order.
+	**/
+	public static function classPaths(path:String):Array<String> {
+		var relative:String = path.split('.').join('/') + '.hx';
+		var out:Array<String> = [];
+		for (root in CLASS_ROOTS)
+			out.push(root + relative);
+		return out;
+	}
+
+	/**
+		Whether a folder directly under `mods/` is a script root rather than a modpack.
+
+		`mods/scripts/classes/states/FreeplayState.hx` is a GLOBAL override owned by no mod, so the
+		first path segment must not be mistaken for a mod named "scripts".
+	**/
+	public static function isScriptRoot(folder:String):Bool {
+		for (root in CLASS_ROOTS)
+			if (root.split('/')[0] == folder)
+				return true;
+		return false;
+	}
+
+	/**
+		The mod a script file belongs to, or `SHARED_WORLD` for one that belongs to none.
+
+		e.g. `mods/MyMod/scripts/classes/demo/Counter.hx` -> `MyMod`, while a bare-root global
+		override at `mods/scripts/classes/states/FreeplayState.hx` -> `''`.
+	**/
+	public static function modOfFile(file:String):String {
+		#if MODS_ALLOWED
+		if (file == null)
+			return SHARED_WORLD;
+
+		var parts:Array<String> = file.split('/');
+		if (parts.length > 3 && parts[0] + '/' == Paths.mods() && !isScriptRoot(parts[1]))
+			return parts[1];
+		#end
+		return SHARED_WORLD;
+	}
+
+	/** Every mod's world, keyed by mod folder. **/
+	static var worlds:Map<String, ScriptWorld> = new Map();
+
+	/** The world for `mod`, created on first use. **/
+	public static function worldFor(?mod:String):ScriptWorld {
+		var key:String = (mod != null) ? mod : SHARED_WORLD;
+
+		var found:ScriptWorld = worlds.get(key);
+		if (found == null) {
+			found = new ScriptWorld(key);
+			worlds.set(key, found);
 		}
-		return environment;
+		return found;
 	}
 
-	/**
-	 * Drops every loaded class and the shared environment. Called when leaving a mod, so
-	 * the next launch re-reads from disk instead of reusing another mod's classes.
-	 */
+	/** Drops one mod's classes, so re-entering it re-reads from disk. **/
+	public static function disposeMod(?mod:String):Void {
+		var key:String = (mod != null) ? mod : SHARED_WORLD;
+
+		var found:ScriptWorld = worlds.get(key);
+		if (found == null)
+			return;
+
+		found.dispose();
+		worlds.remove(key);
+	}
+
+	/** Drops every world. **/
 	public static function dispose():Void {
-		if (environment != null)
-			environment.snapshot();
-
-		environment = null;
-		sessionScope = ANY;
-		loaded.clear();
-		stamps.clear();
-		failedPaths.resize(0);
+		for (world in worlds)
+			world.dispose();
+		worlds.clear();
 	}
 
-	/** True if any parsed file has changed on disk since it was loaded. */
+	/** True if any parsed file in any world has changed on disk since it was loaded. */
 	public static function stale():Bool {
-		for (file => stamp in stamps)
-			if (modified(file) != stamp)
+		for (world in worlds)
+			if (world.stale())
 				return true;
 
 		return false;
@@ -90,9 +144,13 @@ class ScriptRegistry {
 	 * Resolves a scripted class by dotted path (`taiko.TaikoNote`), loading it and anything
 	 * it imports if it isn't in the world yet. Returns null and logs to the debug console
 	 * when the file is missing or fails to initialize.
+	 *
+	 * @param mod Which mod's world to resolve in. Defaults to the shared world.
 	 */
-	public static function resolveClass(path:String, ?scope:ResolveScope):ScriptedClass {
-		var type:IScriptedType = resolveType(path, (scope != null) ? scope : sessionScope);
+	public static function resolveClass(path:String, ?mod:String, ?scope:ResolveScope):ScriptedClass {
+		var world:ScriptWorld = worldFor(mod);
+
+		var type:IScriptedType = resolveType(world, path, (scope != null) ? scope : world.scope);
 		if (type == null)
 			return null;
 
@@ -104,8 +162,8 @@ class ScriptRegistry {
 	}
 
 	/** Builds an instance of a scripted class by dotted path. */
-	public static function instantiate(path:String, ?args:Array<Dynamic>, ?scope:ResolveScope):Dynamic {
-		var cls:ScriptedClass = resolveClass(path, scope);
+	public static function instantiate(path:String, ?args:Array<Dynamic>, ?mod:String, ?scope:ResolveScope):Dynamic {
+		var cls:ScriptedClass = resolveClass(path, mod, scope);
 		if (cls == null)
 			return null;
 
@@ -133,8 +191,8 @@ class ScriptRegistry {
 	}
 
 	/** Whether `path` names a scripted class extending (directly or not) the given native base. */
-	public static function isSubclassOf(path:String, base:Class<Dynamic>, ?scope:ResolveScope):Bool {
-		var cls:ScriptedClass = resolveClass(path, scope);
+	public static function isSubclassOf(path:String, base:Class<Dynamic>, ?mod:String, ?scope:ResolveScope):Bool {
+		var cls:ScriptedClass = resolveClass(path, mod, scope);
 		if (cls == null)
 			return false;
 
@@ -147,50 +205,99 @@ class ScriptRegistry {
 		return false;
 	}
 
-	static function resolveType(path:String, scope:ResolveScope):IScriptedType {
-		var env:Environment = world();
+	/**
+	 * Registers an entry module (a state or substate) in its mod's world, replacing any previous
+	 * version so it re-runs from scratch. Returns its main type.
+	 *
+	 * The world comes from the FILE, not from whatever mod happens to be current: a state and the
+	 * song scripts of the same mod must land in one world or they cannot see each other's classes.
+	 */
+	public static function loadEntry(file:String, name:String, ?pack:Array<String>, ?scope:ResolveScope):IScriptedType {
+		if (pack == null)
+			pack = [];
+
+		// The same trust gate the mod's own classes go through. Without it a state script from an
+		// untrusted mod would run while every class it imports was blocked -- which both executes
+		// code the player never approved and fails in a way that reads like a broken script.
+		if (blocked(file)) {
+			HScript.error('Scripted state "$name" is blocked: mod not trusted', errPos(name));
+			return null;
+		}
+
+		var world:ScriptWorld = worldFor(modOfFile(file));
+
+		// The entry was resolved in this scope, so its classes have to resolve in it too.
+		world.scope = (scope != null) ? scope : ANY;
+
+		var failed:Bool = false;
+		var module:Module = new Module(File.getContent(file), name, pack, file);
+		module.onParsingError = function(e:haxe.Exception) { failed = true; HScript.error('${e.message}', errPos(name)); };
+		module.onProgramError = function(e:haxe.Exception) { failed = true; HScript.error('${e.message}', errPos(name)); };
+		module.onTypeError = function(e:haxe.Exception, t:IScriptedType) { failed = true; HScript.error('${e.message}', errPos(name)); };
+
+		if (failed)
+			return null;
+
+		var env:Environment = world.environment();
+		env.addModule(module);
+		world.stamps.set(file, modified(file));
+
+		var added:Array<Module> = [module];
+		for (dependency in scriptedImports(world, module))
+			load(world, dependency, world.scope, added);
+
+		startAll(world, added);
+
+		if (failed)
+			return null;
+
+		return env.resolve(insanity.tools.Tools.pathToString(name, pack));
+	}
+
+	static function resolveType(world:ScriptWorld, path:String, scope:ResolveScope):IScriptedType {
+		var env:Environment = world.environment();
 
 		var existing:IScriptedType = env.resolve(path);
 		if (existing != null)
 			return existing;
 
-		if (failedPaths.contains(path))
+		if (world.failedPaths.contains(path))
 			return null;
 
 		var added:Array<Module> = [];
-		if (!load(path, scope, added)) {
-			failedPaths.push(path);
+		if (!load(world, path, scope, added)) {
+			world.failedPaths.push(path);
 			return null;
 		}
 
-		startAll(added);
+		startAll(world, added);
 		return env.resolve(path);
 	}
 
 	/**
-	 * Parses `path` (and, depth-first, every scripted type it imports) into the shared
-	 * environment without starting anything yet -- cross-references only resolve once all
-	 * of them are registered.
+	 * Parses `path` (and, depth-first, every scripted type it imports) into the world without
+	 * starting anything yet -- cross-references only resolve once all of them are registered.
 	 */
-	static function load(path:String, scope:ResolveScope, added:Array<Module>):Bool {
-		if (loaded.exists(path))
+	static function load(world:ScriptWorld, path:String, scope:ResolveScope, added:Array<Module>):Bool {
+		if (world.loaded.exists(path))
 			return true;
 
-		var relative:String = CLASS_ROOT + path.split('.').join('/') + '.hx';
-		var file:String = ScriptedStates.resolvePath(relative, scope);
+		var candidates:Array<String> = classPaths(path);
+		var file:String = null;
 
-		// A mod's own source first, then the wider search. LAUNCHED and GLOBALS deliberately never
-		// fall back to shared on their own, but a class library that lives outside the launched mod
-		// should still be reachable.
+		// Every root in the requested scope first, then every root in the wider search. LAUNCHED
+		// and GLOBALS deliberately never fall back to shared on their own, but a class library
+		// that lives outside the launched mod should still be reachable.
+		file = ScriptedStates.resolveScript(candidates, scope);
 		if (file == null && scope != ANY)
-			file = ScriptedStates.resolvePath(relative, ANY);
+			file = ScriptedStates.resolveScript(candidates, ANY);
 
 		// `scriptedImports` only hands over paths that are NOT compiled types, so failing to find
 		// one on disk is a real error. Reporting it here is what turns "must declare a class named
 		// X" -- raised much later, when the type that needed the import fails to initialize -- into
 		// the actual missing file.
 		if (file == null) {
-			HScript.error('Unresolved import "$path": no compiled type, and no $relative in this mod', errPos(path));
+			HScript.error('Unresolved import "$path": no compiled type, and no ${candidates.join(" or ")} in this mod', errPos(path));
 			return false;
 		}
 
@@ -211,13 +318,13 @@ class ScriptRegistry {
 		if (failed)
 			return false;
 
-		loaded.set(path, module);
-		stamps.set(file, modified(file));
-		world().addModule(module);
+		world.loaded.set(path, module);
+		world.stamps.set(file, modified(file));
+		world.environment().addModule(module);
 		added.push(module);
 
-		for (dependency in scriptedImports(module))
-			load(dependency, scope, added);
+		for (dependency in scriptedImports(world, module))
+			load(world, dependency, scope, added);
 
 		return true;
 	}
@@ -227,7 +334,7 @@ class ScriptRegistry {
 	 * to come off disk. A path already in the engine's type collection is a native import
 	 * and needs nothing from us.
 	 */
-	static function scriptedImports(module:Module):Array<String> {
+	static function scriptedImports(world:ScriptWorld, module:Module):Array<String> {
 		var paths:Array<String> = [];
 
 		for (decl in module.decls) {
@@ -242,7 +349,7 @@ class ScriptRegistry {
 						continue;
 
 					var full:String = parts.join('.');
-					if (TypeCollection.main.fromPath(full) != null || loaded.exists(full))
+					if (TypeCollection.main.fromPath(full) != null || world.loaded.exists(full))
 						continue;
 
 					if (!paths.contains(full))
@@ -259,15 +366,17 @@ class ScriptRegistry {
 		return s.length > 0 && s.charAt(0) == s.charAt(0).toUpperCase();
 
 	/** Runs module-level code and initializes the types of newly added modules. */
-	static function startAll(modules:Array<Module>):Void {
-		for (module in modules)
-			module.init(environment);
+	static function startAll(world:ScriptWorld, modules:Array<Module>):Void {
+		var env:Environment = world.environment();
 
 		for (module in modules)
-			module.start(environment);
+			module.init(env);
 
 		for (module in modules)
-			module.startTypes(environment);
+			module.start(env);
+
+		for (module in modules)
+			module.startTypes(env);
 
 		// Every scripted class runs in "safe" mode: a runtime error in one of its methods
 		// is caught and logged to the debug console instead of crashing the game -- the same
@@ -286,50 +395,6 @@ class ScriptRegistry {
 		cls.onInstanceError = function(e:Dynamic, fun:String, ?inst:Dynamic) {
 			HScript.error('${cls.path}.$fun(): $e', errPos(cls.path));
 		};
-	}
-
-	/**
-	 * Registers an entry module (a state or substate) in the shared world, replacing any
-	 * previous version so it re-runs from scratch. Returns its main type.
-	 */
-	public static function loadEntry(file:String, name:String, ?pack:Array<String>, ?scope:ResolveScope):IScriptedType {
-		if (pack == null)
-			pack = [];
-
-		// The entry was resolved in this scope, so its classes have to resolve in it too.
-		sessionScope = (scope != null) ? scope : ANY;
-
-		// The same trust gate the mod's own classes go through. Without it a state script from an
-		// untrusted mod would run while every class it imports was blocked -- which both executes
-		// code the player never approved and fails in a way that reads like a broken script.
-		if (blocked(file)) {
-			HScript.error('Scripted state "$name" is blocked: mod not trusted', errPos(name));
-			return null;
-		}
-
-		var failed:Bool = false;
-		var module:Module = new Module(File.getContent(file), name, pack, file);
-		module.onParsingError = function(e:haxe.Exception) { failed = true; HScript.error('${e.message}', errPos(name)); };
-		module.onProgramError = function(e:haxe.Exception) { failed = true; HScript.error('${e.message}', errPos(name)); };
-		module.onTypeError = function(e:haxe.Exception, t:IScriptedType) { failed = true; HScript.error('${e.message}', errPos(name)); };
-
-		if (failed)
-			return null;
-
-		var env:Environment = world();
-		env.addModule(module);
-		stamps.set(file, modified(file));
-
-		var added:Array<Module> = [module];
-		for (dependency in scriptedImports(module))
-			load(dependency, sessionScope, added);
-
-		startAll(added);
-
-		if (failed)
-			return null;
-
-		return env.resolve(insanity.tools.Tools.pathToString(name, pack));
 	}
 
 	static function blocked(file:String):Bool {
@@ -356,5 +421,77 @@ class ScriptRegistry {
 
 	static inline function errPos(name:String):HScriptInfos
 		return cast {fileName: name, showLine: false};
+}
+
+/**
+ * One mod's scripted-class world: its interpreter environment, what it has loaded, and where it
+ * resolves further classes from.
+ *
+ * Separate worlds are what keep two mods' identically-named classes apart and stop a mod's statics
+ * outliving it. The environment is built lazily so a mod that never touches `classes/` costs
+ * nothing.
+ */
+class ScriptWorld {
+	/** Mod folder this world belongs to, or `''` for the shared one. **/
+	public var mod:String;
+
+	/**
+	 * Where this world resolves classes from.
+	 *
+	 * A launched mod's state is resolved with LAUNCHED scope (see `ScriptedStates.sourceScope`),
+	 * because `Mods.currentModDirectory` -- which the plain ANY scope reads -- gets repointed by
+	 * engine helpers like `WeekData.setDirectoryFromWeek`. The classes it imports have to come from
+	 * the SAME source, or the state loads and its own library does not.
+	 */
+	public var scope:ResolveScope = ANY;
+
+	/** Dotted type path -> its module, for everything loaded from a class root. **/
+	public var loaded:Map<String, Module> = new Map();
+
+	/** File path -> modification time when it was parsed. **/
+	public var stamps:Map<String, Float> = new Map();
+
+	/** Paths already known to be unresolvable, so a miss is reported once and not retried. **/
+	public var failedPaths:Array<String> = [];
+
+	var env:Environment = null;
+
+	public function new(mod:String) {
+		this.mod = mod;
+	}
+
+	/** This world's interpreter environment, built (and given its globals) on first use. **/
+	public function environment():Environment {
+		if (env == null) {
+			env = new Environment();
+			ScriptGlobals.inject(env.variables, mod);
+		}
+		return env;
+	}
+
+	/** True if any parsed file has changed on disk since it was loaded. **/
+	public function stale():Bool {
+		for (file => stamp in stamps) {
+			#if sys
+			try {
+				if (FileSystem.stat(file).mtime.getTime() != stamp)
+					return true;
+			} catch (e:Dynamic) {
+				return true;
+			}
+			#end
+		}
+		return false;
+	}
+
+	public function dispose():Void {
+		if (env != null)
+			env.snapshot();
+
+		env = null;
+		loaded.clear();
+		stamps.clear();
+		failedPaths.resize(0);
+	}
 }
 #end

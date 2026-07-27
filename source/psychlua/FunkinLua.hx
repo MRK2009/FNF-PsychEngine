@@ -393,7 +393,27 @@ class FunkinLua {
 		Lua_helper.add_callback(lua, "launchMod", function(folder:String) {
 			return scripting.ScriptedStates.launchMod(folder);
 		});
+
+		// Scripted classes from Lua. The instance comes back as a proxy (every callback return
+		// goes through LuaProxy.pushHaxe), so its fields and methods are reachable the same way
+		// any other engine object is. Bound to this script's own mod, so two mods' identically
+		// named classes stay apart.
+		Lua_helper.add_callback(lua, "buildScripted", function(path:String, ?args:Array<Dynamic>) {
+			return scripting.ScriptRegistry.instantiate(path, args, this.modFolder);
+		});
+		Lua_helper.add_callback(lua, "scriptedClass", function(path:String) {
+			return scripting.ScriptRegistry.resolveClass(path, this.modFolder);
+		});
 		#end
+
+		// Leaving the song for somewhere of the mod's choosing: a built-in menu by name, or one of
+		// the mod's own scripted states. Works in a plain modpack, not just a launched one.
+		Lua_helper.add_callback(lua, "setExitTarget", function(name:String) {
+			PlayState.setExitTarget(name);
+		});
+		Lua_helper.add_callback(lua, "exitToState", function(name:String) {
+			PlayState.exitToState(name);
+		});
 
 		Lua_helper.add_callback(lua, "setVar", function(varName:String, value:Dynamic) {
 			MusicBeatState.getVariables().set(varName, ReflectionFunctions.parseSingleInstance(value));

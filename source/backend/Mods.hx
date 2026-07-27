@@ -339,14 +339,20 @@ class Mods {
 		return pack.compatibilityMode == true || pack.legacyMode == true;
 	}
 
-	/** A mod is launchable if it ships its entry state at states/<entry>.hx. */
+	/** A mod is launchable if it ships its entry state under a class root, e.g. scripts/classes/states/<entry>.hx. */
 	public static function isLaunchable(?folder:String = null):Bool {
 		#if (MODS_ALLOWED && HSCRIPT_ALLOWED)
 		if (folder == null)
 			folder = currentModDirectory;
 		if (folder == null || folder.length < 1)
 			return false;
-		return FileSystem.exists(Paths.mods(folder + '/states/' + getEntryState(folder) + '.hx'));
+		// The entry state lives under a class root (scripts/classes/states/, or the older
+		// classes/states/), so every root has to be checked rather than one fixed path.
+		var entry:String = getEntryState(folder);
+		for (relative in scripting.ScriptRegistry.classPaths(scripting.ScriptRegistry.STATE_PACKAGE + '.' + entry))
+			if (FileSystem.exists(Paths.mods(folder + '/' + relative)))
+				return true;
+		return false;
 		#else
 		return false;
 		#end

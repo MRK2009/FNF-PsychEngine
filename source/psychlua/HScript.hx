@@ -278,14 +278,9 @@ class HScript {
 		return (script != null && script.variables.exists(name));
 
 	function preset() {
+		scripting.ScriptGlobals.shared(function(name:String, value:Dynamic) set(name, value), this.modFolder);
+
 		// Some very commonly used classes
-		#if android
-		set('File', mobile.backend.ScriptFile);
-		set('FileSystem', mobile.backend.ScriptFileSystem);
-		#elseif sys
-		set('File', File);
-		set('FileSystem', FileSystem);
-		#end
 		set('FlxG', flixel.FlxG);
 		set('FlxMath', flixel.math.FlxMath);
 		set('FlxSprite', flixel.FlxSprite);
@@ -315,134 +310,6 @@ class HScript {
 		#if flixel_animate
 		set('FlxAnimate', FlxAnimate);
 		#end
-
-		// Functions & Variables
-		set('setVar', function(name:String, value:Dynamic) {
-			MusicBeatState.getVariables().set(name, value);
-			return value;
-		});
-		set('getVar', function(name:String) {
-			var result:Dynamic = null;
-			if (MusicBeatState.getVariables().exists(name))
-				result = MusicBeatState.getVariables().get(name);
-			return result;
-		});
-		set('removeVar', function(name:String) {
-			if (MusicBeatState.getVariables().exists(name)) {
-				MusicBeatState.getVariables().remove(name);
-				return true;
-			}
-			return false;
-		});
-		set('debugPrint', function(text:String, ?color:FlxColor = null) {
-			if (color == null)
-				color = FlxColor.WHITE;
-			PlayState.instance.addTextToDebug(text, color);
-		});
-		set('getModSetting', function(saveTag:String, ?modName:String = null) {
-			if (modName == null) {
-				if (this.modFolder == null) {
-					HScript.error('getModSetting: Argument #2 is null and script is not inside a packed Mod folder!', errorPos());
-					return null;
-				}
-				modName = this.modFolder;
-			}
-			return LuaUtils.getModSetting(saveTag, modName);
-		});
-
-		// Keyboard & Gamepads
-		set('keyboardJustPressed', function(name:String) return Reflect.getProperty(FlxG.keys.justPressed, name));
-		set('keyboardPressed', function(name:String) return Reflect.getProperty(FlxG.keys.pressed, name));
-		set('keyboardReleased', function(name:String) return Reflect.getProperty(FlxG.keys.justReleased, name));
-
-		set('anyGamepadJustPressed', function(name:String) return FlxG.gamepads.anyJustPressed(name));
-		set('anyGamepadPressed', function(name:String) return FlxG.gamepads.anyPressed(name));
-		set('anyGamepadReleased', function(name:String) return FlxG.gamepads.anyJustReleased(name));
-
-		set('gamepadAnalogX', function(id:Int, ?leftStick:Bool = true) {
-			var controller = FlxG.gamepads.getByID(id);
-			if (controller == null)
-				return 0.0;
-
-			return controller.getXAxis(leftStick ? LEFT_ANALOG_STICK : RIGHT_ANALOG_STICK);
-		});
-		set('gamepadAnalogY', function(id:Int, ?leftStick:Bool = true) {
-			var controller = FlxG.gamepads.getByID(id);
-			if (controller == null)
-				return 0.0;
-
-			return controller.getYAxis(leftStick ? LEFT_ANALOG_STICK : RIGHT_ANALOG_STICK);
-		});
-		set('gamepadJustPressed', function(id:Int, name:String) {
-			var controller = FlxG.gamepads.getByID(id);
-			if (controller == null)
-				return false;
-
-			return Reflect.getProperty(controller.justPressed, name) == true;
-		});
-		set('gamepadPressed', function(id:Int, name:String) {
-			var controller = FlxG.gamepads.getByID(id);
-			if (controller == null)
-				return false;
-
-			return Reflect.getProperty(controller.pressed, name) == true;
-		});
-		set('gamepadReleased', function(id:Int, name:String) {
-			var controller = FlxG.gamepads.getByID(id);
-			if (controller == null)
-				return false;
-
-			return Reflect.getProperty(controller.justReleased, name) == true;
-		});
-
-		set('keyJustPressed', function(name:String = '') {
-			name = name.toLowerCase();
-			switch (name) {
-				case 'left':
-					return Controls.instance.NOTE_LEFT_P;
-				case 'down':
-					return Controls.instance.NOTE_DOWN_P;
-				case 'up':
-					return Controls.instance.NOTE_UP_P;
-				case 'right':
-					return Controls.instance.NOTE_RIGHT_P;
-				default:
-					return Controls.instance.justPressed(name);
-			}
-			return false;
-		});
-		set('keyPressed', function(name:String = '') {
-			name = name.toLowerCase();
-			switch (name) {
-				case 'left':
-					return Controls.instance.NOTE_LEFT;
-				case 'down':
-					return Controls.instance.NOTE_DOWN;
-				case 'up':
-					return Controls.instance.NOTE_UP;
-				case 'right':
-					return Controls.instance.NOTE_RIGHT;
-				default:
-					return Controls.instance.pressed(name);
-			}
-			return false;
-		});
-		set('keyReleased', function(name:String = '') {
-			name = name.toLowerCase();
-			switch (name) {
-				case 'left':
-					return Controls.instance.NOTE_LEFT_R;
-				case 'down':
-					return Controls.instance.NOTE_DOWN_R;
-				case 'up':
-					return Controls.instance.NOTE_UP_R;
-				case 'right':
-					return Controls.instance.NOTE_RIGHT_R;
-				default:
-					return Controls.instance.justReleased(name);
-			}
-			return false;
-		});
 
 		// For adding your own callbacks
 		// not very tested but should work
@@ -485,23 +352,9 @@ class HScript {
 		#end
 		set('this', this);
 		set('game', FlxG.state);
-		set('controls', Controls.instance);
 
-		set('buildTarget', LuaUtils.getBuildTarget());
 		set('customSubstate', CustomSubstate.instance);
 		set('customSubstateName', CustomSubstate.name);
-
-		// Class-based scripted states (states/<Name>.hx extending ScriptedMusicBeatState).
-		set('switchToState', function(name:String, ?args:Array<Dynamic>) return scripting.ScriptedStates.switchToState(name, args));
-		set('openScriptedSubstate', function(name:String, ?args:Array<Dynamic>) return scripting.ScriptedStates.openSubstate(name, args));
-		set('exitToEngine', function() scripting.ScriptedStates.exitToEngine());
-		set('launchMod', function(folder:String) return scripting.ScriptedStates.launchMod(folder));
-
-		set('Function_Stop', LuaUtils.Function_Stop);
-		set('Function_Continue', LuaUtils.Function_Continue);
-		set('Function_StopLua', LuaUtils.Function_StopLua); // doesnt do much cuz HScript has a lower priority than Lua
-		set('Function_StopHScript', LuaUtils.Function_StopHScript);
-		set('Function_StopAll', LuaUtils.Function_StopAll);
 	}
 
 	#if LUA_ALLOWED

@@ -159,11 +159,29 @@ class PlayState extends MusicBeatState {
 	public static var SONG:SongChart = null;
 	public static var isStoryMode:Bool = false;
 
-	// When a song is launched from a mod's scripted state (e.g. a custom main
-	// menu), this holds the scripted-state name to return to on exit instead of
-	// the built-in Freeplay/Story menus. Set it before switching to PlayState;
-	// it is honoured only while a mod is actually launched (Mods.launchedMod).
+	/**
+	 * Where to go when this song ends or the player backs out, instead of the built-in
+	 * Freeplay/Story menus. A scripted state name, or one of the built-in menus in `EXIT_STATES`.
+	 * Set it directly, or from a script via `setExitTarget(name)`.
+	 *
+	 * Honoured in every state-source mode: a plain modpack that ships no scripted states at all
+	 * can still send the player to its own menu, or back to Freeplay on purpose.
+	 */
 	public static var returnToScriptedState:String = null;
+
+	/**
+	 * Built-in menus a script may name as an exit target.
+	 *
+	 * An allowlist rather than `Type.resolveClass`: that would let a script instantiate any class
+	 * in the build, and `ModSecurity` flags scripts that mention it for good reason.
+	 */
+	public static final EXIT_STATES:Map<String, Void->flixel.FlxState> = [
+		'MainMenuState' => function():flixel.FlxState return new states.MainMenuState(),
+		'FreeplayState' => function():flixel.FlxState return new states.FreeplayState(),
+		'StoryMenuState' => function():flixel.FlxState return new states.StoryMenuState(),
+		'OptionsState' => function():flixel.FlxState return new options.OptionsState(),
+		'ModsMenuState' => function():flixel.FlxState return new states.ModsMenuState()
+	];
 	public static var storyWeek:Int = 0;
 	public static var storyPlaylist:Array<String> = [];
 	public static var storyDifficulty:Int = 1;
@@ -2619,6 +2637,12 @@ class PlayState extends MusicBeatState {
 		var explicitTarget:String = returnToScriptedState;
 		returnToScriptedState = null;
 
+		if (explicitTarget != null && EXIT_STATES.exists(explicitTarget)) {
+			FlxG.sound.playMusic(Paths.music('freakyMenu'), 0);
+			MusicBeatState.switchState(EXIT_STATES.get(explicitTarget)());
+			return true;
+		}
+
 		switch (Mods.stateSourceMode) {
 			case MOD:
 				// Only return to a scripted menu while a mod is actually launched, and
@@ -2645,8 +2669,11 @@ class PlayState extends MusicBeatState {
 					target = scripting.ScriptedStates.activeScriptedState;
 				scope = scripting.ScriptedStates.ResolveScope.GLOBALS;
 
-			default: // NONE -> built-in menus only
-				return false;
+			default:
+				if (explicitTarget == null || explicitTarget.length < 1)
+					return false;
+				target = explicitTarget;
+				scope = scripting.ScriptedStates.ResolveScope.ANY;
 		}
 		if (target == null || target.length < 1)
 			return false;
@@ -2664,6 +2691,36 @@ class PlayState extends MusicBeatState {
 		#else
 		return false;
 		#end
+	}
+
+	/**
+	 * Where to go when this song ends or the player backs out.
+	 *
+	 * `name` is one of the built-in menus in `EXIT_STATES` or one of the mod's own scripted states.
+	 * Nothing happens until the song actually ends, so it is safe to call from `onCreate`.
+	 *
+	 * Exposed to scripts as `setExitTarget(name)`.
+	 */
+	public static function setExitTarget(name:String):Void {
+		returnToScriptedState = name;
+	}
+
+	/**
+	 * Leaves the song for `name` right now.
+	 *
+	 * Falls back to Freeplay when the target cannot be resolved, so a typo strands nobody in a
+	 * running song with no way out.
+	 *
+	 * Exposed to scripts as `exitToState(name)`.
+	 */
+	public static function exitToState(name:String):Void {
+		returnToScriptedState = name;
+
+		if (exitToScriptedStateIfNeeded())
+			return;
+
+		FlxG.sound.playMusic(Paths.music('freakyMenu'), 0);
+		MusicBeatState.switchState(new states.FreeplayState());
 	}
 
 	public function endSong() {

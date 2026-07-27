@@ -72,7 +72,7 @@ class ScriptedStates {
 	}
 
 	public static function loadState(name:String, ?args:Array<Dynamic>, scope:ResolveScope = ANY):MusicBeatState {
-		var inst:Dynamic = instantiate('states/', name, args, sourceScope(scope));
+		var inst:Dynamic = instantiate(ScriptRegistry.STATE_PACKAGE, name, args, sourceScope(scope));
 		if (inst == null)
 			return null;
 		if (!(inst is MusicBeatState)) {
@@ -89,7 +89,7 @@ class ScriptedStates {
 
 	/** Builds a live `MusicBeatSubstate` from `substates/<name>.hx`. */
 	public static function loadSubstate(name:String, ?args:Array<Dynamic>):MusicBeatSubstate {
-		var inst:Dynamic = instantiate('substates/', name, args, sourceScope(ANY));
+		var inst:Dynamic = instantiate(ScriptRegistry.SUBSTATE_PACKAGE, name, args, sourceScope(ANY));
 		if (inst == null)
 			return null;
 		if (!(inst is MusicBeatSubstate)) {
@@ -133,7 +133,7 @@ class ScriptedStates {
 			return null;
 
 		var scope:ResolveScope = (Mods.stateSourceMode == MOD) ? LAUNCHED : GLOBALS;
-		if (resolvePath('states/' + name + '.hx', scope) == null)
+		if (resolveScript(ScriptRegistry.classPaths(ScriptRegistry.STATE_PACKAGE + '.' + name), scope) == null)
 			return null; // no override file -> stay built-in, no error
 		return loadState(name, null, scope);
 	}
@@ -147,8 +147,10 @@ class ScriptedStates {
 		#if MODS_ALLOWED
 		if (!Mods.isLaunchable(folder))
 			return false;
-		// Whatever the previous mod loaded is not this mod's; start from a clean world.
-		ScriptRegistry.dispose();
+		// Start this mod from a clean world, so a relaunch re-reads its classes from disk rather
+		// than resuming whatever state the last visit left in their statics. Other mods' worlds are
+		// theirs and stay put.
+		ScriptRegistry.disposeMod(folder);
 
 		Mods.currentModDirectory = folder;
 		Mods.launchedMod = folder;
@@ -181,12 +183,16 @@ class ScriptedStates {
 		PlayState.returnToScriptedState = null;
 		activeScriptedState = null;
 		activeScriptedMod = null;
+
+		var leaving:String = Mods.launchedMod;
 		Mods.launchedMod = null;
 		Mods.stateSourceMode = NONE;
 
-		// Drop the mod's scripted classes so the next launch reads from disk instead of
-		// inheriting another mod's world.
-		ScriptRegistry.dispose();
+		// Drop the leaving mod's scripted classes so the next launch reads from disk instead of
+		// resuming its statics. Ordinary (non-launched) mods keep theirs, which is what lets a
+		// regular modpack's song scripts share classes across songs.
+		if (leaving != null)
+			ScriptRegistry.disposeMod(leaving);
 
 		#if MODS_ALLOWED
 		// Back to base defaults: only GLOBAL (scriptpack / runsGlobally) mods keep
@@ -228,17 +234,20 @@ class ScriptedStates {
 	// Shared load/parse/instantiate pipeline for states and substates. The parsing and
 	// class-construction work lives in ScriptRegistry so states, substates and a mod's own
 	// `classes/` all share one environment -- which is what lets a state import them.
-	static function instantiate(subfolder:String, name:String, ?args:Array<Dynamic>, scope:ResolveScope = ANY):Dynamic {
-		var path:String = resolvePath(subfolder + name + '.hx', scope);
+	static function instantiate(pack:String, name:String, ?args:Array<Dynamic>, scope:ResolveScope = ANY):Dynamic {
+		var path:String = resolveScript(ScriptRegistry.classPaths(pack + '.' + name), scope);
 		if (path == null) {
-			HScript.error('Scripted state not found: ${subfolder}${name}.hx', errPos(name));
+			HScript.error('Scripted state not found: ${pack}/${name}.hx under ${ScriptRegistry.CLASS_ROOTS.join(" or ")}', errPos(name));
 			return null;
 		}
 
 		// The scope travels with the entry: a state resolved from the launched mod must find its
 		// `classes/` there too, not through the ANY scope's Mods.currentModDirectory (which engine
 		// helpers repoint, so the state would load while its own library went missing).
-		var type:IScriptedType = ScriptRegistry.loadEntry(path, name, null, scope);
+		//
+		// A state lives under a class root, so it is a class in the `states` package like any
+		// other -- which is what lets another class `import states.MyMenu`.
+		var type:IScriptedType = ScriptRegistry.loadEntry(path, name, [pack], scope);
 		if (type == null || !(type is ScriptedClass)) {
 			HScript.error('Scripted state "$name" must declare a class named "$name"', errPos(name));
 			return null;
@@ -260,14 +269,32 @@ class ScriptedStates {
 		return inst;
 	}
 
+	/**
+	 * First of `candidates` that exists in `scope`, or null.
+	 *
+	 * Scripted classes and states can live under more than one root, so the caller hands over the
+	 * places to try in preference order and this walks them within one scope.
+	 */
+	public static function resolveScript(candidates:Array<String>, scope:ResolveScope = ANY):String {
+		for (relative in candidates) {
+			var found:String = resolvePath(relative, scope);
+			if (found != null)
+				return found;
+		}
+		return null;
+	}
+
 	// The mod folder a resolved script path belongs to, or null if it's a shared
-	// (non-mod) path. e.g. "mods/MyMod/states/X.hx" -> "MyMod". A bare-root global
-	// script ("mods/states/X.hx", 3 segments) has no owning mod -> null, so it's
-	// not mistaken for a mod literally named "states".
+	// (non-mod) path. e.g. "mods/MyMod/scripts/classes/states/X.hx" -> "MyMod".
+	//
+	// A bare-root global script ("mods/scripts/classes/states/X.hx") has no owning mod -> null.
+	// It is told apart by its first segment being a script ROOT rather than a mod name, which is
+	// why the roots live in one place: a depth check alone cannot distinguish the two now that a
+	// class root is itself several folders deep.
 	static function ownerModOf(path:String):String {
 		#if MODS_ALLOWED
 		var parts:Array<String> = path.split('/');
-		if (parts.length > 3 && parts[0] + '/' == Paths.mods())
+		if (parts.length > 3 && parts[0] + '/' == Paths.mods() && !ScriptRegistry.isScriptRoot(parts[1]))
 			return parts[1];
 		#end
 		return null;

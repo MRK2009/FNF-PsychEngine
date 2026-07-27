@@ -143,48 +143,153 @@ class ScriptGlobals {
 	}
 
 	/**
-	 * Values and helper functions available inside scripted classes. `this` (the instance)
-	 * and everything inherited from the base are wired by the bridge macro, so this only
-	 * covers what isn't reachable through the object itself.
+	 * Everything a script can see that does not depend on which kind of script it is.
+	 *
+	 * `HScript.preset()` and `inject()` both used to answer this question, separately, and had
+	 * drifted: `preset` owned the keyboard and gamepad helpers and `getModSetting`, `inject` owned
+	 * the navigation helpers, and adding anything to one meant remembering to add it to the other.
+	 * Both now feed this one definition their own sink.
+	 *
+	 * @param set   Where to put each binding. An ordinary script writes into its interpreter, a
+	 *              scripted class into its world's variable table.
+	 * @param mod   The mod the script belongs to. `buildScripted` and `getModSetting` resolve
+	 *              against it, so a mod always reaches its OWN classes and settings rather than
+	 *              whichever mod happens to be the current directory.
 	 */
-	public static function inject(vars:Map<String, Dynamic>):Void {
-		inline function s(name:String, value:Dynamic)
-			vars.set(name, value);
-
+	public static function shared(set:(String, Dynamic) -> Void, ?mod:String):Void {
 		// Names bound to Psych-specific replacements (see TYPE_IMPORTS).
 		#if android
-		s('File', mobile.backend.ScriptFile);
-		s('FileSystem', mobile.backend.ScriptFileSystem);
+		set('File', mobile.backend.ScriptFile);
+		set('FileSystem', mobile.backend.ScriptFileSystem);
 		#elseif sys
-		s('File', File);
-		s('FileSystem', FileSystem);
+		set('File', File);
+		set('FileSystem', FileSystem);
 		#end
-		s('controls', Controls.instance);
+		set('controls', Controls.instance);
+		set('buildTarget', psychlua.LuaUtils.getBuildTarget());
 
-		s('getVar', function(name:String):Dynamic {
+		set('getVar', function(name:String):Dynamic {
 			return MusicBeatState.getVariables().exists(name) ? MusicBeatState.getVariables().get(name) : null;
 		});
-		s('setVar', function(name:String, value:Dynamic):Dynamic {
+		set('setVar', function(name:String, value:Dynamic):Dynamic {
 			MusicBeatState.getVariables().set(name, value);
 			return value;
 		});
-		s('removeVar', function(name:String):Bool {
+		set('removeVar', function(name:String):Bool {
 			if (MusicBeatState.getVariables().exists(name)) {
 				MusicBeatState.getVariables().remove(name);
 				return true;
 			}
 			return false;
 		});
+		set('debugPrint', function(text:String, ?color:flixel.util.FlxColor):Void {
+			if (states.PlayState.instance != null)
+				states.PlayState.instance.addTextToDebug(text, color == null ? flixel.util.FlxColor.WHITE : color);
+		});
 
-		// Navigation between scripted states from within a scripted class.
-		s('switchToState', function(name:String, ?args:Array<Dynamic>):Bool return ScriptedStates.switchToState(name, args));
-		s('openScriptedSubstate', function(name:String, ?args:Array<Dynamic>):Bool return ScriptedStates.openSubstate(name, args));
-		s('switchState', function(state:flixel.FlxState) MusicBeatState.switchState(state));
-		s('exitToEngine', function() ScriptedStates.exitToEngine());
-		s('launchMod', function(folder:String):Bool return ScriptedStates.launchMod(folder));
+		set('switchToState', function(name:String, ?args:Array<Dynamic>):Bool return ScriptedStates.switchToState(name, args));
+		set('openScriptedSubstate', function(name:String, ?args:Array<Dynamic>):Bool return ScriptedStates.openSubstate(name, args));
+		set('switchState', function(state:flixel.FlxState) MusicBeatState.switchState(state));
+		set('exitToEngine', function() ScriptedStates.exitToEngine());
+		set('launchMod', function(folder:String):Bool return ScriptedStates.launchMod(folder));
 
-		// Building scripted objects from other scripts.
-		s('buildScripted', function(path:String, ?args:Array<Dynamic>):Dynamic return ScriptRegistry.instantiate(path, args));
+		set('buildScripted', function(path:String, ?args:Array<Dynamic>):Dynamic return ScriptRegistry.instantiate(path, args, mod));
+		set('scriptedClass', function(path:String):Dynamic return ScriptRegistry.resolveClass(path, mod));
+
+		set('setExitTarget', function(name:String) states.PlayState.setExitTarget(name));
+		set('exitToState', function(name:String) states.PlayState.exitToState(name));
+
+		set('getModSetting', function(saveTag:String, ?modName:String):Dynamic {
+			if (modName == null) {
+				if (mod == null) {
+					trace('getModSetting: Argument #2 is null and script is not inside a packed Mod folder!');
+					return null;
+				}
+				modName = mod;
+			}
+			return psychlua.LuaUtils.getModSetting(saveTag, modName);
+		});
+
+		sharedInput(set);
+
+		set('Function_Stop', psychlua.LuaUtils.Function_Stop);
+		set('Function_Continue', psychlua.LuaUtils.Function_Continue);
+		set('Function_StopLua', psychlua.LuaUtils.Function_StopLua);
+		set('Function_StopHScript', psychlua.LuaUtils.Function_StopHScript);
+		set('Function_StopAll', psychlua.LuaUtils.Function_StopAll);
+	}
+
+	/** Keyboard, gamepad and note-control polling. Split out only to keep `shared` readable. **/
+	static function sharedInput(set:(String, Dynamic) -> Void):Void {
+		set('keyboardJustPressed', function(name:String):Dynamic return Reflect.getProperty(flixel.FlxG.keys.justPressed, name));
+		set('keyboardPressed', function(name:String):Dynamic return Reflect.getProperty(flixel.FlxG.keys.pressed, name));
+		set('keyboardReleased', function(name:String):Dynamic return Reflect.getProperty(flixel.FlxG.keys.justReleased, name));
+
+		set('anyGamepadJustPressed', function(name:String):Bool return flixel.FlxG.gamepads.anyJustPressed(name));
+		set('anyGamepadPressed', function(name:String):Bool return flixel.FlxG.gamepads.anyPressed(name));
+		set('anyGamepadReleased', function(name:String):Bool return flixel.FlxG.gamepads.anyJustReleased(name));
+
+		set('gamepadAnalogX', function(id:Int, ?leftStick:Bool = true):Float {
+			var controller = flixel.FlxG.gamepads.getByID(id);
+			return controller == null ? 0.0 : controller.getXAxis(leftStick ? LEFT_ANALOG_STICK : RIGHT_ANALOG_STICK);
+		});
+		set('gamepadAnalogY', function(id:Int, ?leftStick:Bool = true):Float {
+			var controller = flixel.FlxG.gamepads.getByID(id);
+			return controller == null ? 0.0 : controller.getYAxis(leftStick ? LEFT_ANALOG_STICK : RIGHT_ANALOG_STICK);
+		});
+		set('gamepadJustPressed', function(id:Int, name:String):Bool {
+			var controller = flixel.FlxG.gamepads.getByID(id);
+			return controller != null && Reflect.getProperty(controller.justPressed, name) == true;
+		});
+		set('gamepadPressed', function(id:Int, name:String):Bool {
+			var controller = flixel.FlxG.gamepads.getByID(id);
+			return controller != null && Reflect.getProperty(controller.pressed, name) == true;
+		});
+		set('gamepadReleased', function(id:Int, name:String):Bool {
+			var controller = flixel.FlxG.gamepads.getByID(id);
+			return controller != null && Reflect.getProperty(controller.justReleased, name) == true;
+		});
+
+		set('keyJustPressed', function(name:String = ''):Bool {
+			return switch (name.toLowerCase()) {
+				case 'left': Controls.instance.NOTE_LEFT_P;
+				case 'down': Controls.instance.NOTE_DOWN_P;
+				case 'up': Controls.instance.NOTE_UP_P;
+				case 'right': Controls.instance.NOTE_RIGHT_P;
+				default: Controls.instance.justPressed(name);
+			}
+		});
+		set('keyPressed', function(name:String = ''):Bool {
+			return switch (name.toLowerCase()) {
+				case 'left': Controls.instance.NOTE_LEFT;
+				case 'down': Controls.instance.NOTE_DOWN;
+				case 'up': Controls.instance.NOTE_UP;
+				case 'right': Controls.instance.NOTE_RIGHT;
+				default: Controls.instance.pressed(name);
+			}
+		});
+		set('keyReleased', function(name:String = ''):Bool {
+			return switch (name.toLowerCase()) {
+				case 'left': Controls.instance.NOTE_LEFT_R;
+				case 'down': Controls.instance.NOTE_DOWN_R;
+				case 'up': Controls.instance.NOTE_UP_R;
+				case 'right': Controls.instance.NOTE_RIGHT_R;
+				default: Controls.instance.justReleased(name);
+			}
+		});
+	}
+
+	/**
+	 * Values and helper functions available inside scripted classes. `this` (the instance)
+	 * and everything inherited from the base are wired by the bridge macro, so this only
+	 * covers what isn't reachable through the object itself.
+	 *
+	 * @param mod The mod this world belongs to. `buildScripted` resolves against it, so a class
+	 *            building another class finds its OWN mod's copy rather than whichever mod
+	 *            happened to be current.
+	 */
+	public static function inject(vars:Map<String, Dynamic>, ?mod:String):Void {
+		shared(function(name:String, value:Dynamic) vars.set(name, value), mod);
 	}
 }
 #end
