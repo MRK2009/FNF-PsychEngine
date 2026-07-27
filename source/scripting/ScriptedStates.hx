@@ -235,7 +235,10 @@ class ScriptedStates {
 			return null;
 		}
 
-		var type:IScriptedType = ScriptRegistry.loadEntry(path, name);
+		// The scope travels with the entry: a state resolved from the launched mod must find its
+		// `classes/` there too, not through the ANY scope's Mods.currentModDirectory (which engine
+		// helpers repoint, so the state would load while its own library went missing).
+		var type:IScriptedType = ScriptRegistry.loadEntry(path, name, null, scope);
 		if (type == null || !(type is ScriptedClass)) {
 			HScript.error('Scripted state "$name" must declare a class named "$name"', errPos(name));
 			return null;

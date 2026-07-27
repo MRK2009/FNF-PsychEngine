@@ -43,6 +43,17 @@ class ScriptRegistry {
 
 	static var failedPaths:Array<String> = [];
 
+	/**
+	 * Where this session's `classes/` resolve from.
+	 *
+	 * A launched mod's state is resolved with LAUNCHED scope (see `ScriptedStates.sourceScope`),
+	 * because `Mods.currentModDirectory` -- which the plain ANY scope reads -- gets repointed by
+	 * engine helpers like `WeekData.setDirectoryFromWeek`. The classes a state imports have to
+	 * come from the SAME source, or the state loads and its own library does not. `loadEntry`
+	 * records the scope it was given so everything that follows agrees with it.
+	 */
+	static var sessionScope:ResolveScope = ANY;
+
 	public static function world():Environment {
 		if (environment == null) {
 			environment = new Environment();
@@ -60,6 +71,7 @@ class ScriptRegistry {
 			environment.snapshot();
 
 		environment = null;
+		sessionScope = ANY;
 		loaded.clear();
 		stamps.clear();
 		failedPaths.resize(0);
@@ -79,8 +91,8 @@ class ScriptRegistry {
 	 * it imports if it isn't in the world yet. Returns null and logs to the debug console
 	 * when the file is missing or fails to initialize.
 	 */
-	public static function resolveClass(path:String, scope:ResolveScope = ANY):ScriptedClass {
-		var type:IScriptedType = resolveType(path, scope);
+	public static function resolveClass(path:String, ?scope:ResolveScope):ScriptedClass {
+		var type:IScriptedType = resolveType(path, (scope != null) ? scope : sessionScope);
 		if (type == null)
 			return null;
 
@@ -92,7 +104,7 @@ class ScriptRegistry {
 	}
 
 	/** Builds an instance of a scripted class by dotted path. */
-	public static function instantiate(path:String, ?args:Array<Dynamic>, scope:ResolveScope = ANY):Dynamic {
+	public static function instantiate(path:String, ?args:Array<Dynamic>, ?scope:ResolveScope):Dynamic {
 		var cls:ScriptedClass = resolveClass(path, scope);
 		if (cls == null)
 			return null;
@@ -121,7 +133,7 @@ class ScriptRegistry {
 	}
 
 	/** Whether `path` names a scripted class extending (directly or not) the given native base. */
-	public static function isSubclassOf(path:String, base:Class<Dynamic>, scope:ResolveScope = ANY):Bool {
+	public static function isSubclassOf(path:String, base:Class<Dynamic>, ?scope:ResolveScope):Bool {
 		var cls:ScriptedClass = resolveClass(path, scope);
 		if (cls == null)
 			return false;
@@ -166,11 +178,26 @@ class ScriptRegistry {
 
 		var relative:String = CLASS_ROOT + path.split('.').join('/') + '.hx';
 		var file:String = ScriptedStates.resolvePath(relative, scope);
-		if (file == null)
-			return false;
 
-		if (blocked(file))
+		// A mod's own source first, then the wider search. LAUNCHED and GLOBALS deliberately never
+		// fall back to shared on their own, but a class library that lives outside the launched mod
+		// should still be reachable.
+		if (file == null && scope != ANY)
+			file = ScriptedStates.resolvePath(relative, ANY);
+
+		// `scriptedImports` only hands over paths that are NOT compiled types, so failing to find
+		// one on disk is a real error. Reporting it here is what turns "must declare a class named
+		// X" -- raised much later, when the type that needed the import fails to initialize -- into
+		// the actual missing file.
+		if (file == null) {
+			HScript.error('Unresolved import "$path": no compiled type, and no $relative in this mod', errPos(path));
 			return false;
+		}
+
+		if (blocked(file)) {
+			HScript.error('Unresolved import "$path": the mod it belongs to is not trusted', errPos(path));
+			return false;
+		}
 
 		var parts:Array<String> = path.split('.');
 		var name:String = parts.pop();
@@ -265,9 +292,20 @@ class ScriptRegistry {
 	 * Registers an entry module (a state or substate) in the shared world, replacing any
 	 * previous version so it re-runs from scratch. Returns its main type.
 	 */
-	public static function loadEntry(file:String, name:String, ?pack:Array<String>):IScriptedType {
+	public static function loadEntry(file:String, name:String, ?pack:Array<String>, ?scope:ResolveScope):IScriptedType {
 		if (pack == null)
 			pack = [];
+
+		// The entry was resolved in this scope, so its classes have to resolve in it too.
+		sessionScope = (scope != null) ? scope : ANY;
+
+		// The same trust gate the mod's own classes go through. Without it a state script from an
+		// untrusted mod would run while every class it imports was blocked -- which both executes
+		// code the player never approved and fails in a way that reads like a broken script.
+		if (blocked(file)) {
+			HScript.error('Scripted state "$name" is blocked: mod not trusted', errPos(name));
+			return null;
+		}
 
 		var failed:Bool = false;
 		var module:Module = new Module(File.getContent(file), name, pack, file);
@@ -284,7 +322,7 @@ class ScriptRegistry {
 
 		var added:Array<Module> = [module];
 		for (dependency in scriptedImports(module))
-			load(dependency, ANY, added);
+			load(dependency, sessionScope, added);
 
 		startAll(added);
 
