@@ -144,16 +144,39 @@ class ModSecurity {
 		// scripts can't tamper with it; block resolution so they can't reach it here.
 		"DebugPrefs" => true,
 		"backend.DebugPrefs" => true,
+		// The interpreter's own config, which holds the type blacklist mirrored below. Blocked by
+		// name rather than by package: the rest of `insanity` is the machinery scripts run ON.
+		"insanity.Config" => true,
 	];
 
 	/**
-	 * Reflection-safe replacement for `Type.resolveClass`. Returns null for
-	 * any class on the blocklist. Use this from EVERY mod-script entry point
-	 * that resolves a class by name (Lua callbacks, HScript imports, etc.).
+	 * Whole packages no mod script has any business resolving out of, by prefix.
+	 *
+	 * `BLOCKED_CLASSES` names individual engine classes; this covers the ones where the danger is
+	 * the package rather than any one type: the process and filesystem (`sys`), native handles
+	 * (`cpp`, `neko`, `java`), and the raw Lua state sitting behind the script's own interpreter
+	 * (`llua`). Naming them here means a new class under any of them is not reachable by default,
+	 * without having to enumerate engine classes a mod is expected to use.
+	 *
+	 * `insanity` is deliberately NOT here. It is the interpreter itself: `Std`, `Type` and
+	 * `Reflect` inside a script ARE `insanity.proxy.*`, and scripted abstracts run on
+	 * `insanity.types.*`, so blocking the package breaks the machinery scripts are written
+	 * against. `insanity.Config`, which holds the type blacklist, is blocked by name instead.
 	 */
-	public static inline function safeResolveClass(name:String):Class<Dynamic> {
+	public static final BLOCKED_PACKAGES:Array<String> = ["sys.", "cpp.", "neko.", "java.", "llua."];
+
+	/**
+	 * Reflection-safe replacement for `Type.resolveClass`. Use this from EVERY mod-script entry
+	 * point that resolves a class by name (Lua callbacks, `import(...)`, `addHaxeLibrary`, ...).
+	 */
+	public static function safeResolveClass(name:String):Class<Dynamic> {
 		if (name == null) return null;
 		if (BLOCKED_CLASSES.exists(name)) return null;
+
+		for (pack in BLOCKED_PACKAGES)
+			if (name.startsWith(pack))
+				return null;
+
 		return Type.resolveClass(name);
 	}
 

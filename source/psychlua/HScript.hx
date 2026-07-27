@@ -101,6 +101,27 @@ class HScript {
 		for (name => _ in backend.ModSecurity.BLOCKED_CLASSES)
 			if (name.indexOf('.') >= 0 && !byType.contains(name)) // fully-qualified names only
 				byType.push(name);
+
+		/**
+			`import` is a wider surface than resolution by name: it goes through insanity's own type
+			collection, so `ModSecurity.safeResolveClass` never sees it. The packages that are
+			dangerous wholesale are mirrored here so both surfaces agree.
+
+			`insanity` itself must NOT be listed. `Std`, `Type` and `Reflect` inside a script resolve
+			to `insanity.proxy.*` and scripted abstracts run on `insanity.types.*`, so blocking the
+			package blacklists the interpreter's own machinery: every script using `Std` dies with
+			"Unknown identifier: Std". `insanity.Config` is in `BLOCKED_CLASSES` by name instead.
+		**/
+		var byPackage:Array<String> = insanity.Config.blacklist.get(ByPackage(true));
+		if (byPackage == null) {
+			byPackage = [];
+			insanity.Config.blacklist.set(ByPackage(true), byPackage);
+		}
+		for (pack in backend.ModSecurity.BLOCKED_PACKAGES) {
+			var name:String = pack.substr(0, pack.length - 1); // "sys." -> "sys"
+			if (!byPackage.contains(name))
+				byPackage.push(name);
+		}
 		#end
 	}
 
