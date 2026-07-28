@@ -52,6 +52,19 @@ class HScript {
 	public var blocked:Bool = false;
 	public var failed:Bool = false;
 
+	/**
+		Hook name -> whether this script defines a function by that name.
+
+		Dispatch asks every script for every hook, and almost every answer is "not defined" -- each
+		of which cost a variable lookup plus a `Reflect.isFunction` type check, per script, per
+		hook, per frame. `onUpdate` and `onUpdatePost` alone made that `2 x scripts x 60` a second.
+		The Lua side has had this (`FunkinLua.hookCache`); HScript went without.
+
+		A `false` is only trusted until the script defines the function later -- see `defineHook`,
+		which is what a runtime definition needs to call.
+	**/
+	var hookCache:Map<String, Bool> = new Map();
+
 	// Replaces crowplexus Iris.instances -- lets PlayState/LoadingState/FunkinLua
 	// check whether a script path is already running and fetch it by name.
 	public static var instances:Map<String, HScript> = new Map();
@@ -244,6 +257,9 @@ class HScript {
 		try {
 			returnValue = interp.execute(script.program);
 			scripting.ScriptHooks.bindHScript(script.variables);
+			// Executing is what DEFINES the hooks, and a re-run (runHaxeCode against a Lua parent's
+			// interpreter) can replace them wholesale, so nothing learned before it still holds.
+			hookCache.clear();
 		} catch (e:haxe.Exception) {
 			failed = true;
 			returnValue = null;
@@ -291,6 +307,18 @@ class HScript {
 	public function set(name:String, value:Dynamic):Void {
 		if (script != null)
 			script.variables.set(name, value);
+		hookCache.remove(name);
+	}
+
+	/**
+		Forgets what is cached about `func`, so the next dispatch looks it up again.
+
+		Only needed by a script that defines a hook from inside another function, long after load;
+		one declared normally is already there the first time it is looked for. Mirrors
+		`FunkinLua.defineHook`.
+	**/
+	public function defineHook(func:String):Void {
+		hookCache.remove(func);
 	}
 
 	public function get(name:String):Dynamic
@@ -343,7 +371,11 @@ class HScript {
 					if (script != null && script.lua != null && !script.closed)
 						Lua_helper.add_callback(script.lua, name, func);
 
-			FunkinLua.customFunctions.set(name, func);
+			// Through the host, so its teardown removes this name and leaves other hosts' alone.
+			if (host != null)
+				host.registerGlobalCallback(name, func);
+			else
+				FunkinLua.customFunctions.set(name, func);
 		});
 
 		// this one was tested
@@ -461,9 +493,17 @@ class HScript {
 		if (funcToRun == null || script == null)
 			return null;
 
-		var func:Dynamic = script.variables.get(funcToRun);
-		if (func == null || !Reflect.isFunction(func))
+		var known:Null<Bool> = hookCache.get(funcToRun);
+		if (known != null && !known)
 			return null;
+
+		var func:Dynamic = script.variables.get(funcToRun);
+		if (func == null || !Reflect.isFunction(func)) {
+			hookCache.set(funcToRun, false);
+			return null;
+		}
+		if (known == null)
+			hookCache.set(funcToRun, true);
 
 		try {
 			return Reflect.callMethod(null, func, args ?? []);

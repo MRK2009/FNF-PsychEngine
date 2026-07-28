@@ -33,24 +33,21 @@ class CallbackHandler {
 		try {
 			var cbf:Dynamic = Lua_helper.callbacks.get(fname);
 
-			// Local functions have the lowest priority -- only loop through
-			// scripts when no global callback owns the name.
+			// Local functions have the lowest priority -- only resolve the owning script
+			// when no global callback owns the name.
 			if (cbf == null) {
-				final last:FunkinLua = FunkinLua.lastCalledScript;
-				if (last == null || last.lua != L) {
-					final host:scripting.ScriptHost = scripting.ScriptHost.current;
-					if (host != null && host.luaArray != null) {
-						for (script in host.luaArray)
-							if (script != null && script != last && script.lua == L) {
-								cbf = script.callbacks.get(fname);
-								// Mirror linc_luajit behaviour: dispatcher updates
-								// lastCalledScript so per-script API helpers route correctly.
-								FunkinLua.lastCalledScript = script;
-								break;
-							}
-					}
-				} else
-					cbf = last.callbacks.get(fname);
+				// The owner comes off `L` itself (LuaProxy keeps it on the state's registry entry).
+				// This used to go through `ScriptHost.current` plus a linear scan plus a
+				// `lastCalledScript` guess, so a callback firing while a DIFFERENT host was current --
+				// a tween or timer that outlived its state -- resolved to nothing and silently
+				// returned no values.
+				final owner:FunkinLua = LuaProxy.ownerOf(L);
+				if (owner != null) {
+					cbf = owner.callbacks.get(fname);
+					// Mirror linc_luajit behaviour: dispatcher updates lastCalledScript
+					// so per-script API helpers route correctly.
+					FunkinLua.lastCalledScript = owner;
+				}
 			}
 
 			if (cbf == null)

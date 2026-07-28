@@ -168,35 +168,27 @@ class ScriptGlobals {
 		set('controls', Controls.instance);
 		set('buildTarget', psychlua.LuaUtils.getBuildTarget());
 
-		set('getVar', function(name:String):Dynamic {
-			return MusicBeatState.getVariables().exists(name) ? MusicBeatState.getVariables().get(name) : null;
-		});
-		set('setVar', function(name:String, value:Dynamic):Dynamic {
-			MusicBeatState.getVariables().set(name, value);
-			return value;
-		});
-		set('removeVar', function(name:String):Bool {
-			if (MusicBeatState.getVariables().exists(name)) {
-				MusicBeatState.getVariables().remove(name);
-				return true;
-			}
-			return false;
-		});
-		set('debugPrint', function(text:String, ?color:flixel.util.FlxColor):Void {
-			ScriptError.show(text, color == null ? flixel.util.FlxColor.WHITE : color);
-		});
+		// Static references, not inline closures. An anonymous closure allocates every time the
+		// expression is evaluated -- once per binding per script load, so a modpack with a dozen
+		// scripts paid a few hundred small allocations for functions that capture nothing. hxcpp
+		// caches a static function's `_dyn` object, so each of these allocates once for the process.
+		// The three below that close over `mod` genuinely need to.
+		set('getVar', getVar);
+		set('setVar', setVar);
+		set('removeVar', removeVar);
+		set('debugPrint', debugPrint);
 
-		set('switchToState', function(name:String, ?args:Array<Dynamic>):Bool return ScriptedStates.switchToState(name, args));
-		set('openScriptedSubstate', function(name:String, ?args:Array<Dynamic>):Bool return ScriptedStates.openSubstate(name, args));
-		set('switchState', function(state:flixel.FlxState) MusicBeatState.switchState(state));
-		set('exitToEngine', function() ScriptedStates.exitToEngine());
-		set('launchMod', function(folder:String):Bool return ScriptedStates.launchMod(folder));
+		set('switchToState', switchToState);
+		set('openScriptedSubstate', openScriptedSubstate);
+		set('switchState', switchState);
+		set('exitToEngine', ScriptedStates.exitToEngine);
+		set('launchMod', ScriptedStates.launchMod);
 
 		set('buildScripted', function(path:String, ?args:Array<Dynamic>):Dynamic return ScriptRegistry.instantiate(path, args, mod));
 		set('scriptedClass', function(path:String):Dynamic return ScriptRegistry.resolveClass(path, mod));
 
-		set('setExitTarget', function(name:String) states.PlayState.setExitTarget(name));
-		set('exitToState', function(name:String) states.PlayState.exitToState(name));
+		set('setExitTarget', states.PlayState.setExitTarget);
+		set('exitToState', states.PlayState.exitToState);
 
 		set('getModSetting', function(saveTag:String, ?modName:String):Dynamic {
 			if (modName == null) {
@@ -218,64 +210,139 @@ class ScriptGlobals {
 		set('Function_StopAll', psychlua.LuaUtils.Function_StopAll);
 	}
 
-	/** Keyboard, gamepad and note-control polling. Split out only to keep `shared` readable. **/
+	/**
+		Keyboard, gamepad and note-control polling.
+
+		Static references for the same reason as `shared`'s bindings: none of these capture anything,
+		so an inline closure would have allocated one object per binding per script load.
+	**/
 	static function sharedInput(set:(String, Dynamic) -> Void):Void {
-		set('keyboardJustPressed', function(name:String):Dynamic return Reflect.getProperty(flixel.FlxG.keys.justPressed, name));
-		set('keyboardPressed', function(name:String):Dynamic return Reflect.getProperty(flixel.FlxG.keys.pressed, name));
-		set('keyboardReleased', function(name:String):Dynamic return Reflect.getProperty(flixel.FlxG.keys.justReleased, name));
+		set('keyboardJustPressed', keyboardJustPressed);
+		set('keyboardPressed', keyboardPressed);
+		set('keyboardReleased', keyboardReleased);
 
-		set('anyGamepadJustPressed', function(name:String):Bool return flixel.FlxG.gamepads.anyJustPressed(name));
-		set('anyGamepadPressed', function(name:String):Bool return flixel.FlxG.gamepads.anyPressed(name));
-		set('anyGamepadReleased', function(name:String):Bool return flixel.FlxG.gamepads.anyJustReleased(name));
+		set('anyGamepadJustPressed', anyGamepadJustPressed);
+		set('anyGamepadPressed', anyGamepadPressed);
+		set('anyGamepadReleased', anyGamepadReleased);
 
-		set('gamepadAnalogX', function(id:Int, ?leftStick:Bool = true):Float {
-			var controller = flixel.FlxG.gamepads.getByID(id);
-			return controller == null ? 0.0 : controller.getXAxis(leftStick ? LEFT_ANALOG_STICK : RIGHT_ANALOG_STICK);
-		});
-		set('gamepadAnalogY', function(id:Int, ?leftStick:Bool = true):Float {
-			var controller = flixel.FlxG.gamepads.getByID(id);
-			return controller == null ? 0.0 : controller.getYAxis(leftStick ? LEFT_ANALOG_STICK : RIGHT_ANALOG_STICK);
-		});
-		set('gamepadJustPressed', function(id:Int, name:String):Bool {
-			var controller = flixel.FlxG.gamepads.getByID(id);
-			return controller != null && Reflect.getProperty(controller.justPressed, name) == true;
-		});
-		set('gamepadPressed', function(id:Int, name:String):Bool {
-			var controller = flixel.FlxG.gamepads.getByID(id);
-			return controller != null && Reflect.getProperty(controller.pressed, name) == true;
-		});
-		set('gamepadReleased', function(id:Int, name:String):Bool {
-			var controller = flixel.FlxG.gamepads.getByID(id);
-			return controller != null && Reflect.getProperty(controller.justReleased, name) == true;
-		});
+		set('gamepadAnalogX', gamepadAnalogX);
+		set('gamepadAnalogY', gamepadAnalogY);
+		set('gamepadJustPressed', gamepadJustPressed);
+		set('gamepadPressed', gamepadPressed);
+		set('gamepadReleased', gamepadReleased);
 
-		set('keyJustPressed', function(name:String = ''):Bool {
-			return switch (name.toLowerCase()) {
-				case 'left': Controls.instance.NOTE_LEFT_P;
-				case 'down': Controls.instance.NOTE_DOWN_P;
-				case 'up': Controls.instance.NOTE_UP_P;
-				case 'right': Controls.instance.NOTE_RIGHT_P;
-				default: Controls.instance.justPressed(name);
-			}
-		});
-		set('keyPressed', function(name:String = ''):Bool {
-			return switch (name.toLowerCase()) {
-				case 'left': Controls.instance.NOTE_LEFT;
-				case 'down': Controls.instance.NOTE_DOWN;
-				case 'up': Controls.instance.NOTE_UP;
-				case 'right': Controls.instance.NOTE_RIGHT;
-				default: Controls.instance.pressed(name);
-			}
-		});
-		set('keyReleased', function(name:String = ''):Bool {
-			return switch (name.toLowerCase()) {
-				case 'left': Controls.instance.NOTE_LEFT_R;
-				case 'down': Controls.instance.NOTE_DOWN_R;
-				case 'up': Controls.instance.NOTE_UP_R;
-				case 'right': Controls.instance.NOTE_RIGHT_R;
-				default: Controls.instance.justReleased(name);
-			}
-		});
+		set('keyJustPressed', keyJustPressed);
+		set('keyPressed', keyPressed);
+		set('keyReleased', keyReleased);
+	}
+
+	static function getVar(name:String):Dynamic {
+		return MusicBeatState.getVariables().get(name);
+	}
+
+	static function setVar(name:String, value:Dynamic):Dynamic {
+		MusicBeatState.getVariables().set(name, value);
+		return value;
+	}
+
+	static function removeVar(name:String):Bool {
+		if (MusicBeatState.getVariables().exists(name)) {
+			MusicBeatState.getVariables().remove(name);
+			return true;
+		}
+		return false;
+	}
+
+	static function debugPrint(text:String, ?color:flixel.util.FlxColor):Void {
+		ScriptError.show(text, color == null ? flixel.util.FlxColor.WHITE : color);
+	}
+
+	// Wrappers rather than direct references: the engine functions take a further `scope`/state
+	// argument that is not part of the script-facing signature.
+	static function switchToState(name:String, ?args:Array<Dynamic>):Bool
+		return ScriptedStates.switchToState(name, args);
+
+	static function openScriptedSubstate(name:String, ?args:Array<Dynamic>):Bool
+		return ScriptedStates.openSubstate(name, args);
+
+	static function switchState(state:flixel.FlxState):Void
+		MusicBeatState.switchState(state);
+
+	// Wrappers, not direct references: `FlxGamepadManager`'s `any*` are `inline`, so they have no
+	// runtime form to take a closure on -- hxcpp would emit a call to a `_dyn` it never declares,
+	// which only shows up at C++ compile time. They also declare `FlxGamepadInputID`, and the
+	// script-facing signature has always been a plain String.
+	static function anyGamepadJustPressed(name:String):Bool
+		return flixel.FlxG.gamepads.anyJustPressed(name);
+
+	static function anyGamepadPressed(name:String):Bool
+		return flixel.FlxG.gamepads.anyPressed(name);
+
+	static function anyGamepadReleased(name:String):Bool
+		return flixel.FlxG.gamepads.anyJustReleased(name);
+
+	static function keyboardJustPressed(name:String):Dynamic
+		return Reflect.getProperty(flixel.FlxG.keys.justPressed, name);
+
+	static function keyboardPressed(name:String):Dynamic
+		return Reflect.getProperty(flixel.FlxG.keys.pressed, name);
+
+	static function keyboardReleased(name:String):Dynamic
+		return Reflect.getProperty(flixel.FlxG.keys.justReleased, name);
+
+	static function gamepadAnalogX(id:Int, ?leftStick:Bool = true):Float {
+		var controller = flixel.FlxG.gamepads.getByID(id);
+		return controller == null ? 0.0 : controller.getXAxis(leftStick ? LEFT_ANALOG_STICK : RIGHT_ANALOG_STICK);
+	}
+
+	static function gamepadAnalogY(id:Int, ?leftStick:Bool = true):Float {
+		var controller = flixel.FlxG.gamepads.getByID(id);
+		return controller == null ? 0.0 : controller.getYAxis(leftStick ? LEFT_ANALOG_STICK : RIGHT_ANALOG_STICK);
+	}
+
+	static function gamepadJustPressed(id:Int, name:String):Bool {
+		var controller = flixel.FlxG.gamepads.getByID(id);
+		return controller != null && Reflect.getProperty(controller.justPressed, name) == true;
+	}
+
+	static function gamepadPressed(id:Int, name:String):Bool {
+		var controller = flixel.FlxG.gamepads.getByID(id);
+		return controller != null && Reflect.getProperty(controller.pressed, name) == true;
+	}
+
+	static function gamepadReleased(id:Int, name:String):Bool {
+		var controller = flixel.FlxG.gamepads.getByID(id);
+		return controller != null && Reflect.getProperty(controller.justReleased, name) == true;
+	}
+
+	static function keyJustPressed(name:String = ''):Bool {
+		return switch (name.toLowerCase()) {
+			case 'left': Controls.instance.NOTE_LEFT_P;
+			case 'down': Controls.instance.NOTE_DOWN_P;
+			case 'up': Controls.instance.NOTE_UP_P;
+			case 'right': Controls.instance.NOTE_RIGHT_P;
+			default: Controls.instance.justPressed(name);
+		}
+	}
+
+	static function keyPressed(name:String = ''):Bool {
+		return switch (name.toLowerCase()) {
+			case 'left': Controls.instance.NOTE_LEFT;
+			case 'down': Controls.instance.NOTE_DOWN;
+			case 'up': Controls.instance.NOTE_UP;
+			case 'right': Controls.instance.NOTE_RIGHT;
+			default: Controls.instance.pressed(name);
+		}
+	}
+
+	static function keyReleased(name:String = ''):Bool {
+		return switch (name.toLowerCase()) {
+			case 'left': Controls.instance.NOTE_LEFT_R;
+			case 'down': Controls.instance.NOTE_DOWN_R;
+			case 'up': Controls.instance.NOTE_UP_R;
+			case 'right': Controls.instance.NOTE_RIGHT_R;
+			default: Controls.instance.justReleased(name);
+		}
 	}
 
 	/**

@@ -59,7 +59,9 @@ class PropertyPath {
 
 		// Ordered for the hot path: a proxied sprite fails the type check and returns on the single
 		// reflection call. The fallbacks only run where the answer would have been null anyway.
-		if ((instance is MusicBeatState) && MusicBeatState.getVariables().exists(key)) {
+		// One `get`, not `exists` then `get`: a stored null was already treated as "not stored", so
+		// the membership test only doubled the map lookup on every `game.<field>` read.
+		if ((instance is MusicBeatState)) {
 			var stored:Dynamic = MusicBeatState.getVariables().get(key);
 			if (stored != null)
 				return stored;

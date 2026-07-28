@@ -45,6 +45,23 @@ class ScriptHost {
 
 	#if LUA_ALLOWED
 	public var luaArray:Array<FunkinLua> = [];
+
+	/**
+		Names this host's scripts registered through `createGlobalCallback`.
+
+		`FunkinLua.customFunctions` is one global registry shared by every host, and teardown used to
+		`clear()` it outright -- so a host dying took every OTHER live host's global callbacks with
+		it. Now that `scripts/global/` gives every state a host, that is a real collision.
+	**/
+	var ownedGlobalCallbacks:Array<String> = [];
+
+	/** Publishes a global callback and remembers it, so teardown removes only what this host added. **/
+	public function registerGlobalCallback(name:String, func:Dynamic):Void {
+		if (!ownedGlobalCallbacks.contains(name))
+			ownedGlobalCallbacks.push(name);
+
+		FunkinLua.customFunctions.set(name, func);
+	}
 	#end
 	#if HSCRIPT_ALLOWED
 	public var hscriptArray:Array<HScript> = [];
@@ -53,6 +70,24 @@ class ScriptHost {
 	public function new(owner:flixel.FlxState) {
 		this.owner = owner;
 		current = this;
+	}
+
+	/**
+		Whether this host has anything to dispatch to.
+
+		Lets a per-frame caller skip the hook entirely rather than walking two empty arrays, which is
+		the common case: every state has a host now, and almost none of them have scripts.
+	**/
+	public inline function hasScripts():Bool {
+		#if LUA_ALLOWED
+		if (luaArray != null && luaArray.length > 0)
+			return true;
+		#end
+		#if HSCRIPT_ALLOWED
+		if (hscriptArray != null && hscriptArray.length > 0)
+			return true;
+		#end
+		return false;
 	}
 
 	/**
@@ -225,8 +260,9 @@ class ScriptHost {
 	**/
 	public function call(funcToCall:String, args:Array<Dynamic> = null, ignoreStops:Bool = false, exclusions:Array<String> = null,
 			excludeValues:Array<Dynamic> = null):Dynamic {
-		if (args == null)
-			args = [];
+		// `args` stays null rather than becoming `[]`. Most hooks take no arguments and most scripts
+		// implement none of them, so materialising an empty array here allocated once per hook per
+		// frame for dispatches that then found nothing to call. Both language passes take null.
 		if (exclusions == null)
 			exclusions = EMPTY_EXCLUSIONS;
 		if (excludeValues == null)
@@ -251,8 +287,6 @@ class ScriptHost {
 			excludeValues:Array<Dynamic> = null):Dynamic {
 		var returnVal:Dynamic = LuaUtils.Function_Continue;
 		#if LUA_ALLOWED
-		if (args == null)
-			args = [];
 		if (exclusions == null)
 			exclusions = EMPTY_EXCLUSIONS;
 		if (excludeValues == null)
@@ -362,12 +396,14 @@ class ScriptHost {
 		#if LUA_ALLOWED
 		if (luaArray != null) {
 			for (lua in luaArray) {
-				lua.call(ScriptHooks.DESTROY, []);
+				lua.call(ScriptHooks.DESTROY);
 				lua.stop();
 			}
 			luaArray = null;
 		}
-		FunkinLua.customFunctions.clear();
+		for (name in ownedGlobalCallbacks)
+			FunkinLua.customFunctions.remove(name);
+		ownedGlobalCallbacks.resize(0);
 		#end
 
 		#if HSCRIPT_ALLOWED

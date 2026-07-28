@@ -27,6 +27,9 @@ import hxluajit.wrapper.LuaFunction;
 //  - TUSERDATA: routed through the `userdataToHaxe` hook (installed by LuaProxy) so a
 //    table of object proxies unwraps its ELEMENTS to their live Haxe objects instead
 //    of marshalling them to null (e.g. `cam.filters = {shaderFilter}`).
+//  - Array / Map / anonymous structure: reimplemented so their ELEMENTS go through the
+//    `haxeToLua` hook. The haxelib's own recursion marshals any class it doesn't
+//    special-case to nil, so an `Array<NoteData>` reached Lua as a table of nils.
 class Convert {
 	/**
 	 * Proxy-userdata unwrap, installed by `psychlua.LuaProxy`. `convertTable` runs every
@@ -44,6 +47,23 @@ class Convert {
 
 	static function rawUserdata(L:State, idx:Int):Dynamic
 		return LuaConverter.fromLua(L, idx);
+
+	/**
+	 * Container-ELEMENT push, installed by `psychlua.LuaProxy`. The container cases below run
+	 * every element through this, so an `Array<NoteData>` becomes a real Lua table holding live
+	 * object proxies rather than the nils `LuaConverter` produces for any class it does not
+	 * special-case (its `toLua` has no proxy bridge and falls through to `pushnil`).
+	 *
+	 * That gap was not cosmetic: hook arguments are pushed through here, so `onNotesGenerated`
+	 * handed Lua a table of nils while HScript got the live note list.
+	 *
+	 * Defaults to plain `LuaConverter` marshalling when no proxy bridge is active. A
+	 * `cpp.Callable`, not a Haxe closure, for the same reason as `userdataToHaxe`.
+	 */
+	public static var haxeToLua:cpp.Callable<(L:State, v:Dynamic) -> Void> = cpp.Callable.fromStaticFunction(rawToLua);
+
+	static function rawToLua(L:State, v:Dynamic):Void
+		LuaConverter.toLua(L, v);
 
 	/**
 	 * The proxy state id owning `L`, installed by `psychlua.LuaProxy`. A wrapped Lua callback captures
@@ -75,8 +95,123 @@ class Convert {
 
 	static var tableDepth:Int = 0;
 
-	public static inline function toLua(L:State, val:Dynamic):Void
+	// Same guard, for the Haxe -> Lua direction: an object graph that contains itself would
+	// otherwise recurse until the native stack overflows.
+	static var pushDepth:Int = 0;
+
+	/**
+	 * Haxe value -> Lua value.
+	 *
+	 * Containers and anonymous structures are built here so their elements go through `haxeToLua`;
+	 * everything else is left to the haxelib, which marshals it correctly.
+	 *
+	 * Classified with direct type tests, not `Type.typeof`: on hxcpp the latter CONSTRUCTS a
+	 * `ValueType`, and its `TClass(c)` carries a parameter, so classifying a value allocated an
+	 * enum instance just to be switched on. Each test below is a single type check.
+	 */
+	public static function toLua(L:State, val:Dynamic):Void {
+		if (val != null) {
+			if ((val is Array)) {
+				pushArray(L, val);
+				return;
+			}
+			if ((val is haxe.Constraints.IMap)) {
+				pushMap(L, val);
+				return;
+			}
+			// What is left with no class of its own, once primitives, strings, enums and functions
+			// are excluded, is an anonymous structure.
+			if (!(val is String)
+				&& !(val is Float) // covers Int
+				&& !(val is Bool)
+				&& !Reflect.isFunction(val)
+				&& !Reflect.isEnumValue(val)
+				&& Type.getClass(val) == null) {
+				pushAnon(L, val);
+				return;
+			}
+		}
 		LuaConverter.toLua(L, val);
+	}
+
+	static function pushArray(L:State, arr:Array<Dynamic>):Void {
+		if (pushDepth >= MAX_TABLE_DEPTH) {
+			Lua.pushnil(L);
+			return;
+		}
+		pushDepth++;
+
+		final len:Int = arr.length;
+		Lua.createtable(L, len, 0);
+		try {
+			for (i in 0...len) {
+				Lua.pushinteger(L, i + 1); // Lua is 1-based
+				haxeToLua(L, arr[i]);
+				Lua.settable(L, -3);
+			}
+		} catch (e:Dynamic) {
+			pushDepth--;
+			throw e;
+		}
+		pushDepth--;
+	}
+
+	static function pushMap(L:State, map:haxe.Constraints.IMap<Dynamic, Dynamic>):Void {
+		if (pushDepth >= MAX_TABLE_DEPTH) {
+			Lua.pushnil(L);
+			return;
+		}
+		pushDepth++;
+
+		Lua.createtable(L, 0, 0);
+		try {
+			for (key in map.keys()) {
+				pushKey(L, key);
+				haxeToLua(L, map.get(key));
+				Lua.settable(L, -3);
+			}
+		} catch (e:Dynamic) {
+			pushDepth--;
+			throw e;
+		}
+		pushDepth--;
+	}
+
+	static function pushAnon(L:State, v:Dynamic):Void {
+		if (pushDepth >= MAX_TABLE_DEPTH) {
+			Lua.pushnil(L);
+			return;
+		}
+		pushDepth++;
+
+		final fields:Array<String> = Reflect.fields(v);
+		Lua.createtable(L, 0, fields.length);
+		try {
+			for (field in fields) {
+				Lua.pushstring(L, field);
+				haxeToLua(L, Reflect.field(v, field));
+				Lua.settable(L, -3);
+			}
+		} catch (e:Dynamic) {
+			pushDepth--;
+			throw e;
+		}
+		pushDepth--;
+	}
+
+	/**
+	 * A Haxe map key as a Lua table key. `IntMap` keys have to stay NUMBERS: the haxelib pushed
+	 * every key with `lua_pushstring` after casting the map to `Map<String, Dynamic>`, so an
+	 * `IntMap` produced garbage keys.
+	 */
+	static inline function pushKey(L:State, key:Dynamic):Void {
+		if ((key is Int))
+			Lua.pushinteger(L, (key : Int));
+		else if ((key is Float))
+			Lua.pushnumber(L, (key : Float));
+		else
+			Lua.pushstring(L, Std.string(key));
+	}
 
 	public static function fromLua(L:State, idx:Int):Dynamic {
 		return switch (Lua.type(L, idx)) {

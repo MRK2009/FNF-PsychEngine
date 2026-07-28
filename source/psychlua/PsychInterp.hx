@@ -18,11 +18,26 @@ import insanity.runtime.Error;
 class PsychInterp extends Interp {
 	public var parentInstance(default, set):Dynamic = null;
 
-	var _instanceFields:Array<String> = [];
+	/**
+	 * The parent instance's field names, as a set.
+	 *
+	 * A `Map`, not the `Array` `Type.getInstanceFields` hands back: this is consulted for every
+	 * identifier the script does not otherwise resolve, and for the base of every member access
+	 * (`isResolvable`). `parentInstance` is usually `PlayState`, whose field list runs to several
+	 * hundred entries, so a linear `indexOf` put a few hundred string comparisons on a path that
+	 * runs many times per frame.
+	 */
+	var _instanceFields:Map<String, Bool> = new Map();
 
 	function set_parentInstance(inst:Dynamic):Dynamic {
 		parentInstance = inst;
-		_instanceFields = (inst != null) ? Type.getInstanceFields(Type.getClass(inst)) : [];
+		_instanceFields = new Map();
+		if (inst != null) {
+			var cls:Class<Dynamic> = Type.getClass(inst);
+			if (cls != null)
+				for (field in Type.getInstanceFields(cls))
+					_instanceFields.set(field, true);
+		}
 		return inst;
 	}
 
@@ -38,7 +53,7 @@ class PsychInterp extends Interp {
 	// Purely additive: when parentInstance is null (e.g. scripted states that
 	// never set it) this short-circuits to the base behaviour.
 	override public function isResolvable(id:String):Bool {
-		return super.isResolvable(id) || (parentInstance != null && _instanceFields.indexOf(id) >= 0);
+		return super.isResolvable(id) || (parentInstance != null && _instanceFields.exists(id));
 	}
 
 	// Write-back counterpart to `resolve`: assigning to a creating-state field by
@@ -48,7 +63,7 @@ class PsychInterp extends Interp {
 	// properties, the strict undeclared-variable error for non-fields like a
 	// typo'd local) defers to insanity unchanged.
 	override function setVar(name:String, v:Dynamic):Dynamic {
-		if (!imports.exists(name) && !variables.exists(name) && parentInstance != null && _instanceFields.indexOf(name) >= 0) {
+		if (!imports.exists(name) && !variables.exists(name) && parentInstance != null && _instanceFields.exists(name)) {
 			Reflect.setProperty(parentInstance, name, v);
 			return v;
 		}
@@ -67,7 +82,7 @@ class PsychInterp extends Interp {
 			return resolveMirror(variables.get(id));
 
 		// Back-compat: resolve a field of the creating state as a bare identifier.
-		if (parentInstance != null && _instanceFields.indexOf(id) >= 0)
+		if (parentInstance != null && _instanceFields.exists(id))
 			return Reflect.getProperty(parentInstance, id);
 
 		error(EUnknownVariable(id));

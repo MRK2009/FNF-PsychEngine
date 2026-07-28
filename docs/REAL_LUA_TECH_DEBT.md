@@ -45,10 +45,17 @@ reading through our shim. Right now the logic is **duplicated** between the haxe
 
 ## 2. **[maintainability]** `Convert.hx` duplicates haxelib table-conversion logic
 
-`source/llua/Convert.hx` now reimplements `convertTable` / table iteration that also
-exists in `hxluajit-wrapper`. They can drift. A cleaner setup: a single source of truth
-(proper vendored fork of the wrapper, or move *all* conversion into the project and stop
+`source/llua/Convert.hx` now reimplements `convertTable` / table iteration **and** the
+Haxe→Lua container pushes (array / map / anonymous structure) that also exist in
+`hxluajit-wrapper`. They can drift. A cleaner setup: a single source of truth (proper
+vendored fork of the wrapper, or move *all* conversion into the project and stop
 delegating). Tied to #1.
+
+The Haxe→Lua half had to be reimplemented for correctness, not just for symmetry: the
+haxelib's `toLua` has no proxy bridge, so its `default` branch pushes **nil** for any class
+it does not special-case. An `Array<NoteData>` therefore reached Lua as a table of nils,
+which is what made `onNotesGenerated` useless from Lua while HScript saw the live list.
+Container elements now go through the `haxeToLua` hook, the mirror of `userdataToHaxe`.
 
 ---
 
@@ -83,14 +90,70 @@ helper to paste.
 
 ## 5. **[perf]** Per-frame proxy churn & callback round-trips
 
-- Method returns and `new` instances are pushed as **ephemeral** proxies — a fresh
-  handle each call. Hot per-frame code (`game.dad:getMidpoint()` every `onUpdate`)
-  allocates handles that then GC. Fine for scripting, but consider pooling for tight
-  loops.
-- An `ease` passed as a proxy method closure (`FlxEase.linear`) becomes a
-  `makeVarArgs` wrapper that round-trips Haxe→Lua→Haxe **every tween step**. Correct,
-  but heavy. Consider detecting/short-circuiting known `FlxEase` functions, or passing
-  eases by name.
+Partly addressed. What was done:
+
+- Ephemeral pushes now **reuse an object's existing cached proxy** when it has one, so a
+  method returning `this` (or a getter for something the script already touched) stops
+  allocating a fresh handle per call.
+- A classified plain field is tagged in the proxy env with an **interned key id**, not
+  `true`, so a cached read no longer rebuilds a Haxe `String` from Lua's C string on
+  every access. `__newindex` shares the same classification, which it previously had no
+  fast path for at all.
+- Metatable callbacks carry the resolved `ProxyState` instead of re-reading the state id
+  out of the Lua registry on every value pushed.
+
+- `isProxy` is a `getmetatable` plus a `rawgeti` on an integer slot, instead of one or two
+  registry lookups **by string name** plus a `rawequal`. It runs per argument of every
+  method call. Both metatables keep their own identity, which Lua 5.1 `__eq` dispatch
+  depends on.
+- `Type.typeof` is gone from the push path in both `LuaProxy` and `Convert`. On hxcpp it
+  CONSTRUCTS a `ValueType`, and `TClass(c)`/`TEnum(e)` carry a parameter — so classifying
+  a value to push it allocated an enum instance per push, purely to be switched on.
+- `ProxyFields` gives the members scripts touch every frame (`x`, `y`, `angle`, `alpha`,
+  `color`, `visible`, `scale.x`, …) direct typed access: an interned integer id switches
+  into a real field read or a virtual `set_*`, with no `Reflect` and no `Dynamic` boxing of
+  the value. Reflection remains the fallback for everything else.
+
+Still open:
+
+- Method returns for objects with **no** cached proxy are still a fresh handle per call.
+  Pooling would help tight loops.
+- An `ease` passed as a proxy method closure (`FlxEase.linear`) becomes a `makeVarArgs`
+  wrapper that round-trips Haxe→Lua→Haxe **every tween step**. Correct, but heavy.
+  Consider detecting/short-circuiting known `FlxEase` functions, or passing eases by name.
+- `ProxyFields` only covers `FlxObject`, `FlxSprite` and `FlxBasePoint`. Engine types with
+  their own hot members (`Character`, `Receptor`, `Conductor` statics) still go through
+  reflection. Extending it is mechanical, but every field added must be a property with a
+  setter **on the base class** — a plain variable would be written directly and skip
+  `FlxSpriteGroup`'s propagating overrides.
+
+---
+
+## 8. **[fixed, needs play test]** Anonymous structures are proxied on the direct path
+
+Anonymous structures used to marshal to a **table copy**, so on the direct path
+`game.SONG.notes[0].mustHitSection = true` wrote to a throwaway and was silently lost —
+chart data is made of typedefs (`ChartSection`, `SongNote`, `SwagSection`). They are proxied
+now, so writes reach the real structure. The traditional callback API is unchanged: it still
+hands back table copies, byte-compatible with upstream Psych.
+
+**This is the one behaviour change in the batch that a raw-Lua script could notice.** A
+section reached off `game.*` is now `userdata`, not `table`, so a script doing
+`type(section) == 'table'`, `table.insert(section, …)` or passing one to `table.*` breaks.
+Iteration is covered — `pairs`/`ipairs` work on proxies now — but the raw stages should be
+play-tested before this is trusted.
+
+---
+
+## 9. **[perf]** Lua numbers always reach Haxe as `Float`
+
+`LuaConverter.fromLua` returns `lua_tonumber` for every number, so a Lua `1` arrives at a
+Haxe `Int` parameter as `1.0` boxed in `Dynamic`, and `Std.isOfType(v, Int)` is false for it.
+`mapKeyAt` already narrows integral values for map lookups; `unwrap` does not.
+
+Narrowing in `unwrap` would fix it, but `unwrap` feeds **every** argument of the whole
+classic callback API, and this codebase has been bitten by hxcpp `Dynamic` numeric coercion
+before. Worth doing, but with a real play test, not a type-check.
 
 ---
 

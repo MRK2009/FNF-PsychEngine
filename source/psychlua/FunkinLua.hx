@@ -122,6 +122,7 @@ class FunkinLua {
 		// Install the real-Lua object bridge (metatables + `import`) and decide
 		// whether the legacy callback API should be registered for this script.
 		LuaProxy.setup(lua);
+		LuaProxy.setOwner(lua, this); // so a C callback can find this script from `lua` alone
 		rawLua = resolveLuaMode();
 
 		// trace('Lua version: ' + Lua.version());
@@ -1691,13 +1692,17 @@ class FunkinLua {
 				#else
 				luaTrace('$scriptName\n$resultStr', true, false, FlxColor.RED);
 				#end
-				lua = null;
+				// `stop()`, not `lua = null`: dropping the pointer leaked the whole LuaJIT state AND
+				// left this script's entry in LuaProxy's registry forever -- its handle map was never
+				// freed, and `isStateAlive` kept answering true for a script that no longer exists.
+				stop();
 				return;
 			}
 			if (isString)
 				scriptName = 'unknown';
 		} catch (e:Dynamic) {
 			trace(e);
+			stop(); // same leak as above, on the throwing path
 			return;
 		}
 		trace('lua file loaded succesfully:' + scriptName);
@@ -1721,7 +1726,7 @@ class FunkinLua {
 		hookCache.remove(func);
 	}
 
-	public function call(func:String, args:Array<Dynamic>):Dynamic {
+	public function call(func:String, ?args:Array<Dynamic>):Dynamic {
 		if (closed || lua == null)
 			return LuaUtils.Function_Continue;
 
@@ -1747,9 +1752,18 @@ class FunkinLua {
 			if (known == null)
 				hookCache.set(func, true);
 
-			for (arg in args)
-				Convert.toLua(lua, arg);
-			var status:Int = Lua.pcall(lua, args.length, 1, 0);
+			// Traditional psychlua argument boundary, the same one callback returns use: data
+			// containers arrive as native 1-based tables, class instances as live proxies.
+			// `Convert.toLua` alone pushed nil for a class, so a hook handed an object (e.g.
+			// `onNotesGenerated`, whose argument is an Array<NoteData>) saw nothing in Lua.
+			// Ephemeral, because a hook argument is a per-dispatch value and caching would pin it.
+			var nargs:Int = 0;
+			if (args != null) {
+				nargs = args.length;
+				for (arg in args)
+					LuaProxy.pushHaxe(lua, arg, false, false);
+			}
+			var status:Int = Lua.pcall(lua, nargs, 1, 0);
 
 			// Checks if it's not successful, then show a error.
 			if (status != Lua.OK) {
@@ -1803,13 +1817,35 @@ class FunkinLua {
 		return Std.string(ClientPrefs.data.luaMode).toLowerCase() == 'raw';
 	}
 
+	/**
+		How much of a script's head is scanned for the `@luamode` directive.
+
+		The directive is documented as living near the top, but the scan used to read the WHOLE file
+		to find it -- and `LuaL.dofile` then read the same file again from scratch, so every script
+		was loaded from disk twice. A bounded read costs the same for a small script and much less
+		for a large one.
+	**/
+	static inline var LUAMODE_SCAN_BYTES:Int = 1024;
+
 	// Looks for `-- @luamode raw` / `-- @luamode compat` near the top of the
 	// script file. Returns null if absent (or the script is inline source).
 	function scanLuaDirective():Null<Bool> {
+		var input:sys.io.FileInput = null;
 		try {
 			if (!FileSystem.exists(scriptName))
 				return null;
-			var head:String = sys.io.File.getContent(scriptName);
+
+			var size:Int = Std.int(FileSystem.stat(scriptName).size);
+			if (size > LUAMODE_SCAN_BYTES)
+				size = LUAMODE_SCAN_BYTES;
+			if (size <= 0)
+				return null;
+
+			input = sys.io.File.read(scriptName, false);
+			var head:String = input.readString(size);
+			input.close();
+			input = null;
+
 			var idx:Int = head.indexOf('@luamode');
 			if (idx < 0)
 				return null;
@@ -1818,7 +1854,12 @@ class FunkinLua {
 				return true;
 			if (rest.indexOf('compat') >= 0)
 				return false;
-		} catch (e:Dynamic) {}
+		} catch (e:Dynamic) {
+			if (input != null)
+				try
+					input.close()
+				catch (_:Dynamic) {}
+		}
 		return null;
 	}
 

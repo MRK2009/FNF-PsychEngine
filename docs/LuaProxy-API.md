@@ -153,9 +153,14 @@ FlxG.timeScale = 0.5                           -- preset global, slow-mo everyth
 ```
 
 If Haxe can see it and a script can resolve it, you can touch it — fields,
-nested objects, statics, constructors, even functions stored as variables. The
-only gate is **ModSecurity**: classes on the blocklist resolve to `nil` (see
-`import` / `createInstance`), so untrusted mods can't reach dangerous types.
+nested objects, statics, constructors, even functions stored as variables.
+
+The gate is **which classes you can name at all**. `import` / `createInstance` /
+`getPropertyFromClass` resolve through `ModSecurity.safeResolveClass`, which
+returns `nil` for anything on `BLOCKED_CLASSES` or under a blocked package —
+`sys`, `cpp`, `neko`, `java` and `llua`. Everything else the engine compiles is
+reachable. See
+[the security model](script-hooks-and-dispatch.md#security-what-is-and-is-not-a-boundary).
 
 The flip side of "unrestrictive" is **no guardrails**: nothing validates that a
 field exists, that a value is the right type, or that the underlying Flixel
@@ -406,8 +411,7 @@ game.boyfriend.color = getColorFromString('red')
 
 ## 12. Iterate a group or array
 
-Proxied containers are **1-based** and support `#`. Use a numeric loop —
-`pairs`/`ipairs` do **not** work on a proxy.
+Proxied containers are **1-based** and support `#`, `ipairs` and `pairs`.
 
 ```lua
 -- the unspawnNotes / notes group, members, etc.
@@ -421,14 +425,38 @@ end
 ```lua
 -- a plain Haxe array property
 local chars = game.gfGroup.members
-for i = 1, #chars do
-    chars[i].visible = true
+for _, c in ipairs(chars) do
+    c.visible = true
 end
 ```
 
-> ⚠️ A callback that *returns* an array/map hands you a native Lua table (so
-> `ipairs` works on those). But anything you index off `game.*` is a live proxy —
-> numeric loop only. See [`CallbackHandler.hx`](../source/psychlua/CallbackHandler.hx).
+`pairs` walks a proxied **Map** by its entry keys, and any other proxied object by
+its field names:
+
+```lua
+for key, value in pairs(someHaxeMap) do
+    debugPrint(key .. ' = ' .. tostring(value))
+end
+```
+
+> LuaJIT is a Lua 5.1 core, which has no `__pairs`/`__ipairs`, so the engine
+> replaces the two globals with wrappers that recognise a proxy and fall through
+> to the originals for everything else. Ordinary tables behave exactly as before.
+> See [`installIterators`](../source/psychlua/LuaProxy.hx).
+
+> ⚠️ A callback that *returns* an array/map still hands you a native Lua table,
+> not a proxy — so it is a copy, and writing to it does not reach the Haxe object.
+> See [`CallbackHandler.hx`](../source/psychlua/CallbackHandler.hx).
+
+Anonymous structures (chart sections, note structs, option tables) are proxies too,
+so writing through one reaches the real data:
+
+```lua
+game.SONG.notes[1].mustHitSection = false   -- sticks
+```
+
+> ⚠️ That means they are `userdata`, not `table` — `type(x) == 'table'` is false for
+> one, and `table.insert` / `table.concat` will not take it. Use `pairs`/`#` instead.
 
 ## 13. Reach into a group member
 
@@ -517,7 +545,7 @@ reflection the string API does on every call.
   and `Paths`. Import everything else yourself (`FlxSprite`, `FlxTween`,
   `FlxColor`, …); the HScript preset list does not apply here.
 - **Method `:`, property `.`** — the single most common mistake.
-- **1-based + numeric loops** on proxies; no `pairs`/`ipairs`.
+- **Proxies are 1-based**; `#`, `ipairs` and `pairs` all work on them.
 - **`import` can return `nil`** (blocked or misspelled class) — guard before
   `.new`.
 - **`import` resolves *classes* only** — not enum-abstracts like `FlxAxes`,
