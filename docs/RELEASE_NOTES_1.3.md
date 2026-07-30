@@ -1,9 +1,27 @@
 # Release Notes: v1.3.1
 
-A patch release on top of v1.3.0: bug fixes reported against 1.3.0, with no new
-features.
+A follow-up to v1.3.0. It started as a bug-fix pass over what was reported against
+1.3.0, and grew a set of features on top: rebuilt Note Skin and Note Colours editors, a
+new crash handler, offset calibration, the Freeplay music bar, characters for extra
+strumlines, and scripting that reaches outside gameplay.
 
 ## General
+
+### Breaking: the base game is now a modpack
+Friday Night Funkin's own content left the engine. Weeks 1 to 7 and Weekend 1 ship as
+an ordinary pack in `mods/Friday Night Funkin`, and their stages are scripted classes
+rather than compiled ones. Disable it and the engine boots with no content at all.
+
+The pack is isolated (no `runsGlobally`), so **a mod that used base-game assets it does
+not ship will break** and has to bundle its own copy. What the engine still ships, and
+therefore what you can still rely on, is the week 1 stage, `bf`/`gf`/`dad`/`bf-dead`
+with their pixel variants, and the pixel UI/dialogue/game-over baseline. See
+[base-game-pack.md](base-game-pack.md), which also documents how to write a stage as a
+script and the dozen things the interpreter does not do for you.
+
+Also gone with it: the `BASE_GAME_FILES` define, and `TankmenBG.animationNotes` (the
+pico-speaker note list now lives only on the character that loaded it, as
+`character.animationNotes`).
 
 ### Fixes
 - **Hurt Notes**: no longer render uncolored. The note-system-v2 rewrite applied
@@ -75,6 +93,32 @@ features.
 - **Note skins in mods**: a folder skin living in a non-current mod reported its pixel art
   as missing (it rendered fine); the lookup didn't pin asset resolution to the skin's
   owning mod the way the renderers do.
+- **Note skin atlas cache**: a skin whose cached atlas outlived its bitmap could null-ref
+  when reused, crashing anything that rebuilt receptors -- most visibly the Note Colours
+  editor with a widescreen mod skin. GPU caching disposes a persisted graphic's CPU bitmap
+  after upload, leaving the cached atlas pointing at nothing; the skin cache now detects a
+  dead atlas and rebuilds it (falling back to a unique graphic), which fixes the crash for
+  gameplay too.
+- **Extra strumlines**: a third (or fourth, ...) strumline no longer renders invisibly when
+  **Opponent Notes** is off. The receptor builder was told only whether a line was the
+  player's, so it treated *everything* that wasn't as the opponent and applied that option's
+  hide to extra lines too. Extra lines are their own role now and keep their own visibility,
+  which is what the chart editor's **Render arrows in gameplay** toggle always implied.
+- **Multikey strumlines**: a line with its own key count is laid out at that count instead of
+  the song's. Column width and spacing came from a single global describing whichever key
+  count was applied last, so on a chart mixing key counts every line but one was spaced
+  wrong. Note splashes had the same bug and were sized from the same global.
+- **Lua errors are no longer hidden**: a runtime error in a Lua script only reached the
+  screen if that script had set `luaDebugMode`, and never reached the log file at all --
+  and `FunkinLua.call` swallowed exceptions into a bare `trace`, so a failure could vanish
+  from the in-game console entirely. Script failures now always report, to the console, the
+  log and the on-screen overlay. Ordinary debug output keeps the `luaDebugMode` gate.
+- **HScript hooks are no longer starved by Lua**: `callOnScripts` ran the Lua pass and only
+  ran the HScript pass if Lua had returned nothing meaningful, so a single Lua script
+  returning a value meant no HScript in that mod ever saw the event -- silently. Both
+  languages now always run. See the dispatch notes below for the stop-value rules.
+- **The script error overlay works everywhere**: it assumed `PlayState`, so an error in a
+  menu had nowhere to go.
 
 ### New
 - **Freeplay Music Player**: rebuilt on SmidrUI, the song-preview player is now a persistent
@@ -142,6 +186,69 @@ features.
   (`squareSheet`) instead of the shared one.
 - **Legacy note skin**: the classic 1.0.4 `NOTE_assets` sheet ships again as a selectable
   **Legacy** skin, and is the template new atlas skins are cloned from.
+- **Offset calibration overhaul**: the old single-slider Note/Beat Delay screen is replaced by a
+  two-tab calibration menu, built on SmidrUI over a framed preview viewport. **Audio Offset** still
+  shifts note timing for judgement, and a new **Visual Offset** shifts only where notes appear relative
+  to the receptors -- no effect on scoring -- so display lag can be corrected independently of audio
+  sync. Each offset can be set three ways: the manual slider / arrow keys, a guided **Start Calibration**
+  run, or (audio only) a **Detect Hardware** button that estimates the output latency from the active
+  audio-buffer configuration.
+  - **Audio calibration** plays a metronome beep with no visual aid and asks you to tap along.
+  - **Visual calibration** drops a single note lane -- real note art landing on a real receptor with its
+    confirm animation -- that you press as each note lands.
+  - Either guided run is free tapping: sixteen presses are averaged into the offset, and the run always
+    starts from a zeroed value so you calibrate from scratch.
+  - **Modders**: `visualOffset` is a new `ClientPrefs` field, exposed to Lua as `visualOffset` (render
+    only; it does not affect hit windows, scoring or replays).
+- **Rewritten Note Colours editor**: the flixel colour menu was rebuilt on SmidrUI while keeping the
+  live flixel preview. A left control panel -- keycount / element / channel (Main/Border/Shadow)
+  selectors, an HSV colour picker with presets, copy/paste hex, and per-channel/per-lane reset --
+  sits beside the right-hand preview: the lane strip and the note / hold / splash / static / pressed /
+  confirm cells, all real gameplay sprites that recolour live as you edit. Clicking a lane on the strip
+  retargets the whole preview to that column.
+  - A new **Reset All Colours** dialog restores every colour to default, scoped to either the current
+    keycount or all keycounts.
+  - **One Colour for All** now actually takes effect from the editor (it edits the single shared
+    colour instead of being ignored).
+  - The editor degrades gracefully instead of crashing on a malformed mod skin -- the colour tools
+    keep working even if a skin's preview fails to build.
+- **Extra strumlines get their own characters**: a chart could always declare more strumlines,
+  but an extra one could only reuse boyfriend, dad or gf -- there was nowhere for a fourth
+  character to stand, so naming one got you nothing. Stages now declare **named positions**,
+  and a strumline says which one its character uses.
+  - A position is a `character` entry in the stage's `objects` list:
+    `{ "type": "character", "name": "dj_booth", "x": 2750, "y": 1610 }`. It lives in `objects`
+    on purpose -- that list is the **layer order**, so an extra character can sit behind or in
+    front of stage pieces like anything else. Positions are written by hand for now; the stage
+    editor round-trips them safely but has no UI to place one yet.
+  - The chart editor's strumline panel gains a **Stage position** dropdown (the three built-ins
+    plus whatever the song's stage declares) and **Offset X / Y** for a per-chart nudge.
+  - `opponent`, `player` and `spectator` are ordinary named positions every stage has, so a
+    line can deliberately borrow one. A line that doesn't pick one falls back to its role, so
+    **every existing chart behaves exactly as before**.
+  - The character sings that line's notes and the camera targets it, with no extra setup: a
+    strumline already drove its character, there was just never a way to give it one.
+  - Full guide: [docs/strumline-characters.md](strumline-characters.md).
+- **Strumlines fit the screen**: lines now share the width in proportion to how much room each
+  one actually needs, and when they can't all fit at natural size everything scales down
+  together -- receptors, notes, hold trails and splashes -- so a crowded chart reads as a
+  smaller strumline rather than a broken one. Anything that already fits is untouched, so
+  existing songs are unchanged (the classic two-line split is still 25% / 75%). Under
+  middlescroll the non-player lines spread out instead of stacking on the same spot.
+- **Scripts can run in menus**: a new `scripts/global/` folder loads in **every state**, not
+  just gameplay. Previously the only way to touch a menu was to script the whole state.
+  `scripts/` is unchanged and stays gameplay-only. Global scripts get
+  `onCreate`/`onDestroy`/`onUpdate`/`onUpdatePost`/`onBeatHit`/`onStepHit` plus a new
+  `onStateChange(name)`, and in gameplay they additionally get every normal PlayState hook.
+- **Scripted classes without scripted states**: a plain modpack -- nothing but songs -- can
+  now keep a class library in `scripts/classes/` and reach it from the scripts it already has
+  with `buildScripted(path)` / `scriptedClass(path)`, in Lua or HScript. Each mod gets its own
+  class world, so two mods shipping the same type never collide. See
+  [docs/scripted-classes.md](scripted-classes.md).
+- **A script can choose where a song exits to**: `setExitTarget(name)` and `exitToState(name)`
+  send the player to a built-in menu or one of the mod's own scripted states when the song
+  ends or they back out, instead of the default Freeplay/Story menus. Works in a plain
+  modpack, not only a launched one.
 
 ## Mobile specific
 - **Substate**: closing a substate (e.g. Gameplay Changers) no longer also backs
@@ -155,7 +262,7 @@ features.
   buttons on a self-managed overlay, replacing the old flat sprites. It still
   drives `backend.Controls` through the same API (so every menu keeps working
   unchanged) and keeps true multitouch by hit-testing `FlxG.touches` itself. The
-  gameplay lane Hitbox is unchanged.
+  gameplay lane Hitbox is a separate overlay (now customizable -- see below).
 - **Freeplay**: tapping the on-screen navigation pad no longer also click-selects
   the song row underneath it -- taps that land on a pad button are ignored by the
   list.
@@ -165,8 +272,88 @@ features.
   OpenFL can't load a font from by path on mobile, so a mod's `fonts/*.ttf`
   silently fell back to the default font ("not recognized"). Mod fonts are now
   registered from their bytes (the same way mod images/sounds already load).
+- **Mobile settings tab**: the mobile-only options (control opacity, vibration, Pause
+  button) moved out of their standalone substate into a proper **Mobile** category in the
+  SmidrUI Options menu, alongside the new Hitbox settings below.
+- **Customizable gameplay Hitbox**: the on-screen note lanes are now configurable --
+  **style** (solid fill or outline), **width** / **height** / vertical **position** as
+  fractions of the screen, per-lane **overlap** (how far a lane's touch area reaches into
+  its neighbours), and resting / held **opacity**. **Lane colours** default to the note
+  colour each lane plays (following the active skin and any colour overrides) or can be set
+  per-lane in a dedicated colour editor.
+- **Freeplay**: the music player no longer sits underneath the on-screen A/B
+  buttons. The right column (song info panel plus the player bar) now stops above
+  the pad on touch builds instead of ending at the screen edge.
+- **Keyboard hints hidden**: the shortcut lines at the bottom of Freeplay and
+  Options listed keys a phone doesn't have. They are desktop-only now, and Options
+  gives the reclaimed space back to its panels.
+- **Options**: the category rail scrolls. Mobile adds a **Mobile** category and
+  uses taller, finger-sized rows, which pushed the last button out through the
+  bottom of the rail panel; the rail is a scroll pane now and keyboard/controller
+  selection scrolls itself into view.
+- **Options**: changing **Audio Buffer** now says it needs a restart on Android
+  too. Desktop already offered to relaunch on the way out; mobile applied the
+  preference at startup but told you nothing, so the setting looked like it did
+  nothing. The prompt can't relaunch an Android app, so it offers to close the
+  game for a manual restart.
 - **Misc**: the mouse-only Legacy Chart Editor is hidden on mobile (it has no
   touch controls);
+
+### Touch editors
+
+- **Touch-controls guide**: the "? GUIDE" modal fits its text. Every line is split
+  into a gesture column and a description column, both word-wrapped, inside a
+  scrollable panel sized to the safe area, instead of running off the right edge
+  and past the bottom of the screen.
+- **Unsaved changes are confirmed**: leaving any touch editor (rail EXIT or the
+  Android back button) with unsaved edits now asks first -- **Save & Exit** /
+  **Discard & Exit** / **Keep Editing** -- and so does anything that replaces the
+  open document (New / Open, and switching menu-character slot). Save & Exit waits
+  for the file picker to actually finish, so cancelling it keeps your work.
+- **Action bar**: with many actions the floating bottom bar ran under the right
+  thumb rail, leaving its last button (PLAY / CONFIRM / REMOVE) unreachable. Its
+  buttons now shrink to fit between the rails.
+- **Nudge buttons**: the offset arrows moved the character the wrong way in the
+  Menu Character and Dialogue Portrait editors (the arrays they edit are draw
+  offsets, which are subtracted, so the signs were reversed relative to the desktop
+  editors' arrow keys). Dragging on the canvas in those two also did nothing at
+  all: the handler read the gesture's absolute position as its frame delta and
+  never claimed the press as a drag, so it was routed away as a camera pan.
+- **Chart editor**: the rail's SAVE button became a **FILE** page (save, save-as,
+  open, new, with the saved/unsaved state at the top), the strumlines page dropped
+  its `-----` separator rows for plain spacing, and exiting with unsaved edits asks
+  before leaving.
+- **Week editor**: the longer field captions ("Week Before (unlocks after):") ran
+  into their input boxes on the narrow drawer. Fields are stacked now, caption line
+  above a full-width box. The preview also shows the week's **background art**
+  (`menubackgrounds/menu_<name>`, the same lookup the Story Menu uses), fitted into
+  the banner and updating as you type the asset name.
+- **Character editor**: the animation list no longer keeps a stale purple highlight
+  on whichever row was current when the page opened. Picking a row does not rebuild
+  the page, and the rail button plus status strip already name the animation that is
+  playing. Picking one now also **loads it into the fields** above the list (name,
+  symbol/prefix, framerate, indices, looped), which used to keep showing whichever
+  animation was current when the page opened -- so Add / Update silently edited the
+  wrong animation.
+- **Menu Character editor**: the slot button now edits **that slot's** character
+  (loading `dad` / `bf` / `gf` from `images/menucharacters/`) and puts the other
+  slots back to their stock look. It used to paste the file you were editing onto
+  every slot you visited, so all three turned into the same character.
+- **Dialogue editor**: the Character field actually reloads the portrait json now
+  (it only re-applied the old one, so a retyped name did nothing until you changed
+  line), the status strip names the animation the portrait is really playing
+  (unnamed playback picks a *random* animation, so the strip could name a different
+  one), and the line's **Text** is a multiline wrapping box at the bottom of the
+  drawer instead of a single-line field.
+- **Dialogue Portrait editor**: no longer crashes on entry. Loading the portrait ran
+  all the way down to the status strip before the editor chrome existed, which
+  null-referenced and killed the state immediately.
+- **Dialogue Portrait editor**: the red/blue offset ghosts were drawn permanently,
+  three portraits stacked on top of each other with no way to turn them off. They are
+  now an opt-in overlay on a **GHOSTS** rail page (per-ghost toggles and an opacity
+  slider, like the character editor's ghost), off by default. The portrait itself now
+  carries the offsets you are editing and plays the pose the mode selects, so nudging
+  and dragging move the real thing instead of only a ghost.
 
 ## Haxelibs
 - **HaxeFlixel 6.2.0** (from 6.1.2): brings Flixel's sound-system refactor
@@ -199,6 +386,51 @@ features.
 - **Default skins** now declare `animated: false` for notes, strums and hold pieces
   (pressed/confirm stay animated), so those elements use only their first frame.
 - Skins in `skin.tcfg` / `skin.json` are otherwise unchanged and load as before.
+
+### Chart and stage format
+Both additions are optional and written only when set, so a chart or stage that never uses
+them saves byte-for-byte identical to before.
+
+- **Stage `objects`** accepts `{"type": "character", "name": ..., "x": ..., "y": ...}` (plus
+  the usual `scrollFactor`), declaring a named position a strumline's character can stand on.
+  Its slot in the list is its layer. `opponent`, `player`, `spectator`, `dad`, `gf` and
+  `boyfriend` are reserved names.
+- **`strumlines[]`** accepts `anchor` (a position name) and `offset` (`[dx, dy]` on top of it).
+  Absent means "derive from the line's role", which is what every existing chart does.
+
+### Script dispatch
+Behaviour changes here can affect existing scripts. The starvation fix in particular means
+HScript hooks that previously never ran now do. Full reference:
+[docs/script-hooks-and-dispatch.md](script-hooks-and-dispatch.md).
+
+- **Both languages always run.** Stopping is per language: `Function_StopLua` ends the Lua
+  pass, `Function_StopHScript` the HScript pass, `Function_StopAll` both. `Function_Stop`
+  keeps its own meaning -- it cancels the engine's action and skips the other language, but
+  does **not** stop the rest of its own, so a script cancelling a note hit can't hide that hit
+  from a sibling script that only counts it.
+- **Consistent hook names**: the eight hooks that predate the `onX` convention (`goodNoteHit`,
+  `noteMiss`, `preUpdateScore`, ...) still work and always will -- they're the names the engine
+  dispatches. Each now also accepts the consistent spelling (`onGoodNoteHit`, `onNoteMiss`,
+  `onUpdateScorePre`, ...), bound when your script loads. Declare either.
+- **Faster dispatch**: a script no longer pays for hooks it doesn't declare (Lua globals are
+  looked up once and cached, not on every dispatch), hook returns are classified once instead
+  of string-compared per script, and calling an HScript hook no longer allocates.
+- **Map access is uniform**: `getProperty('someMap.key')` reads and writes map entries without
+  `allowMaps`, matching what direct proxy access already did. The parameter is still accepted
+  everywhere, so no call site changes; it just isn't needed. A map entry can no longer shadow
+  a map's own `get`/`set`/`keys`, which is the reason the two APIs disagreed. `game.someVar`
+  through the proxy also picks up script variables now instead of silently reading `nil`.
+- **Blocked packages**: resolving a class by name (`import()`, `createInstance`,
+  `getPropertyFromClass`, `callMethodFromClass`, `addHaxeLibrary`) now rejects the `sys`,
+  `cpp`, `neko`, `java` and `llua` packages outright, not just individually blocklisted
+  classes -- the process, the filesystem, native handles, and the raw Lua state behind your
+  own interpreter. Everything else the engine compiles stays reachable. HScript's `import`
+  is gated the same way.
+- **The mod source scan is a trust prompt, not a sandbox.** It reads source text, so a name
+  built at runtime walks straight past it; it exists so a mod that obviously wants your
+  filesystem has to say so first, and so a mod changing after you trusted it asks again. The
+  boundary that actually holds is the binding layer above. This was previously documented as
+  "the primary gate", which overstated it.
 
 ### Real Lua (raw mode) hardening
 A batch of fixes to the object bridge that backs `import()` and `game:method()` / `game.field`

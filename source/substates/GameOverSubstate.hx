@@ -88,7 +88,9 @@ class GameOverSubstate extends MusicBeatSubstate {
 		PlayState.instance.callOnScripts('onGameOverStart', []);
 		FlxG.sound.music.loadEmbedded(Paths.music(loopSoundName), true);
 
-		if (characterName == 'pico-dead') {
+		// The overlay art belongs to whichever pack ships `pico-dead`, so a mod naming that character
+		// without it gets the plain game over instead of a null-frames crash.
+		if (characterName == 'pico-dead' && Paths.getSparrowAtlas('Pico_Death_Retry') != null) {
 			overlay = new FlxSprite(boyfriend.x + 205, boyfriend.y - 80);
 			overlay.frames = Paths.getSparrowAtlas('Pico_Death_Retry');
 			overlay.animation.addByPrefix('deathLoop', 'Retry Text Loop', 24, true);
@@ -111,7 +113,7 @@ class GameOverSubstate extends MusicBeatSubstate {
 				}
 			}
 
-			if (PlayState.instance.gf != null && PlayState.instance.gf.curCharacter == 'nene') {
+			if (PlayState.instance.gf != null && PlayState.instance.gf.curCharacter == 'nene' && Paths.getSparrowAtlas('NeneKnifeToss') != null) {
 				var neneKnife:FlxSprite = new FlxSprite(boyfriend.x - 450, boyfriend.y - 250);
 				neneKnife.frames = Paths.getSparrowAtlas('NeneKnifeToss');
 				neneKnife.animation.addByPrefix('anim', 'knife toss', 24, false);

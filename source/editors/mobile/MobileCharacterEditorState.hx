@@ -156,7 +156,6 @@ class MobileCharacterEditorState extends MobileEditorBase {
 		var lastLoaded:String = Paths.currentLevel;
 		Paths.currentLevel = assetFolder;
 
-		#if BASE_GAME_FILES
 		var bg:BGSprite = new BGSprite('stageback', -600, -200, 0.9, 0.9);
 		bg.cameras = [previewCam];
 		add(bg);
@@ -166,9 +165,6 @@ class MobileCharacterEditorState extends MobileEditorBase {
 		stageFront.updateHitbox();
 		stageFront.cameras = [previewCam];
 		add(stageFront);
-		#else
-		previewCam.bgColor = 0xFF666666;
-		#end
 
 		dadPosition.set(100, 100);
 		bfPosition.set(770, 100);

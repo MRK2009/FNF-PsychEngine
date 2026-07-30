@@ -89,24 +89,44 @@ class StorageUtil
 				}
 			}
 		}
-		installBundledExamples();
+		installBundledMods();
 		#end
 	}
 
 	/**
-	 * Copies the bundled example_mods files (mod template + readme) from the APK into
-	 * the public mods/ folder, so a fresh install isn't an empty directory. Per-file
-	 * and skip-if-present, so user changes/deletions are never overwritten.
+	 * Bundled asset prefix -> where it lands under the public `mods/` folder.
+	 *
+	 * `example_mods/` holds the mod template and readme; `base_game/` is the base-game modpack,
+	 * which is content rather than engine files and so ships the same way any other pack would.
 	 */
-	static function installBundledExamples():Void
+	static final BUNDLED_MODS:Array<{prefix:String, dest:String}> = [
+		{prefix: 'example_mods/', dest: ''},
+		{prefix: 'base_game/', dest: 'Friday Night Funkin/'}
+	];
+
+	/**
+	 * Copies the bundled modpacks out of the package into the public mods/ folder, so a fresh
+	 * install isn't an empty directory. Per-file and skip-if-present, so user changes/deletions
+	 * are never overwritten.
+	 */
+	static function installBundledMods():Void
 	{
 		#if (android || ios)
 		final modsRoot:String = Path.join([getStorageDirectory(), 'mods']);
 		for (asset in openfl.utils.Assets.list())
 		{
-			if (!StringTools.startsWith(asset, 'example_mods/'))
+			var relative:String = null;
+			for (bundle in BUNDLED_MODS)
+			{
+				if (!StringTools.startsWith(asset, bundle.prefix))
+					continue;
+				relative = bundle.dest + asset.substr(bundle.prefix.length);
+				break;
+			}
+			if (relative == null)
 				continue;
-			final dest:String = Path.join([modsRoot, asset.substr('example_mods/'.length)]);
+
+			final dest:String = Path.join([modsRoot, relative]);
 			if (FileSystem.exists(dest))
 				continue;
 			try

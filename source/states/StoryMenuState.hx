@@ -397,11 +397,13 @@ class StoryMenuState extends MusicBeatState {
 
 		bgSprite.visible = true;
 		var assetName:String = leWeek.weekBackground;
-		if (assetName == null || assetName.length < 1) {
+		// A week can name a background whose pack isn't installed, so a missing image hides the
+		// sprite rather than handing loadGraphic a null.
+		var bg:FlxGraphic = (assetName != null && assetName.length > 0) ? Paths.image('menubackgrounds/menu_' + assetName) : null;
+		if (bg == null)
 			bgSprite.visible = false;
-		} else {
-			bgSprite.loadGraphic(Paths.image('menubackgrounds/menu_' + assetName));
-		}
+		else
+			bgSprite.loadGraphic(bg);
 		PlayState.storyWeek = curWeek;
 
 		Difficulty.loadFromWeek();
