@@ -72,6 +72,12 @@ class MasterConverterState extends MusicBeatState {
 
 		changeSelection();
 		FlxG.mouse.visible = false;
+
+		#if mobile
+		// Up/down + accept with the cursor hidden, so without this the menu could only be backed out of.
+		addTouchPad('FULL', 'A_B');
+		#end
+
 		super.create();
 	}
 
