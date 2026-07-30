@@ -1827,24 +1827,48 @@ class FunkinLua {
 	**/
 	static inline var LUAMODE_SCAN_BYTES:Int = 1024;
 
-	// Looks for `-- @luamode raw` / `-- @luamode compat` near the top of the
-	// script file. Returns null if absent (or the script is inline source).
+	/**
+		Looks for `-- @luamode raw` / `-- @luamode compat` near the top of the script file. Returns null
+		if absent (or the script is inline source).
+
+		The partial read is only worth it for a real file. `FileAccessMacro` rewrites `File.getContent`
+		but not `stat`/`File.read`, so on Android a script bundled in the APK threw here and silently got
+		the default mode; those read whole through `getContent` instead, then scan the same window.
+	**/
 	function scanLuaDirective():Null<Bool> {
 		var input:sys.io.FileInput = null;
 		try {
 			if (!FileSystem.exists(scriptName))
 				return null;
 
-			var size:Int = Std.int(FileSystem.stat(scriptName).size);
-			if (size > LUAMODE_SCAN_BYTES)
-				size = LUAMODE_SCAN_BYTES;
-			if (size <= 0)
-				return null;
+			var head:String = null;
+			try {
+				var size:Int = Std.int(FileSystem.stat(scriptName).size);
+				if (size > LUAMODE_SCAN_BYTES)
+					size = LUAMODE_SCAN_BYTES;
+				if (size <= 0)
+					return null;
 
-			input = sys.io.File.read(scriptName, false);
-			var head:String = input.readString(size);
-			input.close();
-			input = null;
+				input = sys.io.File.read(scriptName, false);
+				head = input.readString(size);
+				input.close();
+				input = null;
+			} catch (_:Dynamic) {
+				// Not a real file on this platform. `getContent` is the rewritten one, so it reaches the
+				// APK asset; the window is the same, just taken after the fact.
+				if (input != null) {
+					try
+						input.close()
+					catch (_:Dynamic) {}
+					input = null;
+				}
+				var whole:String = File.getContent(scriptName);
+				if (whole == null)
+					return null;
+				head = (whole.length > LUAMODE_SCAN_BYTES) ? whole.substr(0, LUAMODE_SCAN_BYTES) : whole;
+			}
+			if (head == null)
+				return null;
 
 			var idx:Int = head.indexOf('@luamode');
 			if (idx < 0)

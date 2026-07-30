@@ -472,16 +472,20 @@ class ScriptWorld {
 		return env;
 	}
 
-	/** True if any parsed file has changed on disk since it was loaded. **/
+	/**
+		True if any parsed file has changed on disk since it was loaded.
+
+		A file that cannot be statted counts as unchanged, not as changed. `FileAccessMacro` does not
+		rewrite `stat`, so a script bundled inside the APK throws here on every check -- calling that
+		"changed" made such a registry permanently stale and re-parsed it forever.
+	**/
 	public function stale():Bool {
 		for (file => stamp in stamps) {
 			#if sys
 			try {
 				if (FileSystem.stat(file).mtime.getTime() != stamp)
 					return true;
-			} catch (e:Dynamic) {
-				return true;
-			}
+			} catch (e:Dynamic) {}
 			#end
 		}
 		return false;
