@@ -72,7 +72,8 @@ class Main extends Sprite {
 		Haptic.initialize();
 		#end
 		StorageUtil.prepareDirectories();
-		Sys.setCwd(StorageUtil.getStorageDirectory());
+		if (StorageUtil.ready)
+			Sys.setCwd(StorageUtil.getStorageDirectory());
 		#end
 		#if VIDEOS_ALLOWED
 		hxvlc.util.Handle.init(#if (hxvlc >= "1.8.0") ['--no-lua'] #end);
@@ -108,6 +109,10 @@ class Main extends Sprite {
 		// into a per-frame flag here instead of going through FlxG.android.
 		FlxG.signals.preUpdate.add(mobile.backend.BackButton.poll);
 		FlxG.signals.preUpdate.add(mobile.backend.DocumentPicker.poll);
+		// All Files Access is granted in a Settings activity that returns focus here, and is the
+		// only chance to set storage up without making the user restart. Storage that came up on
+		// the first try makes this a no-op.
+		FlxG.signals.focusGained.add(onStorageMaybeGranted);
 		smidr.UIRoot.onLongPress = (_) -> if (ClientPrefs.data.vibration) Haptic.vibrateOneShot(0.03, 1, 0.4);
 		// Game Mode (Battery/Performance) is flipped from the Game Dashboard while we're
 		// backgrounded -- re-apply the framerate policy every time focus comes back.
@@ -229,6 +234,28 @@ class Main extends Sprite {
 			#end
 		});
 	}
+
+	#if android
+	/**
+		Finishes mobile storage setup if the user granted All Files Access after launch.
+
+		The grant happens in a Settings activity, so this is the first moment the engine can act on it.
+		Everything downstream of storage has to be redone in the same order `create` does it, since all
+		of it ran against a working directory that had no mods folder.
+	**/
+	static function onStorageMaybeGranted():Void {
+		if (!StorageUtil.retryIfPending())
+			return;
+
+		#if LUA_ALLOWED
+		Mods.pushGlobalMods();
+		#end
+		Mods.loadTopMod();
+		FlxG.save.bind('funkin', CoolUtil.getSavePath());
+		Highscore.load();
+		#if ACHIEVEMENTS_ALLOWED Achievements.load(); #end
+	}
+	#end
 
 	static function resetSpriteCache(sprite:Sprite):Void {
 		@:privateAccess {
