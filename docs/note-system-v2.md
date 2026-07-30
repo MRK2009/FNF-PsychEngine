@@ -65,7 +65,8 @@ carriers, safe in the scene-added `notes` group.
 **Per-note custom textures (v2 primitive, all modes):** `NoteData.texture` overrides the active skin
 for a note's head; `NoteSprite.apply` loads it via `ClassicNoteSkin.applyNoteTexture`. Set it from a
 note type (`NoteTypesConfig` `texture` property) or, in compat, via the `unspawnNotes` write-through.
-*Sustain* custom textures are not yet wired (head only).
+The trail follows the head's `data.texture` through the same setter, so a custom-textured note skins
+whole rather than head-only.
 
 **Known limitations (alias-impossible — handled by the Script Converter):** script *writes* to an
 adapter's visual props (`note.x`/`alpha`/strum position) do not reflect back onto the v2 drawables.
@@ -76,13 +77,15 @@ names like `.strumTime`→`.time`) and writes annotated `*.converted.<ext>` copi
 
 ## Known gaps (v2)
 
-- EditorPlayState/ChartingState still use the legacy `Note`/`StrumNote` classes for their previews.
-- Holds grant health only on the head-hit (no per-frame tick like the legacy per-piece model).
-  **Still open** — deferred from Phase 2 as a gameplay-feel change that needs tuning, not adapter work.
-- Stage `goodNoteHit`/etc. note hooks — **now fired in compat mode** via `PlayState.fireStageNote`
-  (skipped in non-compat v2 play, since the hooks take a legacy `Note`).
-- Custom note-splash colors fall back to defaults. **Still open** — deferred from Phase 2; threading
-  per-note splash RGB through `spawnNoteSplash` is a `NoteSplash`-API change, not adapter work.
+- The **legacy** chart editor (`source/legacy/editors/`) still previews with the legacy
+  `Note`/`StrumNote` classes. The current editor has its own pooled drawables
+  (`editors/charting/render/EditorNoteField.hx`) and does not.
+- Non-GH holds tick health per segment (`PlayState.sustainSegmentHit`), matching the legacy
+  per-piece model. GH holds remain a single unit judged at release.
+- Stage `goodNoteHit`/`opponentNoteHit`/`noteMiss` hooks fire for every stage, compat or not, and
+  take the native `NoteData` (`PlayState.fireStageNote`).
+- Per-note splash colours are applied: `noteSplashData.r`/`g`/`b` override the palette the splash
+  would otherwise take, and a note type's splash texture with them.
 - Shared statics (`defaultNoteTypes`/`defaultNoteSkin`/`getNoteSkinPostfix`/`initializeGlobalRGBShader`/
   `globalRgbShaders`/`SUSTAIN_SIZE`/`NoteSplashData`/`EventNote`) now live on the neutral
   **`objects.notes.NoteDefaults`**; `swagWidth`/`colArray` read from their owner `Mania`. The v2

@@ -98,6 +98,8 @@ LuaJIT statically).
 - `<haxedef name="LINC_LUA_RELATIVE_DYNAMIC_LIB"/>` removed (Lua swap).
 - `TITLE_SCREEN_EASTER_EGG`, `BASE_GAME_FILES`, `VIDEOS_ALLOWED` are no longer
   wrapped in `<section if="officialBuild">` — they are unconditionally defined.
+  (`BASE_GAME_FILES` was removed outright in 1.3 when the base game became a
+  modpack; see [base-game-pack.md](base-game-pack.md).)
 - New `<haxeflag name="--macro" value="macros.PatchIris.patch()" if="MODS_ALLOWED" />`
   reroutes every `Type.resolveClass()` call inside `hscript-iris` through
   `ModSecurity.safeResolveClass` so mod scripts can't import / instantiate
