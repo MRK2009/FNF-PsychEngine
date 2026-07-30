@@ -48,6 +48,7 @@ class FileDialogHandler extends FlxBasic {
 		_startUp(onComplete, onCancel, onError);
 		mobile.backend.DocumentPicker.saveText(fileName, mimeFor(fileName), dataToSave, function(name:String, _:String):Void {
 			this.path = name;
+			this.pathIsAddressable = false;
 			this.completed = true;
 			if (this.onComplete != null)
 				this.onComplete();
@@ -90,6 +91,7 @@ class FileDialogHandler extends FlxBasic {
 		// and a strict filter would grey those files out entirely.
 		mobile.backend.DocumentPicker.openText('*/*', function(name:String, contents:String):Void {
 			this.path = name;
+			this.pathIsAddressable = false;
 			this.data = contents;
 			this.completed = true;
 			if (this.onComplete != null)
@@ -185,9 +187,20 @@ class FileDialogHandler extends FlxBasic {
 	public var path:String;
 	public var completed:Bool = true;
 
+	/**
+		Whether `path` is a real filesystem path an editor may write to or read siblings from.
+
+		False for Android's storage picker, which hands back a `content://` document: `path` there is
+		only the display name, so treating it as a location writes to the working directory instead of
+		to the file the user chose. An editor that keeps a "current file" must not remember it, and
+		anything writing sidecars beside it has to be skipped.
+	**/
+	public var pathIsAddressable:Bool = true;
+
 	function onSaveComplete(_) {
 		@:privateAccess
 		this.path = _fileRef._trackSavedPath;
+		this.pathIsAddressable = true;
 		this.completed = true;
 		trace('Saved file to: $path');
 
@@ -200,6 +213,7 @@ class FileDialogHandler extends FlxBasic {
 	function onLoadComplete(_) {
 		@:privateAccess
 		this.path = _fileRef.__path;
+		this.pathIsAddressable = true;
 		this.data = File.getContent(this.path);
 		this.completed = true;
 		trace('Loaded file from: $path');

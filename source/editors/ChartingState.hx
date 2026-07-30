@@ -1359,6 +1359,13 @@ class ChartingState extends MusicBeatState {
 			return;
 		}
 		fileDialog.save(dialogFileName(), data, function():Void {
+			// Android's picker writes through a content:// document and reports only its display name, so
+			// there is no location to remember or to put sidecars beside. Taking it for a path wrote the
+			// sidecars, and every later Ctrl+S, into the working directory instead of the chosen file.
+			if (!fileDialog.pathIsAddressable) {
+				UIToast.show('Saved: ${fileDialog.path} (events/metadata not written -- save inside mods/ to keep the package together)');
+				return;
+			}
 			backend.Song.chartPath = fileDialog.path.replace('\\', '/');
 			saveSidecars(backend.Song.chartPath);
 			UIToast.show('Saved: ${fileDialog.path}');
@@ -1513,7 +1520,10 @@ class ChartingState extends MusicBeatState {
 					UIToast.show('Not a valid chart file');
 					return;
 				}
-				backend.Song.chartPath = fileDialog.path.replace('\\', '/');
+				// A non-addressable path (Android's picker) must not become the save target, or Ctrl+S
+				// writes a bare display name into the working directory. Null sends the next save back
+				// through the picker, which is where it belongs.
+				backend.Song.chartPath = fileDialog.pathIsAddressable ? fileDialog.path.replace('\\', '/') : null;
 				bindPackage(loaded, backend.Song.chartPath);
 				adoptChart(loaded);
 				UIToast.show('Loaded: ${loaded.song}');
