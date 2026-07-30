@@ -173,12 +173,16 @@ final class NoteField {
 	}
 
 	function spawn(data:NoteData):Void {
+		// Taken off this field's own receptors so the notes match the lane they fall into, rather
+		// than from a global -- each strumline is fitted independently.
+		var fit:Float = (receptors != null && receptors.length > 0) ? receptors[0].fitScale : 1;
+
 		var head:NoteSprite = headGroup.recycle(NoteSprite);
-		head.apply(data, keyCount);
+		head.apply(data, keyCount, fit);
 		var sus:SustainSprite = null;
 		if (data.isSustain()) {
 			sus = sustainGroup.recycle(SustainSprite);
-			sus.apply(data, keyCount);
+			sus.apply(data, keyCount, fit);
 		}
 		head.sustain = sus; // let scripts reach the trail from the head (note.sustain)
 		data.spawned = true;

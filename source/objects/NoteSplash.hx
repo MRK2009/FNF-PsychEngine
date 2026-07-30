@@ -444,7 +444,14 @@ class NoteSplash extends FlxSprite {
 		// `config.scale` applies at EVERY keycount -- it used to be set only inside the multikey branch,
 		// so a skin's `splashScale` silently did nothing on the default 4K layout. Multikey then scales
 		// down on top of it to match the smaller notes, shrinking the configured nudge with it.
-		var ratio:Float = (!inEditor && Mania.current != Mania.DEFAULT) ? (Mania.noteSizes[Mania.current - 1] / Mania.noteSizes[Mania.DEFAULT - 1]) : 1;
+		// Measured against the RECEPTOR this splash belongs to, not `Mania.current`: that global holds
+		// one keycount, so on a chart whose strumlines differ every splash was sized for whichever
+		// line was applied last. Its `fitScale` rides along, keeping splashes with fitted lanes.
+		var rec:objects.notes.Receptor = (babyArrow is objects.notes.Receptor) ? cast babyArrow : null;
+		var splashKeys:Int = (rec != null) ? rec.keyCount : Mania.current;
+		var ratio:Float = (!inEditor && splashKeys != Mania.DEFAULT) ? (Mania.noteSizes[splashKeys - 1] / Mania.noteSizes[Mania.DEFAULT - 1]) : 1;
+		if (rec != null)
+			ratio *= rec.fitScale;
 		scale.set(config.scale * ratio, config.scale * ratio);
 		if (ratio != 1) {
 			splashNudgeX *= ratio;
@@ -463,7 +470,10 @@ class NoteSplash extends FlxSprite {
 	function followArrow():Void {
 		if (babyArrow == null)
 			return;
-		var recCx:Float = babyArrow.x + Mania.swagWidth / 2;
+		// `babyArrow` is a plain FlxSprite on the public surface (a script may set it), so the lane
+		// width comes off it only when it really is a receptor; the global stays the fallback.
+		var lane:Float = (babyArrow is objects.notes.Receptor) ? cast(babyArrow, objects.notes.Receptor).laneWidth : Mania.swagWidth;
+		var recCx:Float = babyArrow.x + lane / 2;
 		var recCy:Float = babyArrow.y + babyArrow.height / 2;
 		if (folderCentered) {
 			recCx += splashNudgeX;

@@ -3311,7 +3311,7 @@ class ChartingState extends MusicBeatState {
 	function openStrumlineModal(idx:Int):Void {
 		var line = model.chart.strumLines[idx];
 		var W:Float = 360;
-		var H:Float = 300;
+		var H:Float = 388;
 		var pad:Float = 16;
 		var cw:Float = W - pad * 2;
 		var modal:UIModal = new UIModal('Strumline: ${line.id}', W, H);
@@ -3351,7 +3351,35 @@ class ChartingState extends MusicBeatState {
 		visChk.y = 132;
 		modal.body.addChild(visChk);
 
+		// Where this line's character stands. The chart names an anchor and the STAGE owns its
+		// coordinates, so the same chart still places the character sensibly on another stage.
+		var anchors:Array<String> = model.anchorList();
+		var curAnchor:String = (line.anchor != null && line.anchor.length > 0) ? line.anchor : ChartEditorModel.anchorForRole(line.type);
+		if (anchors.indexOf(curAnchor) < 0)
+			anchors.unshift(curAnchor); // keep an anchor this stage no longer declares selectable
+		var anchorDrop:UIDropdown = new UIDropdown("Stage position", cw, function(_:Int, _:String):Void {});
+		anchorDrop.tooltip = "Which stage position this line's character stands on";
+		anchorDrop.controlWidth = UITheme.px(170);
+		anchorDrop.setItems(anchors);
+		anchorDrop.select(Std.int(Math.max(0, anchors.indexOf(curAnchor))));
+		anchorDrop.x = pad;
+		anchorDrop.y = 170;
+		modal.body.addChild(anchorDrop);
+
 		var halfW:Float = (cw - 8) / 2;
+		var offX:UIStepper = new UIStepper("Offset X", halfW, (line.offset != null) ? line.offset[0] : 0, 10, function(_:Float):Void {});
+		offX.decimals = 0;
+		offX.controlWidth = UITheme.px(70);
+		offX.x = pad;
+		offX.y = 210;
+		modal.body.addChild(offX);
+		var offY:UIStepper = new UIStepper("Offset Y", halfW, (line.offset != null) ? line.offset[1] : 0, 10, function(_:Float):Void {});
+		offY.decimals = 0;
+		offY.controlWidth = UITheme.px(70);
+		offY.x = pad + halfW + 8;
+		offY.y = 210;
+		modal.body.addChild(offY);
+
 		var moveUp:UIButton = new UIButton("Move Up", halfW, 26, function():Void {
 			if (idx > 0) {
 				moveStrumline(idx, -1);
@@ -3359,7 +3387,7 @@ class ChartingState extends MusicBeatState {
 			}
 		});
 		moveUp.x = pad;
-		moveUp.y = 170;
+		moveUp.y = 254;
 		modal.body.addChild(moveUp);
 		var moveDown:UIButton = new UIButton("Move Down", halfW, 26, function():Void {
 			if (idx < model.chart.strumLines.length - 1) {
@@ -3368,7 +3396,7 @@ class ChartingState extends MusicBeatState {
 			}
 		});
 		moveDown.x = pad + halfW + 8;
-		moveDown.y = 170;
+		moveDown.y = 254;
 		modal.body.addChild(moveDown);
 
 		var remove:UIButton = new UIButton("Remove", 100, 28, function():Void {
@@ -3383,7 +3411,7 @@ class ChartingState extends MusicBeatState {
 		});
 		remove.danger = true;
 		remove.x = pad;
-		remove.y = 214;
+		remove.y = 298;
 		modal.body.addChild(remove);
 
 		var apply:UIButton = new UIButton("Apply", 110, 28, function():Void {
@@ -3392,6 +3420,7 @@ class ChartingState extends MusicBeatState {
 			model.setLineRole(idx, roleType);
 			var removed:Int = model.setLineKeyCount(idx, Std.int(kcStep.value));
 			model.setLineCharacter(idx, charDrop.selectedValue);
+			model.setLineAnchor(idx, anchorDrop.selectedValue, offX.value, offY.value);
 			if (visChk.checked != line.visible) {
 				if (visChk.checked && !line.visible && model.visibleLineCount() >= MAX_VISIBLE_LINES)
 					UIToast.show('At most $MAX_VISIBLE_LINES strumlines can be visible');
@@ -3402,9 +3431,10 @@ class ChartingState extends MusicBeatState {
 			rebuildStrumlineUI();
 			if (removed > 0)
 				UIToast.show('$removed out-of-range notes removed');
+			warnOnColumnBudget();
 		}, true);
 		apply.x = W - pad - 110;
-		apply.y = 214;
+		apply.y = 298;
 		modal.body.addChild(apply);
 
 		modal.open();
@@ -3417,6 +3447,19 @@ class ChartingState extends MusicBeatState {
 		rebuildStrumlineUI();
 	}
 
+	/**
+		Warns once when the visible strumlines want more columns than fit across the screen.
+
+		A count of lines is the wrong budget -- 4+4+4 fits and 6+6+6 does not -- so this measures
+		columns, and says so while charting rather than leaving it to be found at play time.
+	**/
+	function warnOnColumnBudget():Void {
+		var columns:Int = model.visibleColumnCount();
+		var budget:Int = ChartEditorModel.columnBudget();
+		if (columns > budget)
+			UIToast.show('$columns visible columns is more than the ~$budget that fit on screen; lanes will be cramped');
+	}
+
 	/** Shows/hides a lane in the grid (enforces the visible-lines cap). **/
 	function toggleLineVisible(idx:Int, visible:Bool):Void {
 		if (visible && model.visibleLineCount() >= MAX_VISIBLE_LINES) {
@@ -3427,6 +3470,7 @@ class ChartingState extends MusicBeatState {
 		undoStack.snapshot(model, 'Lane Visibility');
 		model.setLineVisible(idx, visible);
 		rebuildStrumlineUI();
+		warnOnColumnBudget();
 	}
 
 	function applyAudioVolumes():Void {

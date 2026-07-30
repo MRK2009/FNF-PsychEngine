@@ -48,12 +48,25 @@ class Mania {
 		only affects newly-made objects.
 		@return the clamped keycount that was applied
 	**/
+	/**
+		The lane width a given keycount draws at.
+
+		The single derivation of it. `swagWidth` is this for whatever keycount was applied LAST, which
+		is all a single-keycount song needs; anything holding several key counts at once (strumlines
+		with their own `keyCount`) has to ask per line instead, so it asks here.
+
+		@param count the column count (clamped)
+		@return lane width in px
+	**/
+	public static inline function widthFor(count:Int):Float
+		return 160 * noteSizes[clamp(count) - 1];
+
 	public static function apply(count:Int):Int {
 		var changed:Bool = (count != current);
 		count = clamp(count);
 		current = count;
 		colArray = colArrayTable[count - 1];
-		swagWidth = 160 * noteSizes[count - 1];
+		swagWidth = widthFor(count);
 		// The shared per-column note palettes are seeded from the KEYCOUNT palette but cached by column
 		// alone, so a keycount change has to drop them or notes keep the previous count's colours.
 		// Receptors re-read `getColors` in their constructor, which is why only they used to recolour.

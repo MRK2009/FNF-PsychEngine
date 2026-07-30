@@ -17,6 +17,26 @@ import shaders.RGBPalette.RGBShaderReference;
 final class Receptor extends FlxSprite {
 	public var column:Int = 0;
 	public var keyCount:Int = 4;
+
+	/**
+		This lane's width in px.
+
+		Derived from this receptor's OWN `keyCount`, not from `Mania.swagWidth`. That global describes
+		whichever keycount was applied last, which is all a single-keycount song ever needed -- but a
+		chart can give each strumline its own `keyCount`, and two lines on screen at once then want
+		different widths. Notes, sustains and splashes all reach their receptor already, so they read
+		this instead of the global.
+	**/
+	public var laneWidth:Float = Mania.widthFor(4);
+
+	/**
+		Uniform shrink applied on top of the skin's own sizing so a crowded set of strumlines fits.
+
+		Deliberately separate from the skin's scale rather than folded into it: the skin owns how big
+		a note is for its keycount, and this owns how much of that the screen has room for. Applied
+		at the end of `build()` so a skin or keycount rebuild cannot drop it.
+	**/
+	public var fitScale(default, null):Float = 1;
 	public var player:Int = 0;
 
 	public var direction:Float = 90;
@@ -116,6 +136,7 @@ final class Receptor extends FlxSprite {
 		this.column = column;
 		this.player = player;
 		this.keyCount = (keyCount != null) ? keyCount : Mania.current;
+		this.laneWidth = Mania.widthFor(this.keyCount);
 		this.ID = column;
 
 		rgbShader = new RGBShaderReference(this, NoteDefaults.initializeGlobalRGBShader(column));
@@ -179,8 +200,33 @@ final class Receptor extends FlxSprite {
 		// update() each frame. Deferring the recompute left notes reading a stale hitBonus after a live edit
 		// (a rebuild) until something else forced a re-sync -- e.g. a note hit calling playAnim. Force it here
 		// so an edit takes effect immediately. `-1` makes the (frame-size-gated) recompute actually run.
+		// Fit LAST, on top of the finished skin build: the skin decides how big a receptor is for its
+		// keycount, and the layout only says how much of that fits on screen. Re-applied here rather
+		// than once at setup because `build()` runs again on a skin or keycount change, which would
+		// otherwise restore the unfitted size.
+		if (fitScale != 1) {
+			scale.x *= fitScale;
+			scale.y *= fitScale;
+			updateHitbox();
+		}
+
 		_lastFrameW = _lastFrameH = -1;
 		syncFrameCentering();
+	}
+
+	/**
+		Scales this receptor down so its whole strumline fits on screen.
+
+		@param value uniform multiplier on the skin's own size, and on the lane spacing with it. `1`
+		             restores the natural size.
+	**/
+	public function applyFit(value:Float):Void {
+		if (value == fitScale)
+			return;
+
+		fitScale = value;
+		laneWidth = Mania.widthFor(keyCount) * fitScale;
+		build();
 	}
 
 	/**
@@ -189,11 +235,13 @@ final class Receptor extends FlxSprite {
 		must already be set: the skin's y nudge follows the scroll direction.
 	**/
 	public function playerPosition():Void {
-		final kc:Int = Mania.current;
+		// This lane's own keycount, not the global: with per-strumline key counts the global describes
+		// only whichever line was applied last, which would lay every other line out at the wrong pitch.
+		final kc:Int = keyCount;
 		// A skin may widen/narrow the lane spacing; additive, and 4K gets it too (it has no base gap).
 		final skinGap:Float = backend.NoteSkinConfig.columnGap();
 		if (kc == Mania.DEFAULT) {
-			x += (Mania.swagWidth + skinGap) * column;
+			x += (laneWidth + skinGap) * column;
 			x += 50;
 			x += ((FlxG.width / 2) * player);
 			x += skinOffsetX;
@@ -201,7 +249,7 @@ final class Receptor extends FlxSprite {
 			return;
 		}
 
-		final step:Float = Mania.swagWidth + Mania.STRUM_GAP + skinGap;
+		final step:Float = laneWidth + Mania.STRUM_GAP + skinGap;
 		final center4K:Float = 160 * Mania.noteSizes[Mania.DEFAULT - 1] * (Mania.DEFAULT - 1) / 2;
 
 		x += step * column;
@@ -255,7 +303,7 @@ final class Receptor extends FlxSprite {
 		centerOffsets();
 		centerOrigin();
 		if (laneCenter)
-			offset.x = (frameWidth - Mania.swagWidth) / 2;
+			offset.x = (frameWidth - laneWidth) / 2;
 
 		// osu!mania flips its key art vertically depending on scroll direction; mirror that here (its art is
 		// drawn for downscroll, so the converter asks to flip on upscroll).
@@ -275,7 +323,7 @@ final class Receptor extends FlxSprite {
 		// `hitBonus` so notes converge on that spot of the art instead of the lane centre.
 		if (!Math.isNaN(hitAlign)) {
 			var a:Float = flip ? (1 - hitAlign) : hitAlign;
-			hitBonus = a * frameHeight * scale.y - Mania.swagWidth * 0.5;
+			hitBonus = a * frameHeight * scale.y - laneWidth * 0.5;
 		} else
 			hitBonus = 0;
 	}

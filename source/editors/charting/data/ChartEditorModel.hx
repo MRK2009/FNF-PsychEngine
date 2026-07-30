@@ -918,6 +918,60 @@ final class ChartEditorModel {
 	}
 
 	/**
+		Binds a strumline's character to a stage anchor, with an optional offset on top of it.
+
+		An anchor matching the line's role is stored as `null`, so a chart that never moved anything
+		off its default keeps saving without the key at all.
+
+		@param idx the strumline index
+		@param anchor the anchor name
+		@param dx offset X applied on top of the anchor
+		@param dy offset Y
+	**/
+	public function setLineAnchor(idx:Int, anchor:String, dx:Float, dy:Float):Void {
+		if (idx < 0 || idx >= chart.strumLines.length)
+			return;
+
+		var line:StrumLineData = chart.strumLines[idx];
+		line.anchor = (anchor == null || anchor.length < 1 || anchor == anchorForRole(line.type)) ? null : anchor;
+		line.offset = (dx == 0 && dy == 0) ? null : [dx, dy];
+		markDirty();
+	}
+
+	/**
+		The stage anchors a strumline's character can stand on: the three built-ins, then every
+		`character` object the song's stage declares.
+
+		Read off the stage the chart actually points at, so both editors offer real positions rather
+		than names the charter has to remember.
+	**/
+	public function anchorList():Array<String> {
+		var out:Array<String> = [
+			backend.StageData.ANCHOR_OPPONENT,
+			backend.StageData.ANCHOR_PLAYER,
+			backend.StageData.ANCHOR_SPECTATOR
+		];
+
+		var stage:String = (chart.stage != null && chart.stage.length > 0) ? chart.stage : backend.StageData.vanillaSongStage(chart.songKey());
+		var file = backend.StageData.getStageFile(stage);
+		if (file != null)
+			for (name in backend.StageData.characterAnchors(file).keys())
+				if (out.indexOf(name) < 0)
+					out.push(name);
+
+		return out;
+	}
+
+	/** The anchor a line of this role stands on when it declares none. **/
+	public static function anchorForRole(type:Int):String {
+		return switch (type) {
+			case 1: backend.StageData.ANCHOR_PLAYER;
+			case 0: backend.StageData.ANCHOR_OPPONENT;
+			default: backend.StageData.ANCHOR_SPECTATOR;
+		}
+	}
+
+	/**
 		Shows/hides a strumline's lanes in the grid and gameplay.
 		@param idx the strumline index
 		@param visible the new state
@@ -975,6 +1029,33 @@ final class ChartEditorModel {
 			if (line.visible)
 				count++;
 		return count;
+	}
+
+	/**
+		Total columns across every visible strumline.
+
+		The real budget for how much fits on screen: a line count says 4+4+4 and 6+6+6 are the same
+		when the first fits comfortably and the second cannot. Used to warn while charting rather
+		than leaving it to be discovered at play time.
+	**/
+	public function visibleColumnCount():Int {
+		var count:Int = 0;
+		for (line in chart.strumLines)
+			if (line.visible)
+				count += line.keyCount;
+		return count;
+	}
+
+	/**
+		Columns that fit across the play area at once.
+
+		Derived from the same width maths gameplay lays out with, at the widest (4K) lane, so the
+		warning is conservative: a chart under this always fits, and higher key counts draw narrower
+		lanes and so fit more than this suggests.
+	**/
+	public static function columnBudget():Int {
+		var step:Float = backend.Mania.widthFor(backend.Mania.DEFAULT) + backend.Mania.STRUM_GAP;
+		return Std.int(flixel.FlxG.width / step);
 	}
 
 	/** Copies notes from `sec + offset` into `sec` (times shifted; occupied spots skipped). **/

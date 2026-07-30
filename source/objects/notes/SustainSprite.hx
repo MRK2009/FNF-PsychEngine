@@ -138,7 +138,14 @@ final class SustainSprite extends FlxSprite {
 		@param data the sustain this drawable represents
 		@param keyCount the active column count (for per-keycount skin resolution)
 	**/
-	public function apply(data:NoteData, keyCount:Int):Void {
+	/**
+		Applies this hold's visuals, then shrinks them to the strumline's fitted size.
+
+		@param fitScale extra uniform scale from the layout, applied ON TOP of what the skin computed.
+		               Only the trail's WIDTH takes it -- its length is driven by the note's duration
+		               against scroll speed, and scaling that would desync the hold from its own notes.
+	**/
+	public function apply(data:NoteData, keyCount:Int, fitScale:Float = 1):Void {
 		this.data = data;
 		this.column = data.column;
 		this.keyCount = keyCount;
@@ -217,6 +224,16 @@ final class SustainSprite extends FlxSprite {
 		multSpeed = data.multSpeed;
 		alpha = multAlpha;
 		tail.alpha = alpha;
+
+		// Width only: `follow` recomputes scale.y from the hold's duration every frame, so touching it
+		// here would be overwritten anyway -- and shortening a hold would break where it ends.
+		if (fitScale != 1) {
+			scale.x *= fitScale;
+			tail.scale.x *= fitScale;
+			tail.scale.y *= fitScale;
+			updateHitbox();
+			tail.updateHitbox();
+		}
 	}
 
 	/** Returns this hold (body + tail) to the pool. **/
@@ -250,7 +267,7 @@ final class SustainSprite extends FlxSprite {
 		// BOTH scroll directions (the old code only got downscroll right).
 		var neg:Float = strum.downScroll ? 1 : -1;
 		var rate:Float = songSpeed * multSpeed;
-		var half:Float = Mania.swagWidth * 0.5;
+		var half:Float = strum.laneWidth * 0.5;
 		// The head/end landing point along the axis; `hitBonus` shifts it onto the receptor's hit-position
 		// zone (0 unless the skin sets `hitAlign`), matching the note head. `half` is still the PERPENDICULAR
 		// lane centre below, which the press point must not affect.
@@ -288,7 +305,7 @@ final class SustainSprite extends FlxSprite {
 		if (!data.hit) {
 			var ho:Float = (skinHeadOverlap != null) ? skinHeadOverlap : headOverlap;
 			if (ho != 0)
-				startAlong -= dir * (Mania.swagWidth * ho);
+				startAlong -= dir * (strum.laneWidth * ho);
 		}
 
 		// Missing hold-end: no tail length is reserved, so the body reaches where the tail would have ended.
@@ -341,7 +358,7 @@ final class SustainSprite extends FlxSprite {
 		}
 
 		// Held: hide the portion already scrolled past the receptor (raw scroll progress, dir-independent).
-		clip(0.45 * (scrollNow - data.scrollPos) * rate - Mania.swagWidth * holdClipNudge, bodyLen);
+		clip(0.45 * (scrollNow - data.scrollPos) * rate - strum.laneWidth * holdClipNudge, bodyLen);
 	}
 
 	/**

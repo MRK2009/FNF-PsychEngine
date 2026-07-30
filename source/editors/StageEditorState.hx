@@ -2076,6 +2076,14 @@ class StageEditorMetaSprite {
 					this.animations = data.animations;
 					this.firstAnimation = data.firstAnimation;
 				}
+
+			// A character anchor: a named position a strumline's character stands on. It carries no
+			// art of its own, so only its name and placement round-trip -- but they MUST, because
+			// saving rebuilds the whole object list from these and would otherwise drop them.
+			case 'character':
+				this.name = data.name;
+				if (data.scrollFactor != null)
+					this.scroll = data.scrollFactor;
 		}
 	}
 
@@ -2103,6 +2111,15 @@ class StageEditorMetaSprite {
 						obj.firstAnimation = firstAnimation;
 					}
 				}
+
+			// Must round-trip: saving rebuilds the whole object list from these, so anything not
+			// written here is destroyed the first time someone opens the stage and saves it.
+			case 'character':
+				obj.name = name;
+				obj.x = x;
+				obj.y = y;
+				if (scroll[0] != 1 || scroll[1] != 1)
+					obj.scrollFactor = scroll;
 		}
 		return obj;
 	}

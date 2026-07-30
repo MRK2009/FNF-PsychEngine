@@ -115,11 +115,63 @@ class StageData {
 		return 'stage';
 	}
 
-	public static var reservedNames:Array<String> = ['gf', 'gfGroup', 'dad', 'dadGroup', 'boyfriend', 'boyfriendGroup']; // blocks these names from being used on stage editor's name input text
+	public static var reservedNames:Array<String> = [
+		'gf', 'gfGroup', 'dad', 'dadGroup', 'boyfriend', 'boyfriendGroup',
+		// The three built-in character anchors. A `character` object may not shadow them, or a
+		// strumline asking for `player` would get the stage's object instead of the real one.
+		ANCHOR_OPPONENT, ANCHOR_PLAYER, ANCHOR_SPECTATOR
+	]; // blocks these names from being used on stage editor's name input text
+
+	/** The anchor a strumline's character stands on when its role is OPPONENT. **/
+	public static inline var ANCHOR_OPPONENT:String = 'opponent';
+
+	/** ... PLAYER. **/
+	public static inline var ANCHOR_PLAYER:String = 'player';
+
+	/** ... ADDITIONAL, and where a `gf` sing-track lands. **/
+	public static inline var ANCHOR_SPECTATOR:String = 'spectator';
+
+	/**
+		Named character anchors a stage declares, beyond the three built-in ones.
+
+		An anchor is a `character` entry in the stage's `objects` list:
+		`{ "type": "character", "name": "dj_booth", "x": 2750, "y": 1610 }`. It sits in the layer
+		stack at its own slot like any other object, which is the reason anchors live in `objects`
+		rather than in a positions map -- a character that cannot be layered between stage pieces is
+		not much use.
+
+		@param stage the loaded stage file
+		@return anchor name -> `[x, y]`, empty when the stage declares none
+	**/
+	public static function characterAnchors(stage:StageFile):Map<String, Array<Float>> {
+		var out:Map<String, Array<Float>> = new Map();
+		if (stage == null || stage.objects == null)
+			return out;
+
+		for (data in stage.objects) {
+			if (data == null || data.type != 'character')
+				continue;
+			var name:String = data.name;
+			if (name == null || name.length < 1)
+				continue;
+			out.set(name, [(data.x != null) ? data.x : 0.0, (data.y != null) ? data.y : 0.0]);
+		}
+		return out;
+	}
+
+	/**
+		Empty positioned groups created for `character` anchors, by anchor name.
+
+		Filled by `addObjectsToState` and read straight after by `PlayState`, which spawns whichever
+		strumline character is bound to each anchor into its group. Cleared on every call so a
+		restart does not inherit the previous stage's groups.
+	**/
+	public static var anchorGroups:Map<String, FlxSpriteGroup> = new Map();
 
 	public static function addObjectsToState(objectList:Array<Dynamic>, gf:FlxSprite, dad:FlxSprite, boyfriend:FlxSprite, ?group:Dynamic = null,
 			?ignoreFilters:Bool = false) {
 		var addedObjects:Map<String, FlxSprite> = [];
+		anchorGroups = new Map();
 		for (num => data in objectList) {
 			// Pick the canonical key the matching branch below would store under.
 			// Previously this called `addedObjects.exists(data)` on a Dynamic,
@@ -134,6 +186,24 @@ class StageData {
 				continue;
 
 			switch (data.type) {
+				// A character anchor: an empty group at this slot in the layer stack, which PlayState
+				// fills with whichever strumline's character is bound to this name. Adding it here
+				// rather than positioning a character directly is what gives the character the same
+				// layering control every other stage object has.
+				case 'character':
+					var name:String = data.name;
+					if (name == null || name.length < 1)
+						continue;
+
+					var anchor:FlxSpriteGroup = new FlxSpriteGroup((data.x != null) ? data.x : 0.0, (data.y != null) ? data.y : 0.0);
+					anchor.ID = num;
+					if (data.scrollFactor != null)
+						anchor.scrollFactor.set(data.scrollFactor[0], data.scrollFactor[1]);
+					if (group != null)
+						group.add(anchor);
+					anchorGroups.set(name, anchor);
+					addedObjects.set(name, anchor);
+
 				case 'gf', 'gfGroup':
 					if (gf != null) {
 						gf.ID = num;

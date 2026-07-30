@@ -581,6 +581,9 @@ class PlayState extends MusicBeatState {
 				if (!StageData.reservedNames.contains(key))
 					variables.set(key, spr);
 		} else {
+			// No object list means no declared anchors; drop the previous stage's rather than
+			// letting a song inherit them (`addObjectsToState` resets the map itself).
+			StageData.anchorGroups = new Map();
 			add(gfGroup);
 			add(dadGroup);
 			add(boyfriendGroup);
@@ -1750,13 +1753,17 @@ class PlayState extends MusicBeatState {
 		for (line in strumLines)
 			if (line.field != null)
 				visibleLines.push(line);
+		// Every line takes the new count here, so the fit has to be measured against that rather than
+		// the counts they are being rebuilt away from.
+		for (line in visibleLines)
+			line.keyCount = count;
 		var centers:Array<Float> = layoutStrumLines(visibleLines);
+		var fit:Float = strumFitScale(visibleLines);
 		var firstOpp:StrumLine = null;
 		var firstPlayer:StrumLine = null;
 		for (i in 0...visibleLines.length) {
 			var line:StrumLine = visibleLines[i];
-			line.keyCount = count;
-			line.receptors = buildReceptors(line.isPlayer, count, centers[i]);
+			line.receptors = buildReceptors(line, count, centers[i], fit);
 			line.field.receptors = line.receptors;
 			line.field.keyCount = count;
 			if (line.isPlayer) {
@@ -3397,7 +3404,7 @@ class PlayState extends MusicBeatState {
 			line.vocalsSuffix = sd.vocalsSuffix;
 			line.downScroll = ClientPrefs.data.downScroll;
 			line.cpuControlled = human ? cpuControlled : true;
-			line.characters = [for (name in sd.characters) resolveStrumCharacter(name)];
+			line.characters = [for (name in sd.characters) resolveStrumCharacter(sd, name)];
 			strumLines.push(line);
 			if (human && controlledLine == null)
 				controlledLine = line;
@@ -3418,8 +3425,9 @@ class PlayState extends MusicBeatState {
 
 		// Auto-spread the visible lines across the play area (2-line case == the classic 25%/75%).
 		var centers:Array<Float> = layoutStrumLines(visibleLines);
+		var fit:Float = strumFitScale(visibleLines);
 		for (i in 0...visibleLines.length)
-			visibleLines[i].receptors = buildReceptors(visibleLines[i].isPlayer, visibleLines[i].keyCount, centers[i]);
+			visibleLines[i].receptors = buildReceptors(visibleLines[i], visibleLines[i].keyCount, centers[i], fit);
 
 		// Distribute notes into each line's field by absolute strumLine index.
 		var perLine:Array<Array<NoteData>> = [for (_ in SONG.strumLines) []];
@@ -3520,20 +3528,27 @@ class PlayState extends MusicBeatState {
 		}
 	}
 
-	function buildReceptors(isPlayer:Bool, keyCount:Int, targetCenter:Float):Array<Receptor> {
+	function buildReceptors(line:StrumLine, keyCount:Int, targetCenter:Float, fitScale:Float = 1):Array<Receptor> {
 		var out:Array<Receptor> = [];
+		var isPlayer:Bool = line.isPlayer;
 		var strumLineX:Float = ClientPrefs.data.middleScroll ? STRUM_X_MIDDLESCROLL : STRUM_X;
 		var strumLineY:Float = ClientPrefs.data.downScroll ? (FlxG.height - 150) : 50;
 		var player:Int = isPlayer ? 1 : 0;
 		for (i in 0...keyCount) {
 			var targetAlpha:Float = 1;
 			if (!isPlayer) {
-				if (!ClientPrefs.data.opponentStrums)
+				// "Opponent Notes" hides the OPPONENT, not everything that isn't the player. An
+				// ADDITIONAL line is its own strumline and renders like any other once it is marked
+				// visible, so it must not disappear with the opponent's option.
+				if (line.type == backend.SongChart.StrumLineType.OPPONENT && !ClientPrefs.data.opponentStrums)
 					targetAlpha = 0;
 				else if (ClientPrefs.data.middleScroll)
 					targetAlpha = 0.35;
 			}
 			var r:Receptor = new Receptor(strumLineX, strumLineY, i, player, keyCount);
+			// Before `playerPosition`, which walks the lane out using `laneWidth` -- fitting after it
+			// would shrink the art but leave the spacing at full size.
+			r.applyFit(fitScale);
 			r.downScroll = ClientPrefs.data.downScroll;
 			if (!isStoryMode && !skipArrowStartTween) {
 				r.alpha = 0;
@@ -3571,15 +3586,85 @@ class PlayState extends MusicBeatState {
 	function layoutStrumLines(lines:Array<StrumLine>):Array<Float> {
 		var centers:Array<Float> = [];
 		var n:Int = lines.length;
+
 		if (ClientPrefs.data.middleScroll) {
+			// The player centres; the rest share the leftover width instead of every one of them
+			// taking the opponent's single shoved position and stacking on top of each other.
+			var others:Int = 0;
 			for (line in lines)
-				centers.push(line.isPlayer ? FlxG.width / 2 : -1);
-		} else {
-			for (i in 0...n)
-				centers.push(FlxG.width * ((i + 0.5) / n));
+				if (!line.isPlayer)
+					others++;
+
+			var seen:Int = 0;
+			for (line in lines) {
+				if (line.isPlayer) {
+					centers.push(FlxG.width / 2);
+					continue;
+				}
+				centers.push((others <= 1) ? -1 : FlxG.width * ((seen + 0.5) / others));
+				seen++;
+			}
+			return centers;
+		}
+
+		// Two lines reproduce the classic opponent-25% / player-75% split exactly, because equal
+		// widths make the width-weighted split identical to the even one.
+		var widths:Array<Float> = [for (line in lines) lineWidth(line)];
+		var total:Float = 0;
+		for (w in widths)
+			total += w;
+
+		// Share the screen in proportion to how much room each line actually needs, so a wide line
+		// next to a narrow one is not given the same slice and forced to overlap its neighbour.
+		var cursor:Float = 0;
+		for (i in 0...n) {
+			var slice:Float = (total > 0) ? FlxG.width * (widths[i] / total) : FlxG.width / n;
+			centers.push(cursor + slice / 2);
+			cursor += slice;
 		}
 		return centers;
 	}
+
+	/**
+		How much horizontal room a line's receptors occupy.
+
+		Uses the line's OWN key count rather than the song-level one, which is the whole reason two
+		lines with different counts can be laid out at all.
+
+		@param line the strumline
+		@return width in px
+	**/
+	inline function lineWidth(line:StrumLine):Float {
+		// Mirrors `Receptor.playerPosition`, which gives 4K no STRUM_GAP (it has no base gap) and
+		// every other count one. Estimating it any other way mis-weights a 4K line beside a wider one.
+		var gap:Float = backend.NoteSkinConfig.columnGap() + ((line.keyCount == Mania.DEFAULT) ? 0 : Mania.STRUM_GAP);
+		return (Mania.widthFor(line.keyCount) + gap) * line.keyCount;
+	}
+
+	/**
+		How much the visible strumlines must shrink to fit side by side.
+
+		Applied on top of the note skin's own sizing, never folded into it: the skin owns how big a
+		note is for its keycount, this owns how much of that the screen has room for. Lines that
+		already fit get `1` and are untouched, so every existing song is unaffected.
+
+		@param lines the visible strumlines
+		@return a uniform multiplier in `(0, 1]`
+	**/
+	function strumFitScale(lines:Array<StrumLine>):Float {
+		var total:Float = 0;
+		for (line in lines)
+			total += lineWidth(line);
+
+		if (total <= FlxG.width || total <= 0)
+			return 1;
+
+		// A margin either side, so the outermost lanes are not flush against the screen edge.
+		return (FlxG.width - STRUM_FIT_MARGIN * 2) / total;
+	}
+
+	/** Room left either side of the fitted strumlines. **/
+	static inline var STRUM_FIT_MARGIN:Float = 10;
 
 	/** The strumline a note belongs to (or `null` if its index is out of range). **/
 	inline function lineOf(data:NoteData):StrumLine
@@ -3859,10 +3944,72 @@ class PlayState extends MusicBeatState {
 			strumCharacters.set(char.curCharacter, char);
 	}
 
-	/** Resolves a strumline character name to one of PlayState's live characters (bf/dad/gf). **/
-	function resolveStrumCharacter(name:String):Character {
+	/**
+		The stage anchor a strumline's character stands on.
+
+		An explicit `anchor` wins; otherwise it comes from the line's role, which is what every chart
+		written before anchors existed relies on.
+
+		@param sd the chart's descriptor for the line
+		@return the anchor name (never null)
+	**/
+	function anchorOf(sd:StrumLineData):String {
+		if (sd.anchor != null && sd.anchor.length > 0)
+			return sd.anchor;
+
+		return switch (sd.type) {
+			case backend.SongChart.StrumLineType.PLAYER: StageData.ANCHOR_PLAYER;
+			case backend.SongChart.StrumLineType.OPPONENT: StageData.ANCHOR_OPPONENT;
+			default: StageData.ANCHOR_SPECTATOR;
+		}
+	}
+
+	/**
+		The group a character bound to `anchor` should live in.
+
+		The three built-ins map to the existing character groups; anything else comes from the
+		`character` objects the stage declared, so it keeps that object's slot in the layer stack.
+		An unknown anchor falls back to the spectator's group rather than dropping the character.
+
+		@param anchor the anchor name
+		@return the group to add into, or null when even the fallback is absent
+	**/
+	function anchorGroup(anchor:String):FlxSpriteGroup {
+		switch (anchor) {
+			case StageData.ANCHOR_PLAYER:
+				return boyfriendGroup;
+			case StageData.ANCHOR_OPPONENT:
+				return dadGroup;
+			case StageData.ANCHOR_SPECTATOR:
+				return gfGroup;
+		}
+
+		var group:FlxSpriteGroup = StageData.anchorGroups.get(anchor);
+		if (group != null)
+			return group;
+
+		FlxG.log.warn('Strumline anchor "$anchor" is not declared by stage "$curStage" -- using the spectator position');
+		return gfGroup;
+	}
+
+	/** Characters spawned for a strumline anchor, so two lines on one anchor share one character. **/
+	var anchoredCharacters:Map<String, Character> = new Map<String, Character>();
+
+	/**
+		Resolves a strumline's character, spawning one when it is not already on stage.
+
+		A line naming `bf`/`dad`/`gf` reuses the live character, exactly as before. Any other name is
+		built into its anchor's group -- which is what makes an extra strumline able to have a
+		character of its own at all.
+
+		@param sd the line's chart descriptor, for its anchor and offset
+		@param name the character the line asked for
+		@return the character to animate, or null when the name is empty
+	**/
+	function resolveStrumCharacter(sd:StrumLineData, name:String):Character {
 		if (name == null || name.length == 0)
 			return null;
+
 		var char:Character = strumCharacters.get(name);
 		if (char != null)
 			return char;
@@ -3872,7 +4019,31 @@ class PlayState extends MusicBeatState {
 			return boyfriend;
 		if (gf != null && gf.curCharacter == name)
 			return gf;
-		return null;
+
+		var anchor:String = anchorOf(sd);
+		var key:String = '$anchor|$name';
+		var existing:Character = anchoredCharacters.get(key);
+		if (existing != null)
+			return existing;
+
+		var group:FlxSpriteGroup = anchorGroup(anchor);
+		if (group == null)
+			return null;
+
+		// `isPlayer` drives the character's own left/right facing, so it follows the line's role
+		// rather than the anchor it happens to stand on.
+		var spawned:Character = new Character(0, 0, name, sd.isPlayer);
+		group.add(spawned);
+		startCharacterPos(spawned);
+		if (sd.offset != null) {
+			spawned.x += sd.offset[0];
+			spawned.y += sd.offset[1];
+		}
+		startCharacterScripts(spawned.curCharacter);
+
+		anchoredCharacters.set(key, spawned);
+		bindStrumCharacter(name, spawned);
+		return spawned;
 	}
 
 	/**

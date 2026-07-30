@@ -29,6 +29,18 @@ typedef StrumLineData = {
 		this line, muted/unmuted by its own note hits/misses. `null` = derive from the line's character
 		vocals file, else the side default (`Player`/`Opponent`). **/
 	@:optional var vocalsSuffix:String;
+
+	/** The stage anchor this line's character stands on: one of the three built-ins
+		(`opponent`/`player`/`spectator`) or a `character` object declared by the stage. `null` derives
+		it from `type`, which is what every chart written before anchors existed does.
+
+		The chart names the anchor and the STAGE owns its coordinates, so the same chart keeps working
+		on a stage that puts the character somewhere else. **/
+	@:optional var anchor:String;
+
+	/** `[dx, dy]` applied on top of the resolved anchor, for showcase tweaks that shouldn't mean
+		editing the stage. `null` = no offset. **/
+	@:optional var offset:Array<Float>;
 }
 
 /** A note in the native model: absolute `(strumLine, column)`, never mustHitSection-relative. `length`
@@ -472,7 +484,9 @@ class SongChart {
 					visible: (e.visible != false),
 					characters: chars,
 					keyCount: Mania.resolveKeyCount(e.keyCount),
-					vocalsSuffix: e.vocalsSuffix
+					vocalsSuffix: e.vocalsSuffix,
+					anchor: e.anchor,
+					offset: (e.offset != null) ? [(e.offset[0] : Float), (e.offset[1] : Float)] : null
 				});
 			}
 		}

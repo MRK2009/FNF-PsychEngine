@@ -469,6 +469,43 @@ class MobileChartingState extends MobileEditorBase {
 				pane.content.addChild(vis);
 				y += 58;
 
+				// Where this line's character stands. The chart names an anchor and the STAGE owns its
+				// coordinates, so the same chart still places the character sensibly on another stage.
+				var anchors:Array<String> = model.anchorList();
+				var curAnchor:String = (line.anchor != null && line.anchor.length > 0) ? line.anchor : ChartEditorModel.anchorForRole(line.type);
+				if (anchors.indexOf(curAnchor) < 0)
+					anchors.unshift(curAnchor);
+				var anchorDrop:UIDropdown = new UIDropdown('Stage position', w, function(_:Int, value:String):Void {
+					undoStack.snapshot(model, 'Stage Position');
+					var off:Array<Float> = line.offset;
+					model.setLineAnchor(idx, value, (off != null) ? off[0] : 0, (off != null) ? off[1] : 0);
+				});
+				anchorDrop.fontSize = 15;
+				anchorDrop.controlWidth = 260;
+				anchorDrop.setItems(anchors);
+				anchorDrop.select(Std.int(Math.max(0, anchors.indexOf(curAnchor))));
+				anchorDrop.y = y;
+				pane.content.addChild(anchorDrop);
+				y += 44;
+
+				var offX:UIStepper = new UIStepper('Offset X', w, (line.offset != null) ? line.offset[0] : 0, 10, function(v:Float):Void {
+					undoStack.snapshot(model, 'Character Offset');
+					model.setLineAnchor(idx, curAnchor, v, (line.offset != null) ? line.offset[1] : 0);
+				});
+				offX.decimals = 0;
+				offX.y = y;
+				pane.content.addChild(offX);
+				y += 54;
+
+				var offY:UIStepper = new UIStepper('Offset Y', w, (line.offset != null) ? line.offset[1] : 0, 10, function(v:Float):Void {
+					undoStack.snapshot(model, 'Character Offset');
+					model.setLineAnchor(idx, curAnchor, (line.offset != null) ? line.offset[0] : 0, v);
+				});
+				offY.decimals = 0;
+				offY.y = y;
+				pane.content.addChild(offY);
+				y += 54;
+
 				var third:Float = (w - 20) / 3;
 				var up:UIButton = new UIButton('UP', third, 50, function() {
 					if (idx > 0) {

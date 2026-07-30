@@ -307,6 +307,11 @@ class Song {
 				o.visible = false;
 			if (sd.vocalsSuffix != null)
 				o.vocalsSuffix = sd.vocalsSuffix;
+			// Written only when set, so a chart that never touched anchors saves byte-identical.
+			if (sd.anchor != null && sd.anchor.length > 0)
+				o.anchor = sd.anchor;
+			if (sd.offset != null && (sd.offset[0] != 0 || sd.offset[1] != 0))
+				o.offset = sd.offset;
 			strumlines.push(o);
 		}
 

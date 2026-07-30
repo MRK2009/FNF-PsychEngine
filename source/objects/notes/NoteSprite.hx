@@ -139,7 +139,14 @@ final class NoteSprite extends FlxSprite {
 		@param data the note this head represents
 		@param keyCount the active column count (for per-keycount skin resolution)
 	**/
-	public function apply(data:NoteData, keyCount:Int):Void {
+	/**
+		Applies this note's visuals, then shrinks them to the strumline's fitted size.
+
+		@param fitScale extra uniform scale from the layout, applied ON TOP of whatever the skin
+		               computed -- the skin decides how big a note is for its keycount, and the
+		               layout only says how much of that fits on screen. `1` leaves it untouched.
+	**/
+	public function apply(data:NoteData, keyCount:Int, fitScale:Float = 1):Void {
 		this.data = data;
 		this.column = data.column;
 		this.keyCount = keyCount;
@@ -188,6 +195,13 @@ final class NoteSprite extends FlxSprite {
 		}
 
 		applyTypeVisual(data.type);
+
+		// Last, so it multiplies the finished size whichever path above built it.
+		if (fitScale != 1) {
+			scale.x *= fitScale;
+			scale.y *= fitScale;
+			updateHitbox();
+		}
 	}
 
 	/**
@@ -231,7 +245,7 @@ final class NoteSprite extends FlxSprite {
 			alpha = strum.alpha * multAlpha;
 
 		var along:Float = offsetY + distance + height / 2 + strum.hitBonus;
-		var perp:Float = offsetX + (centerOnStrum ? Mania.swagWidth / 2 : width / 2);
+		var perp:Float = offsetX + (centerOnStrum ? strum.laneWidth / 2 : width / 2);
 		var cx:Float = strum.x + uX * along + uY * perp;
 		var cy:Float = strum.y + uY * along - uX * perp;
 		if (copyX)
