@@ -675,6 +675,7 @@ class StageEditorState extends MusicBeatState {
 		addDataTab(boxPanes[1]);
 		addObjectTab(boxPanes[2]);
 
+		reloadStageDropDown();
 		selectTabByName('Data');
 	}
 
@@ -1319,8 +1320,6 @@ class StageEditorState extends MusicBeatState {
 		dummyStage.x = stageX + PAD + halfW + 10;
 		dummyStage.y = stageY + 64;
 		mainUI.addChild(dummyStage);
-
-		reloadStageDropDown();
 	}
 
 	function updateStageDataUI() {
@@ -1452,7 +1451,8 @@ class StageEditorState extends MusicBeatState {
 			stageList.push('');
 		stageDropDown.setItems(stageList.copy());
 		stageDropDown.select(Std.int(Math.max(0, stageList.indexOf(lastLoadedStage))));
-		directoryDropDown.select(Std.int(Math.max(0, directoryList.indexOf(stageJson.directory))));
+		if (directoryDropDown != null)
+			directoryDropDown.select(Std.int(Math.max(0, directoryList.indexOf(stageJson.directory))));
 	}
 
 	function checkUIOnObject() {
@@ -1939,7 +1939,11 @@ class StageEditorState extends MusicBeatState {
 
 	override function destroy() {
 		destroySubStates = true;
-		animationEditor.destroy();
+		if (animationEditor != null) {
+			if (animationEditor != subState)
+				animationEditor.destroy();
+			animationEditor = null;
+		}
 		if (uiRoot != null) {
 			FlxSmidr.dispose();
 			#if mobile UITheme.clearMobilePreset(); #end

@@ -518,10 +518,21 @@ class CrashHandler {
 		dateNow = dateNow.replace(" ", "_");
 		dateNow = dateNow.replace(":", "'");
 
-		final path:String = CRASH_DIR + "PsychEngine_" + dateNow + ".txt";
+		var path:String = CRASH_DIR + "PsychEngine_" + dateNow + ".txt";
 		try {
 			if (!FileSystem.exists(CRASH_DIR))
 				FileSystem.createDirectory(CRASH_DIR);
+
+			// The stamp only resolves to the second, and a crash cascade (the teardown of a
+			// half-built state faulting again) writes several reports inside that second. Without
+			// a uniquifier the follow-up ones overwrite the FIRST report, which is the only one
+			// that names the original fault.
+			var dupe:Int = 1;
+			while (FileSystem.exists(path) && dupe < 100) {
+				dupe++;
+				path = CRASH_DIR + "PsychEngine_" + dateNow + "_" + dupe + ".txt";
+			}
+
 			File.saveContent(path, report + "\n");
 			lastReportPath = Path.normalize(path);
 		} catch (_:Dynamic) {
