@@ -777,8 +777,10 @@ class LoadingState extends MusicBeatState {
 			if (requestKey.lastIndexOf('.') < 0)
 				requestKey += '.png';
 
-			if (!Paths.currentTrackedAssets.exists(requestKey)) {
-				var file:String = Paths.getPath(requestKey, IMAGE);
+			// Keyed by the resolved file, matching Paths' cache: two mods overriding the same key
+			// resolve to different files and must not share a slot.
+			var file:String = Paths.getPath(requestKey, IMAGE);
+			if (!Paths.currentTrackedAssets.exists(file)) {
 				if (#if sys FileSystem.exists(file) || #end OpenFlAssets.exists(file, IMAGE)) {
 					// Mobile: BitmapData.fromFile returns null for external-storage files; AssetUtil decodes bytes.
 					#if mobile
@@ -792,7 +794,7 @@ class LoadingState extends MusicBeatState {
 					if (bitmap != null) {
 						mutex.acquire();
 						requestedBitmaps.set(file, bitmap);
-						originalBitmapKeys.set(file, requestKey);
+						originalBitmapKeys.set(file, file);
 						mutex.release();
 						return bitmap;
 					}
@@ -801,7 +803,8 @@ class LoadingState extends MusicBeatState {
 					trace('no such image $key exists');
 			}
 
-			return Paths.currentTrackedAssets.get(requestKey).bitmap;
+			var tracked:flixel.graphics.FlxGraphic = Paths.currentTrackedAssets.get(file);
+			return (tracked != null) ? tracked.bitmap : null;
 		} catch (e:haxe.Exception) {
 			trace('ERROR! fail on preloading image $key');
 		}

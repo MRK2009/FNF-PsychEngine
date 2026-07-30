@@ -286,6 +286,7 @@ class Mods {
 
 	public static function loadTopMod() {
 		Mods.currentModDirectory = '';
+		Paths.resetCaseCache();
 
 		#if MODS_ALLOWED
 		var list:Array<String> = Mods.parseList().enabled;

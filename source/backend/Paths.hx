@@ -220,6 +220,66 @@ class Paths {
 	}
 	#end
 
+	#if mobile
+	/** Case-corrected paths, and the misses, so a given path is only ever scanned for once. **/
+	static var caseFixCache:Map<String, String> = new Map();
+
+	/**
+		The real spelling of `path` when only its case is wrong, or null when it genuinely is not there.
+
+		Android's filesystem is case-sensitive and Windows' is not, so a mod authored on desktop that
+		asks for `Images/Foo.png` works for its author and resolves to nothing on a phone -- silently,
+		as a missing texture. Only the miss path pays for this: an exact hit never reaches here, and
+		both hits and misses are cached, so a wrong-cased asset is scanned for once per session.
+
+		The leading segment is taken as-is; `mods` and `assets` are spelled by the engine, not by mods.
+	**/
+	static function caseFixed(path:String):Null<String> {
+		if (caseFixCache.exists(path))
+			return caseFixCache.get(path);
+
+		var fixed:String = null;
+		#if sys
+		var parts:Array<String> = path.split('/');
+		if (parts.length > 1) {
+			var built:String = parts[0];
+			var ok:Bool = true;
+			for (i in 1...parts.length) {
+				var exact:String = '$built/${parts[i]}';
+				if (FileSystem.exists(exact)) {
+					built = exact;
+					continue;
+				}
+
+				var match:String = null;
+				var wanted:String = parts[i].toLowerCase();
+				for (entry in listDirectory(built))
+					if (entry.toLowerCase() == wanted) {
+						match = entry;
+						break;
+					}
+				if (match == null) {
+					ok = false;
+					break;
+				}
+				built = '$built/$match';
+			}
+			if (ok)
+				fixed = built;
+		}
+		#end
+		caseFixCache.set(path, fixed);
+		return fixed;
+	}
+	#end
+
+	/** Drops the case-correction cache; call whenever the set of files underfoot changes. **/
+	public static function resetCaseCache():Void {
+		#if mobile
+		caseFixCache.clear();
+		#end
+	}
+
 	public static function getPath(file:String, ?type:AssetType = TEXT, ?parentfolder:String, ?modsAllowed:Bool = true):String {
 		#if MODS_ALLOWED
 		if (modsAllowed) {
@@ -304,46 +364,55 @@ class Paths {
 
 	public static var currentTrackedAssets:Map<String, FlxGraphic> = [];
 
-	// Build the cache key. When a parentFolder is supplied we prefix it so
-	// `image("foo")` and `image("foo", "songs")` no longer collide on the
-	// same cache slot. When no folder is given the key stays plain so
-	// existing callers (LoadingState.preloadGraphic, etc.) still match.
-	inline static function trackedKey(key:String, ?parentFolder:String):String
-		return parentFolder != null ? '$parentFolder:$key' : key;
+	/**
+		The cached graphic for an already-resolved file, or null when there is no live entry.
+
+		Flixel consumers (notably flixel-animate's `FlxAnimateSpritemapCollection`) call
+		`FlxG.bitmap.remove()` on shared spritemap graphics during their destroy/useCount cleanup, which
+		leaves the entry pointing at a destroyed `FlxGraphic` that crashes on the next draw. Those are
+		dropped here so the caller re-creates them.
+	**/
+	static function trackedGraphic(file:String):FlxGraphic {
+		if (!currentTrackedAssets.exists(file))
+			return null;
+
+		var cached:FlxGraphic = currentTrackedAssets.get(file);
+		if (cached != null && !cached.isDestroyed) {
+			localTrackedAssets.push(file);
+			return cached;
+		}
+		currentTrackedAssets.remove(file);
+		return null;
+	}
 
 	static public function image(key:String, ?parentFolder:String = null, ?allowGPU:Bool = true):FlxGraphic {
 		key = Language.getFileTranslation('images/$key') + '.png';
-		var trackKey:String = trackedKey(key, parentFolder);
-		var bitmap:BitmapData = null;
-		if (currentTrackedAssets.exists(trackKey)) {
-			var cached:FlxGraphic = currentTrackedAssets.get(trackKey);
-			// Some consumers (notably flixel-animate's FlxAnimateSpritemapCollection)
-			// will call FlxG.bitmap.remove() on shared spritemap graphics during
-			// their destroy/useCount cleanup. The cache entry would then point at
-			// a destroyed FlxGraphic and crash on the next draw, so re-create it.
-			if (cached != null && !cached.isDestroyed) {
-				localTrackedAssets.push(trackKey);
-				return cached;
-			}
-			currentTrackedAssets.remove(trackKey);
-		}
-		// Compat fallback: a previous call with no parentFolder may have
-		// cached this image under the bare key. Honor that hit so mods that
-		// mix folder/no-folder calls don't double-load.
-		if (parentFolder != null && currentTrackedAssets.exists(key)) {
-			var cached:FlxGraphic = currentTrackedAssets.get(key);
-			if (cached != null && !cached.isDestroyed) {
-				localTrackedAssets.push(key);
-				return cached;
-			}
-			currentTrackedAssets.remove(key);
-		}
-		return cacheBitmap(key, parentFolder, bitmap, allowGPU);
+		var file:String = getPath(key, IMAGE, parentFolder, true);
+
+		var cached:FlxGraphic = trackedGraphic(file);
+		if (cached != null)
+			return cached;
+		return cacheAt(file, null, allowGPU);
 	}
 
-	public static function cacheBitmap(key:String, ?parentFolder:String = null, ?bitmap:BitmapData, ?allowGPU:Bool = true):FlxGraphic {
+	/**
+		Caches a graphic under the file it came from.
+
+		@param key an asset key to resolve when `bitmap` is null, or the path the bitmap was read from
+		@param bitmap an already-decoded bitmap, or null to load `key` from disk
+	**/
+	public static function cacheBitmap(key:String, ?parentFolder:String = null, ?bitmap:BitmapData, ?allowGPU:Bool = true):FlxGraphic
+		return cacheAt(bitmap == null ? getPath(key, IMAGE, parentFolder, true) : key, bitmap, allowGPU);
+
+	/**
+		The cache is keyed by the RESOLVED path, never by the asset key: two mods overriding the same
+		key (`icons/icon-bf`, `NOTE_assets`) resolve to different files, and keying by the key alone
+		handed whichever loaded first to both of them for as long as the entry lived. That is invisible
+		in gameplay -- the cache is emptied between states -- but plainly wrong anywhere one screen
+		spans several mods, like Freeplay's icon list.
+	**/
+	static function cacheAt(file:String, ?bitmap:BitmapData, ?allowGPU:Bool = true):FlxGraphic {
 		if (bitmap == null) {
-			var file:String = getPath(key, IMAGE, parentFolder, true);
 			#if mobile
 			bitmap = mobile.backend.AssetUtil.getBitmap(file);
 			#elseif MODS_ALLOWED
@@ -356,11 +425,10 @@ class Paths {
 				bitmap = OpenFlAssets.getBitmapData(file);
 			#end
 
-			if (bitmap == null) {
-				// trace('Bitmap not found: $file | key: $key');
+			if (bitmap == null)
 				return null;
-			}
 		}
+		var key:String = file;
 
 		if (allowGPU && ClientPrefs.data.cacheOnGPU && bitmap.image != null) {
 			bitmap.lock();
@@ -375,13 +443,12 @@ class Paths {
 			bitmap.readable = true;
 		}
 
-		var trackKey:String = trackedKey(key, parentFolder);
-		var graph:FlxGraphic = FlxGraphic.fromBitmapData(bitmap, false, trackKey);
+		var graph:FlxGraphic = FlxGraphic.fromBitmapData(bitmap, false, key);
 		graph.persist = true;
 		graph.destroyOnNoUse = false;
 
-		currentTrackedAssets.set(trackKey, graph);
-		localTrackedAssets.push(trackKey);
+		currentTrackedAssets.set(key, graph);
+		localTrackedAssets.push(key);
 		return graph;
 	}
 
@@ -654,6 +721,21 @@ class Paths {
 			if (existsCached(fileToCheck))
 				return fileToCheck;
 		}
+
+		#if mobile
+		// Nothing matched exactly. Before handing back a path that does not exist, allow for a mod
+		// written on a case-insensitive filesystem naming its own files in a different case.
+		if (Mods.allowCurrentModAssets && Mods.currentModDirectory != null && Mods.currentModDirectory.length > 0) {
+			var fixed:String = caseFixed(mods(Mods.currentModDirectory + '/' + key));
+			if (fixed != null)
+				return fixed;
+		}
+		for (mod in Mods.getGlobalMods()) {
+			var fixed:String = caseFixed(mods(mod + '/' + key));
+			if (fixed != null)
+				return fixed;
+		}
+		#end
 		return 'mods/' + key;
 	}
 	#end
