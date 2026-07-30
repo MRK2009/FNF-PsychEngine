@@ -64,6 +64,13 @@ final class NoteField {
 	/** Called right after an entry becomes alive; used to fire the `onSpawnNote` callbacks. **/
 	public var onSpawn:ActiveNote->Void = null;
 
+	/**
+		Called as an entry leaves play -- consumed by a hit or scrolled past -- and fires the
+		`onDespawnNote` callbacks. Not called for bulk teardown (`clear`, `skipTo`, a rewind), which is
+		not a note ending so much as the whole field being thrown away.
+	**/
+	public var onDespawn:ActiveNote->Void = null;
+
 	var nextSpawn:Int = 0;
 
 	/**
@@ -127,6 +134,8 @@ final class NoteField {
 			if (songPos - note.data.endTime() > killBehind) {
 				free(note);
 				active.splice(i, 1);
+				if (onDespawn != null)
+					onDespawn(note);
 			}
 		}
 	}
@@ -201,6 +210,8 @@ final class NoteField {
 		if (idx >= 0)
 			active.splice(idx, 1);
 		free(note);
+		if (onDespawn != null)
+			onDespawn(note);
 	}
 
 	/**
@@ -270,6 +281,24 @@ final class NoteField {
 			free(note);
 		active = [];
 		nextSpawn = 0;
+	}
+
+	/**
+		Re-points every on-screen note at the palette for `keyCount`.
+
+		Drawables bake their palette when they are realized, and a keycount change builds a whole new
+		set of `RGBPalette` objects -- so receptors, which are rebuilt, took the new colours while notes
+		already on screen went on referencing the palettes of a count no longer in effect.
+		@param keyCount the field's new column count
+	**/
+	public function refreshColors(keyCount:Int):Void {
+		this.keyCount = keyCount;
+		for (note in active) {
+			if (note.head != null && note.head.exists)
+				note.head.applyPalette(keyCount);
+			if (note.sustain != null && note.sustain.exists)
+				note.sustain.applyPalette(keyCount);
+		}
 	}
 
 	/**

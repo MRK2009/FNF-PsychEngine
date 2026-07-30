@@ -152,6 +152,7 @@ final class NoteSprite extends FlxSprite {
 		this.keyCount = keyCount;
 
 		exists = visible = active = true;
+		resetScriptState();
 		alpha = 1;
 		multAlpha = data.multAlpha; // load-time / compat unspawn override (default 1)
 		multSpeed = data.multSpeed;
@@ -162,9 +163,9 @@ final class NoteSprite extends FlxSprite {
 		clipRect = null;
 
 		if (rgbShader == null)
-			rgbShader = new RGBShaderReference(this, NoteDefaults.initializeGlobalRGBShader(column));
+			rgbShader = new RGBShaderReference(this, NoteDefaults.initializeGlobalRGBShader(column, this.keyCount));
 		else
-			rgbShader.reset(this, NoteDefaults.initializeGlobalRGBShader(column));
+			rgbShader.reset(this, NoteDefaults.initializeGlobalRGBShader(column, this.keyCount));
 		rgbShader.enabled = !(data.disableRGB || (PlayState.SONG != null && PlayState.SONG.disableNoteRGB));
 
 		fillSplashData(noteSplashData);
@@ -262,5 +263,38 @@ final class NoteSprite extends FlxSprite {
 		data = null;
 		sustain = null;
 		clipRect = null;
+	}
+
+	/**
+		Re-points this note at the palette for `keyCount`, keeping whatever the RGB shader was toggled to.
+
+		Used when a strumline's column count changes mid-song: the palettes are rebuilt for the new count
+		and a note already on screen would otherwise keep drawing from the old objects.
+		@param keyCount the strumline's new column count
+	**/
+	public function applyPalette(keyCount:Int):Void {
+		this.keyCount = keyCount;
+		if (rgbShader == null)
+			return;
+
+		var enabled:Bool = rgbShader.enabled;
+		rgbShader.reset(this, NoteDefaults.initializeGlobalRGBShader(column, keyCount));
+		rgbShader.enabled = enabled;
+	}
+
+	/**
+		Clears the visual state a script can set on a pooled drawable.
+
+		Heads and trails are recycled, so anything a script wrote in `onSpawnNote` -- a tint, a flip, a
+		blend, its own cameras -- stayed on the sprite and reappeared on an unrelated note later. The
+		fields the runtime rewrites every frame (`angle`, `alpha`, position) heal themselves; these do
+		not, so they are put back here before the note is built.
+	**/
+	inline function resetScriptState():Void {
+		color = flixel.util.FlxColor.WHITE;
+		colorTransform.redOffset = colorTransform.greenOffset = colorTransform.blueOffset = 0;
+		flipX = flipY = false;
+		blend = null;
+		cameras = null; // back to inheriting the note group's
 	}
 }

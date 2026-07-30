@@ -62,16 +62,16 @@ class Mania {
 		return 160 * noteSizes[clamp(count) - 1];
 
 	public static function apply(count:Int):Int {
-		var changed:Bool = (count != current);
 		count = clamp(count);
+		var changed:Bool = (count != current);
 		current = count;
 		colArray = colArrayTable[count - 1];
 		swagWidth = widthFor(count);
-		// The shared per-column note palettes are seeded from the KEYCOUNT palette but cached by column
-		// alone, so a keycount change has to drop them or notes keep the previous count's colours.
-		// Receptors re-read `getColors` in their constructor, which is why only they used to recolour.
+		// Palettes are seeded from the KEYCOUNT palette, so a change has to drop them or notes keep the
+		// previous count's colours. Compared AFTER clamping: an out-of-range request that clamps back to
+		// the count already in effect is not a change, and used to throw the cache away for nothing.
 		if (changed)
-			objects.notes.NoteDefaults.globalRgbShaders = [];
+			objects.notes.NoteDefaults.resetPalettes();
 		return count;
 	}
 

@@ -58,26 +58,47 @@ class NoteDefaults {
 
 	public static var SUSTAIN_SIZE:Int = 44;
 
-	/** Per-column global RGB palettes, lazily built by `initializeGlobalRGBShader`. **/
+	/** Per-column RGB palettes for the ACTIVE keycount, lazily built by `initializeGlobalRGBShader`. **/
 	public static var globalRgbShaders:Array<RGBPalette> = [];
 
 	/**
-		Lazily builds (and caches) the shared per-column RGB palette for `noteData`, seeded from the
-		multikey palette or the user's arrow-color prefs.
-		@param noteData the 0-based column
-		@return the shared `RGBPalette` for that column
-	**/
-	public static function initializeGlobalRGBShader(noteData:Int):RGBPalette {
-		if (globalRgbShaders[noteData] == null) {
-			var newRGB:RGBPalette = new RGBPalette();
-			// A skin may ship its own palette; the player's colours are the fallback (and win outright
-			// when `overrideSkinColors` is on).
-			var arr:Array<FlxColor> = backend.NoteSkinConfig.skinNoteColors(noteData);
-			if (arr != null) {} else if (Mania.current != Mania.DEFAULT)
-				arr = Mania.getColors(Mania.current)[noteData]; // multikey palette
-			else
-				arr = (!PlayState.isPixelStage) ? ClientPrefs.data.arrowRGB[noteData] : ClientPrefs.data.arrowRGBPixel[noteData];
+		Palettes for keycounts other than the active one, keyed by count.
 
+		Strumlines carry their own `keyCount`, so a song can hold a 4K line and a 6K line at once. The
+		palette a lane wants depends on that count, not just on the column index: keying by column alone
+		gave a 6K line the 4K palette for lanes 0-3 and no palette at all for lanes 4-5, since the
+		player's arrow-colour prefs only go four wide. Only the active count lives in
+		`globalRgbShaders`, which the colour menu edits in place; the rest live here.
+	**/
+	static var rgbShadersByCount:Map<Int, Array<RGBPalette>> = new Map();
+
+	/** Drops every cached palette, active and per-keycount alike. **/
+	public static function resetPalettes():Void {
+		globalRgbShaders = [];
+		rgbShadersByCount.clear();
+	}
+
+	/**
+		Lazily builds (and caches) the shared RGB palette for a lane, seeded from the skin's palette, the
+		multikey palette for `keyCount`, or the user's arrow-colour prefs.
+		@param noteData the 0-based column
+		@param keyCount the column count of the strumline this lane belongs to; defaults to the active one
+		@return the shared `RGBPalette` for that lane
+	**/
+	public static function initializeGlobalRGBShader(noteData:Int, ?keyCount:Int):RGBPalette {
+		var count:Int = (keyCount != null) ? Mania.clamp(keyCount) : Mania.current;
+		var store:Array<RGBPalette> = globalRgbShaders;
+		if (count != Mania.current) {
+			store = rgbShadersByCount.get(count);
+			if (store == null) {
+				store = [];
+				rgbShadersByCount.set(count, store);
+			}
+		}
+
+		if (store[noteData] == null) {
+			var newRGB:RGBPalette = new RGBPalette();
+			var arr:Array<FlxColor> = laneColors(noteData, count);
 			if (arr != null && arr.length >= 3) {
 				newRGB.r = arr[0];
 				newRGB.g = arr[1];
@@ -88,9 +109,30 @@ class NoteDefaults {
 				newRGB.b = 0xFF0000FF;
 			}
 
-			globalRgbShaders[noteData] = newRGB;
+			store[noteData] = newRGB;
 		}
-		return globalRgbShaders[noteData];
+		return store[noteData];
+	}
+
+	/**
+		The `[main, border, shadow]` triple a lane draws with: the skin's shipped palette first (unless
+		the player overrides skin colours), then the keycount palette, then the pixel/normal arrow-colour
+		prefs. The prefs are only four lanes wide, so anything past 4K takes the keycount palette.
+		@param column the 0-based lane
+		@param count the strumline's column count
+	**/
+	static function laneColors(column:Int, count:Int):Array<FlxColor> {
+		var arr:Array<FlxColor> = backend.NoteSkinConfig.skinNoteColors(column);
+		if (arr != null)
+			return arr;
+
+		if (count != Mania.DEFAULT) {
+			var palette:Array<Array<FlxColor>> = Mania.getColors(count);
+			return (palette != null && column >= 0 && column < palette.length) ? palette[column] : null;
+		}
+
+		var prefs:Array<Array<FlxColor>> = (!PlayState.isPixelStage) ? ClientPrefs.data.arrowRGB : ClientPrefs.data.arrowRGBPixel;
+		return (prefs != null && column >= 0 && column < prefs.length) ? prefs[column] : null;
 	}
 
 	/**
@@ -100,21 +142,14 @@ class NoteDefaults {
 		`initializeGlobalRGBShader` this touches no shared cache, so menus and overlays (e.g. the mobile
 		Hitbox) can read a lane's colour with no gameplay side effects.
 		@param column the 0-based lane
+		@param keyCount the strumline's column count; defaults to the active one
 	**/
-	public static function resolveLaneColors(column:Int):Array<FlxColor> {
-		var arr:Array<FlxColor> = backend.NoteSkinConfig.skinNoteColors(column);
-		if (arr == null) {
-			if (Mania.current != Mania.DEFAULT)
-				arr = Mania.getColors(Mania.current)[column];
-			else
-				arr = (!PlayState.isPixelStage) ? ClientPrefs.data.arrowRGB[column] : ClientPrefs.data.arrowRGBPixel[column];
-		}
-		return arr;
-	}
+	public static function resolveLaneColors(column:Int, ?keyCount:Int):Array<FlxColor>
+		return laneColors(column, (keyCount != null) ? Mania.clamp(keyCount) : Mania.current);
 
 	/** The primary (Main channel) colour of a lane, i.e. the arrow's dominant tint. **/
-	public static function resolveLaneColor(column:Int):FlxColor {
-		var arr:Array<FlxColor> = resolveLaneColors(column);
+	public static function resolveLaneColor(column:Int, ?keyCount:Int):FlxColor {
+		var arr:Array<FlxColor> = resolveLaneColors(column, keyCount);
 		return (arr != null && arr.length > 0) ? arr[0] : 0xFFFFFFFF;
 	}
 

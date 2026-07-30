@@ -46,8 +46,15 @@ class StrumLine {
 
 	public var vocalsSuffix:String = null;
 
-	/** Player-line input: the ordered control names and the `FlxKey -> column` map. `null` for
-		auto/opponent lines. Only one player line is wired for input at present. **/
+	/**
+		Player-line input: the ordered control names and the `FlxKey -> column` map, both sized to this
+		line's own `keyCount`. `null` for auto/opponent lines.
+
+		Filled by `PlayState.rebuildPlayerInput` for the line the human plays, and re-filled whenever the
+		count changes. Only one line is wired for input at present, so only `controlledLine` carries
+		these -- but they are the line's, not a global, which is what lets a 6K player line beside a 4K
+		one bind six keys instead of the song's four.
+	**/
 	public var keys:Array<String> = null;
 
 	public var keyToColumn:Map<FlxKey, Int> = null;

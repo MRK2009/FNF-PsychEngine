@@ -69,6 +69,19 @@ class ScriptGlobals {
 		'backend.WeekData',
 		'objects.Character',
 		'objects.StrumLine',
+		// The note runtime, which any script touching gameplay reaches for. Without these a script has
+		// to name them by full path (`objects.notes.NoteData`) or import each by hand, for the types it
+		// is handed by `onSpawnNote`/`goodNoteHit`/`onNotesGenerated` in the first place.
+		'objects.notes.NoteData',
+		'objects.notes.NoteField',
+		// Declared inside the NoteField module, so it needs naming in full -- a global import registers
+		// only the type it names, and this is what `field.active` holds.
+		'objects.notes.NoteField.ActiveNote',
+		'objects.notes.NoteSprite',
+		'objects.notes.SustainSprite',
+		'objects.notes.Receptor',
+		'objects.notes.NoteDefaults',
+		'backend.NoteSkinConfig',
 		'objects.Bar',
 		'objects.HealthIcon',
 		'objects.NoteSplash',

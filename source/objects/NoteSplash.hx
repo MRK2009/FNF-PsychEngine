@@ -294,6 +294,12 @@ class NoteSplash extends FlxSprite {
 			noteData = note.noteData;
 
 		var paletteCol:Int = noteData;
+		// The lane's real column count, taken off the receptor this splash sits on rather than the song's:
+		// a strumline carries its own keyCount, so a 6K line beside a 4K one was tinting its splashes from
+		// the 4K palette. The `% colArray.length` anim mapping below is unrelated and stays -- splash
+		// atlases only ship the four cardinal colours.
+		var laneRec:objects.notes.Receptor = (babyArrow is objects.notes.Receptor) ? cast babyArrow : null;
+		var laneKeys:Int = (laneRec != null) ? laneRec.keyCount : Mania.current;
 
 		// Always map the column to one of the 4 cardinal splash colours (`% 4`); pick a random variant
 		// only when the atlas ships more than one. (Plain `% 4` also keeps multikey columns in range.)
@@ -372,8 +378,8 @@ class NoteSplash extends FlxSprite {
 			}
 		}
 
-		if (tempShader != null && note == null && !inEditor && Mania.current != Mania.DEFAULT) {
-			var mc:Array<Array<FlxColor>> = Mania.getColors(Mania.current);
+		if (tempShader != null && note == null && !inEditor && laneKeys != Mania.DEFAULT) {
+			var mc:Array<Array<FlxColor>> = Mania.getColors(laneKeys);
 			if (paletteCol >= 0 && paletteCol < mc.length && mc[paletteCol] != null && mc[paletteCol].length >= 3) {
 				tempShader.r = mc[paletteCol][0];
 				tempShader.g = mc[paletteCol][1];
@@ -384,7 +390,7 @@ class NoteSplash extends FlxSprite {
 		// Independent splash colour: the skin allows colouring the splash but its link is OFF, so use the
 		// splash's own per-asset colour (per-keycount aware, note-colour fallback) instead of the note's.
 		if (config.allowRGB && !splashLinked) {
-			var sc:Array<Array<FlxColor>> = Mania.getAssetColors('splash', Mania.current);
+			var sc:Array<Array<FlxColor>> = Mania.getAssetColors('splash', laneKeys);
 			if (paletteCol >= 0 && paletteCol < sc.length && sc[paletteCol] != null && sc[paletteCol].length >= 3) {
 				if (tempShader == null)
 					tempShader = new RGBPalette();

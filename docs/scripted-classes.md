@@ -247,7 +247,9 @@ Engine singletons and helpers resolve as bare identifiers everywhere scripts run
 list is `source/scripting/ScriptGlobals.hx` (`TYPE_IMPORTS` for types, `inject()` for
 values/helpers). It covers the common Flixel classes, `FlxG`, `Conductor`, `ClientPrefs`,
 `Paths`, `controls`, gameplay classes (`Character`, `StrumLine`, `Bar`, `HealthIcon`,
-`NoteSplash`), `PlayState`, `Song`, `LoadingState`, and the
+`NoteSplash`), the note runtime (`NoteData`, `NoteField`, `ActiveNote`, `NoteSprite`,
+`SustainSprite`, `Receptor`, `NoteDefaults`, `NoteSkinConfig` — the types the note callbacks
+hand you), `PlayState`, `Song`, `LoadingState`, and the
 `getVar`/`switchToState`/`buildScripted`/… helpers.
 
 A useful slice of **OpenFL** and **Lime** is included too (display objects, filters/shaders,

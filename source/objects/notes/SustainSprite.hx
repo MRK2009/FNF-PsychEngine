@@ -153,6 +153,7 @@ final class SustainSprite extends FlxSprite {
 
 		exists = visible = active = true;
 		tail.exists = tail.visible = true;
+		resetScriptState();
 		copyX = copyY = copyAngle = copyAlpha = true;
 		offsetAngle = 0;
 		clipRect = null;
@@ -162,13 +163,13 @@ final class SustainSprite extends FlxSprite {
 
 		var rgbOff:Bool = data.disableRGB || (PlayState.SONG != null && PlayState.SONG.disableNoteRGB);
 		if (rgbShader == null)
-			rgbShader = new RGBShaderReference(this, NoteDefaults.initializeGlobalRGBShader(column));
+			rgbShader = new RGBShaderReference(this, NoteDefaults.initializeGlobalRGBShader(column, this.keyCount));
 		else
-			rgbShader.reset(this, NoteDefaults.initializeGlobalRGBShader(column));
+			rgbShader.reset(this, NoteDefaults.initializeGlobalRGBShader(column, this.keyCount));
 		if (tailRGB == null)
-			tailRGB = new RGBShaderReference(tail, NoteDefaults.initializeGlobalRGBShader(column));
+			tailRGB = new RGBShaderReference(tail, NoteDefaults.initializeGlobalRGBShader(column, this.keyCount));
 		else
-			tailRGB.reset(tail, NoteDefaults.initializeGlobalRGBShader(column));
+			tailRGB.reset(tail, NoteDefaults.initializeGlobalRGBShader(column, this.keyCount));
 
 		// Force Selected Skin blocks a PLAIN note's hold-texture override; a custom-type note keeps it.
 		var forceSkip:Bool = ClientPrefs.data.forceNoteSkin && (data.type == null || data.type == '');
@@ -411,5 +412,41 @@ final class SustainSprite extends FlxSprite {
 		if (frames != null && animation.frameIndex >= 0 && animation.frameIndex < frames.frames.length)
 			frame = frames.frames[animation.frameIndex];
 		return rect;
+	}
+
+	/**
+		Re-points this hold (and its tail) at the palette for `keyCount`. See `NoteSprite.applyPalette`.
+		@param keyCount the strumline's new column count
+	**/
+	public function applyPalette(keyCount:Int):Void {
+		this.keyCount = keyCount;
+		if (rgbShader != null) {
+			var enabled:Bool = rgbShader.enabled;
+			rgbShader.reset(this, NoteDefaults.initializeGlobalRGBShader(column, keyCount));
+			rgbShader.enabled = enabled;
+		}
+		if (tailRGB != null) {
+			var tailEnabled:Bool = tailRGB.enabled;
+			tailRGB.reset(tail, NoteDefaults.initializeGlobalRGBShader(column, keyCount));
+			tailRGB.enabled = tailEnabled;
+		}
+	}
+
+	/**
+		Clears the visual state a script can set on this pooled trail and its tail. See
+		`NoteSprite.resetScriptState`: without it a tint or blend written in `onSpawnNote` reappeared on
+		whichever note recycled the sprite next.
+	**/
+	inline function resetScriptState():Void {
+		color = flixel.util.FlxColor.WHITE;
+		flipX = flipY = false;
+		blend = null;
+		cameras = null;
+		if (tail != null) {
+			tail.color = flixel.util.FlxColor.WHITE;
+			tail.flipX = tail.flipY = false;
+			tail.blend = null;
+			tail.cameras = null;
+		}
 	}
 }

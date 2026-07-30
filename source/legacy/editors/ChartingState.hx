@@ -3442,7 +3442,7 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 	}
 
 	override function destroy() {
-		Note.globalRgbShaders = [];
+		objects.notes.NoteDefaults.resetPalettes();
 		backend.NoteTypesConfig.clearNoteTypesData();
 
 		// Multikey: restore the classic 4K globals when leaving the editor.

@@ -139,22 +139,15 @@ final class Receptor extends FlxSprite {
 		this.laneWidth = Mania.widthFor(this.keyCount);
 		this.ID = column;
 
-		rgbShader = new RGBShaderReference(this, NoteDefaults.initializeGlobalRGBShader(column));
+		rgbShader = new RGBShaderReference(this, NoteDefaults.initializeGlobalRGBShader(column, this.keyCount));
 		rgbShader.enabled = false;
 		if (PlayState.SONG != null && PlayState.SONG.disableNoteRGB)
 			useRGBShader = false;
 
 		// Skin-shipped palette first, then the keycount/player colours (see NoteSkinConfig.skinNoteColors).
-		var arr:Array<FlxColor> = backend.NoteSkinConfig.skinNoteColors(column);
-		if (arr == null) {
-			if (Mania.current != Mania.DEFAULT)
-				arr = Mania.getColors(Mania.current)[column];
-			else {
-				arr = ClientPrefs.data.arrowRGB[column];
-				if (PlayState.isPixelStage)
-					arr = ClientPrefs.data.arrowRGBPixel[column];
-			}
-		}
+		// Resolved against THIS line's count, not the active one: a 6K line beside a 4K one asked the 4K
+		// palette for lanes it does not have and fell through to red/green/blue.
+		var arr:Array<FlxColor> = NoteDefaults.resolveLaneColors(column, this.keyCount);
 		if (arr != null && arr.length >= 3) {
 			@:bypassAccessor {
 				rgbShader.r = arr[0];
@@ -393,7 +386,7 @@ final class Receptor extends FlxSprite {
 		}
 		var c:Array<FlxColor>;
 		if (linked) {
-			var np:RGBPalette = NoteDefaults.initializeGlobalRGBShader(column);
+			var np:RGBPalette = NoteDefaults.initializeGlobalRGBShader(column, keyCount);
 			c = [np.r, np.g, np.b];
 		} else {
 			var all:Array<Array<FlxColor>> = Mania.getAssetColors(element, keyCount);

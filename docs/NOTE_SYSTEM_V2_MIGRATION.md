@@ -97,6 +97,24 @@ Lua callbacks get plain values. HScript callbacks get the note object (its `.dat
 | `opponentNoteHit` | `(id, column, type, isSustain)` |
 | `noteMiss` | `(id, column, type, isSustain)` |
 | `goodNoteHitPre` / `opponentNoteHitPre` | same args; `return Function_Stop` to cancel the hit |
+| `onDespawnNote` | `(-1, column, type, isSustain, time, mustPress)` |
+| `onSustainRelease` | `(-1, column, type, time)` |
+| `onStrumsCreated` | `(strumlineCount)` |
+
+Three of those are new, and each closes a hole the pooled runtime opened:
+
+- **`onDespawnNote`** fires as a note leaves play, however it left -- hit, missed, or simply scrolled
+  past. Its drawables are already back in the pool by then, so this is where you drop whatever you
+  were tracking for that note. The sprite you were handed in `onSpawnNote` now belongs to the field
+  again and will be handed out for a different note. HScript gets the note object; plain Lua reads
+  `game.despawnNote` (the mirror of `game.spawnNote`), valid only inside the callback.
+- **`onSustainRelease`** fires when a hold is dropped early. `noteMiss` still fires too -- this one
+  exists so you can tell a dropped hold apart from a note that was never pressed, which the miss
+  arguments alone cannot express.
+- **`onStrumsCreated`** fires the moment receptors, note fields and the strum aliases all exist.
+  Every other callback is either too early (`onCreatePost`, `onStartCountdown`, both of which run
+  before the fields are built) or well into the song, so restyling or repositioning lanes had no
+  correct moment to happen in.
 
 **The thing to know: what `id` (the first argument) means now.**
 
@@ -139,13 +157,17 @@ fields, a receptor, the note skin - use the property functions:
 
 ```lua
 function onSpawnNote(id, column, noteType, isSustain, time, mustPress)
-    setPropertyFromGroup('game.playerField.notes', id, 'alpha', 0.5)
+    setPropertyFromGroup('game.playerField.notes', id, 'multAlpha', 0.5)
 end
 ```
 
 - `id` is the value from `onSpawnNote`. It's not a global index and only works inside that callback.
-- The write hits the live note, so visual props (`x`, `y`, `alpha`, `angle`, `offsetX`, `offsetY`,
-  `multAlpha`, `multSpeed`, ...) all work.
+- **Write the offsets, not the position.** A note follows its receptor every frame, so `x`, `y`,
+  `alpha` and `angle` are *recomputed* each frame and a direct write is gone by the next one. Use
+  `offsetX` / `offsetY` / `multAlpha` / `multSpeed` / `offsetAngle`, which are inputs to that
+  calculation and therefore stick.
+- To own a property outright, turn its follow off first: `copyX`, `copyY`, `copyAlpha` and
+  `copyAngle` each stop the note recomputing that one, after which a plain `x` / `alpha` write holds.
 
 This is also how you reach a note's other settings that the callback didn't pass:
 
@@ -206,12 +228,18 @@ end
 (HScript can skip these and set `game.spawnNote.head.texture` / `.sustain.texture` and `rgbEnabled`
 directly.) Section 5 explains the skin files these point at.
 
-### 2.4 Two easy mistakes
+### 2.4 Three easy mistakes
 
 - **Using `i`/loop counters in note callbacks.** Inside a note callback there is no `i`; Lua turns it
   into `0`, so you keep hitting note 0. Use the `id` argument.
 - **`game.notes.members[...]` in hit/miss.** `id` is `-1` there, so this is always wrong. Read
   `game.lastJudgedNote`.
+- **Holding on to a note's sprite past its lifetime.** Heads and trails are pooled: the sprite you
+  styled in `onSpawnNote` is handed to a different note once yours leaves. Do your styling in
+  `onSpawnNote` every time rather than caching the sprite, and use `onDespawnNote` to drop anything
+  you were tracking. The engine resets colour, flip, blend and camera assignment when a sprite is
+  reused, so a tint no longer bleeds onto an unrelated note -- but a reference you kept is still
+  pointing at a sprite that has moved on.
 
 ### 2.5 Worked example: a custom note type
 

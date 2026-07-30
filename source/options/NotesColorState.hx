@@ -709,7 +709,9 @@ class NotesColorState extends MusicBeatState
 
 		Mania.apply(count);
 
-		Note.globalRgbShaders = [];
+		// resetPalettes, not just the active array: the per-keycount caches were seeded from the colours
+		// being edited here and would otherwise survive with the old ones.
+		objects.notes.NoteDefaults.resetPalettes();
 		for (i in 0...count)
 		{
 			var pal:RGBPalette = new RGBPalette();
@@ -1021,7 +1023,7 @@ class NotesColorState extends MusicBeatState
 
 	override function destroy():Void
 	{
-		Note.globalRgbShaders = [];
+		objects.notes.NoteDefaults.resetPalettes();
 		Mania.apply(prevKeyCount);
 		FlxG.mouse.useSystemCursor = false;
 		FlxG.mouse.visible = false;

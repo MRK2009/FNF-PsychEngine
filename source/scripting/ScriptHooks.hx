@@ -3,8 +3,8 @@ package scripting;
 /**
 	Every hook the engine dispatches to scripts, in one place.
 
-	There was no such list: 47 names existed only as string literals spread across the dispatch
-	sites, and eight of them broke the `onX` convention the other thirty-nine follow
+	There was no such list: the names existed only as string literals spread across the dispatch
+	sites, and eight of the 53 break the `onX` convention the other forty-five follow
 	(`goodNoteHit`, `noteMiss`, `preUpdateScore`, ...). Those eight are the names the engine has
 	always called, so they stay the dispatch names -- renaming them would break every published
 	mod for a cosmetic gain. Instead the consistent spelling is available as an alias: a script
@@ -37,6 +37,9 @@ class ScriptHooks {
 
 	public static inline var NOTES_GENERATED:String = 'onNotesGenerated';
 	public static inline var SPAWN_NOTE:String = 'onSpawnNote';
+	public static inline var DESPAWN_NOTE:String = 'onDespawnNote';
+	public static inline var SUSTAIN_RELEASE:String = 'onSustainRelease';
+	public static inline var STRUMS_CREATED:String = 'onStrumsCreated';
 	public static inline var KEY_COUNT_CHANGE:String = 'onKeyCountChange';
 
 	/** Off-convention, kept: the name every published mod already declares. **/

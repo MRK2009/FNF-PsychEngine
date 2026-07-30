@@ -90,7 +90,7 @@ end
 
 ## Hook names
 
-Eight hooks predate the `onX` convention the other thirty-nine follow. They still work and always
+Eight hooks predate the `onX` convention the other forty-five follow. They still work and always
 will -- they are the names the engine dispatches. Each now also accepts the consistent spelling,
 bound when your script loads:
 

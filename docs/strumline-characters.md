@@ -88,6 +88,18 @@ never a way to have one.
 Two strumlines naming the same character on the same position share one character rather than
 stacking two copies.
 
+`characters` is a list, and every name in it animates the line's notes -- a duet, a character and
+its prop, a crowd. The first is the one the camera targets when a section points at the line.
+
+A line's `keyCount` picks its sing animations too, so a 6K line beside a 4K one uses the 6K set for
+all six lanes instead of clamping its outer two onto `singRIGHT`. Its arrow colours come from the
+same place: the palette for the line's own count, not for whatever count the rest of the chart uses.
+
+The line the human plays sets the width of everything on the input side -- the bound keys, the mobile
+lane overlay, the replay, and the key count a score is filed under all follow `controlledLine`, not
+the song's `keyCount`. A chart may therefore give its player line a different count from the song's
+and still be playable.
+
 If a chart names a position the stage does not declare, the character falls back to the spectator
 position and a warning goes to the log, rather than vanishing or landing at `0, 0`.
 

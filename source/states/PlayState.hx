@@ -1182,8 +1182,9 @@ class PlayState extends MusicBeatState {
 			// PERSISTS a replay is decided once at endSong, where ranked/saveReplays are evaluated.
 			// Deciding here is fragile: botplay/practice can be toggled mid-song from the pause menu.
 			if (!replayMode && !chartingMode && replayRecorder != null)
-				replayRecorder.begin(Highscore.formatSong(Song.loadedSongName, storyDifficulty) + '_' + totalColumns + 'k', Song.loadedSongName,
-					(Mods.currentModDirectory != null) ? Mods.currentModDirectory : '', storyDifficulty, totalColumns, playbackRate, scoring.system.id());
+				replayRecorder.begin(Highscore.formatSong(Song.loadedSongName, storyDifficulty) + '_' + playerKeyCount() + 'k', Song.loadedSongName,
+					(Mods.currentModDirectory != null) ? Mods.currentModDirectory : '', storyDifficulty, playerKeyCount(), playbackRate,
+					scoring.system.id());
 
 			startedCountdown = true;
 			Conductor.songPosition = -Conductor.crochet * 5 + Conductor.offset;
@@ -1751,8 +1752,6 @@ class PlayState extends MusicBeatState {
 
 		totalColumns = count;
 		applyKeyCountGlobals(count);
-		keysArray = Mania.keyNames(count);
-		rebuildKeyToStrumMap();
 
 		// NoteSystem V2
 		if (receptorGroup != null) {
@@ -1782,7 +1781,9 @@ class PlayState extends MusicBeatState {
 			var line:StrumLine = visibleLines[i];
 			line.receptors = buildReceptors(line, count, centers[i], fit);
 			line.field.receptors = line.receptors;
-			line.field.keyCount = count;
+			// Rebuilt receptors take the new palettes on construction; notes already on screen are
+			// still pointing at the old count's, so re-point them too.
+			line.field.refreshColors(count);
 			if (line.isPlayer) {
 				if (firstPlayer == null)
 					firstPlayer = line;
@@ -1796,6 +1797,9 @@ class PlayState extends MusicBeatState {
 		playerReceptors = (firstPlayer != null) ? firstPlayer.receptors : playerReceptors;
 
 		refreshStrumAliases();
+		// After the lines took the new count, so the input follows the human's line rather than the
+		// count that was just requested.
+		rebuildPlayerInput();
 		// The old receptors were destroyed above, so the bands are rebuilt rather than re-pointed --
 		// per-column mode also needs a different band count at the new key count.
 		buildStrumUnderlays(visibleLines);
@@ -2980,7 +2984,7 @@ class PlayState extends MusicBeatState {
 			|| ClientPrefs.getGameplaySetting('opponentplay'));
 
 		var wifeJ4:Float = scoring.wifeJ4Percent();
-		var ssr:Array<Float> = ranked ? backend.profiles.SkillRating.ssrForPlay(buildMsdRows(), playbackRate, totalColumns, wifeJ4) : [];
+		var ssr:Array<Float> = ranked ? backend.profiles.SkillRating.ssrForPlay(buildMsdRows(), playbackRate, playerKeyCount(), wifeJ4) : [];
 
 		var acc:Float = ratingPercent;
 		if (Math.isNaN(acc))
@@ -2994,12 +2998,12 @@ class PlayState extends MusicBeatState {
 
 		var rec:backend.profiles.ScoreRecord = {
 			id: 0,
-			songKey: Highscore.formatSong(Song.loadedSongName, storyDifficulty) + '_' + totalColumns + 'k',
+			songKey: Highscore.formatSong(Song.loadedSongName, storyDifficulty) + '_' + playerKeyCount() + 'k',
 			songName: Song.loadedSongName,
 			folder: (Mods.currentModDirectory != null) ? Mods.currentModDirectory : '',
 			diff: storyDifficulty,
 			diffName: Difficulty.getString(storyDifficulty, false),
-			keyCount: totalColumns,
+			keyCount: playerKeyCount(),
 			systemId: scoring.system.id(),
 			score: songScore,
 			accuracy: acc,
@@ -3057,7 +3061,7 @@ class PlayState extends MusicBeatState {
 			var j:Int = i;
 			while (j < count && notes[j].time - t0 <= 1.0) {
 				var lane:Int = notes[j].column;
-				if (lane >= 0 && lane < totalColumns && !notes[j].ignore)
+				if (lane >= 0 && lane < playerKeyCount() && !notes[j].ignore)
 					mask |= 1 << lane;
 				j++;
 			}
@@ -3215,6 +3219,39 @@ class PlayState extends MusicBeatState {
 			}
 		}
 		return -1;
+	}
+
+	/** The number of lanes the human actually plays: their strumline's, not the song's. **/
+	public inline function playerKeyCount():Int
+		return (controlledLine != null) ? controlledLine.keyCount : totalColumns;
+
+	/**
+		Re-derives the human's input from the line they play, and publishes it onto that line.
+
+		`keysArray` used to come from the song's `keyCount`, which is only the same thing when every
+		strumline shares it. A chart giving its player line six lanes while the song says four bound
+		four keys to a six-lane line: the outer two could not be pressed at all, the mobile hitbox drew
+		four columns over six, and `getStrumFromKey` could never return those lanes. It now follows
+		`controlledLine`, so the width is whatever the human is actually looking at.
+
+		Also fills the line's own `keys`/`keyToColumn`, which existed for this and had stayed null.
+	**/
+	public function rebuildPlayerInput():Void {
+		var count:Int = playerKeyCount();
+		keysArray = Mania.keyNames(count);
+		rebuildKeyToStrumMap();
+
+		if (controlledLine != null) {
+			controlledLine.keys = keysArray;
+			controlledLine.keyToColumn = _keyToStrum;
+		}
+
+		#if mobile
+		// The lane overlay is built in create(), before the strumlines exist, so it starts at the
+		// song's count and is re-fitted here once the human's line is known.
+		if (hitbox != null && hitbox.buttons.length != count)
+			addHitbox(count);
+		#end
 	}
 
 	// Build / refresh the FlxKey -> strum-index map from the current keysArray
@@ -3470,6 +3507,7 @@ class PlayState extends MusicBeatState {
 		for (line in visibleLines) {
 			line.field = new NoteField(perLine[line.index], line.receptors, line.keyCount, ClientPrefs.data.downScroll);
 			line.field.onSpawn = onNoteSpawned;
+			line.field.onDespawn = onNoteDespawned;
 			noteFields.push(line.field);
 			if (line.isPlayer) {
 				if (firstPlayer == null)
@@ -3486,6 +3524,8 @@ class PlayState extends MusicBeatState {
 		playerReceptors = (firstPlayer != null) ? firstPlayer.receptors : [];
 
 		refreshStrumAliases();
+		// The human's line exists now, so the input can stop guessing from the song's key count.
+		rebuildPlayerInput();
 
 		// Note layering, per-skin (`skin.tcfg` `holdsOverHeads`) or the global `sustainsOverNotes` option.
 		// Un-held trails ALWAYS sit at the back so a hold looks like it disappears into its note head;
@@ -3521,6 +3561,11 @@ class PlayState extends MusicBeatState {
 			setOnScripts('defaultOpponentStrumX' + i, opponentReceptors[i].x);
 			setOnScripts('defaultOpponentStrumY' + i, opponentReceptors[i].y);
 		}
+
+		// The first moment receptors, note fields and strumline aliases all exist. Every other callback
+		// either fires before this (`onCreatePost`, `onStartCountdown`) or well after the song is already
+		// running, so a script wanting to restyle or reposition the lanes had nowhere correct to do it.
+		callOnScripts('onStrumsCreated', [strumLines.length]);
 	}
 
 	/**
@@ -3794,6 +3839,15 @@ class PlayState extends MusicBeatState {
 	}
 
 	/**
+		The strumline a note was CHARTED on: its origin line when a modifier folded it onto another,
+		else the line it plays on. Distinct from `lineOf`, which is always the line it plays on.
+	**/
+	inline function chartedLineOf(data:NoteData):StrumLine {
+		var index:Int = (data.originLine >= 0) ? data.originLine : data.strumLine;
+		return (index >= 0 && index < strumLines.length) ? strumLines[index] : null;
+	}
+
+	/**
 		The character a judged note animates: the line it was CHARTED on when a modifier moved it (so a
 		borrowed note still sings for whoever it was written for), else the line it is played on.
 		@param data the note being judged
@@ -3803,10 +3857,37 @@ class PlayState extends MusicBeatState {
 	function singerFor(data:NoteData, fallback:Character):Character {
 		if (data.gfNote)
 			return gf;
-		var index:Int = (data.originLine >= 0) ? data.originLine : data.strumLine;
-		var line:StrumLine = (index >= 0 && index < strumLines.length) ? strumLines[index] : null;
+		var line:StrumLine = chartedLineOf(data);
 		var char:Character = (line != null) ? line.cameraCharacter() : null;
 		return (char != null) ? char : fallback;
+	}
+
+	/**
+		Animates a note on every character bound to the line it was charted on.
+
+		`StrumLine.characters` has always been a list -- a line can front a duet, a character and its
+		prop, a crowd -- but only `cameraCharacter()` (the first) ever animated, so the rest stood still.
+		The line's own `keyCount` picks the sing animations too: a 6K line beside a 4K one was reading
+		the 4K set and clamping lanes 4 and 5 onto singRIGHT.
+		@param data the note being animated
+		@param fallback the character to use when the line names none
+		@param animCheck the "Hey!" animation to prefer, or null
+	**/
+	function singNote(data:NoteData, fallback:Character, animCheck:String):Void {
+		if (data.gfNote) {
+			singChar(gf, data, animCheck);
+			return;
+		}
+
+		var line:StrumLine = chartedLineOf(data);
+		var chars:Array<Character> = (line != null) ? line.characters : null;
+		if (chars == null || chars.length == 0) {
+			singChar(fallback, data, animCheck, (line != null) ? line.keyCount : null);
+			return;
+		}
+
+		for (char in chars)
+			singChar(char, data, animCheck, line.keyCount);
 	}
 
 	/**
@@ -4067,6 +4148,26 @@ class PlayState extends MusicBeatState {
 		inside an `onSpawnNote` callback.
 	**/
 	public var spawnNote:ActiveNote = null;
+
+	/**
+		The note currently being passed to `onDespawnNote`, reachable the same way `spawnNote` is
+		(`getProperty('despawnNote.data.type')`); only valid inside the callback.
+	**/
+	public var despawnNote:ActiveNote = null;
+
+	/**
+		Fires `onDespawnNote` as a note leaves play, hit or missed or simply scrolled past.
+
+		The drawables are already back in the pool by now, so this is where a script drops whatever it
+		was tracking for that note -- the sprite it was handed in `onSpawnNote` belongs to the field
+		again and will be handed out for a different note.
+	**/
+	function onNoteDespawned(note:ActiveNote):Void {
+		despawnNote = note;
+		callOnLuas('onDespawnNote', [-1, note.data.column, note.data.type, note.data.isSustain(), note.data.time, note.data.mustPress]);
+		despawnNote = null;
+		callOnHScript('onDespawnNote', [cbArg(note)]);
+	}
 
 	function onNoteSpawned(note:ActiveNote):Void {
 		spawnNote = note;
@@ -4413,10 +4514,11 @@ class PlayState extends MusicBeatState {
 	}
 
 	// NoteSystem V2
-	function singChar(char:Character, data:NoteData, animCheck:String):Void {
+	function singChar(char:Character, data:NoteData, animCheck:String, ?keyCount:Int):Void {
 		if (char == null)
 			return;
-		var animToPlay:String = singAnimations[Std.int(Math.abs(Math.min(singAnimations.length - 1, data.column)))] + data.animSuffix;
+		var anims:Array<String> = (keyCount != null && keyCount != totalColumns) ? Mania.singAnims(keyCount) : singAnimations;
+		var animToPlay:String = anims[Std.int(Math.abs(Math.min(anims.length - 1, data.column)))] + data.animSuffix;
 		var canPlay:Bool = true;
 		if (data.isSustain()) {
 			var holdAnim:String = animToPlay + '-hold';
@@ -4486,15 +4588,16 @@ class PlayState extends MusicBeatState {
 				// skip long-stale notes (song skip/seek) instead of burst-singing them
 				if (data.ignore || songPos - data.time > 1000)
 					continue;
-				var who:Character = data.gfNote ? gf : singer;
-				if (who != null && !data.noAnimation)
-					singChar(who, data, null);
+				if (!data.noAnimation)
+					singNote(data, singer, null);
 				if (data.isSustain() && data.endTime() > silentHoldEnd[li])
 					silentHoldEnd[li] = data.endTime();
 			}
 			silentCursor[li] = cursor;
-			if (singer != null && songPos < silentHoldEnd[li])
-				singer.holdTimer = 0;
+			if (songPos < silentHoldEnd[li])
+				for (char in line.characters)
+					if (char != null)
+						char.holdTimer = 0;
 		}
 	}
 
@@ -4517,7 +4620,7 @@ class PlayState extends MusicBeatState {
 			singer.specialAnim = true;
 			singer.heyTimer = 0.6;
 		} else if (!data.noAnimation)
-			singChar(singer, data, null);
+			singNote(data, singer, null);
 
 		if (opponentVocals.length <= 0)
 			vocals.volume = 1;
@@ -4565,7 +4668,7 @@ class PlayState extends MusicBeatState {
 
 		if (!data.hitCausesMiss) {
 			if (!data.noAnimation)
-				singChar(singerFor(data, boyfriend), data, data.gfNote ? 'cheer' : 'hey');
+				singNote(data, boyfriend, data.gfNote ? 'cheer' : 'hey');
 
 			if (!cpuControlled) {
 				var spr:Receptor = playerReceptors[data.column];
@@ -4639,6 +4742,11 @@ class PlayState extends MusicBeatState {
 		var result:Dynamic = callOnLuas('noteMiss', [-1, data.column, data.type, true]);
 		if (notStopped(result))
 			callOnHScript('noteMiss', [cbArg(note, true)]);
+
+		// Distinct from the miss: a dropped hold is the one miss a script can see coming, and reacting
+		// to it (an animation, a modifier, a sound) needs to tell it apart from a note never pressed.
+		callOnLuas('onSustainRelease', [-1, data.column, data.type, data.time]);
+		callOnHScript('onSustainRelease', [cbArg(note, true)]);
 
 		playerField.remove(note);
 	}
@@ -4757,7 +4865,11 @@ class PlayState extends MusicBeatState {
 
 		if (char != null && (data == null || !data.noMissAnimation) && char.hasMissAnimations) {
 			var postfix:String = (data != null) ? data.animSuffix : '';
-			var animToPlay:String = singAnimations[Std.int(Math.abs(Math.min(singAnimations.length - 1, direction)))] + 'miss' + postfix;
+			// The charted line's count, so a wider line's outer lanes miss with their own animation
+			// instead of clamping onto the 4K one.
+			var missLine:StrumLine = (data != null) ? chartedLineOf(data) : null;
+			var anims:Array<String> = (missLine != null && missLine.keyCount != totalColumns) ? Mania.singAnims(missLine.keyCount) : singAnimations;
+			var animToPlay:String = anims[Std.int(Math.abs(Math.min(anims.length - 1, direction)))] + 'miss' + postfix;
 			char.playAnim(animToPlay, true);
 			if (char != gf && lastCombo > 5 && gf != null && gf.hasAnimation('sad')) {
 				gf.playAnim('sad');
@@ -5019,7 +5131,7 @@ class PlayState extends MusicBeatState {
 		FlxG.camera.filters = []; #if FLX_PITCH FlxG.sound.music.pitch = 1; #end
 		FlxG.animationTimeScale = 1;
 
-		Note.globalRgbShaders = [];
+		objects.notes.NoteDefaults.resetPalettes();
 		backend.NoteTypesConfig.clearNoteTypesData();
 
 		// Multikey: restore the classic 4K globals so later states aren't left
