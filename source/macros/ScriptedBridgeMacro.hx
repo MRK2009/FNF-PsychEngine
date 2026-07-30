@@ -43,6 +43,8 @@ class ScriptedBridgeMacro {
 
 		// Gameplay objects.
 		{base: 'objects.Character'},
+		// The stage-prop base: scrolling background sprites, which every stage is mostly made of.
+		{base: 'objects.BGSprite'},
 		{base: 'objects.StrumLine'},
 		{base: 'objects.NoteSplash'},
 		{base: 'backend.BaseStage'},

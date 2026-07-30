@@ -349,7 +349,17 @@ class LuaProxy {
 	 * storyboard runtime previously anchored off the osu CONVERTER, which is desktop-only, so mobile
 	 * silently shipped without it.
 	 */
-	@:keep static var _importAnchors:Array<Class<Dynamic>> = [backend.osu.OsuStoryboardPlayer];
+	@:keep static var _importAnchors:Array<Class<Dynamic>> = [
+		backend.osu.OsuStoryboardPlayer,
+		objects.ABotSpectrum,
+		// Cutscene machinery the base-game pack's scripted stages build on. Nothing compiled calls
+		// these any more now that the stages themselves are scripts.
+		cutscenes.CutsceneHandler,
+		cutscenes.DialogueBox,
+		backend.PsychFlxAnimate,
+		// Weekend 1's rain, now driven by the pack's scripted Philly Streets / Blazin'.
+		shaders.RainShader
+	];
 
 	static inline final INST_META:String = "hxproxy_instance";
 	static inline final CLASS_META:String = "hxproxy_class";

@@ -49,6 +49,9 @@ class ScriptRegistry {
 	/** Package a scripted substate lives in, under a class root. **/
 	public static inline var SUBSTATE_PACKAGE:String = 'substates';
 
+	/** Package a scripted stage lives in, under a class root. **/
+	public static inline var STAGE_PACKAGE:String = 'stages';
+
 	/** Key for the world holding shared (non-mod) classes. **/
 	public static inline var SHARED_WORLD:String = '';
 

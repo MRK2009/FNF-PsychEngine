@@ -72,6 +72,7 @@ class ScriptGlobals {
 		'objects.Bar',
 		'objects.HealthIcon',
 		'objects.NoteSplash',
+		'objects.ABotSpectrum',
 		'psychlua.CustomSubstate',
 
 		// Flixel types the engine itself rarely names but scripts do.

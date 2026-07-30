@@ -121,14 +121,16 @@ class BaseStage extends FlxBasic {
 
 	public function noteMissPress(direction:Int) {}
 
-	// Things to replace FlxGroup stuff and inject sprites directly into the state
-	function add(object:FlxBasic)
+	// Things to replace FlxGroup stuff and inject sprites directly into the state.
+	// Public because a scripted stage reaches these the same way a compiled one does, and the
+	// script side resolves them by reflection rather than through the compiler.
+	public function add(object:FlxBasic)
 		return FlxG.state.add(object);
 
-	function remove(object:FlxBasic, splice:Bool = false)
+	public function remove(object:FlxBasic, splice:Bool = false)
 		return FlxG.state.remove(object, splice);
 
-	function insert(position:Int, object:FlxBasic)
+	public function insert(position:Int, object:FlxBasic)
 		return FlxG.state.insert(position, object);
 
 	public function addBehindGF(obj:FlxBasic)
@@ -168,23 +170,23 @@ class BaseStage extends FlxBasic {
 	}
 
 	// overrides
-	function startCountdown()
+	public function startCountdown()
 		if (onPlayState)
 			return PlayState.instance.startCountdown();
 		else
 			return false;
 
-	function endSong()
+	public function endSong()
 		if (onPlayState)
 			return PlayState.instance.endSong();
 		else
 			return false;
 
-	function moveCameraSection()
+	public function moveCameraSection()
 		if (onPlayState)
 			PlayState.instance.moveCameraSection();
 
-	function moveCamera(isDad:Bool)
+	public function moveCamera(isDad:Bool)
 		if (onPlayState)
 			PlayState.instance.moveCamera(isDad);
 

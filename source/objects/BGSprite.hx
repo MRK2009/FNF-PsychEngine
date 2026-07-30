@@ -8,14 +8,7 @@ class BGSprite extends FlxSprite {
 
 		if (animArray != null) {
 			frames = Paths.getSparrowAtlas(image);
-			for (i in 0...animArray.length) {
-				var anim:String = animArray[i];
-				animation.addByPrefix(anim, anim, 24, loop);
-				if (idleAnim == null) {
-					idleAnim = anim;
-					animation.play(anim);
-				}
-			}
+			addAnims(animArray, loop);
 		} else {
 			if (image != null) {
 				loadGraphic(Paths.image(image));
@@ -24,6 +17,24 @@ class BGSprite extends FlxSprite {
 		}
 		scrollFactor.set(scrollX, scrollY);
 		antialiasing = ClientPrefs.data.antialiasing;
+	}
+
+	/**
+		Adds one animation per prefix, the first becoming the idle.
+
+		Kept out of the constructor deliberately: mods subclass this through the scripted bridge, which
+		re-emits the constructor from its typed form, and a loop there carries compiler temporaries that
+		cannot be printed back as valid syntax. Only the constructor is re-emitted, so a loop is fine
+		anywhere else.
+	**/
+	function addAnims(animArray:Array<String>, loop:Bool):Void {
+		for (anim in animArray) {
+			animation.addByPrefix(anim, anim, 24, loop);
+			if (idleAnim == null) {
+				idleAnim = anim;
+				animation.play(anim);
+			}
+		}
 	}
 
 	public function dance(?forceplay:Bool = false) {
