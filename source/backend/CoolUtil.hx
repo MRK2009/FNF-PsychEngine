@@ -63,6 +63,26 @@ class CoolUtil {
 		return version;
 	}
 
+	/**
+		Collects, then hands the freed pages back to the operating system.
+
+		`System.gc()` only does the first half: hxcpp keeps whatever heap it grew, so work that
+		allocates heavily in a burst -- a mod converting a whole beatmap collection, a state tearing
+		down -- leaves the process sitting at its peak for the rest of the session even though nothing
+		is still referenced. Compaction is what actually returns it.
+
+		Worth calling after a burst that is definitely over, never per frame: compaction walks the heap
+		and is a visible pause on a large one.
+	**/
+	public static function compactMemory():Void {
+		#if cpp
+		cpp.vm.Gc.run(true);
+		cpp.vm.Gc.compact();
+		#else
+		openfl.system.System.gc();
+		#end
+	}
+
 	inline public static function quantize(f:Float, snap:Float) {
 		// changed so this actually works lol
 		var m:Float = Math.fround(f * snap);
