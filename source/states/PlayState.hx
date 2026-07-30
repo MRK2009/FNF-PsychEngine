@@ -373,10 +373,6 @@ class PlayState extends MusicBeatState {
 	private var _lastSentDecBeat:Float = Math.NEGATIVE_INFINITY;
 	private var _lastSentBotplay:Null<Bool> = null;
 
-	// Reused arg array for the every-frame onUpdate/onUpdatePost callbacks so the dispatch doesn't
-	// allocate a fresh [elapsed] each frame. Read-only as far as scripts are concerned.
-	private var _updateArgs:Array<Dynamic> = [0.0];
-
 	// Less laggy controls
 	private var keysArray:Array<String>;
 

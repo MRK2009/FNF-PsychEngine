@@ -65,6 +65,14 @@ class MusicBeatState extends FlxState {
 	public var scriptHost:scripting.ScriptHost;
 
 	/**
+		Reused for the per-frame update dispatch.
+
+		A fresh `[elapsed]` twice a frame in every state is steady garbage for no reason, and the
+		collections it causes are felt as stutter rather than as a lower frame rate.
+	**/
+	var _updateArgs:Array<Dynamic> = [0.0];
+
+	/**
 		Loads `scripts/global/` and starts this state's scripts.
 
 		`scripts/` stays gameplay-only, exactly as it was -- the loader is not recursive, so a
@@ -345,15 +353,21 @@ class MusicBeatState extends FlxState {
 		}
 
 		#if (LUA_ALLOWED || HSCRIPT_ALLOWED)
-		if (scriptHost != null && scriptHost.autoDispatch)
-			scriptHost.call(scripting.ScriptHooks.UPDATE, [elapsed]);
+		// `hasScripts` first: this runs in EVERY state now, and most states have none. Skipping the
+		// dispatch entirely is what keeps that free rather than merely cheap.
+		if (scriptHost != null && scriptHost.autoDispatch && scriptHost.hasScripts()) {
+			_updateArgs[0] = elapsed;
+			scriptHost.call(scripting.ScriptHooks.UPDATE, _updateArgs);
+		}
 		#end
 
 		super.update(elapsed);
 
 		#if (LUA_ALLOWED || HSCRIPT_ALLOWED)
-		if (scriptHost != null && scriptHost.autoDispatch)
-			scriptHost.call(scripting.ScriptHooks.UPDATE_POST, [elapsed]);
+		if (scriptHost != null && scriptHost.autoDispatch && scriptHost.hasScripts()) {
+			_updateArgs[0] = elapsed;
+			scriptHost.call(scripting.ScriptHooks.UPDATE_POST, _updateArgs);
+		}
 		#end
 	}
 
