@@ -19,6 +19,15 @@ A modder needs a floor to build on, so this much stays compiled and in `assets/`
 
 Everything else went to the pack, week 1's charts included.
 
+Chart events followed their implementations. The engine's built-in event list
+(`legacy.editors.ChartingState.defaultEvents`, which both chart editors read) now holds only events
+the engine itself handles, and the five the base game's stages handle -- Dadbattle Spotlight, Philly
+Glow, Kill Henchmen, BG Freaks Expression, Trigger BG Ghouls -- ship as `base_game/custom_events/`
+text files, whose contents are the description the editor shows. Any pack does the same: drop
+`custom_events/<Event Name>.txt` beside your stage script and the event appears in the editor while
+your pack is the one loaded. The View menu's old "Stage Events: Hidden" toggle went with them, since
+the events now only show up where they mean something.
+
 ## Writing a stage as a script
 
 Put a class in the `stages` package under a class root, named after the stage key with its first
@@ -44,10 +53,27 @@ class Spooky extends BaseStage {
 `BaseStage`'s constructor registers it and calls `create()` itself. Every hook a compiled stage has is
 available: `create`, `createPost`, `beatHit`, `stepHit`, `sectionHit`, `countdownTick`, `startSong`,
 `eventPushed`, `eventCalled`, `goodNoteHit`, `opponentNoteHit`, `noteMiss`, `notesGenerated`,
-`openSubState`, `closeSubState`. A missing script is not an error, since most stages are pure JSON.
+`openSubState`, `closeSubState`, `gameOverStart`, `gameOverLoopStart`. A missing script is not an
+error, since most stages are pure JSON.
 
-Helper props live in `stages.objects` beside them, and subclass whatever fits: `BGSprite` for a
-scrolling prop, `FlxSprite`, `FlxSpriteGroup`, or nothing at all for a plain logic class.
+The two game over hooks are how a stage decorates the death screen without the engine knowing what
+the decoration is. `gameOverStart(gameOver)` runs once the substate has its character, camera and
+music: assign `gameOver.overlay` there and the substate plays that sprite's `deathLoop` and
+`deathConfirm` in step with the character, so the stage owns the art and not the timing (see
+`stages.objects.PicoDeathOverlay`). `gameOverLoopStart(gameOver)` runs when the death loop begins;
+return `true` to claim the music, which is how `Tank` drops the loop to 20% and plays a Jeff line
+over it.
+
+Helper props live in `stages.objects` beside them, and subclass whatever fits: `FlxSprite`,
+`FlxSpriteGroup`, or nothing at all for a plain logic class.
+
+Do not subclass `BGSprite` for now. It is in `ScriptedBridgeMacro.BASES` and constructing one
+directly works, but a *scripted subclass* of it has thrown "Null Function Pointer" from its
+constructor for two of the three props that tried (`BackgroundTank`, `PhillyTrain`), while the third
+(`MallCrowd`) ran fine on the same build, and none of it reproduces against a stand-in base. All
+three now extend `FlxSprite` and open with the four lines `BGSprite`'s constructor would have run
+(`loadGraphic` or `frames`/`addByPrefix`, `scrollFactor.set`, `active`, `antialiasing`), which is
+what the compiled props did anyway. `FlxSprite` and `FlxSpriteGroup` subclasses have never shown it.
 
 ## What the interpreter does not do for you
 
@@ -108,19 +134,17 @@ play. A mod that leaned on base-game art it does not ship -- week 2-7 background
 the set most mods actually depend on.
 
 Compiled classes that only the pack's scripts use are kept alive by `psychlua.LuaProxy._importAnchors`
-(`CutsceneHandler`, `DialogueBox`, `PsychFlxAnimate`, `RainShader`, `ABotSpectrum`). Anything else a
-script imports by name and nothing compiled references will be dropped by DCE and resolve to nothing,
-so add it there.
+(`CutsceneHandler`, `PsychFlxAnimate`, `RainShader`, `ABotSpectrum`). Anything else a script imports
+by name and nothing compiled references will be dropped by DCE and resolve to nothing, so add it
+there.
 
 ## Known leftovers
 
 Base-game specifics still sitting in engine code, all inert without the pack:
 
-- `substates/GameOverSubstate.hx`: the `pico-dead` retry overlay, the `nene` knife toss, and the
-  `tank` stage's Jeff voice lines.
-- `cutscenes/DialogueBox.hx`: the senpai/roses/thorns cases of the week 6 dialogue box.
-- `states/PlayState.hx`: three `songName == 'tutorial'` camera-zoom special cases. Moving these needs
-  a hook the engine does not have (`tweenCamIn` is internal), and inventing one risks changing how
-  week 1's intro camera feels, so they stayed.
 - `backend/StageData.hx`: `vanillaSongStage`, the legacy song-to-stage fallback for charts with no
   stage field.
+- `editors/charting/VSlice.hx`: the V-Slice stage-id table (`spookyMansion` -> `spooky` and friends),
+  which an importer needs whether or not the pack is installed.
+- `states/stages/StageWeek1.hx`: the Dadbattle Spotlight fog, since the week 1 stage itself is part of
+  the retained baseline. Its editor description moved to the pack with the rest.

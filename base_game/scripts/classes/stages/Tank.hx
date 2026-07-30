@@ -4,6 +4,7 @@ import backend.PsychFlxAnimate;
 import cutscenes.CutsceneHandler;
 import stages.objects.BackgroundTank;
 import stages.objects.TankmenBG;
+import substates.GameOverSubstate;
 
 /**
 	Week 7. Ported from the compiled `states.stages.Tank`.
@@ -163,6 +164,22 @@ class Tank extends BaseStage {
 
 	override function beatHit():Void {
 		everyoneDance();
+	}
+
+	/**
+		Jeff heckles you over the death screen, so the loop starts quiet and fades up once he is done.
+		Returning `true` tells the substate the music is already handled.
+	**/
+	override function gameOverLoopStart(gameOver:GameOverSubstate):Bool {
+		gameOver.coolStartDeath(0.2);
+
+		var line:String = 'jeffGameover/jeffGameover-' + FlxG.random.int(1, 25, []);
+		FlxG.sound.play(Paths.sound(line), 1, false, null, true, function():Void {
+			if (!gameOver.isEnding) {
+				FlxG.sound.music.fadeIn(0.2, 1, 4);
+			}
+		});
+		return true;
 	}
 
 	function everyoneDance():Void {

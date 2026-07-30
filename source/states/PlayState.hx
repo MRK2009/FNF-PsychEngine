@@ -2547,7 +2547,6 @@ class PlayState extends MusicBeatState {
 		camFollow.setPosition(gf.getMidpoint().x, gf.getMidpoint().y);
 		camFollow.x += gf.cameraPosition[0] + girlfriendCameraOffset[0];
 		camFollow.y += gf.cameraPosition[1] + girlfriendCameraOffset[1];
-		tweenCamIn();
 	}
 
 	var cameraTwn:FlxTween;
@@ -2559,34 +2558,29 @@ class PlayState extends MusicBeatState {
 			camFollow.setPosition(dad.getMidpoint().x + 150, dad.getMidpoint().y - 100);
 			camFollow.x += dad.cameraPosition[0] + opponentCameraOffset[0];
 			camFollow.y += dad.cameraPosition[1] + opponentCameraOffset[1];
-			tweenCamIn();
 		} else {
 			if (boyfriend == null)
 				return;
 			camFollow.setPosition(boyfriend.getMidpoint().x - 100, boyfriend.getMidpoint().y - 100);
 			camFollow.x -= boyfriend.cameraPosition[0] - boyfriendCameraOffset[0];
 			camFollow.y += boyfriend.cameraPosition[1] + boyfriendCameraOffset[1];
-
-			if (songName == 'tutorial' && cameraTwn == null && FlxG.camera.zoom != 1) {
-				cameraTwn = FlxTween.tween(FlxG.camera, {zoom: 1}, (Conductor.stepCrochet * 4 / 1000), {
-					ease: FlxEase.elasticInOut,
-					onComplete: function(twn:FlxTween) {
-						cameraTwn = null;
-					}
-				});
-			}
 		}
 	}
 
-	public function tweenCamIn() {
-		if (songName == 'tutorial' && cameraTwn == null && FlxG.camera.zoom != 1.3) {
-			cameraTwn = FlxTween.tween(FlxG.camera, {zoom: 1.3}, (Conductor.stepCrochet * 4 / 1000), {
-				ease: FlxEase.elasticInOut,
-				onComplete: function(twn:FlxTween) {
-					cameraTwn = null;
-				}
-			});
-		}
+	/**
+		Tweens the camera to `zoom` over a beat, replacing any tween this already started. Week 1's
+		tutorial camera is built out of this from a song script, on `onMoveCamera`.
+	**/
+	public function tweenCamZoom(zoom:Float):Void {
+		if (cameraTwn != null || FlxG.camera.zoom == zoom)
+			return;
+
+		cameraTwn = FlxTween.tween(FlxG.camera, {zoom: zoom}, (Conductor.stepCrochet * 4 / 1000), {
+			ease: FlxEase.elasticInOut,
+			onComplete: function(twn:FlxTween) {
+				cameraTwn = null;
+			}
+		});
 	}
 
 	public function finishSong(?ignoreNoteOffset:Bool = false):Void {

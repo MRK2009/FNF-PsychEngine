@@ -59,16 +59,18 @@ enum abstract WaveformTarget(String) {
 }
 
 class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychUIEvent {
+	/**
+		The engine's own events, offered by every chart editor regardless of what is installed.
+		An event a stage implements ships with that stage's pack as `custom_events/<name>.txt`,
+		whose contents are the description shown here -- which is where the base game's
+		stage-locked events (Dadbattle Spotlight, Philly Glow, Kill Henchmen, BG Freaks
+		Expression, Trigger BG Ghouls) went.
+	**/
 	public static final defaultEvents:Array<Array<String>> = [
 		['', "Nothing. Yep, that's right."], //Always leave this one empty pls
-		['Dadbattle Spotlight', "Used in Dad Battle,\nValue 1: 0/1 = ON/OFF,\n2 = Target Dad\n3 = Target BF"],
 		['Hey!', "Plays the \"Hey!\" animation from Bopeebo,\nValue 1: BF = Only Boyfriend, GF = Only Girlfriend,\nSomething else = Both.\nValue 2: Custom animation duration,\nleave it blank for 0.6s"],
 		['Set GF Speed', "Sets GF head bopping speed,\nValue 1: 1 = Normal speed,\n2 = 1/2 speed, 4 = 1/4 speed etc.\nUsed on Fresh during the beatbox parts.\n\nWarning: Value must be integer!"],
-		['Philly Glow', "Exclusive to Week 3\nValue 1: 0/1/2 = OFF/ON/Reset Gradient\n \nNo, i won't add it to other weeks."],
-		['Kill Henchmen', "For Mom's songs, don't use this please, i love them :("],
 		['Add Camera Zoom', "Used on MILF on that one \"hard\" part\nValue 1: Camera zoom add (Default: 0.015)\nValue 2: UI zoom add (Default: 0.03)\nLeave the values blank if you want to use Default."],
-		['BG Freaks Expression', "Should be used only in \"school\" Stage!"],
-		['Trigger BG Ghouls', "Should be used only in \"schoolEvil\" Stage!"],
 		['Play Animation', "Plays an animation on a Character,\nonce the animation is completed,\nthe animation changes to Idle\n\nValue 1: Animation to play.\nValue 2: Character (Dad, BF, GF)"],
 		['Camera Follow Pos', "Value 1: X\nValue 2: Y\n\nThe camera won't change the follow point\nafter using this, for getting it back\nto normal, leave both values blank."],
 		['Alt Idle Animation', "Sets a specified postfix after the idle animation name.\nYou can use this to trigger 'idle-alt' if you set\nValue 2 to -alt\n\nValue 1: Character to set (Dad, BF or GF)\nValue 2: New postfix (Leave it blank to disable)"],
@@ -2345,12 +2347,6 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 	var showPreviousSection:Bool = true;
 	var showNextSection:Bool = true;
 	var showNoteTypeLabels:Bool = true;
-	// When false (default), the vanilla week/stage-locked events below are filtered out of
-	// the Events dropdown to reduce clutter. They're useless in ~99% of charts.
-	var showStageEvents:Bool = false;
-	static final STAGE_LOCKED_EVENTS:Array<String> = [
-		'Dadbattle Spotlight', 'Philly Glow', 'Kill Henchmen', 'BG Freaks Expression', 'Trigger BG Ghouls'
-	];
 	var forceDataUpdate:Bool = true;
 
 	function loadSection(?sec:Null<Int> = null) {
@@ -2867,12 +2863,6 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 				if (!eventsList.contains(event))
 					eventsList.insert(id, event);
 
-			// Hide the vanilla stage/song-locked events unless the user opted in (View menu).
-			// Filtering the data list keeps it parallel with the display list and the
-			// index-based lookups used when adding/selecting events.
-			if (!showStageEvents)
-				eventsList = eventsList.filter(function(e) return !STAGE_LOCKED_EVENTS.contains(e[0]));
-
 			var displayEventsList:Array<String> = [];
 			for (id => data in eventsList) {
 				if (id > 0)
@@ -3050,7 +3040,6 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 	var showNextGridButton:PsychUIButton;
 	var noteTypeLabelsButton:PsychUIButton;
 	var vortexEditorButton:PsychUIButton;
-	var stageEventsButton:PsychUIButton;
 	var fpsCounterButton:PsychUIButton;
 	var downScrollButton:PsychUIButton;
 

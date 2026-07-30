@@ -1,21 +1,28 @@
-package cutscenes;
+package stages.objects;
 
 import flixel.addons.text.FlxTypeText;
+// Imported as MODULES so their sibling types (`FlxTextBorderStyle`, `FlxTextAlign`) come in as bare
+// names -- a global import registers only the one type it names.
+import flixel.text.FlxText;
+import flixel.util.FlxAxes;
 import backend.Song;
 
-class DialogueBox extends FlxSpriteGroup {
-	var box:FlxSprite;
+/**
+	Week 6's pixel dialogue box: Senpai, his angry variant, and the Spirit. Ported from the compiled
+	`cutscenes.DialogueBox`, which existed only to render these three and left the engine with it.
 
-	var curCharacter:String = '';
-
-	var dialogueList:Array<String> = [];
-
-	// SECOND DIALOGUE FOR THE PIXEL SHIT INSTEAD???
-	var swagDialogue:FlxTypeText;
-
+	Mods wanting dialogue use `DialogueBoxPsych`, which is data-driven off `dialogue.json`. This one
+	is hardcoded to the songs it was written for, which is exactly why it belongs here.
+**/
+class SenpaiDialogueBox extends FlxSpriteGroup {
 	public var finishThing:Void->Void;
 	public var nextDialogueThing:Void->Void = null;
 	public var skipDialogueThing:Void->Void = null;
+
+	var box:FlxSprite;
+	var curCharacter:String = '';
+	var dialogueList:Array<String> = [];
+	var swagDialogue:FlxTypeText;
 
 	var portraitLeft:FlxSprite;
 	var portraitRight:FlxSprite;
@@ -24,25 +31,34 @@ class DialogueBox extends FlxSpriteGroup {
 	var bgFade:FlxSprite;
 	var skipText:FlxText;
 
-	var songName:String = Paths.formatToSongPath(Song.loadedSongName);
+	var songName:String = '';
 
-	public function new(talkingRight:Bool = true, ?dialogueList:Array<String>) {
+	var dialogueOpened:Bool = false;
+	var dialogueStarted:Bool = false;
+	var dialogueEnded:Bool = false;
+	var isEnding:Bool = false;
+
+	public function new(talkingRight:Bool = true, dialogueList:Array<String> = null) {
 		super();
 
-		bgFade = new FlxSprite(-200, -200).makeGraphic(Std.int(FlxG.width * 1.3), Std.int(FlxG.height * 1.3), 0xFFB3DFd8);
-		bgFade.scrollFactor.set();
+		songName = Paths.formatToSongPath(Song.loadedSongName);
+
+		bgFade = new FlxSprite(-200, -200);
+		bgFade.makeGraphic(Std.int(FlxG.width * 1.3), Std.int(FlxG.height * 1.3), 0xFFB3DFd8);
+		bgFade.scrollFactor.set(0, 0);
 		bgFade.alpha = 0;
 		add(bgFade);
 
-		new FlxTimer().start(0.83, function(tmr:FlxTimer) {
+		new FlxTimer().start(0.83, function(tmr:FlxTimer):Void {
 			bgFade.alpha += (1 / 5) * 0.7;
-			if (bgFade.alpha > 0.7)
+			if (bgFade.alpha > 0.7) {
 				bgFade.alpha = 0.7;
+			}
 		}, 5);
 
 		box = new FlxSprite(-20, 45);
 
-		var hasDialog = true;
+		var hasDialog:Bool = true;
 		switch (songName) {
 			case 'senpai':
 				box.frames = Paths.getSparrowAtlas('weeb/pixelUI/dialogueBox-pixel');
@@ -57,7 +73,8 @@ class DialogueBox extends FlxSpriteGroup {
 				box.animation.addByPrefix('normalOpen', 'Spirit Textbox spawn', 24, false);
 				box.animation.addByIndices('normal', 'Spirit Textbox spawn instance 1', [11], '', 24);
 
-				var face:FlxSprite = new FlxSprite(320, 170).loadGraphic(Paths.image('weeb/spiritFaceForward'));
+				var face:FlxSprite = new FlxSprite(320, 170);
+				face.loadGraphic(Paths.image('weeb/spiritFaceForward'));
 				face.setGraphicSize(Std.int(face.width * 6));
 				face.antialiasing = false;
 				add(face);
@@ -68,9 +85,8 @@ class DialogueBox extends FlxSpriteGroup {
 		this.dialogueList = dialogueList;
 
 		if (!hasDialog) {
-			// Make sure a content-less dialogue substate doesn't sit on top
-			// of the play state forever; disable updates/draws so the parent
-			// state can immediately advance past it.
+			// Don't leave a content-less dialogue substate sitting on top of the play state forever:
+			// disabling updates and draws lets the parent state advance past it immediately.
 			active = false;
 			visible = false;
 			return;
@@ -81,7 +97,7 @@ class DialogueBox extends FlxSpriteGroup {
 		portraitLeft.animation.addByPrefix('enter', 'Senpai Portrait Enter', 24, false);
 		portraitLeft.setGraphicSize(Std.int(portraitLeft.width * PlayState.daPixelZoom * 0.9));
 		portraitLeft.updateHitbox();
-		portraitLeft.scrollFactor.set();
+		portraitLeft.scrollFactor.set(0, 0);
 		portraitLeft.antialiasing = false;
 		add(portraitLeft);
 		portraitLeft.visible = false;
@@ -91,7 +107,7 @@ class DialogueBox extends FlxSpriteGroup {
 		portraitRight.animation.addByPrefix('enter', 'Boyfriend portrait enter', 24, false);
 		portraitRight.setGraphicSize(Std.int(portraitRight.width * PlayState.daPixelZoom * 0.9));
 		portraitRight.updateHitbox();
-		portraitRight.scrollFactor.set();
+		portraitRight.scrollFactor.set(0, 0);
 		portraitRight.antialiasing = false;
 		add(portraitRight);
 		portraitRight.visible = false;
@@ -102,10 +118,11 @@ class DialogueBox extends FlxSpriteGroup {
 		box.antialiasing = false;
 		add(box);
 
-		box.screenCenter(X);
-		portraitLeft.screenCenter(X);
+		box.screenCenter(FlxAxes.X);
+		portraitLeft.screenCenter(FlxAxes.X);
 
-		handSelect = new FlxSprite(1042, 590).loadGraphic(Paths.image('weeb/pixelUI/hand_textbox'));
+		handSelect = new FlxSprite(1042, 590);
+		handSelect.loadGraphic(Paths.image('weeb/pixelUI/hand_textbox'));
 		handSelect.setGraphicSize(Std.int(handSelect.width * PlayState.daPixelZoom * 0.9));
 		handSelect.updateHitbox();
 		handSelect.antialiasing = false;
@@ -116,32 +133,26 @@ class DialogueBox extends FlxSpriteGroup {
 		swagDialogue.font = Paths.font('pixel-latin.ttf');
 		swagDialogue.color = 0xFF3F2021;
 		swagDialogue.sounds = [FlxG.sound.load(Paths.sound('pixelText'), 0.6)];
-		swagDialogue.borderStyle = SHADOW;
+		swagDialogue.borderStyle = FlxTextBorderStyle.SHADOW;
 		swagDialogue.borderColor = 0xFFD89494;
 		swagDialogue.shadowOffset.set(2, 2);
 		add(swagDialogue);
 
 		skipText = new FlxText(FlxG.width - 320, FlxG.height - 30, 300, Language.getPhrase('dialogue_skip', 'Press BACK to Skip'), 16);
-		skipText.setFormat(null, 16, FlxColor.WHITE, RIGHT, OUTLINE_FAST, FlxColor.BLACK);
+		skipText.setFormat(null, 16, FlxColor.WHITE, FlxTextAlign.RIGHT, FlxTextBorderStyle.OUTLINE_FAST, FlxColor.BLACK);
 		skipText.borderSize = 2;
 		add(skipText);
 	}
 
-	var dialogueOpened:Bool = false;
-	var dialogueStarted:Bool = false;
-	var dialogueEnded:Bool = false;
-
-	override function update(elapsed:Float) {
-		// HARD CODING CUZ IM STUPDI
+	override function update(elapsed:Float):Void {
 		super.update(elapsed);
 
-		switch (songName) {
-			case 'roses':
-				portraitLeft.visible = false;
-			case 'thorns':
-				portraitLeft.visible = false;
-				swagDialogue.color = FlxColor.WHITE;
-				swagDialogue.borderStyle = NONE;
+		if (songName == 'roses') {
+			portraitLeft.visible = false;
+		} else if (songName == 'thorns') {
+			portraitLeft.visible = false;
+			swagDialogue.color = FlxColor.WHITE;
+			swagDialogue.borderStyle = FlxTextBorderStyle.NONE;
 		}
 
 		if (box.animation.curAnim != null && box.animation.curAnim.name == 'normalOpen' && box.animation.curAnim.finished) {
@@ -162,8 +173,9 @@ class DialogueBox extends FlxSpriteGroup {
 		} else if (Controls.instance.ACCEPT) {
 			if (dialogueEnded) {
 				if (dialogueList[1] == null && dialogueList[0] != null) {
-					if (!isEnding)
+					if (!isEnding) {
 						dialogueCompleted();
+					}
 				} else {
 					dialogueList.remove(dialogueList[0]);
 					startDialogue();
@@ -180,16 +192,17 @@ class DialogueBox extends FlxSpriteGroup {
 		}
 	}
 
-	var isEnding:Bool = false;
-
-	function dialogueCompleted() {
+	function dialogueCompleted():Void {
 		isEnding = true;
 		FlxG.sound.play(Paths.sound('clickText'), 0.8);
 
-		if (songName == 'senpai' || songName == 'thorns')
-			FlxG.sound.music.fadeOut(1.5, 0, (_) -> FlxG.sound.music.stop());
+		if (songName == 'senpai' || songName == 'thorns') {
+			FlxG.sound.music.fadeOut(1.5, 0, function(twn:FlxTween):Void {
+				FlxG.sound.music.stop();
+			});
+		}
 
-		new FlxTimer().start(0.2, function(tmr:FlxTimer) {
+		new FlxTimer().start(0.2, function(tmr:FlxTimer):Void {
 			box.alpha -= 1 / 5;
 			bgFade.alpha -= 1 / 5 * 0.7;
 			portraitLeft.visible = false;
@@ -200,51 +213,53 @@ class DialogueBox extends FlxSpriteGroup {
 
 		swagDialogue.skip();
 		skipText.visible = false;
-		new FlxTimer().start(1.5, function(tmr:FlxTimer) {
-			if (finishThing != null) finishThing();
+
+		new FlxTimer().start(1.5, function(tmr:FlxTimer):Void {
+			if (finishThing != null) {
+				finishThing();
+			}
 			kill();
 		});
 	}
 
 	function startDialogue():Void {
 		cleanDialog();
-		// var theDialog:Alphabet = new Alphabet(0, 70, dialogueList[0], false, true);
-		// dialogue = theDialog;
-		// add(theDialog);
 
-		// swagDialogue.text = ;
 		swagDialogue.resetText(dialogueList[0]);
 		swagDialogue.start(0.04, true);
-		swagDialogue.completeCallback = function() {
+		swagDialogue.completeCallback = function():Void {
 			handSelect.visible = true;
 			dialogueEnded = true;
 		};
 
 		handSelect.visible = false;
 		dialogueEnded = false;
-		switch (curCharacter) {
-			case 'dad':
-				portraitRight.visible = false;
-				if (!portraitLeft.visible) {
-					if (songName == 'senpai')
-						portraitLeft.visible = true;
-					portraitLeft.animation.play('enter');
+
+		if (curCharacter == 'dad') {
+			portraitRight.visible = false;
+			if (!portraitLeft.visible) {
+				if (songName == 'senpai') {
+					portraitLeft.visible = true;
 				}
-			case 'bf':
-				portraitLeft.visible = false;
-				if (!portraitRight.visible) {
-					portraitRight.visible = true;
-					portraitRight.animation.play('enter');
-				}
+				portraitLeft.animation.play('enter');
+			}
+		} else if (curCharacter == 'bf') {
+			portraitLeft.visible = false;
+			if (!portraitRight.visible) {
+				portraitRight.visible = true;
+				portraitRight.animation.play('enter');
+			}
 		}
-		if (nextDialogueThing != null)
+
+		if (nextDialogueThing != null) {
 			nextDialogueThing();
+		}
 	}
 
 	function cleanDialog():Void {
 		var splitName:Array<String> = dialogueList[0].split(':');
-		// Lines without a "char:text" prefix would crash here when reading
-		// splitName[1].length; default to keeping the previous character.
+		// A line without a "char:text" prefix would crash on splitName[1].length; keep the previous
+		// character instead.
 		if (splitName.length < 2 || splitName[1] == null) {
 			return;
 		}

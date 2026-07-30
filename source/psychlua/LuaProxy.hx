@@ -355,7 +355,6 @@ class LuaProxy {
 		// Cutscene machinery the base-game pack's scripted stages build on. Nothing compiled calls
 		// these any more now that the stages themselves are scripts.
 		cutscenes.CutsceneHandler,
-		cutscenes.DialogueBox,
 		backend.PsychFlxAnimate,
 		// Weekend 1's rain, now driven by the pack's scripted Philly Streets / Blazin'.
 		shaders.RainShader

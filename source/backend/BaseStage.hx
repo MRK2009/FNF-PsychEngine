@@ -7,6 +7,7 @@ import flixel.group.FlxGroup;
 import objects.Note;
 import objects.Character;
 import objects.notes.NoteData;
+import substates.GameOverSubstate;
 
 enum Countdown {
 	THREE;
@@ -120,6 +121,22 @@ class BaseStage extends FlxBasic {
 	public function notesGenerated(notes:Array<NoteData>) {}
 
 	public function noteMissPress(direction:Int) {}
+
+	/**
+		Fired once the death screen has its character, camera and music, before it is first drawn.
+		A stage that wants art on top of the death screen builds it here and assigns
+		`gameOver.overlay`: the substate plays that sprite's `deathLoop` and `deathConfirm` animations
+		on its own, so the stage only owns the sprite, not the timing.
+	**/
+	public function gameOverStart(gameOver:GameOverSubstate) {}
+
+	/**
+		Fired when the death animation reaches its loop, which is where the game over music normally
+		starts. Return `true` to say the stage started the music itself -- a stage plays a voice line
+		over a quiet loop that way (`gameOver.coolStartDeath(volume)` sets it up).
+	**/
+	public function gameOverLoopStart(gameOver:GameOverSubstate):Bool
+		return false;
 
 	// Things to replace FlxGroup stuff and inject sprites directly into the state.
 	// Public because a scripted stage reaches these the same way a compiled one does, and the

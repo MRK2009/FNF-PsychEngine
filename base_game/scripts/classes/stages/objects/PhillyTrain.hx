@@ -1,7 +1,16 @@
 package stages.objects;
 
-/** The train that crosses Philly, dragging gf's hair with it. Ported from the compiled version. **/
-class PhillyTrain extends BGSprite {
+/**
+	The train that crosses Philly, dragging gf's hair with it. Ported from the compiled version.
+
+	Extends `FlxSprite` and does inline what `BGSprite`'s constructor would, rather than extending
+	`BGSprite` like the compiled one did. Through the bridge that constructor threw "Null Function
+	Pointer" here, the same way it did for `BackgroundTank`, and neither reproduces against a stand-in
+	base: a scripted subclass calling `super` with a subset of its arguments, a nested static chain in
+	the constructor and a typed field with no initialiser all behave correctly in isolation. Whatever
+	it is needs the real bridge over `FlxSprite`'s hierarchy. The behaviour below is identical.
+**/
+class PhillyTrain extends FlxSprite {
 	public var sound:FlxSound;
 
 	public var moving:Bool = false;
@@ -15,7 +24,10 @@ class PhillyTrain extends BGSprite {
 	public var cooldown:Int = 0;
 
 	public function new(x:Float = 0, y:Float = 0, image:String = 'philly/train', soundName:String = 'train_passes') {
-		super(image, x, y);
+		super(x, y);
+
+		loadGraphic(Paths.image(image));
+		scrollFactor.set(1, 1);
 		active = true; // Allow update
 		antialiasing = ClientPrefs.data.antialiasing;
 

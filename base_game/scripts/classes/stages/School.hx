@@ -1,6 +1,6 @@
 package stages;
 
-import cutscenes.DialogueBox;
+import stages.objects.SenpaiDialogueBox;
 import stages.objects.BackgroundGirls;
 import substates.GameOverSubstate;
 
@@ -13,7 +13,7 @@ import substates.GameOverSubstate;
 **/
 class School extends BaseStage {
 	var bgGirls:BackgroundGirls;
-	var doof:DialogueBox = null;
+	var doof:SenpaiDialogueBox = null;
 
 	override function create():Void {
 		var song:Dynamic = PlayState.SONG;
@@ -127,7 +127,7 @@ class School extends BaseStage {
 			return;
 		}
 
-		doof = new DialogueBox(false, CoolUtil.coolTextFile(file));
+		doof = new SenpaiDialogueBox(false, CoolUtil.coolTextFile(file));
 		doof.cameras = [camHUD];
 		doof.scrollFactor.set(0, 0);
 		doof.finishThing = function():Void {

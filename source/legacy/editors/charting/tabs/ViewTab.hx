@@ -7,8 +7,8 @@ import legacy.editors.ChartingState.ChartingTheme;
 import legacy.editors.ChartingState.WaveformTarget;
 
 /**
-	Builds the "View" toolbar menu of the chart editor: grid/label visibility toggles, stage-event and FPS
-	toggles, downscroll, the vortex editor, and the waveform / go-to / theme / reset-boxes windows. Toggles
+	Builds the "View" toolbar menu of the chart editor: grid/label visibility toggles, the FPS toggle,
+	downscroll, the vortex editor, and the waveform / go-to / theme / reset-boxes windows. Toggles
 	persist through the editor's save. Reaches editor state/widgets via `@:access`.
 **/
 @:access(legacy.editors.ChartingState)
@@ -24,8 +24,6 @@ class ViewTab {
 		var btnY = 1;
 		var btnWid = Std.int(tab.width);
 
-		if (s.chartEditorSave.data.showStageEvents != null)
-			s.showStageEvents = s.chartEditorSave.data.showStageEvents;
 		if (s.chartEditorSave.data.waveformEnabled != null)
 			s.waveformEnabled = s.chartEditorSave.data.waveformEnabled;
 		if (s.chartEditorSave.data.waveformTarget != null)
@@ -56,20 +54,6 @@ class ViewTab {
 		}, btnWid);
 		s.noteTypeLabelsButton.text.alignment = LEFT;
 		tab_group.add(s.noteTypeLabelsButton);
-
-		btnY++;
-		btnY += 20;
-		// Show/hide the vanilla stage/song-locked events in the Events dropdown.
-		s.stageEventsButton = new PsychUIButton(btnX, btnY, '', function() {
-			s.showStageEvents = !s.showStageEvents;
-			s.chartEditorSave.data.showStageEvents = s.showStageEvents;
-			s.chartEditorSave.flush();
-			s.stageEventsButton.text.text = s.showStageEvents ? '  Stage Events: Shown' : '  Stage Events: Hidden';
-			s.reloadNotesDropdowns();
-		}, btnWid);
-		s.stageEventsButton.text.text = s.showStageEvents ? '  Stage Events: Shown' : '  Stage Events: Hidden';
-		s.stageEventsButton.text.alignment = LEFT;
-		tab_group.add(s.stageEventsButton);
 
 		btnY++;
 		btnY += 20;

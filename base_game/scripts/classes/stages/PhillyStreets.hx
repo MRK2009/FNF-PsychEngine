@@ -10,6 +10,7 @@ import cutscenes.CutsceneHandler;
 import openfl.filters.ShaderFilter;
 import shaders.RainShader;
 import stages.objects.ABotSpeaker;
+import stages.objects.PicoDeathOverlay;
 import stages.objects.SpraycanAtlasSprite;
 import substates.GameOverSubstate;
 
@@ -968,6 +969,16 @@ class PhillyStreets extends BaseStage {
 			GameOverSubstate.deathSoundName = 'fnf_loss_sfx-pico-explode';
 			GameOverSubstate.loopSoundName = 'gameOverStart-pico-explode';
 			GameOverSubstate.characterName = 'pico-explosion-dead';
+		}
+	}
+
+	/**
+		Only the plain `pico-dead` death gets the retry text. The firegun explosion swaps the character
+		out from under it (`pico-explosion-dead`), and that one has no overlay art.
+	**/
+	override function gameOverStart(gameOver:GameOverSubstate):Void {
+		if (GameOverSubstate.characterName == 'pico-dead' && Paths.getSparrowAtlas('Pico_Death_Retry') != null) {
+			new PicoDeathOverlay(gameOver);
 		}
 	}
 

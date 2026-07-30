@@ -19,9 +19,27 @@ with their pixel variants, and the pixel UI/dialogue/game-over baseline. See
 [base-game-pack.md](base-game-pack.md), which also documents how to write a stage as a
 script and the dozen things the interpreter does not do for you.
 
-Also gone with it: the `BASE_GAME_FILES` define, and `TankmenBG.animationNotes` (the
+Also gone with it: the `BASE_GAME_FILES` define, `TankmenBG.animationNotes` (the
 pico-speaker note list now lives only on the character that loaded it, as
-`character.animationNotes`).
+`character.animationNotes`), and `cutscenes.DialogueBox`, the hardcoded week 6 pixel
+dialogue box, which is now a pack script. Mods should use `DialogueBoxPsych`, which
+reads `dialogue.json` and was always the one meant for them.
+
+The chart editors' event list shrank to the events the engine actually handles. Dadbattle
+Spotlight, Philly Glow, Kill Henchmen, BG Freaks Expression and Trigger BG Ghouls are
+implemented by the pack's stages, so they now ship as `custom_events/*.txt` inside it and
+list only while it is loaded. Your own pack can do the same for its stage events. The View
+menu's "Stage Events: Hidden" toggle is gone, having nothing left to hide.
+
+The death screen lost its base-game special cases with it, and gained two stage hooks
+in their place: `BaseStage.gameOverStart` hands the stage the substate so it can fill
+`GameOverSubstate.overlay` with its own art, and `BaseStage.gameOverLoopStart` lets a
+stage take over starting the game over music, which is how a voice line plays over it.
+
+`PlayState.tweenCamIn()` is now `tweenCamZoom(zoom)`. The old one only ever did anything
+in a song named `tutorial` -- it was week 1's camera wearing a general name -- and the
+engine no longer calls it at all. The tutorial camera is a script in the pack's song
+folder, built on `onMoveCamera`, and any song can do the same.
 
 ### Fixes
 - **Hurt Notes**: no longer render uncolored. The note-system-v2 rewrite applied
