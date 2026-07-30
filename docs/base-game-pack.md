@@ -148,3 +148,8 @@ Base-game specifics still sitting in engine code, all inert without the pack:
   which an importer needs whether or not the pack is installed.
 - `states/stages/StageWeek1.hx`: the Dadbattle Spotlight fog, since the week 1 stage itself is part of
   the retained baseline. Its editor description moved to the pack with the rest.
+
+An event needing to fire early declares that itself now, from a `custom_events/<name>.hx` beside its
+description: `eventEarlyTrigger(name, value1, value2, strumTime)` returning milliseconds. `PlayState`
+has no offsets of its own -- Kill Henchmen's 280ms used to be hardcoded there, and is now
+`base_game/custom_events/Kill Henchmen.hx`.

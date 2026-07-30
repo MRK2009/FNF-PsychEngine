@@ -544,6 +544,13 @@ class MusicBeatState extends FlxState {
 		}
 	}
 
+	/**
+		Runs `func` against every live stage.
+
+		`active` gates callbacks as well as updates, so a stage that switches itself off to save
+		per-frame work also stops hearing beats, events and note hits. Use `exists = false` to retire a
+		stage; leave `active` alone unless silence is the intent.
+	**/
 	function stagesFunc(func:BaseStage->Void) {
 		for (stage in stages)
 			if (stage != null && stage.exists && stage.active)

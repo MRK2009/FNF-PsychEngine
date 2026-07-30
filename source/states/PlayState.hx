@@ -734,21 +734,11 @@ class PlayState extends MusicBeatState {
 
 		startingSong = true;
 
-		#if LUA_ALLOWED
 		for (notetype in noteTypes)
-			startLuasNamed('custom_notetypes/' + notetype + '.lua');
+			loadNoteTypeScripts(notetype);
 		for (event in eventsPushed)
-			startLuasNamed('custom_events/' + event + '.lua');
-		#end
-
-		#if HSCRIPT_ALLOWED
-		for (notetype in noteTypes)
-			startHScriptsNamed('custom_notetypes/' + notetype + '.hx');
-		for (event in eventsPushed)
-			startHScriptsNamed('custom_events/' + event + '.hx');
-		#end
-		noteTypes = null;
-		eventsPushed = null;
+			loadEventScripts(event);
+		scriptedContentReady = true;
 
 		// SONG SPECIFIC SCRIPTS
 		#if (LUA_ALLOWED || HSCRIPT_ALLOWED)
@@ -1567,6 +1557,41 @@ class PlayState extends MusicBeatState {
 
 		stagesFunc(function(stage:BaseStage) stage.eventPushed(event));
 		eventsPushed.push(event.event);
+
+		// An event a script pushed after create() still needs its own script. Before the bootstrap has
+		// run the create() loop below picks these up; after it, nothing else would.
+		if (scriptedContentReady)
+			loadEventScripts(event.event);
+	}
+
+	/**
+		Whether the create()-time pass over `noteTypes`/`eventsPushed` has run.
+
+		Until it has, appearing in those lists is enough. Afterwards a note type or event introduced at
+		runtime -- a script spawning a note of its own type, an event pushed from a cutscene -- has to
+		load its script itself, or it runs with no implementation and no error.
+	**/
+	var scriptedContentReady:Bool = false;
+
+	/** Loads `custom_events/<name>` for both scripting languages. Idempotent per name by caller. **/
+	function loadEventScripts(name:String) {
+		#if LUA_ALLOWED startLuasNamed('custom_events/$name.lua'); #end
+		#if HSCRIPT_ALLOWED startHScriptsNamed('custom_events/$name.hx'); #end
+	}
+
+	/**
+		Loads `custom_notetypes/<name>` for both scripting languages, registering the type so a later
+		call is a no-op. Public so a script introducing a note type after the chart was generated can
+		bring its implementation in; `ScriptHost` refuses a script it already runs, so calling it
+		again costs nothing.
+	**/
+	public function loadNoteTypeScripts(name:String) {
+		if (name == null || name.length < 1)
+			return;
+		if (!noteTypes.contains(name))
+			noteTypes.push(name);
+		#if LUA_ALLOWED startLuasNamed('custom_notetypes/$name.lua'); #end
+		#if HSCRIPT_ALLOWED startHScriptsNamed('custom_notetypes/$name.hx'); #end
 	}
 
 	/** Set by `resolveCharTarget`: the strumline a "Change Character" value targets, or -1 for none. **/
@@ -1662,21 +1687,33 @@ class PlayState extends MusicBeatState {
 		stagesFunc(function(stage:BaseStage) stage.eventPushedUnique(event));
 	}
 
+	/**
+		How many milliseconds early an event should fire, from whichever script claims it.
+
+		The engine has no offsets of its own: an event that needs one belongs to whatever implements it,
+		so it declares the offset from the same place (see the base-game pack's `custom_events/`).
+	**/
 	function eventEarlyTrigger(event:EventNote):Float {
 		var returnedValue:Null<Float> = callOnScripts('eventEarlyTrigger', [event.event, event.value1, event.value2, event.strumTime], true);
 		if (returnedValue != null && returnedValue != 0) {
 			return returnedValue;
 		}
-
-		switch (event.event) {
-			case 'Kill Henchmen': // Better timing so that the kill sound matches the beat intended
-				return 280; // Plays 280ms before the actual position
-		}
 		return 0;
 	}
 
-	public static function sortByTime(Obj1:Dynamic, Obj2:Dynamic):Int
-		return FlxSort.byValues(FlxSort.ASCENDING, Obj1.strumTime, Obj2.strumTime);
+	/**
+		Orders anything carrying a `strumTime` -- chart notes, events, editor rows -- ascending.
+
+		The params stay `Dynamic` because the callers' element types genuinely differ, but the two field
+		reads are pinned to `Float` locals rather than handed straight to `FlxSort.byValues`. An untyped
+		value crossing into a `Float` parameter is coerced by hxcpp at the call boundary, where a
+		non-numeric one silently becomes zero and scrambles the order instead of failing.
+	**/
+	public static function sortByTime(Obj1:Dynamic, Obj2:Dynamic):Int {
+		var a:Float = Obj1.strumTime;
+		var b:Float = Obj2.strumTime;
+		return FlxSort.byValues(FlxSort.ASCENDING, a, b);
+	}
 
 	function makeEvent(event:Array<Dynamic>, i:Int) {
 		var subEvent:EventNote = {
@@ -2482,13 +2519,17 @@ class PlayState extends MusicBeatState {
 						LuaUtils.setVarInArray(this, value1, trueValue);
 					}
 				} catch (e:Dynamic) {
-					var len:Int = e.message.indexOf('\n') + 1;
+					// Not every throw is an exception object: a thrown String has no `message`, and
+					// reading it made the error handler itself null-ref, turning a mistyped variable
+					// name in a chart event into a crash instead of a red line in the debug overlay.
+					var message:String = Std.string(Reflect.hasField(e, 'message') ? Reflect.field(e, 'message') : e);
+					var len:Int = message.indexOf('\n') + 1;
 					if (len <= 0)
-						len = e.message.length;
+						len = message.length;
 					#if (LUA_ALLOWED || HSCRIPT_ALLOWED)
-					addTextToDebug('ERROR ("Set Property" Event) - ' + e.message.substr(0, len), FlxColor.RED);
+					addTextToDebug('ERROR ("Set Property" Event) - ' + message.substr(0, len), FlxColor.RED);
 					#else
-					FlxG.log.warn('ERROR ("Set Property" Event) - ' + e.message.substr(0, len));
+					FlxG.log.warn('ERROR ("Set Property" Event) - ' + message.substr(0, len));
 					#end
 				}
 

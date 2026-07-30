@@ -41,6 +41,34 @@ in a song named `tutorial` -- it was week 1's camera wearing a general name -- a
 engine no longer calls it at all. The tutorial camera is a script in the pack's song
 folder, built on `onMoveCamera`, and any song can do the same.
 
+### Fixes: mobile and mod assets
+- **Android first launch**: granting "All Files Access" no longer needs a restart. The
+  permission screen is a separate activity that returns while the engine has already
+  given up on creating its storage folder, so the first session ran with no mods and
+  no saves. Storage setup now retries when focus comes back.
+- **Mod asset overrides**: the graphic cache is keyed by the file an asset resolved to,
+  not by its key. Two mods shipping the same-named image (`icons/icon-bf`, `NOTE_assets`)
+  shared one cache slot, so whichever loaded first was handed to both -- visible anywhere
+  one screen spans several mods, like Freeplay's icon list.
+- **Android, wrong-cased mod files**: a mod authored on Windows that asks for `Images/Foo.png`
+  now resolves on a case-sensitive filesystem. Only lookups that would have failed pay for
+  the search, and each is remembered.
+- **Android, bundled packs**: deleting the bundled base game sticks instead of reinstalling
+  itself next launch, and startup no longer stats every file in it. Install is stamped once
+  per build.
+- **Android, chart editor**: saving through the system picker no longer writes the events
+  and metadata sidecars into the storage root, or silently redirects every later Ctrl+S
+  there. The picker returns a document, not a path, and the editor now knows the difference.
+- **Converter menu**: has a touchpad on mobile. It is an up/down + accept list that hides
+  the cursor, so it could previously only be backed out of.
+- **Custom event scripts**: an event pushed after the song started now loads its
+  `custom_events/` script. Only events present when the chart was generated got one.
+- **"Set Property" errors**: report instead of crashing. The handler read `.message` off
+  whatever was thrown, so a throw that was a plain string took the error path down with it.
+- **Chart sorting**: the note/event comparators read their timestamps into typed locals.
+  Feeding untyped values to a `Float` comparison lets hxcpp coerce a non-numeric one to
+  zero at the boundary and quietly reorder the chart.
+
 ### Fixes
 - **Hurt Notes**: no longer render uncolored. The note-system-v2 rewrite applied
   a note type's gameplay effects but never its visual half, so Hurt Notes lost

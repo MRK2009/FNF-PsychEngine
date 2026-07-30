@@ -439,6 +439,10 @@ class VSlice {
 		};
 	}
 
-	static function sortByTime(Obj1:Dynamic, Obj2:Dynamic):Int
-		return FlxSort.byValues(FlxSort.ASCENDING, Obj1.t, Obj2.t);
+	/** Orders any of this file's `t`-stamped rows ascending. See `PlayState.sortByTime` on the locals. **/
+	static function sortByTime(Obj1:Dynamic, Obj2:Dynamic):Int {
+		var a:Float = Obj1.t;
+		var b:Float = Obj2.t;
+		return FlxSort.byValues(FlxSort.ASCENDING, a, b);
+	}
 }

@@ -140,8 +140,12 @@ class AchievementsMenuState extends MusicBeatState {
 		};
 	}
 
-	public static function sortByID(Obj1:Dynamic, Obj2:Dynamic):Int
-		return FlxSort.byValues(FlxSort.ASCENDING, Obj1.ID, Obj2.ID);
+	/** Orders achievements by ID ascending. See `PlayState.sortByTime` on the locals. **/
+	public static function sortByID(Obj1:Dynamic, Obj2:Dynamic):Int {
+		var a:Float = Obj1.ID;
+		var b:Float = Obj2.ID;
+		return FlxSort.byValues(FlxSort.ASCENDING, a, b);
+	}
 
 	var goingBack:Bool = false;
 
