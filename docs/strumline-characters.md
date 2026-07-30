@@ -34,10 +34,20 @@ that character behind the wall. A character you cannot layer is not much use.
 | `name` | What a strumline refers to. Cannot be `opponent`, `player`, `spectator`, `dad`, `gf` or `boyfriend`. |
 | `x`, `y` | Where the character stands. |
 | `scrollFactor` | Optional `[x, y]` parallax, like any other object. |
+| `_editorChar` | Optional. Editor-only preview character, written only when you pick one. |
 
-Positions are written by hand for now. The stage editor loads and saves them without damaging
-them, but has no UI for placing one yet — the easiest way to find coordinates is to position a
-character in the editor, note the numbers, and put them here.
+### Placing one in the stage editor
+
+**New > Character Anchor** drops a position at the middle of the view. It behaves like any other
+object from there: drag it with the mouse or arrow keys, rename it in **Object > Name**, and use
+**Move Up / Move Down** to slide it through the layer stack — the row list is the draw order, so a
+position above a stage sprite puts its character behind it. Anchor rows are marked with `@`.
+
+An empty position has no art, so it draws as a cyan crosshair box at the spot the character's feet
+would be placed. **Object > Preview** stands a real character on it so you can line it up with the
+scene; that choice is editor-only, saved as `_editorChar`, and gameplay ignores it — the character
+that actually shows up is whichever one the chart's strumline names. Swapping the preview keeps the
+position fixed, since the character's own `position` offset is taken out before it is saved.
 
 ### The three built-in positions
 

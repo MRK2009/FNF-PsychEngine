@@ -9,6 +9,7 @@ import flixel.addons.display.FlxBackdrop;
 import flixel.addons.display.FlxGridOverlay;
 import flixel.math.FlxRect;
 import flixel.util.FlxDestroyUtil;
+import flixel.util.FlxSpriteUtil;
 import openfl.utils.Assets;
 import openfl.display.Sprite;
 import openfl.net.FileReference;
@@ -171,6 +172,14 @@ class StageEditorState extends MusicBeatState {
 				]
 			},
 			{
+				title: 'CHARACTER ANCHORS',
+				lines: [
+					'New > Character Anchor - Add a spot for an extra strumline\'s character',
+					'Its name is what a strumline binds to; move it in the list to layer it',
+					'Preview - Stand a character on it in the editor only'
+				]
+			},
+			{
 				title: 'OTHER',
 				lines: ['$btn - Toggle HUD', 'F12 - Toggle Selection Rectangle']
 			}
@@ -191,8 +200,16 @@ class StageEditorState extends MusicBeatState {
 		var list:Map<String, FlxSprite> = [];
 		if (stageJson.objects != null && stageJson.objects.length > 0) {
 			list = StageData.addObjectsToState(stageJson.objects, gf, dad, boyfriend, null, true);
+			var slots:Array<StageEditorMetaSprite> = [];
 			for (key => spr in list)
-				stageSprites[spr.ID] = new StageEditorMetaSprite(stageJson.objects[spr.ID], spr);
+				slots[spr.ID] = new StageEditorMetaSprite(stageJson.objects[spr.ID], spr);
+
+			// `addObjectsToState` drops entries it considers duplicates, leaving holes in the sparse
+			// array above. Compacting here keeps `stageSprites` index-aligned with the row list, which
+			// every selection lookup in this editor relies on.
+			for (spr in slots)
+				if (spr != null)
+					stageSprites.push(spr);
 		}
 
 		for (character in ['gf', 'dad', 'boyfriend'])
@@ -312,6 +329,20 @@ class StageEditorState extends MusicBeatState {
 			var spr = stageSprites[selected];
 			if (spr == null || StageData.reservedNames.contains(spr.type))
 				return;
+
+			// Anchors own their sprite, so they are rebuilt from their data instead of going through
+			// the field-by-field copy below (which would hand one a plain ModchartSprite).
+			if (spr.type == 'character') {
+				insertMeta(new StageEditorMetaSprite({
+					type: 'character',
+					name: findUnoccupiedName('${spr.name}_copy'),
+					x: spr.anchorX,
+					y: spr.anchorY,
+					scrollFactor: spr.scroll.copy(),
+					_editorChar: spr.previewCharacter
+				}, new FlxSprite()), 1);
+				return;
+			}
 
 			var copiedSpr = new ModchartSprite();
 			var copiedMeta:StageEditorMetaSprite = new StageEditorMetaSprite(null, copiedSpr);
@@ -544,7 +575,7 @@ class StageEditorState extends MusicBeatState {
 		uiRoot.content.addChild(createPopupUI);
 
 		var w:Float = 300;
-		var h:Float = 220;
+		var h:Float = 264;
 		var px:Float = (FlxG.width - w) / 2;
 		var py:Float = (FlxG.height - h) / 2;
 
@@ -574,6 +605,15 @@ class StageEditorState extends MusicBeatState {
 					meta.sprite.screenCenter();
 					insertMeta(meta);
 				}
+			},
+			{
+				label: 'Character Anchor',
+				cb: function() {
+					var half:Float = StageEditorMetaSprite.ANCHOR_MARKER_SIZE * 0.5;
+					var meta:StageEditorMetaSprite = new StageEditorMetaSprite({type: 'character', name: findUnoccupiedName('anchor')}, new FlxSprite());
+					meta.setAnchorPosition(Math.round(FlxG.camera.scroll.x + FlxG.width / 2 - half), Math.round(FlxG.camera.scroll.y + FlxG.height / 2 - half));
+					insertMeta(meta);
+				}
 			}
 		]) {
 			var btn:UIButton = new UIButton(def.label, 200, 30, def.cb);
@@ -586,6 +626,17 @@ class StageEditorState extends MusicBeatState {
 		createPopupUI.visible = false;
 	}
 
+	/** The row text a sprite gets in the list; anchors are marked so they read apart from art. **/
+	function listLabelFor(spr:StageEditorMetaSprite):String {
+		return switch (spr.type) {
+			case 'gf': '- Girlfriend -';
+			case 'boyfriend': '- Boyfriend -';
+			case 'dad': '- Opponent -';
+			case 'character': '@ ${spr.name}';
+			default: spr.name;
+		}
+	}
+
 	function updateSpriteListRadio() {
 		var _sel:String = (spriteListChecked >= 0 && spriteListChecked < spriteListLabels.length) ? spriteListLabels[spriteListChecked] : null;
 		var nameList:Array<String> = [];
@@ -593,16 +644,7 @@ class StageEditorState extends MusicBeatState {
 			if (spr == null)
 				continue;
 
-			switch (spr.type) {
-				case 'gf':
-					nameList.push('- Girlfriend -');
-				case 'boyfriend':
-					nameList.push('- Boyfriend -');
-				case 'dad':
-					nameList.push('- Opponent -');
-				default:
-					nameList.push(spr.name);
-			}
+			nameList.push(listLabelFor(spr));
 		}
 		nameList.reverse();
 
@@ -637,6 +679,7 @@ class StageEditorState extends MusicBeatState {
 	}
 
 	function editorUI() {
+		loadCharacterList();
 		addStageTab();
 
 		boxTabs = new UITabs(BOX_W, [{label: 'Meta'}, {label: 'Data'}, {label: 'Object'}], function(i:Int):Void {
@@ -892,6 +935,17 @@ class StageEditorState extends MusicBeatState {
 	var nameInputText:UITextInput;
 	var imgTxt:UILabel;
 
+	var imgButton:UIButton;
+	var animationsButton:UIButton;
+	var scaleLabel:UILabel;
+	var scrollLabel:UILabel;
+	var filtersLabel:UILabel;
+
+	/** Which character the selected anchor previews, editor-only (`_editorChar` in the stage file). **/
+	var anchorCharDropdown:UIDropdown;
+
+	var anchorHint:UILabel;
+
 	var scaleStepperX:UIStepper;
 	var scaleStepperY:UIStepper;
 	var scrollStepperX:UIStepper;
@@ -943,9 +997,10 @@ class StageEditorState extends MusicBeatState {
 
 				selected.name = changedName;
 				if (spriteListChecked >= 0 && spriteListChecked < spriteListLabels.length) {
-					spriteListLabels[spriteListChecked] = changedName;
+					var rowLabel:String = listLabelFor(selected);
+					spriteListLabels[spriteListChecked] = rowLabel;
 					if (spriteListButtons[spriteListChecked] != null)
-						spriteListButtons[spriteListChecked].label = changedName;
+						spriteListButtons[spriteListChecked].label = rowLabel;
 				}
 				outputTime = 0;
 				outputTxt.alpha = 0;
@@ -957,19 +1012,38 @@ class StageEditorState extends MusicBeatState {
 			return (charCode >= '0'.code && charCode <= '9'.code) || (charCode >= 'A'.code && charCode <= 'Z'.code)
 				|| (charCode >= 'a'.code && charCode <= 'z'.code) || charCode == '_'.code || charCode == '-'.code;
 		};
-		nameInputText.tooltip = "The name Lua/HScript scripts use to reach this sprite.";
+		nameInputText.tooltip = "The name Lua/HScript scripts use to reach this sprite, or the anchor name a strumline binds to.";
 		pane.content.addChild(nameInputText);
+
+		anchorCharDropdown = new UIDropdown('Preview:', rowW, function(sel:Int, value:String) {
+			var anchor = getSelected();
+			if (anchor == null || anchor.type != 'character')
+				return;
+
+			anchor.previewCharacter = value;
+			updateSelectedUI();
+			unsavedProgress = true;
+		});
+		anchorCharDropdown.controlWidth = 150;
+		anchorCharDropdown.searchable = true;
+		anchorCharDropdown.tooltip = "Editor-only: stands a character here so the anchor can be aimed. Gameplay uses whichever character the chart's strumline names.";
+		anchorCharDropdown.visible = false;
+		pane.content.addChild(anchorCharDropdown);
+
+		anchorHint = paneLabel(pane, 0, 0, 'A strumline binds to this anchor by name to place its character here.', 10);
+		anchorHint.wrapWidth = rowW;
+		anchorHint.visible = false;
 
 		imgTxt = paneLabel(pane, 0, 34, 'Image: ');
 
-		var imgButton:UIButton = new UIButton('Change Image', halfW, 26, function() {
+		imgButton = new UIButton('Change Image', halfW, 26, function() {
 			trace('attempt to load image');
 			loadImage();
 		});
 		imgButton.y = 52;
 		pane.content.addChild(imgButton);
 
-		var animationsButton:UIButton = new UIButton('Animations', halfW, 26, function() {
+		animationsButton = new UIButton('Animations', halfW, 26, function() {
 			var selected = getSelected();
 			if (selected == null)
 				return;
@@ -1008,7 +1082,7 @@ class StageEditorState extends MusicBeatState {
 			unsavedProgress = true;
 		}
 
-		paneLabel(pane, 0, 122, 'Scale (X/Y):');
+		scaleLabel = paneLabel(pane, 0, 122, 'Scale (X/Y):');
 		scaleStepperX = new UIStepper('X:', halfW, 1, 0.05, updateScale);
 		scaleStepperX.min = 0.05;
 		scaleStepperX.max = 10;
@@ -1031,7 +1105,7 @@ class StageEditorState extends MusicBeatState {
 			unsavedProgress = true;
 		}
 
-		paneLabel(pane, 0, 172, 'Scroll Factor (X/Y):');
+		scrollLabel = paneLabel(pane, 0, 172, 'Scroll Factor (X/Y):');
 		scrollStepperX = new UIStepper('X:', halfW, 1, 0.05, updateScroll);
 		scrollStepperX.min = 0;
 		scrollStepperX.max = 10;
@@ -1125,7 +1199,7 @@ class StageEditorState extends MusicBeatState {
 			}
 			unsavedProgress = true;
 		};
-		paneLabel(pane, 0, 322, 'Visible in:');
+		filtersLabel = paneLabel(pane, 0, 322, 'Visible in:');
 		lowQualityCheckbox = new UICheckbox('Low Quality', halfW, false, recalcFilter);
 		lowQualityCheckbox.y = 340;
 		pane.content.addChild(lowQualityCheckbox);
@@ -1134,7 +1208,57 @@ class StageEditorState extends MusicBeatState {
 		highQualityCheckbox.y = 340;
 		pane.content.addChild(highQualityCheckbox);
 
+		reloadAnchorCharDropdown();
 		pane.refreshContent(374);
+	}
+
+	/** The anchor preview dropdown's raw values, kept so a selection maps back to an exact index. **/
+	var anchorCharItems:Array<String> = [];
+
+	/** Fills the anchor preview dropdown, with an entry for "no preview character" up front. **/
+	function reloadAnchorCharDropdown() {
+		anchorCharItems = [''];
+		var display:Array<String> = ['(None)'];
+		for (char in characterList) {
+			if (char == null || char.length < 1)
+				continue;
+
+			anchorCharItems.push(char);
+			display.push(char);
+		}
+		anchorCharDropdown.setItems(anchorCharItems.copy(), display);
+	}
+
+	/**
+		Reshapes the Object tab for whichever kind of thing is selected.
+
+		A character anchor has no art, so everything below its name is meaningless to it; the two rows
+		it does own are pulled up into the space the hidden ones leave rather than sitting under a gap.
+
+		@param isAnchor whether the selection is a `character` anchor
+	**/
+	function layoutObjectTab(isAnchor:Bool) {
+		var pane:UIScrollPane = boxPanes[2];
+
+		anchorCharDropdown.visible = anchorHint.visible = isAnchor;
+		imgTxt.visible = imgButton.visible = animationsButton.visible = !isAnchor;
+		colorInputText.visible = !isAnchor;
+		scaleLabel.visible = scaleStepperX.visible = scaleStepperY.visible = !isAnchor;
+		alphaStepper.visible = antialiasingCheckbox.visible = !isAnchor;
+		angleStepper.visible = flipXCheckBox.visible = flipYCheckBox.visible = !isAnchor;
+		filtersLabel.visible = lowQualityCheckbox.visible = highQualityCheckbox.visible = !isAnchor;
+
+		if (isAnchor) {
+			anchorCharDropdown.y = 34;
+			anchorHint.y = 70;
+			scrollLabel.y = 104;
+			scrollStepperX.y = scrollStepperY.y = 122;
+			pane.refreshContent(158);
+		} else {
+			scrollLabel.y = 172;
+			scrollStepperX.y = scrollStepperY.y = 190;
+			pane.refreshContent(374);
+		}
 	}
 
 	var oppDropdown:UIDropdown;
@@ -1142,9 +1266,8 @@ class StageEditorState extends MusicBeatState {
 	var plDropdown:UIDropdown;
 	var characterList:Array<String> = [];
 
-	function addMetaTab(pane:UIScrollPane) {
-		var rowW:Float = paneRowW(pane);
-
+	/** Every character the game can load, shared by the Meta tab's dropdowns and the anchor preview. **/
+	function loadCharacterList() {
 		characterList = Mods.mergeAllTextsNamed('data/characterList.txt');
 		var foldersToCheck:Array<String> = Mods.directoriesWithFile(Paths.getSharedPath(), 'characters/');
 		for (folder in foldersToCheck)
@@ -1157,6 +1280,10 @@ class StageEditorState extends MusicBeatState {
 
 		if (characterList.length < 1)
 			characterList.push(''); // Prevents crash
+	}
+
+	function addMetaTab(pane:UIScrollPane) {
+		var rowW:Float = paneRowW(pane);
 
 		var openPreloadButton:UIButton = new UIButton('Preload List', rowW, 28, function() {
 			var lockedList:Array<String> = [];
@@ -1368,14 +1495,10 @@ class StageEditorState extends MusicBeatState {
 		if (selected == null)
 			return;
 
-		var displayX:Float = Math.round(selected.x);
-		var displayY:Float = Math.round(selected.y);
-
-		var char:Character = cast selected.sprite;
-		if (char != null) {
-			displayX -= char.positionArray[0];
-			displayY -= char.positionArray[1];
-		}
+		// Anchor-space, so a character's own `position` offset is not read back as part of the
+		// placement the stage file stores.
+		var displayX:Float = Math.round(selected.anchorX);
+		var displayY:Float = Math.round(selected.anchorY);
 
 		posTxt.text = 'X: $displayX\nY: $displayY';
 		posTxt.visible = true;
@@ -1383,6 +1506,17 @@ class StageEditorState extends MusicBeatState {
 		var selected = getSelected();
 		if (selected == null)
 			return;
+
+		if (selected.type == 'character') {
+			layoutObjectTab(true);
+			nameInputText.text = selected.name;
+			var preview:String = (selected.previewCharacter != null) ? selected.previewCharacter : '';
+			anchorCharDropdown.select(Std.int(Math.max(0, anchorCharItems.indexOf(preview))));
+			scrollStepperX.value = selected.scroll[0];
+			scrollStepperY.value = selected.scroll[1];
+			return;
+		}
+		layoutObjectTab(false);
 
 		// Texts/Input Texts
 		colorInputText.text = selected.color;
@@ -1587,20 +1721,23 @@ class StageEditorState extends MusicBeatState {
 
 			var spr = stageSprites[spriteListLabels.length - selected - 1];
 			if (spr != null) {
-				var displayX:Float, displayY:Float;
-				spr.x = displayX = Math.round(spr.x + moveX);
-				spr.y = displayY = Math.round(spr.y + moveY);
-				var char:Character = cast spr.sprite;
+				spr.x = Math.round(spr.x + moveX);
+				spr.y = Math.round(spr.y + moveY);
+
+				// Characters (the stage's own and the anchors' previews alike) are dragged by their
+				// drawn position but stored by the position they were placed at.
+				var displayX:Float = spr.anchorX;
+				var displayY:Float = spr.anchorY;
 				switch (spr.type) {
 					case 'boyfriend':
-						stageJson.boyfriend[0] = displayX = spr.x - char.positionArray[0];
-						stageJson.boyfriend[1] = displayY = spr.y - char.positionArray[1];
+						stageJson.boyfriend[0] = displayX;
+						stageJson.boyfriend[1] = displayY;
 					case 'gf':
-						stageJson.girlfriend[0] = displayX = spr.x - char.positionArray[0];
-						stageJson.girlfriend[1] = displayY = spr.y - char.positionArray[1];
+						stageJson.girlfriend[0] = displayX;
+						stageJson.girlfriend[1] = displayY;
 					case 'dad':
-						stageJson.opponent[0] = displayX = spr.x - char.positionArray[0];
-						stageJson.opponent[1] = displayY = spr.y - char.positionArray[1];
+						stageJson.opponent[0] = displayX;
+						stageJson.opponent[1] = displayY;
 				}
 				posTxt.text = 'X: $displayX\nY: $displayY';
 				unsavedProgress = true;
@@ -1966,6 +2103,108 @@ class StageEditorMetaSprite {
 	// basic variables for all types
 	public var type:String;
 
+	/** Side of the square drawn for a `character` anchor that has no preview character on it. **/
+	public static inline var ANCHOR_MARKER_SIZE:Int = 120;
+
+	/**
+		Builds the on-screen stand-in for a `character` anchor.
+
+		A named character is spawned so the anchor can be aimed at the scene the same way the stage's
+		own characters are; without one the anchor draws a marker at the bare anchor point, since an
+		empty group has no size and could be neither seen nor selected.
+
+		@param character the preview character, empty for the marker
+		@return the sprite the anchor's meta should own
+	**/
+	public static function makeAnchorSprite(character:String):FlxSprite {
+		if (character != null && character.length > 0)
+			return new Character(0, 0, character);
+
+		var marker:FlxSprite = new FlxSprite().makeGraphic(ANCHOR_MARKER_SIZE, ANCHOR_MARKER_SIZE, FlxColor.TRANSPARENT, true);
+		FlxSpriteUtil.drawRect(marker, 0, 0, ANCHOR_MARKER_SIZE - 1, ANCHOR_MARKER_SIZE - 1, FlxColor.TRANSPARENT, {thickness: 4, color: 0xFF33E1FF});
+		FlxSpriteUtil.drawLine(marker, 0, ANCHOR_MARKER_SIZE / 2, ANCHOR_MARKER_SIZE, ANCHOR_MARKER_SIZE / 2, {thickness: 2, color: 0x9933E1FF});
+		FlxSpriteUtil.drawLine(marker, ANCHOR_MARKER_SIZE / 2, 0, ANCHOR_MARKER_SIZE / 2, ANCHOR_MARKER_SIZE, {thickness: 2, color: 0x9933E1FF});
+		marker.antialiasing = false;
+		return marker;
+	}
+
+	/**
+		The character standing on a `character` anchor for preview, empty for the bare marker.
+
+		Editor-only: gameplay takes the character from whichever strumline binds to this anchor, so
+		this is stored under `_editorChar` and never read by `StageData`.
+	**/
+	public var previewCharacter(default, set):String;
+
+	function set_previewCharacter(v:String):String {
+		if (type != 'character')
+			return (previewCharacter = v);
+
+		var ax:Float = 0.0;
+		var ay:Float = 0.0;
+		var wasVisible:Bool = true;
+		if (sprite != null) {
+			// Read the placement back in anchor space first: the character being swapped in carries a
+			// different offset, and rebuilding from the sprite position would bake the old one in.
+			ax = anchorX;
+			ay = anchorY;
+			wasVisible = sprite.visible;
+			sprite = FlxDestroyUtil.destroy(sprite);
+		}
+
+		previewCharacter = v;
+		sprite = makeAnchorSprite(v);
+		sprite.visible = wasVisible;
+		sprite.scrollFactor.set(scroll[0], scroll[1]);
+		setAnchorPosition(ax, ay);
+		return v;
+	}
+
+	/**
+		The offset a `Character` sprite adds on top of the position it was placed at.
+
+		Zero for everything that is not a character, which lets the anchor maths below run over any
+		selection without a type test at each call site.
+	**/
+	public var characterOffsetX(get, never):Float;
+
+	function get_characterOffsetX():Float {
+		if (!(sprite is Character))
+			return 0.0;
+
+		var pos:Array<Float> = (cast sprite : Character).positionArray;
+		return (pos != null && pos.length > 0) ? pos[0] : 0.0;
+	}
+
+	/** ... on the Y axis. **/
+	public var characterOffsetY(get, never):Float;
+
+	function get_characterOffsetY():Float {
+		if (!(sprite is Character))
+			return 0.0;
+
+		var pos:Array<Float> = (cast sprite : Character).positionArray;
+		return (pos != null && pos.length > 1) ? pos[1] : 0.0;
+	}
+
+	/** The position the stage file stores: where the sprite sits, less the character's own offset. **/
+	public var anchorX(get, never):Float;
+
+	inline function get_anchorX():Float
+		return x - characterOffsetX;
+
+	/** ... on the Y axis. **/
+	public var anchorY(get, never):Float;
+
+	inline function get_anchorY():Float
+		return y - characterOffsetY;
+
+	/** Places the sprite so that `anchorX`/`anchorY` read back as the values given. **/
+	public function setAnchorPosition(ax:Float, ay:Float):Void {
+		x = ax + characterOffsetX;
+		y = ay + characterOffsetY;
+	}
+
 	// variables for all types that aren't Character
 	public var name:String;
 	public var filters:LoadFilters = (LOW_QUALITY) | (HIGH_QUALITY);
@@ -2081,13 +2320,19 @@ class StageEditorMetaSprite {
 					this.firstAnimation = data.firstAnimation;
 				}
 
-			// A character anchor: a named position a strumline's character stands on. It carries no
-			// art of its own, so only its name and placement round-trip -- but they MUST, because
-			// saving rebuilds the whole object list from these and would otherwise drop them.
+			// A character anchor: a named position a strumline's character stands on. The group
+			// `StageData` built for it has no size, so the meta takes ownership of its own sprite --
+			// either the preview character or the marker.
 			case 'character':
 				this.name = data.name;
 				if (data.scrollFactor != null)
 					this.scroll = data.scrollFactor;
+
+				this.previewCharacter = (data._editorChar != null) ? data._editorChar : '';
+
+				var ax:Float = (data.x != null) ? data.x : 0.0;
+				var ay:Float = (data.y != null) ? data.y : 0.0;
+				setAnchorPosition(ax, ay);
 		}
 	}
 
@@ -2118,12 +2363,15 @@ class StageEditorMetaSprite {
 
 			// Must round-trip: saving rebuilds the whole object list from these, so anything not
 			// written here is destroyed the first time someone opens the stage and saves it.
+			// The position is anchor-space, so swapping the preview character cannot move it.
 			case 'character':
 				obj.name = name;
-				obj.x = x;
-				obj.y = y;
+				obj.x = anchorX;
+				obj.y = anchorY;
 				if (scroll[0] != 1 || scroll[1] != 1)
 					obj.scrollFactor = scroll;
+				if (previewCharacter != null && previewCharacter.length > 0)
+					obj._editorChar = previewCharacter;
 		}
 		return obj;
 	}
