@@ -1,4 +1,4 @@
-package psychlua;
+package scripting.hscript;
 
 #if HSCRIPT_ALLOWED
 import insanity.runtime.Interp;

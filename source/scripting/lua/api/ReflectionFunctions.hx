@@ -1,5 +1,10 @@
-package psychlua;
+package scripting.lua.api;
 
+import hxluajit.Types.Lua_State;
+import scripting.lua.FunkinLua;
+import scripting.lua.LuaUtils;
+import scripting.lua.PropertyPath;
+import scripting.lua.Lua_helper;
 import Type.ValueType;
 import haxe.Constraints;
 import substates.GameOverSubstate;
@@ -29,7 +34,7 @@ class ReflectionFunctions {
 	}
 
 	public static function implement(funk:FunkinLua) {
-		var lua:State = funk.lua;
+		var lua:cpp.RawPointer<Lua_State> = funk.lua;
 		Lua_helper.add_callback(lua, "getProperty", function(variable:String, ?allowMaps:Bool = false) {
 			return PropertyPath.get(rootOf(variable, allowMaps), pathAfterRoot(variable), allowMaps);
 		});

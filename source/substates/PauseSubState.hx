@@ -404,6 +404,7 @@ class PauseSubState extends MusicBeatSubstate {
 					OptionsState.onPlayState = true;
 				case "Exit to menu":
 					#if DISCORD_ALLOWED DiscordClient.resetClientID(); #end
+					PlayState.instance.callOnScripts(scripting.ScriptHooks.SONG_EXIT);
 					PlayState.deathCounter = 0;
 					PlayState.seenCutscene = false;
 
@@ -440,6 +441,10 @@ class PauseSubState extends MusicBeatSubstate {
 		PlayState.instance.paused = true; // For lua
 		FlxG.sound.music.volume = 0;
 		PlayState.instance.vocals.volume = 0;
+
+		// The shared retry path -- the pause menu and the game over screen both land here, and nothing
+		// told a script the song was starting over.
+		PlayState.instance.callOnScripts(scripting.ScriptHooks.SONG_RETRY);
 
 		if (noTrans) {
 			FlxTransitionableState.skipNextTransIn = true;

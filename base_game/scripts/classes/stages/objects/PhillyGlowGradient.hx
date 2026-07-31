@@ -1,5 +1,9 @@
 package stages.objects;
 
+import backend.ClientPrefs;
+import backend.Paths;
+import flixel.FlxSprite;
+
 /** The rising light gradient behind Blammed's glow event. Ported from the compiled version. **/
 class PhillyGlowGradient extends FlxSprite {
 	public var originalY:Float;

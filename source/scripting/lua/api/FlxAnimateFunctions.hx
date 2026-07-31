@@ -1,11 +1,15 @@
-package psychlua;
+package scripting.lua.api;
 
+import hxluajit.Types.Lua_State;
+import scripting.lua.FunkinLua;
+import scripting.lua.ModchartAnimateSprite;
+import scripting.lua.Lua_helper;
 import openfl.utils.Assets;
 
 #if (LUA_ALLOWED && flixel_animate)
 class FlxAnimateFunctions {
 	public static function implement(funk:FunkinLua) {
-		var lua:State = funk.lua;
+		var lua:cpp.RawPointer<Lua_State> = funk.lua;
 		Lua_helper.add_callback(lua, "makeFlxAnimateSprite",
 			function(tag:String, ?x:Float = 0, ?y:Float = 0, ?loadFolder:String = null, ?swfMode:Bool = false) {
 				tag = tag.replace('.', '');

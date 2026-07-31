@@ -1,5 +1,15 @@
 package stages;
 
+import backend.BaseStage;
+import backend.ClientPrefs;
+import backend.Conductor;
+import backend.Paths;
+import flixel.FlxG;
+import flixel.FlxSprite;
+import flixel.group.FlxGroup;
+import flixel.util.FlxColor;
+import objects.BGSprite;
+import objects.Character;
 import stages.objects.PhillyGlowGradient;
 import stages.objects.PhillyGlowParticle;
 import stages.objects.PhillyTrain;

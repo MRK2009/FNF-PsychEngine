@@ -2,13 +2,13 @@ package editors.charting.script;
 
 import editors.ChartingState;
 #if HSCRIPT_ALLOWED
-import psychlua.HScript;
+import scripting.hscript.HScript;
 #end
 
 /**
 	Loads and dispatches chart-editor scripts from `scripts/charteditor/*.lua|*.hx` (mods +
 	shared). Lua runs in raw LuaProxy mode ONLY (see `EditorLuaScript`); `.hx` uses the
-	standard `psychlua.HScript` host. Both receive the `editor` (ChartingState) and `api`
+	standard `scripting.hscript.HScript` host. Both receive the `editor` (ChartingState) and `api`
 	(`EditorScriptAPI`) globals.
 
 	Hooks (fired at mutation points, never per-frame unless opted in):

@@ -1,5 +1,11 @@
 package stages.objects;
 
+import backend.ClientPrefs;
+import backend.Paths;
+import flixel.FlxG;
+import flixel.FlxSprite;
+import flixel.util.FlxColor;
+
 /** One spark thrown up by the Philly glow event. Ported from the compiled version. **/
 class PhillyGlowParticle extends FlxSprite {
 	var lifeTime:Float = 0;

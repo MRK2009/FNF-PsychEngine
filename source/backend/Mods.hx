@@ -284,9 +284,23 @@ class Mods {
 		#end
 	}
 
+	/**
+		Tells scripts the active mod changed.
+
+		Asset resolution, a mod's script world and its settings are all scoped to `currentModDirectory`,
+		so a `scripts/global/` script that caches anything mod-specific needs to know when it moves.
+	**/
+	static function notifyModSwitch():Void {
+		#if (LUA_ALLOWED || HSCRIPT_ALLOWED)
+		if (scripting.ScriptHost.current != null)
+			scripting.ScriptHost.current.call(scripting.ScriptHooks.MOD_SWITCHED, [currentModDirectory]);
+		#end
+	}
+
 	public static function loadTopMod() {
 		Mods.currentModDirectory = '';
 		Paths.resetCaseCache();
+		notifyModSwitch();
 
 		#if MODS_ALLOWED
 		var list:Array<String> = Mods.parseList().enabled;

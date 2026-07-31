@@ -1,5 +1,9 @@
 package stages.objects;
 
+import backend.ClientPrefs;
+import backend.Paths;
+import flixel.FlxSprite;
+
 /** One of the limo's dancing henchmen. Ported from the compiled version. **/
 class BackgroundDancer extends FlxSprite {
 	var danceDir:Bool = false;

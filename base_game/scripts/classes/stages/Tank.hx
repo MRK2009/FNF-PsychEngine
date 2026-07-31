@@ -1,5 +1,18 @@
 package stages;
 
+import backend.BaseStage;
+import backend.ClientPrefs;
+import backend.Conductor;
+import backend.Paths;
+import flixel.FlxG;
+import flixel.FlxSprite;
+import flixel.group.FlxGroup;
+import flixel.sound.FlxSound;
+import flixel.tweens.FlxEase;
+import flixel.tweens.FlxTween;
+import objects.BGSprite;
+import objects.Character;
+import states.PlayState;
 import backend.PsychFlxAnimate;
 import cutscenes.CutsceneHandler;
 import stages.objects.BackgroundTank;
@@ -156,7 +169,7 @@ class Tank extends BaseStage {
 		return tankman;
 	}
 
-	override function countdownTick(count:Dynamic, num:Int):Void {
+	override function countdownTick(count:Countdown, num:Int):Void {
 		if (num % 2 == 0) {
 			everyoneDance();
 		}

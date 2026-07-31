@@ -76,16 +76,24 @@ class ScriptedAbstractMacro {
 		if (!Context.defined('HSCRIPT_ALLOWED'))
 			return;
 
-		var wrapped:Int = 0;
+		var wrapped:Array<String> = [];
 		for (path in discover().concat(TYPES)) {
 			if (EXCLUDE.contains(path))
 				continue;
 
 			Compiler.addMetadata('@:build(insanity.macro.AbstractMacro.build())', path);
-			wrapped++;
+			wrapped.push(path);
 		}
 
-		Context.info('ScriptedAbstractMacro: $wrapped abstract(s) exposed to scripts', Context.currentPos());
+		Context.info('ScriptedAbstractMacro: ${wrapped.length} abstract(s) exposed to scripts', Context.currentPos());
+
+		// The scan makes the set implicit -- what a script can reach depends on what happens to be
+		// declared under PACKAGES. `-D scripted_abstracts_list` prints it.
+		if (Context.defined('scripted_abstracts_list')) {
+			wrapped.sort(Reflect.compare);
+			for (path in wrapped)
+				Context.info('  $path', Context.currentPos());
+		}
 	}
 
 	/** Every wrappable abstract declared under `PACKAGES`, as dotted type paths. **/

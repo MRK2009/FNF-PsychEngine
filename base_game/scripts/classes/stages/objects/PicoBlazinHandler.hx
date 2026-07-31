@@ -1,5 +1,10 @@
 package stages.objects;
 
+import flixel.FlxG;
+import flixel.group.FlxSpriteGroup;
+import objects.Character;
+import states.PlayState;
+
 /**
 	Pico's side of the Blazin' fight: which animation answers each note type, hit or missed. Ported
 	from the compiled version.

@@ -1,4 +1,4 @@
-package llua;
+package scripting.lua;
 
 import hxluajit.Lua;
 import hxluajit.Types;
@@ -10,14 +10,14 @@ import hxluajit.Types;
  * `Lua.set_callbacks_function`) and made `Lua.register` route every named
  * callback through that dispatcher. hxluajit has no such hook, so each
  * `add_callback` here pushes a per-name C closure whose upvalue carries
- * the callback name; the closure forwards into `psychlua.CallbackHandler.call`
+ * the callback name; the closure forwards into `scripting.lua.CallbackHandler.call`
  * which preserves Psych's existing global + per-script lookup semantics.
  */
 class Lua_helper {
 	public static var callbacks:Map<String, Dynamic> = new Map<String, Dynamic>();
 	public static var sendErrorsToLua:Bool = false;
 
-	public static function add_callback(L:State, name:String, fn:Dynamic):Bool {
+	public static function add_callback(L:cpp.RawPointer<Lua_State>, name:String, fn:Dynamic):Bool {
 		if (L == null) return false;
 
 		// `fn == null` means "register only as a per-script callback"; the
@@ -29,7 +29,7 @@ class Lua_helper {
 		// Push the callback name as an upvalue and register a C closure
 		// that forwards into our Haxe dispatcher.
 		Lua.pushstring(L, name);
-		Lua.pushcclosure(L, cpp.Callable.fromStaticFunction(psychlua.CallbackHandler.call), 1);
+		Lua.pushcclosure(L, cpp.Callable.fromStaticFunction(scripting.lua.CallbackHandler.call), 1);
 		Lua.setglobal(L, name);
 		return true;
 	}

@@ -1,11 +1,11 @@
 #if LUA_ALLOWED
-package psychlua;
+package scripting.lua;
 
+import scripting.hscript.HScript;
 import hxluajit.Lua;
 import hxluajit.LuaL;
 import hxluajit.Types;
 import hxluajit.wrapper.LuaConverter;
-import llua.Convert;
 import flixel.FlxObject;
 import flixel.FlxSprite;
 import flixel.math.FlxPoint.FlxBasePoint;

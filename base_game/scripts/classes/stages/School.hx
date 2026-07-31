@@ -1,5 +1,15 @@
 package stages;
 
+import backend.BaseStage;
+import backend.ClientPrefs;
+import backend.CoolUtil;
+import backend.Paths;
+import flixel.FlxG;
+import flixel.FlxSprite;
+import flixel.util.FlxColor;
+import flixel.util.FlxTimer;
+import objects.BGSprite;
+import states.PlayState;
 import stages.objects.SenpaiDialogueBox;
 import stages.objects.BackgroundGirls;
 import substates.GameOverSubstate;

@@ -1,5 +1,8 @@
-package psychlua;
+package scripting.lua.api;
 
+import scripting.lua.FunkinLua;
+import scripting.lua.LuaUtils;
+import scripting.lua.Lua_helper;
 #if (!flash && sys)
 import flixel.addons.display.FlxRuntimeShader;
 #end

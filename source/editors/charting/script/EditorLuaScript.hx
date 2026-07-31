@@ -1,11 +1,11 @@
 package editors.charting.script;
 
+import hxluajit.Types.Lua_State;
 #if LUA_ALLOWED
-import llua.Convert;
-import llua.Lua;
-import llua.LuaL;
-import llua.State;
-import psychlua.LuaProxy;
+import scripting.lua.Convert;
+import hxluajit.Lua;
+import hxluajit.LuaL;
+import scripting.lua.LuaProxy;
 
 /**
 	A lean chart-editor Lua script: real-Lua (raw LuaProxy) mode ONLY - the object bridge
@@ -15,7 +15,7 @@ import psychlua.LuaProxy;
 **/
 final class EditorLuaScript {
 	/** The Lua state (null after `stop` or a blocked load). **/
-	public var lua:State = null;
+	public var lua:cpp.RawPointer<Lua_State> = null;
 
 	/** The script file path. **/
 	public var scriptName:String = '';

@@ -338,6 +338,15 @@ class FreeplayState extends MusicBeatState {
 		library.requestRating(e, lastDifficultyName, true);
 		refreshInfo();
 
+		// Menus fired nothing but onStateChange before, so a `scripts/global/` script had to poll the
+		// selection in onUpdate to notice it moved.
+		if (scriptHost != null) {
+			if (fromDiff)
+				scriptHost.call(scripting.ScriptHooks.DIFFICULTY_CHANGE, [curDifficulty, lastDifficultyName]);
+			else
+				scriptHost.call(scripting.ScriptHooks.SELECTION_CHANGE, [listView.curSelected, library.view.length]);
+		}
+
 		if (musicBar != null)
 			musicBar.setSong(e.songName);
 
@@ -751,6 +760,14 @@ class FreeplayState extends MusicBeatState {
 
 	function onAccept(elapsed:Float):Void {
 		var e:SongEntry = listView.selectedEntry();
+
+		// Cancellable, before anything is loaded or state is mutated: a mod can gate the song or
+		// redirect to its own state.
+		if (scriptHost != null && e != null
+			&& scriptHost.call(scripting.ScriptHooks.SONG_SELECTED,
+				[e.songKey, curDifficulty]) == scripting.lua.LuaUtils.Function_Stop)
+			return;
+
 		persistentUpdate = false;
 		try {
 			Song.loadChartFor(e.songKey, Difficulty.getString(curDifficulty, false));

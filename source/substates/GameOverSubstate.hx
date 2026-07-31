@@ -91,7 +91,7 @@ class GameOverSubstate extends MusicBeatSubstate {
 		add(camFollow);
 
 		PlayState.instance.setOnScripts('inGameOver', true);
-		PlayState.instance.callOnScripts('onGameOverStart', []);
+		PlayState.instance.callOnScripts(scripting.ScriptHooks.GAME_OVER_START, []);
 		FlxG.sound.music.loadEmbedded(Paths.music(loopSoundName), true);
 
 		for (stage in PlayState.instance.stages)
@@ -108,7 +108,7 @@ class GameOverSubstate extends MusicBeatSubstate {
 	override function update(elapsed:Float) {
 		super.update(elapsed);
 
-		PlayState.instance.callOnScripts('onUpdate', [elapsed]);
+		PlayState.instance.callOnScripts(scripting.ScriptHooks.UPDATE, [elapsed]);
 
 		var justPlayedLoop:Bool = false;
 		if (!boyfriend.isAnimationNull() && boyfriend.getAnimationName() == 'firstDeath' && boyfriend.isAnimationFinished()) {
@@ -125,6 +125,7 @@ class GameOverSubstate extends MusicBeatSubstate {
 				endBullshit();
 			} else if (controls.BACK) {
 				#if DISCORD_ALLOWED DiscordClient.resetClientID(); #end
+				PlayState.instance.callOnScripts(scripting.ScriptHooks.SONG_EXIT);
 				FlxG.camera.visible = false;
 				FlxG.sound.music.stop();
 				PlayState.deathCounter = 0;
@@ -142,7 +143,7 @@ class GameOverSubstate extends MusicBeatSubstate {
 
 					FlxG.sound.playMusic(Paths.music('freakyMenu'));
 				}
-				PlayState.instance.callOnScripts('onGameOverConfirm', [false]);
+				PlayState.instance.callOnScripts(scripting.ScriptHooks.GAME_OVER_CONFIRM, [false]);
 			} else if (justPlayedLoop) {
 				var handled:Bool = false;
 				for (stage in PlayState.instance.stages)
@@ -157,7 +158,7 @@ class GameOverSubstate extends MusicBeatSubstate {
 				Conductor.songPosition = FlxG.sound.music.time;
 			}
 		}
-		PlayState.instance.callOnScripts('onUpdatePost', [elapsed]);
+		PlayState.instance.callOnScripts(scripting.ScriptHooks.UPDATE_POST, [elapsed]);
 	}
 
 	public var isEnding:Bool = false;
@@ -188,7 +189,7 @@ class GameOverSubstate extends MusicBeatSubstate {
 					MusicBeatState.resetState();
 				});
 			});
-			PlayState.instance.callOnScripts('onGameOverConfirm', [true]);
+			PlayState.instance.callOnScripts(scripting.ScriptHooks.GAME_OVER_CONFIRM, [true]);
 		}
 	}
 

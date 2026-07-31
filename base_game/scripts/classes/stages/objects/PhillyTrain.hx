@@ -1,5 +1,12 @@
 package stages.objects;
 
+import backend.ClientPrefs;
+import backend.Paths;
+import flixel.FlxG;
+import flixel.FlxSprite;
+import flixel.sound.FlxSound;
+import states.PlayState;
+
 /**
 	The train that crosses Philly, dragging gf's hair with it. Ported from the compiled version.
 

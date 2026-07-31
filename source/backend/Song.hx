@@ -104,6 +104,14 @@ class Song {
 			PlayState.SONG.song = meta.songName;
 
 		StageData.loadDirectory(PlayState.SONG);
+
+		// The chart is parsed and the stage is known, but nothing has been turned into notes yet --
+		// the window to rewrite metadata, events or strumlines. `onNotesGenerated` is much later and
+		// only sees the decoded note list.
+		#if (LUA_ALLOWED || HSCRIPT_ALLOWED)
+		if (scripting.ScriptHost.current != null)
+			scripting.ScriptHost.current.call(scripting.ScriptHooks.CHART_PARSED, [PlayState.SONG]);
+		#end
 	}
 
 	static var _lastPath:String;

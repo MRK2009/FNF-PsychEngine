@@ -1,5 +1,9 @@
 package stages.objects;
 
+import backend.ClientPrefs;
+import backend.Paths;
+import flixel.FlxSprite;
+import flixel.group.FlxSpriteGroup;
 import backend.PsychFlxAnimate;
 
 /**

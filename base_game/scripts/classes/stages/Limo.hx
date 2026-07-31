@@ -1,5 +1,13 @@
 package stages;
 
+import backend.BaseStage;
+import backend.ClientPrefs;
+import backend.Paths;
+import flixel.FlxG;
+import flixel.group.FlxGroup;
+import flixel.math.FlxMath;
+import flixel.util.FlxTimer;
+import objects.BGSprite;
 import backend.Achievements;
 import stages.objects.BackgroundDancer;
 

@@ -7,8 +7,8 @@ import insanity.syntax.Expr;
 import insanity.types.ScriptedClass;
 import insanity.types.IScriptedType;
 import insanity.types.TypeCollection;
-import psychlua.HScript;
-import psychlua.HScript.HScriptInfos;
+import scripting.hscript.HScript;
+import scripting.hscript.HScript.HScriptInfos;
 import scripting.ScriptedStates.ResolveScope;
 
 /**

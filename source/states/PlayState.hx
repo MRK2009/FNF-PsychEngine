@@ -50,14 +50,14 @@ import objects.notes.ScrollVelocity.ScrollPoint;
 import backend.noteskin.NoteSkinService;
 import states.stages.*;
 import states.stages.objects.*;
+import scripting.ScriptHooks;
 #if LUA_ALLOWED
-import psychlua.*;
+import scripting.lua.*;
 #else
-import psychlua.LuaUtils;
-import psychlua.HScript;
+import scripting.lua.LuaUtils;
 #end
 #if HSCRIPT_ALLOWED
-import psychlua.HScript;
+import scripting.hscript.HScript;
 #end
 
 /**
@@ -532,7 +532,7 @@ class PlayState extends MusicBeatState {
 			introSoundsSuffix = '-pixel';
 
 		#if (LUA_ALLOWED || HSCRIPT_ALLOWED)
-		luaDebugGroup = new FlxTypedGroup<psychlua.DebugLuaText>();
+		luaDebugGroup = new FlxTypedGroup<scripting.lua.DebugLuaText>();
 		luaDebugGroup.cameras = [camOther];
 		add(luaDebugGroup);
 		#end
@@ -796,7 +796,13 @@ class PlayState extends MusicBeatState {
 		resetRPC();
 
 		stagesFunc(function(stage:BaseStage) stage.createPost());
-		callOnScripts('onCreatePost');
+		callOnScripts(ScriptHooks.CREATE_POST);
+
+		// Which skins this song actually resolved to. Fired here rather than from the skin runtimes:
+		// `activeSkin()` is asked per note and per receptor, so hooking it would fire hundreds of times
+		// a song, and it runs before scripts are loaded.
+		callOnScripts(ScriptHooks.NOTE_SKIN_LOADED, [backend.NoteSkinConfig.activeSkin()]);
+		callOnScripts(ScriptHooks.UI_SKIN_LOADED, [backend.UISkinConfig.activeSkin()]);
 
 		// compatibilityMode: re-derive the typed chart from the final game.unspawnNotes, so a load-time
 		// script that retuned it (flipped mustPress, reordered, replaced it -- e.g. the double-chart mod)
@@ -1163,13 +1169,13 @@ class PlayState extends MusicBeatState {
 
 	public function startCountdown() {
 		if (startedCountdown) {
-			callOnScripts('onStartCountdown');
+			callOnScripts(ScriptHooks.START_COUNTDOWN);
 			return false;
 		}
 
 		seenCutscene = true;
 		inCutscene = false;
-		var ret:Dynamic = callOnScripts('onStartCountdown', null, true);
+		var ret:Dynamic = callOnScripts(ScriptHooks.START_COUNTDOWN, null, true);
 		if (ret != LuaUtils.Function_Stop) {
 			if (skipCountdown || startOnTime > 0)
 				skipArrowStartTween = true;
@@ -1189,7 +1195,7 @@ class PlayState extends MusicBeatState {
 			startedCountdown = true;
 			Conductor.songPosition = -Conductor.crochet * 5 + Conductor.offset;
 			setOnScripts('startedCountdown', true);
-			callOnScripts('onCountdownStarted');
+			callOnScripts(ScriptHooks.COUNTDOWN_STARTED);
 
 			var swagCounter:Int = 0;
 			if (startOnTime > 0) {
@@ -1253,8 +1259,8 @@ class PlayState extends MusicBeatState {
 				}
 
 				stagesFunc(function(stage:BaseStage) stage.countdownTick(tick, swagCounter));
-				callOnLuas('onCountdownTick', [swagCounter]);
-				callOnHScript('onCountdownTick', [tick, swagCounter]);
+				callOnLuas(ScriptHooks.COUNTDOWN_TICK, [swagCounter]);
+				callOnHScript(ScriptHooks.COUNTDOWN_TICK, [tick, swagCounter]);
 
 				swagCounter += 1;
 			}, 5);
@@ -1317,7 +1323,7 @@ class PlayState extends MusicBeatState {
 	// its like if it was a variable but its just a function!
 	// cool right? -Crow
 	public dynamic function updateScore(miss:Bool = false, scoreBop:Bool = true) {
-		var ret:Dynamic = callOnScripts('preUpdateScore', [miss], true);
+		var ret:Dynamic = callOnScripts(ScriptHooks.UPDATE_SCORE_PRE, [miss], true);
 		if (ret == LuaUtils.Function_Stop)
 			return;
 
@@ -1325,7 +1331,7 @@ class PlayState extends MusicBeatState {
 		if (!miss && !cpuControlled && scoreBop)
 			doScoreBop();
 
-		callOnScripts('onUpdateScore', [miss]);
+		callOnScripts(ScriptHooks.UPDATE_SCORE, [miss]);
 	}
 
 	public dynamic function updateScoreText() {
@@ -1408,11 +1414,11 @@ class PlayState extends MusicBeatState {
 
 	public function startNextDialogue() {
 		dialogueCount++;
-		callOnScripts('onNextDialogue', [dialogueCount]);
+		callOnScripts(ScriptHooks.NEXT_DIALOGUE, [dialogueCount]);
 	}
 
 	public function skipDialogue() {
-		callOnScripts('onSkipDialogue', [dialogueCount]);
+		callOnScripts(ScriptHooks.SKIP_DIALOGUE, [dialogueCount]);
 	}
 
 	function startSong():Void {
@@ -1448,7 +1454,7 @@ class PlayState extends MusicBeatState {
 			DiscordClient.changePresence(detailsText, SONG.song + " (" + storyDifficultyText + ")", iconP2.getCharacter(), true, songLength);
 		#end
 		setOnScripts('songLength', songLength);
-		callOnScripts('onSongStart');
+		callOnScripts(ScriptHooks.SONG_START);
 
 		if (debug.bench.BenchmarkRunner.active)
 			debug.bench.BenchmarkRunner.onSongStarted(this);
@@ -1695,7 +1701,7 @@ class PlayState extends MusicBeatState {
 		so it declares the offset from the same place (see the base-game pack's `custom_events/`).
 	**/
 	function eventEarlyTrigger(event:EventNote):Float {
-		var returnedValue:Null<Float> = callOnScripts('eventEarlyTrigger', [event.event, event.value1, event.value2, event.strumTime], true);
+		var returnedValue:Null<Float> = callOnScripts(ScriptHooks.EVENT_EARLY_TRIGGER, [event.event, event.value1, event.value2, event.strumTime], true);
 		if (returnedValue != null && returnedValue != 0) {
 			return returnedValue;
 		}
@@ -1725,7 +1731,7 @@ class PlayState extends MusicBeatState {
 		};
 		eventNotes.push(subEvent);
 		eventPushed(subEvent);
-		callOnScripts('onEventPushed', [
+		callOnScripts(ScriptHooks.EVENT_PUSHED, [
 			subEvent.event,
 			subEvent.value1 != null ? subEvent.value1 : '',
 			subEvent.value2 != null ? subEvent.value2 : '',
@@ -1806,7 +1812,7 @@ class PlayState extends MusicBeatState {
 
 		setOnScripts('keyCount', totalColumns);
 		setOnScripts('mania', totalColumns - 1);
-		callOnScripts('onKeyCountChange', [totalColumns]);
+		callOnScripts(ScriptHooks.KEY_COUNT_CHANGE, [totalColumns]);
 	}
 
 	// Apply any per-section key-count changes whose time the song has reached.
@@ -1850,7 +1856,7 @@ class PlayState extends MusicBeatState {
 				twn.active = true);
 
 			paused = false;
-			callOnScripts('onResume');
+			callOnScripts(ScriptHooks.RESUME);
 			resetRPC(startTimer != null && startTimer.finished);
 		}
 	}
@@ -1938,7 +1944,7 @@ class PlayState extends MusicBeatState {
 		} else
 			FlxG.camera.followLerp = 0;
 		_updateArgs[0] = elapsed;
-		callOnScripts('onUpdate', _updateArgs);
+		callOnScripts(ScriptHooks.UPDATE, _updateArgs);
 
 		super.update(elapsed);
 
@@ -1960,7 +1966,7 @@ class PlayState extends MusicBeatState {
 			// flixel opens + updates the requested substate within this same frame, so the
 			// press that paused would instantly resume through PauseSubState's controls.BACK
 			#if android mobile.backend.BackButton.consume(); #end
-			var ret:Dynamic = callOnScripts('onPause', null, true);
+			var ret:Dynamic = callOnScripts(ScriptHooks.PAUSE, null, true);
 			if (ret != LuaUtils.Function_Stop) {
 				openPauseMenu();
 			}
@@ -2068,7 +2074,7 @@ class PlayState extends MusicBeatState {
 			setOnScripts('botPlay', cpuControlled);
 		}
 		_updateArgs[0] = elapsed;
-		callOnScripts('onUpdatePost', _updateArgs);
+		callOnScripts(ScriptHooks.UPDATE_POST, _updateArgs);
 	}
 
 	// Health icon updaters
@@ -2090,16 +2096,32 @@ class PlayState extends MusicBeatState {
 
 	var iconsAnimations:Bool = true;
 
+	/**
+		Fires `onHealthChange` when the value actually moved.
+
+		`health` is written from many places (hits, misses, drain, scripts), and a mod wanting to react
+		had no signal -- so health mechanics polled it in `onUpdatePost` every frame. Guarded on an
+		actual change so the setter re-running with the same value costs nothing.
+	**/
+	inline function reportHealth(previous:Float, current:Float):Void {
+		if (previous != current)
+			callOnScripts(ScriptHooks.HEALTH_CHANGE, [previous, current]);
+	}
+
 	function set_health(value:Float):Float // You can alter how icon animations work here
 	{
 		value = FlxMath.roundDecimal(value, 5); // Fix Float imprecision
+		var previous:Float = health;
+
 		if (!iconsAnimations || healthBar == null || !healthBar.enabled || healthBar.valueFunction == null) {
 			health = value;
+			reportHealth(previous, health);
 			return health;
 		}
 
 		// update health bar
 		health = value;
+		reportHealth(previous, health);
 		var newPercent:Null<Float> = FlxMath.remapToRange(FlxMath.bound(healthBar.valueFunction(), healthBar.bounds.min, healthBar.bounds.max),
 			healthBar.bounds.min, healthBar.bounds.max, 0, 100);
 		healthBar.percent = (newPercent != null ? newPercent : 0);
@@ -2183,7 +2205,7 @@ class PlayState extends MusicBeatState {
 
 	function doDeathCheck(?skipHealthCheck:Bool = false) {
 		if (((skipHealthCheck && instakillOnMiss) || health <= 0) && !practiceMode && !isDead && gameOverTimer == null) {
-			var ret:Dynamic = callOnScripts('onGameOver', null, true);
+			var ret:Dynamic = callOnScripts(ScriptHooks.GAME_OVER, null, true);
 			if (ret != LuaUtils.Function_Stop) {
 				FlxG.animationTimeScale = 1;
 				boyfriend.stunned = true;
@@ -2480,6 +2502,10 @@ class PlayState extends MusicBeatState {
 						reloadHealthBarColors();
 
 						setOnScripts('${characterName}Name', newCharacter.curCharacter);
+
+						// `onEvent` says a Change Character event fired; this says the swap FINISHED and
+						// hands over both characters, so a script does not have to re-find the new one.
+						callOnScripts(ScriptHooks.CHARACTER_CHANGE, [charTargetLine, character, newCharacter]);
 					}
 				}
 
@@ -2547,7 +2573,7 @@ class PlayState extends MusicBeatState {
 		for (stage in stages)
 			if (stage != null && stage.exists && stage.active)
 				stage.eventCalled(eventName, value1, value2, flValue1, flValue2, strumTime);
-		callOnScripts('onEvent', [eventName, value1, value2, strumTime]);
+		callOnScripts(ScriptHooks.EVENT, [eventName, value1, value2, strumTime]);
 	}
 
 	public function moveCameraSection(?sec:Null<Int>):Void {
@@ -2563,12 +2589,12 @@ class PlayState extends MusicBeatState {
 				return;
 			if (gf != null && SONG.notes[sec].gfSection) {
 				moveCameraToGirlfriend();
-				callOnScripts('onMoveCamera', ['gf']);
+				callOnScripts(ScriptHooks.MOVE_CAMERA, ['gf']);
 				return;
 			}
 			var isDad:Bool = (SONG.notes[sec].mustHitSection != true);
 			moveCamera(isDad);
-			callOnScripts('onMoveCamera', [isDad ? 'dad' : 'boyfriend']);
+			callOnScripts(ScriptHooks.MOVE_CAMERA, [isDad ? 'dad' : 'boyfriend']);
 			return;
 		}
 
@@ -2578,13 +2604,13 @@ class PlayState extends MusicBeatState {
 
 		if (gf != null && char == gf) {
 			moveCameraToGirlfriend();
-			callOnScripts('onMoveCamera', ['gf']);
+			callOnScripts(ScriptHooks.MOVE_CAMERA, ['gf']);
 		} else if (line != null && line.isPlayer) {
 			moveCamera(false);
-			callOnScripts('onMoveCamera', ['boyfriend']);
+			callOnScripts(ScriptHooks.MOVE_CAMERA, ['boyfriend']);
 		} else {
 			moveCamera(true);
-			callOnScripts('onMoveCamera', ['dad']);
+			callOnScripts(ScriptHooks.MOVE_CAMERA, ['dad']);
 		}
 	}
 
@@ -2791,7 +2817,7 @@ class PlayState extends MusicBeatState {
 		]);
 		#end
 
-		var ret:Dynamic = callOnScripts('onEndSong', null, true);
+		var ret:Dynamic = callOnScripts(ScriptHooks.END_SONG, null, true);
 		if (ret != LuaUtils.Function_Stop && !transitioning) {
 			#if !switch
 			if (!scoring.ownsDisplay && !replayMode) {
@@ -2855,6 +2881,8 @@ class PlayState extends MusicBeatState {
 				if (exitToScriptedStateIfNeeded()) {
 					changedDifficulty = false;
 				} else if (playResult != null) {
+					// The finished record, before the screen opens: custom ranks, unlocks, submission.
+					callOnScripts(ScriptHooks.RESULTS, [playResult]);
 					// Keep the song's mod context so the results screen can Retry in place.
 					MusicBeatState.switchState(new ResultsState(playResult, scoring.stats, true));
 					FlxG.sound.playMusic(Paths.music('freakyMenu'));
@@ -3413,7 +3441,7 @@ class PlayState extends MusicBeatState {
 			st.notesGenerated(chart.notes);
 		// Same window for Lua/HScript: a script can reassign/reorder/retag the typed note list (e.g. the
 		// double-chart mod flipping `strumLine`/`mustPress`) before the fields bucket it by strumline.
-		callOnScripts('onNotesGenerated', [chart.notes]);
+		callOnScripts(ScriptHooks.NOTES_GENERATED, [chart.notes]);
 
 		receptorGroup = new flixel.group.FlxGroup.FlxTypedGroup<Receptor>();
 
@@ -3565,7 +3593,7 @@ class PlayState extends MusicBeatState {
 		// The first moment receptors, note fields and strumline aliases all exist. Every other callback
 		// either fires before this (`onCreatePost`, `onStartCountdown`) or well after the song is already
 		// running, so a script wanting to restyle or reposition the lanes had nowhere correct to do it.
-		callOnScripts('onStrumsCreated', [strumLines.length]);
+		callOnScripts(ScriptHooks.STRUMS_CREATED, [strumLines.length]);
 	}
 
 	/**
@@ -4164,9 +4192,9 @@ class PlayState extends MusicBeatState {
 	**/
 	function onNoteDespawned(note:ActiveNote):Void {
 		despawnNote = note;
-		callOnLuas('onDespawnNote', [-1, note.data.column, note.data.type, note.data.isSustain(), note.data.time, note.data.mustPress]);
+		callOnLuas(ScriptHooks.DESPAWN_NOTE, [-1, note.data.column, note.data.type, note.data.isSustain(), note.data.time, note.data.mustPress]);
 		despawnNote = null;
-		callOnHScript('onDespawnNote', [cbArg(note)]);
+		callOnHScript(ScriptHooks.DESPAWN_NOTE, [cbArg(note)]);
 	}
 
 	function onNoteSpawned(note:ActiveNote):Void {
@@ -4176,9 +4204,9 @@ class PlayState extends MusicBeatState {
 		var line:StrumLine = lineOf(note.data);
 		var field:NoteField = (line != null && line.field != null) ? line.field : (note.data.mustPress ? playerField : opponentField);
 		var idx:Int = (field != null) ? field.active.indexOf(note) : -1;
-		callOnLuas('onSpawnNote', [idx, note.data.column, note.data.type, note.data.isSustain(), note.data.time, note.data.mustPress]);
+		callOnLuas(ScriptHooks.SPAWN_NOTE, [idx, note.data.column, note.data.type, note.data.isSustain(), note.data.time, note.data.mustPress]);
 		spawnNote = null;
-		callOnHScript('onSpawnNote', [cbArg(note)]);
+		callOnHScript(ScriptHooks.SPAWN_NOTE, [cbArg(note)]);
 	}
 
 	/** Rebuilds the SV timeline from `svPoints` and re-precomputes every note's scroll position. **/
@@ -4440,7 +4468,7 @@ class PlayState extends MusicBeatState {
 
 		if (!replayMode)
 			backend.profiles.ProfileManager.noteKeypress();
-		var ret:Dynamic = callOnScripts('onKeyPressPre', [key]);
+		var ret:Dynamic = callOnScripts(ScriptHooks.KEY_PRESS_PRE, [key]);
 		if (ret == LuaUtils.Function_Stop)
 			return;
 
@@ -4468,7 +4496,7 @@ class PlayState extends MusicBeatState {
 			if (startedCountdown && !endingSong)
 				scoring.ghostTap();
 			if (ClientPrefs.data.ghostTapping)
-				callOnScripts('onGhostTap', [key]);
+				callOnScripts(ScriptHooks.GHOST_TAP, [key]);
 			else
 				noteMissPress(key);
 		}
@@ -4482,7 +4510,7 @@ class PlayState extends MusicBeatState {
 			spr.playAnim('pressed');
 			spr.resetAnim = 0;
 		}
-		callOnScripts('onKeyPress', [key]);
+		callOnScripts(ScriptHooks.KEY_PRESS, [key]);
 	}
 
 	// NoteSystem V2
@@ -4492,7 +4520,7 @@ class PlayState extends MusicBeatState {
 
 		if (replayRecorder != null && replayRecorder.active)
 			replayRecorder.noteRelease(key, Conductor.songPosition);
-		var ret:Dynamic = callOnScripts('onKeyReleasePre', [key]);
+		var ret:Dynamic = callOnScripts(ScriptHooks.KEY_RELEASE_PRE, [key]);
 		if (ret == LuaUtils.Function_Stop)
 			return;
 
@@ -4501,7 +4529,7 @@ class PlayState extends MusicBeatState {
 			spr.playAnim('static');
 			spr.resetAnim = 0;
 		}
-		callOnScripts('onKeyRelease', [key]);
+		callOnScripts(ScriptHooks.KEY_RELEASE, [key]);
 	}
 
 	// NoteSystem V2
@@ -4606,9 +4634,9 @@ class PlayState extends MusicBeatState {
 		lastJudgedNote = data;
 		var line:StrumLine = lineOf(data);
 		var singer:Character = singerFor(data, (line != null && line.cameraCharacter() != null) ? line.cameraCharacter() : dad);
-		var result:Dynamic = callOnLuas('opponentNoteHitPre', [-1, data.column, data.type, data.isSustain()]);
+		var result:Dynamic = callOnLuas(ScriptHooks.OPPONENT_NOTE_HIT_PRE, [-1, data.column, data.type, data.isSustain()]);
 		if (notStopped(result))
-			result = callOnHScript('opponentNoteHitPre', [cbArg(note)]);
+			result = callOnHScript(ScriptHooks.OPPONENT_NOTE_HIT_PRE, [cbArg(note)]);
 		if (result == LuaUtils.Function_Stop)
 			return;
 
@@ -4627,9 +4655,9 @@ class PlayState extends MusicBeatState {
 		strumPlayAnim((line != null) ? line.receptors : opponentReceptors, data.column, Conductor.stepCrochet * 1.25 / 1000 / playbackRate);
 		data.hitByOpponent = true;
 
-		result = callOnLuas('opponentNoteHit', [-1, data.column, data.type, data.isSustain()]);
+		result = callOnLuas(ScriptHooks.OPPONENT_NOTE_HIT, [-1, data.column, data.type, data.isSustain()]);
 		if (notStopped(result))
-			callOnHScript('opponentNoteHit', [cbArg(note)]);
+			callOnHScript(ScriptHooks.OPPONENT_NOTE_HIT, [cbArg(note)]);
 		fireStageNote(1, note);
 
 		var f:NoteField = (line != null && line.field != null) ? line.field : opponentField;
@@ -4655,9 +4683,9 @@ class PlayState extends MusicBeatState {
 		var leType:String = data.type;
 		lastJudgedNote = data;
 
-		var result:Dynamic = callOnLuas('goodNoteHitPre', [-1, leData, leType, isSus]);
+		var result:Dynamic = callOnLuas(ScriptHooks.GOOD_NOTE_HIT_PRE, [-1, leData, leType, isSus]);
 		if (notStopped(result))
-			result = callOnHScript('goodNoteHitPre', [cbArg(note)]);
+			result = callOnHScript(ScriptHooks.GOOD_NOTE_HIT_PRE, [cbArg(note)]);
 		if (result == LuaUtils.Function_Stop)
 			return;
 
@@ -4696,9 +4724,9 @@ class PlayState extends MusicBeatState {
 			return;
 		}
 
-		result = callOnLuas('goodNoteHit', [-1, leData, leType, isSus]);
+		result = callOnLuas(ScriptHooks.GOOD_NOTE_HIT, [-1, leData, leType, isSus]);
 		if (notStopped(result))
-			callOnHScript('goodNoteHit', [cbArg(note)]);
+			callOnHScript(ScriptHooks.GOOD_NOTE_HIT, [cbArg(note)]);
 		fireStageNote(0, note);
 
 		if (!isSus)
@@ -4720,9 +4748,9 @@ class PlayState extends MusicBeatState {
 
 		scoring.miss(!endingSong);
 		noteMissCommon(data.column, data);
-		var result:Dynamic = callOnLuas('noteMiss', [-1, data.column, data.type, data.isSustain()]);
+		var result:Dynamic = callOnLuas(ScriptHooks.NOTE_MISS, [-1, data.column, data.type, data.isSustain()]);
 		if (notStopped(result))
-			callOnHScript('noteMiss', [cbArg(note)]);
+			callOnHScript(ScriptHooks.NOTE_MISS, [cbArg(note)]);
 		fireStageNote(2, note);
 
 		playerField.remove(note);
@@ -4739,14 +4767,14 @@ class PlayState extends MusicBeatState {
 
 		scoring.holdDrop(!endingSong);
 		noteMissCommon(data.column, data);
-		var result:Dynamic = callOnLuas('noteMiss', [-1, data.column, data.type, true]);
+		var result:Dynamic = callOnLuas(ScriptHooks.NOTE_MISS, [-1, data.column, data.type, true]);
 		if (notStopped(result))
-			callOnHScript('noteMiss', [cbArg(note, true)]);
+			callOnHScript(ScriptHooks.NOTE_MISS, [cbArg(note, true)]);
 
 		// Distinct from the miss: a dropped hold is the one miss a script can see coming, and reacting
 		// to it (an animation, a modifier, a sound) needs to tell it apart from a note never pressed.
-		callOnLuas('onSustainRelease', [-1, data.column, data.type, data.time]);
-		callOnHScript('onSustainRelease', [cbArg(note, true)]);
+		callOnLuas(ScriptHooks.SUSTAIN_RELEASE, [-1, data.column, data.type, data.time]);
+		callOnHScript(ScriptHooks.SUSTAIN_RELEASE, [cbArg(note, true)]);
 
 		playerField.remove(note);
 	}
@@ -4761,9 +4789,9 @@ class PlayState extends MusicBeatState {
 		lastJudgedNote = data;
 		scoring.miss(!endingSong);
 		noteMissCommon(data.column, data);
-		var result:Dynamic = callOnLuas('noteMiss', [-1, data.column, data.type, false]);
+		var result:Dynamic = callOnLuas(ScriptHooks.NOTE_MISS, [-1, data.column, data.type, false]);
 		if (notStopped(result))
-			callOnHScript('noteMiss', [cbArg(note)]);
+			callOnHScript(ScriptHooks.NOTE_MISS, [cbArg(note)]);
 		fireStageNote(2, note);
 		playerField.freeHead(note);
 	}
@@ -4813,9 +4841,9 @@ class PlayState extends MusicBeatState {
 		lastJudgedNote = data;
 		scoring.segmentMiss(!endingSong);
 		noteMissCommon(data.column, data);
-		var result:Dynamic = callOnLuas('noteMiss', [-1, data.column, data.type, true]);
+		var result:Dynamic = callOnLuas(ScriptHooks.NOTE_MISS, [-1, data.column, data.type, true]);
 		if (notStopped(result))
-			callOnHScript('noteMiss', [cbArg(note, true)]);
+			callOnHScript(ScriptHooks.NOTE_MISS, [cbArg(note, true)]);
 		fireStageNote(2, note);
 	}
 
@@ -4826,7 +4854,7 @@ class PlayState extends MusicBeatState {
 		scoring.ghostMiss();
 		noteMissCommon(direction);
 		FlxG.sound.play(Paths.soundRandom('missnote', 1, 3), FlxG.random.float(0.1, 0.2));
-		callOnScripts('noteMissPress', [direction]);
+		callOnScripts(ScriptHooks.NOTE_MISS_PRESS, [direction]);
 	}
 
 	// NoteSystem V2
@@ -5101,7 +5129,7 @@ class PlayState extends MusicBeatState {
 			noteCompat.clear();
 			noteCompat = null;
 		}
-		if (psychlua.CustomSubstate.instance != null) {
+		if (scripting.lua.CustomSubstate.instance != null) {
 			closeSubState();
 			resetSubState();
 		}
@@ -5154,7 +5182,7 @@ class PlayState extends MusicBeatState {
 
 		lastStepHit = curStep;
 		setOnScripts('curStep', curStep);
-		callOnScripts('onStepHit');
+		callOnScripts(ScriptHooks.STEP_HIT);
 	}
 
 	var lastBeatHit:Int = -1;
@@ -5180,7 +5208,7 @@ class PlayState extends MusicBeatState {
 		lastBeatHit = curBeat;
 
 		setOnScripts('curBeat', curBeat);
-		callOnScripts('onBeatHit');
+		callOnScripts(ScriptHooks.BEAT_HIT);
 	}
 
 	public function characterBopper(beat:Int):Void {
@@ -5238,7 +5266,7 @@ class PlayState extends MusicBeatState {
 		super.sectionHit();
 
 		setOnScripts('curSection', curSection);
-		callOnScripts('onSectionHit');
+		callOnScripts(ScriptHooks.SECTION_HIT);
 	}
 
 	#if LUA_ALLOWED
@@ -5296,7 +5324,7 @@ class PlayState extends MusicBeatState {
 		setOnScripts('hits', songHits);
 		setOnScripts('combo', combo);
 
-		var ret:Dynamic = callOnScripts('onRecalculateRating', null, true);
+		var ret:Dynamic = callOnScripts(ScriptHooks.RECALCULATE_RATING, null, true);
 		if (ret != LuaUtils.Function_Stop) {
 			if (scoring.ownsDisplay) {
 				ratingPercent = scoring.accuracy();

@@ -1,4 +1,4 @@
-package psychlua;
+package scripting.lua;
 
 import flixel.FlxObject;
 
@@ -57,9 +57,9 @@ class CustomSubstate extends MusicBeatSubstate {
 		instance = this;
 		PlayState.instance.setOnHScript('customSubstate', instance);
 
-		PlayState.instance.callOnScripts('onCustomSubstateCreate', [name]);
+		PlayState.instance.callOnScripts(scripting.ScriptHooks.SUBSTATE_CREATE, [name]);
 		super.create();
-		PlayState.instance.callOnScripts('onCustomSubstateCreatePost', [name]);
+		PlayState.instance.callOnScripts(scripting.ScriptHooks.SUBSTATE_CREATE_POST, [name]);
 	}
 
 	public function new(name:String) {
@@ -70,13 +70,13 @@ class CustomSubstate extends MusicBeatSubstate {
 	}
 
 	override function update(elapsed:Float) {
-		PlayState.instance.callOnScripts('onCustomSubstateUpdate', [name, elapsed]);
+		PlayState.instance.callOnScripts(scripting.ScriptHooks.SUBSTATE_UPDATE, [name, elapsed]);
 		super.update(elapsed);
-		PlayState.instance.callOnScripts('onCustomSubstateUpdatePost', [name, elapsed]);
+		PlayState.instance.callOnScripts(scripting.ScriptHooks.SUBSTATE_UPDATE_POST, [name, elapsed]);
 	}
 
 	override function destroy() {
-		PlayState.instance.callOnScripts('onCustomSubstateDestroy', [name]);
+		PlayState.instance.callOnScripts(scripting.ScriptHooks.SUBSTATE_DESTROY, [name]);
 		instance = null;
 		name = 'unnamed';
 

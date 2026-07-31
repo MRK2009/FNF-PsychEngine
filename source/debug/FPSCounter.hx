@@ -276,7 +276,7 @@ class FPSCounter extends TextField {
 
 		#if LUA_ALLOWED
 		if (showLuaMem)
-			add(rowLua, 'Lua: ${bytes(psychlua.FunkinLua.totalLuaMemoryBytes())}');
+			add(rowLua, 'Lua: ${bytes(scripting.lua.FunkinLua.totalLuaMemoryBytes())}');
 		#end
 
 		#if HARDWARE_ALLOWED

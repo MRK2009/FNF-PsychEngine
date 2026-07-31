@@ -1,5 +1,17 @@
 package stages;
 
+import backend.BaseStage;
+import backend.ClientPrefs;
+import backend.Paths;
+import flixel.FlxG;
+import flixel.FlxSprite;
+import flixel.addons.transition.FlxTransitionableState;
+import flixel.math.FlxMath;
+import flixel.tweens.FlxTween;
+import flixel.util.FlxColor;
+import objects.BGSprite;
+import openfl.display.BlendMode;
+import states.PlayState;
 import flixel.addons.display.FlxTiledSprite;
 import openfl.filters.ShaderFilter;
 import shaders.RainShader;

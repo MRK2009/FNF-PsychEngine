@@ -1,5 +1,6 @@
 package backend;
 
+import hxluajit.Types.Lua_State;
 class Language {
 	public static var defaultLangName:String = 'English (US)'; // en-US
 	#if TRANSLATIONS_ALLOWED
@@ -95,7 +96,7 @@ class Language {
 	#end
 
 	#if LUA_ALLOWED
-	public static function addLuaCallbacks(lua:State) {
+	public static function addLuaCallbacks(lua:cpp.RawPointer<Lua_State>) {
 		Lua_helper.add_callback(lua, "getTranslationPhrase", function(key:String, ?defaultPhrase:String, ?values:Array<Dynamic> = null) {
 			return getPhrase(key, defaultPhrase, values);
 		});

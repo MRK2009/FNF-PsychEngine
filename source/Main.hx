@@ -91,10 +91,10 @@ class Main extends Sprite {
 		// the save is bound (to read it) and before the FlxGame below opens the audio device.
 		backend.ALSoftConfig.apply();
 
-		// HScript error/warn/fatal logging is handled by psychlua.HScript's
+		// HScript error/warn/fatal logging is handled by scripting.hscript.HScript's
 		// static loggers (they mirror messages to the in-game debug overlay).
 		#if HSCRIPT_ALLOWED
-		psychlua.HScript.setupConfig();
+		scripting.hscript.HScript.setupConfig();
 		#end
 
 		Controls.instance = new Controls();

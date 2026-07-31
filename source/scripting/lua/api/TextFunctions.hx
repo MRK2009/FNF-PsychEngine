@@ -1,5 +1,9 @@
-package psychlua;
+package scripting.lua.api;
 
+import scripting.lua.CustomSubstate;
+import scripting.lua.FunkinLua;
+import scripting.lua.LuaUtils;
+import scripting.lua.Lua_helper;
 class TextFunctions {
 	public static function implement(funk:FunkinLua) {
 		var lua = funk.lua;

@@ -1,5 +1,9 @@
 package stages.objects;
 
+import backend.ClientPrefs;
+import backend.Paths;
+import flixel.FlxSprite;
+
 /**
 	The mall's bopping crowd, which can throw a "hey". Ported from the compiled version.
 

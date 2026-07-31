@@ -1,5 +1,8 @@
-package psychlua;
+package scripting.lua.api;
 
+import hxluajit.Types.Lua_State;
+import scripting.lua.FunkinLua;
+import scripting.lua.Lua_helper;
 import flixel.util.FlxSave;
 import openfl.utils.Assets;
 
@@ -8,7 +11,7 @@ import openfl.utils.Assets;
 //
 class ExtraFunctions {
 	public static function implement(funk:FunkinLua) {
-		var lua:State = funk.lua;
+		var lua:cpp.RawPointer<Lua_State> = funk.lua;
 
 		// Keyboard & Gamepads
 		Lua_helper.add_callback(lua, "keyboardJustPressed", function(name:String) return Reflect.getProperty(FlxG.keys.justPressed, name));

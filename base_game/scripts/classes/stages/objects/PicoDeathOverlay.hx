@@ -1,5 +1,11 @@
 package stages.objects;
 
+import backend.ClientPrefs;
+import backend.Paths;
+import flixel.FlxSprite;
+import flixel.util.FlxTimer;
+import objects.Character;
+import states.PlayState;
 import substates.GameOverSubstate;
 
 /**

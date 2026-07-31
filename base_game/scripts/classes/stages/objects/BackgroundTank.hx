@@ -1,5 +1,10 @@
 package stages.objects;
 
+import backend.ClientPrefs;
+import backend.Paths;
+import flixel.FlxG;
+import flixel.FlxSprite;
+
 /**
 	The tank rolling along the horizon. Ported from the compiled version.
 

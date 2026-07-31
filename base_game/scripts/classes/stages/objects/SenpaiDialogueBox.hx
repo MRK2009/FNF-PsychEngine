@@ -1,5 +1,15 @@
 package stages.objects;
 
+import backend.Controls;
+import backend.Language;
+import backend.Paths;
+import flixel.FlxG;
+import flixel.FlxSprite;
+import flixel.group.FlxSpriteGroup;
+import flixel.tweens.FlxTween;
+import flixel.util.FlxColor;
+import flixel.util.FlxTimer;
+import states.PlayState;
 import flixel.addons.text.FlxTypeText;
 // Imported as MODULES so their sibling types (`FlxTextBorderStyle`, `FlxTextAlign`) come in as bare
 // names -- a global import registers only the one type it names.

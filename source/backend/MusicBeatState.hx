@@ -98,24 +98,24 @@ class MusicBeatState extends FlxState {
 	// PlayState) so scripted menus surface errors instead of silently going black.
 	// Lazily created and always re-raised to the front so it works regardless of
 	// whether a scripted create() called super.create().
-	var luaDebugGroup:FlxTypedGroup<psychlua.DebugLuaText>;
+	var luaDebugGroup:FlxTypedGroup<scripting.lua.DebugLuaText>;
 
 	public function addTextToDebug(text:String, color:FlxColor) {
 		if (luaDebugGroup == null)
-			luaDebugGroup = new FlxTypedGroup<psychlua.DebugLuaText>();
+			luaDebugGroup = new FlxTypedGroup<scripting.lua.DebugLuaText>();
 		// Keep the overlay frontmost even if the state added sprites after it.
 		if (members.contains(luaDebugGroup))
 			remove(luaDebugGroup, true);
 		add(luaDebugGroup);
 
-		var newText:psychlua.DebugLuaText = luaDebugGroup.recycle(psychlua.DebugLuaText);
+		var newText:scripting.lua.DebugLuaText = luaDebugGroup.recycle(scripting.lua.DebugLuaText);
 		newText.text = text;
 		newText.color = color;
 		newText.disableTime = 6;
 		newText.alpha = 1;
 		newText.setPosition(10, 8 - newText.height);
 
-		luaDebugGroup.forEachAlive(function(spr:psychlua.DebugLuaText) {
+		luaDebugGroup.forEachAlive(function(spr:scripting.lua.DebugLuaText) {
 			spr.y += newText.height + 2;
 		});
 		luaDebugGroup.add(newText);

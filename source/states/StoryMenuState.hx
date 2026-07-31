@@ -280,6 +280,13 @@ class StoryMenuState extends MusicBeatState {
 	var stopspamming:Bool = false;
 
 	function selectWeek() {
+		// Cancellable: a mod can gate a week behind its own condition, or send the player somewhere
+		// else entirely, without having to script the whole menu.
+		if (scriptHost != null
+			&& scriptHost.call(scripting.ScriptHooks.WEEK_SELECTED,
+				[loadedWeeks[curWeek].fileName, curDifficulty]) == scripting.lua.LuaUtils.Function_Stop)
+			return;
+
 		if (!weekIsLocked(loadedWeeks[curWeek].fileName)) {
 			// We can't use Dynamic Array .copy() because that crashes HTML5, here's a workaround.
 			var songArray:Array<String> = [];
@@ -368,6 +375,9 @@ class StoryMenuState extends MusicBeatState {
 		#if !switch
 		intendedScore = Highscore.getWeekScore(loadedWeeks[curWeek].fileName, curDifficulty);
 		#end
+
+		if (scriptHost != null)
+			scriptHost.call(scripting.ScriptHooks.DIFFICULTY_CHANGE, [curDifficulty, diff]);
 	}
 
 	var lerpScore:Int = 49324858;
@@ -420,6 +430,9 @@ class StoryMenuState extends MusicBeatState {
 			curDifficulty = newPos;
 		}
 		updateText();
+
+		if (scriptHost != null)
+			scriptHost.call(scripting.ScriptHooks.SELECTION_CHANGE, [curWeek, loadedWeeks.length]);
 	}
 
 	function weekIsLocked(name:String):Bool {

@@ -86,7 +86,7 @@ class ScriptGlobals {
 		'objects.HealthIcon',
 		'objects.NoteSplash',
 		'objects.ABotSpectrum',
-		'psychlua.CustomSubstate',
+		'scripting.lua.CustomSubstate',
 
 		// Flixel types the engine itself rarely names but scripts do.
 		'flixel.FlxBasic',
@@ -180,7 +180,7 @@ class ScriptGlobals {
 		set('FileSystem', FileSystem);
 		#end
 		set('controls', Controls.instance);
-		set('buildTarget', psychlua.LuaUtils.getBuildTarget());
+		set('buildTarget', scripting.lua.LuaUtils.getBuildTarget());
 
 		// Static references, not inline closures. An anonymous closure allocates every time the
 		// expression is evaluated -- once per binding per script load, so a modpack with a dozen
@@ -212,16 +212,16 @@ class ScriptGlobals {
 				}
 				modName = mod;
 			}
-			return psychlua.LuaUtils.getModSetting(saveTag, modName);
+			return scripting.lua.LuaUtils.getModSetting(saveTag, modName);
 		});
 
 		sharedInput(set);
 
-		set('Function_Stop', psychlua.LuaUtils.Function_Stop);
-		set('Function_Continue', psychlua.LuaUtils.Function_Continue);
-		set('Function_StopLua', psychlua.LuaUtils.Function_StopLua);
-		set('Function_StopHScript', psychlua.LuaUtils.Function_StopHScript);
-		set('Function_StopAll', psychlua.LuaUtils.Function_StopAll);
+		set('Function_Stop', scripting.lua.LuaUtils.Function_Stop);
+		set('Function_Continue', scripting.lua.LuaUtils.Function_Continue);
+		set('Function_StopLua', scripting.lua.LuaUtils.Function_StopLua);
+		set('Function_StopHScript', scripting.lua.LuaUtils.Function_StopHScript);
+		set('Function_StopAll', scripting.lua.LuaUtils.Function_StopAll);
 	}
 
 	/**

@@ -1,11 +1,9 @@
 #if LUA_ALLOWED
-package psychlua;
+package scripting.lua;
 
 import hxluajit.Lua;
 import hxluajit.LuaL;
 import hxluajit.Types;
-import llua.Convert;
-import llua.Lua_helper;
 
 /**
  * C-callable dispatcher for every Lua-exposed Haxe function.

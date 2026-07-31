@@ -18,7 +18,7 @@ import sys.thread.Mutex;
 import objects.Note;
 import objects.NoteSplash;
 #if HSCRIPT_ALLOWED
-import psychlua.HScript;
+import scripting.hscript.HScript;
 #end
 
 #if cpp

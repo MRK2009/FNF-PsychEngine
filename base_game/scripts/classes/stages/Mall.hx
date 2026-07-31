@@ -1,5 +1,14 @@
 package stages;
 
+import backend.BaseStage;
+import backend.ClientPrefs;
+import backend.Paths;
+import flixel.FlxG;
+import flixel.FlxSprite;
+import flixel.util.FlxColor;
+import flixel.util.FlxTimer;
+import objects.BGSprite;
+import states.PlayState;
 import stages.objects.MallCrowd;
 
 /** Week 5, Cocoa and Eggnog. Ported from the compiled `states.stages.Mall`. **/
@@ -50,7 +59,7 @@ class Mall extends BaseStage {
 		addBehindBF(santa);
 	}
 
-	override function countdownTick(count:Dynamic, num:Int):Void {
+	override function countdownTick(count:Countdown, num:Int):Void {
 		everyoneDance();
 	}
 

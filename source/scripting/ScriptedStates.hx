@@ -9,8 +9,8 @@ import insanity.types.ScriptedClass;
 import insanity.types.IScriptedType;
 import backend.Mods;
 import backend.Mods.StateSourceMode;
-import psychlua.HScript;
-import psychlua.HScript.HScriptInfos;
+import scripting.hscript.HScript;
+import scripting.hscript.HScript.HScriptInfos;
 
 // Which folders a scripted state may be resolved from.
 enum ResolveScope {

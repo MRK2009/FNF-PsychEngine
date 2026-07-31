@@ -1,5 +1,6 @@
 package backend;
 
+import hxluajit.Types.Lua_State;
 #if DISCORD_ALLOWED
 import Sys.sleep;
 import sys.thread.Thread;
@@ -139,7 +140,7 @@ class DiscordClient {
 	#end
 
 	#if LUA_ALLOWED
-	public static function addLuaCallbacks(lua:State) {
+	public static function addLuaCallbacks(lua:cpp.RawPointer<Lua_State>) {
 		Lua_helper.add_callback(lua, "changeDiscordPresence", changePresence);
 		Lua_helper.add_callback(lua, "changeDiscordClientID", function(?newID:String) {
 			if (newID == null)

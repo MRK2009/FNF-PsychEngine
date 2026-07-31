@@ -1,5 +1,6 @@
-package psychlua;
+package scripting.lua;
 
+import hxluajit.Lua;
 import backend.WeekData;
 import objects.Character;
 import backend.StageData;

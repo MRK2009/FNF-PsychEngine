@@ -372,7 +372,7 @@ class BenchmarkRunner {
 					continue;
 				if (def.lua) {
 					#if LUA_ALLOWED
-					new psychlua.FunkinLua(path);
+					new scripting.lua.FunkinLua(path);
 					#end
 				} else {
 					#if HSCRIPT_ALLOWED

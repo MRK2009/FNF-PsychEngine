@@ -1,11 +1,12 @@
 package backend;
 
+import hxluajit.Types.Lua_State;
 #if ACHIEVEMENTS_ALLOWED
 import objects.AchievementPopup;
 import haxe.Exception;
 import haxe.Json;
 #if LUA_ALLOWED
-import psychlua.FunkinLua;
+import scripting.lua.FunkinLua;
 #end
 
 typedef Achievement = {
@@ -144,6 +145,13 @@ class Achievements {
 		trace('Completed achievement "$name"');
 		achievementsUnlocked.push(name);
 
+		// Scripts could TRIGGER an unlock (`unlockAchievement`) but never hear about one, including
+		// unlocks the engine awarded itself.
+		#if (LUA_ALLOWED || HSCRIPT_ALLOWED)
+		if (scripting.ScriptHost.current != null)
+			scripting.ScriptHost.current.call(scripting.ScriptHooks.ACHIEVEMENT_UNLOCKED, [name]);
+		#end
+
 		// earrape prevention
 		var time:Int = openfl.Lib.getTimer();
 		if (Math.abs(time - _lastUnlock) >= 100) // If last unlocked happened in less than 100 ms (0.1s) ago, then don't play sound
@@ -277,7 +285,7 @@ class Achievements {
 	#end
 
 	#if LUA_ALLOWED
-	public static function addLuaCallbacks(lua:State) {
+	public static function addLuaCallbacks(lua:cpp.RawPointer<Lua_State>) {
 		Lua_helper.add_callback(lua, "getAchievementScore", function(name:String):Float {
 			if (!achievements.exists(name)) {
 				FunkinLua.luaTrace('getAchievementScore: Couldnt find achievement: $name', false, false, FlxColor.RED);

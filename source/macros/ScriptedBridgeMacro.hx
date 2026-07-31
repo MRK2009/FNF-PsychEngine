@@ -53,7 +53,7 @@ class ScriptedBridgeMacro {
 		{base: 'objects.Alphabet'},
 		{base: 'objects.Bar'},
 		{base: 'objects.HealthIcon'},
-		{base: 'psychlua.ModchartSprite'},
+		{base: 'scripting.lua.ModchartSprite'},
 		// NOTE: openfl display objects (Sprite/Bitmap) are intentionally NOT bridged. Their deep
 		// DisplayObject method surface references openfl-internal types (a private `Listener`,
 		// `openfl.Vector`) that a generated override can't reproduce. They're still importable and

@@ -1,12 +1,18 @@
-package psychlua;
+package scripting.lua.api;
 
+import hxluajit.Types.Lua_State;
+import scripting.lua.FunkinLua;
+import scripting.lua.LuaUtils;
+import scripting.lua.ModchartSprite;
+import hxluajit.Lua;
+import scripting.lua.Lua_helper;
 //
 // This is simply where i store deprecated functions for it to be more organized.
 // I would suggest not messing with these, as it could break mods.
 //
 class DeprecatedFunctions {
 	public static function implement(funk:FunkinLua) {
-		var lua:State = funk.lua;
+		var lua:cpp.RawPointer<Lua_State> = funk.lua;
 		// DEPRECATED, DONT MESS WITH THESE SHITS, ITS JUST THERE FOR BACKWARD COMPATIBILITY
 		Lua_helper.add_callback(lua, "addAnimationByIndicesLoop", function(obj:String, name:String, prefix:String, indices:String, framerate:Int = 24) {
 			FunkinLua.luaTrace("addAnimationByIndicesLoop is deprecated! Use addAnimationByIndices instead", false, true);

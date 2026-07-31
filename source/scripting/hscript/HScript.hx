@@ -1,11 +1,12 @@
-package psychlua;
+package scripting.hscript;
 
+import scripting.lua.Lua_helper;
 import flixel.FlxBasic;
 import objects.Character;
-import psychlua.LuaUtils;
-import psychlua.CustomSubstate;
+import scripting.lua.LuaUtils;
+import scripting.lua.CustomSubstate;
 #if LUA_ALLOWED
-import psychlua.FunkinLua;
+import scripting.lua.FunkinLua;
 #end
 #if HSCRIPT_ALLOWED
 import insanity.Script;
@@ -260,6 +261,8 @@ class HScript {
 			// Executing is what DEFINES the hooks, and a re-run (runHaxeCode against a Lua parent's
 			// interpreter) can replace them wholesale, so nothing learned before it still holds.
 			hookCache.clear();
+			if (scripting.ScriptHost.current != null)
+				scripting.ScriptHost.current.invalidateSubscribers();
 		} catch (e:haxe.Exception) {
 			failed = true;
 			returnValue = null;
@@ -308,6 +311,8 @@ class HScript {
 		if (script != null)
 			script.variables.set(name, value);
 		hookCache.remove(name);
+		if (scripting.ScriptHost.current != null)
+			scripting.ScriptHost.current.invalidateSubscribers();
 	}
 
 	/**
@@ -317,8 +322,29 @@ class HScript {
 		one declared normally is already there the first time it is looked for. Mirrors
 		`FunkinLua.defineHook`.
 	**/
+	/**
+		Whether this script defines `hook`, without calling it. Feeds `ScriptHost`'s subscriber lists
+		and shares `hookCache` with the call path.
+	**/
+	public function definesHook(hook:String):Bool {
+		if (script == null)
+			return false;
+
+		var known:Null<Bool> = hookCache.get(hook);
+		if (known != null)
+			return known;
+
+		var value:Dynamic = script.variables.get(hook);
+		var defined:Bool = (value != null && Reflect.isFunction(value));
+
+		hookCache.set(hook, defined);
+		return defined;
+	}
+
 	public function defineHook(func:String):Void {
 		hookCache.remove(func);
+		if (scripting.ScriptHost.current != null)
+			scripting.ScriptHost.current.invalidateSubscribers();
 	}
 
 	public function get(name:String):Dynamic

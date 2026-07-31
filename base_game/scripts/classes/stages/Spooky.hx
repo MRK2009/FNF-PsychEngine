@@ -1,5 +1,18 @@
 package stages;
 
+import backend.BaseStage;
+import backend.ClientPrefs;
+import backend.Paths;
+import flixel.FlxG;
+import flixel.FlxSprite;
+import flixel.math.FlxPoint;
+import flixel.tweens.FlxEase;
+import flixel.tweens.FlxTween;
+import flixel.util.FlxColor;
+import objects.BGSprite;
+import openfl.display.BlendMode;
+import states.PlayState;
+
 /**
 	Week 2. Ported from the compiled `states.stages.Spooky`.
 

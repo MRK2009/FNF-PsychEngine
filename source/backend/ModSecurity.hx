@@ -123,6 +123,14 @@ class ModSecurity {
 		"backend.ModSecurity" => true,
 		"ModSecuritySubstate" => true,
 		"substates.ModSecuritySubstate" => true,
+		// The Lua bridge's own machinery. These used to sit in `llua`, which was blocked wholesale by
+		// package; they now live beside the rest of the Lua backend in `scripting.lua`, which mods DO
+		// reach, so they are named here instead. `Lua_helper.callbacks` is the callback table itself --
+		// a mod that could write to it could replace any engine callback for every script at once.
+		"Lua_helper" => true,
+		"scripting.lua.Lua_helper" => true,
+		"scripting.lua.CallbackHandler" => true,
+		"scripting.lua.Convert" => true,
 		// Performance overlay + its native hardware helpers. Mods have no business
 		// reflecting into these (e.g. swapping the counter out, reading raw native
 		// memory/CPU/GPU handles). The bare hxhardware names (CPU/GPU/Memory) are
@@ -155,7 +163,7 @@ class ModSecurity {
 	 * `BLOCKED_CLASSES` names individual engine classes; this covers the ones where the danger is
 	 * the package rather than any one type: the process and filesystem (`sys`), native handles
 	 * (`cpp`, `neko`, `java`), and the raw Lua state sitting behind the script's own interpreter
-	 * (`llua`). Naming them here means a new class under any of them is not reachable by default,
+	 * (`hxluajit`). Naming them here means a new class under any of them is not reachable
 	 * without having to enumerate engine classes a mod is expected to use.
 	 *
 	 * `insanity` is deliberately NOT here. It is the interpreter itself: `Std`, `Type` and
@@ -163,7 +171,7 @@ class ModSecurity {
 	 * `insanity.types.*`, so blocking the package breaks the machinery scripts are written
 	 * against. `insanity.Config`, which holds the type blacklist, is blocked by name instead.
 	 */
-	public static final BLOCKED_PACKAGES:Array<String> = ["sys.", "cpp.", "neko.", "java.", "llua."];
+	public static final BLOCKED_PACKAGES:Array<String> = ["sys.", "cpp.", "neko.", "java.", "hxluajit."];
 
 	/**
 	 * Reflection-safe replacement for `Type.resolveClass`. Use this from EVERY mod-script entry

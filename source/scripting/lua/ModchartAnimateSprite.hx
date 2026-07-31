@@ -1,6 +1,7 @@
-package psychlua;
+package scripting.lua;
 
-class ModchartSprite extends FlxSprite {
+#if flixel_animate
+class ModchartAnimateSprite extends FlxAnimate {
 	public var animOffsets:Map<String, Array<Float>> = new Map<String, Array<Float>>();
 
 	public function new(?x:Float = 0, ?y:Float = 0) {
@@ -9,7 +10,7 @@ class ModchartSprite extends FlxSprite {
 	}
 
 	public function playAnim(name:String, forced:Bool = false, ?reverse:Bool = false, ?startFrame:Int = 0) {
-		animation.play(name, forced, reverse, startFrame);
+		anim.play(name, forced, reverse, startFrame);
 
 		var daOffset = animOffsets.get(name);
 		if (animOffsets.exists(name))
@@ -20,3 +21,4 @@ class ModchartSprite extends FlxSprite {
 		animOffsets.set(name, [x, y]);
 	}
 }
+#end

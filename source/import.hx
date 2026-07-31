@@ -5,8 +5,10 @@ import backend.Discord;
 #end
 // Psych
 #if LUA_ALLOWED
-import llua.*;
-import llua.Lua;
+import hxluajit.Lua;
+import hxluajit.LuaL;
+import hxluajit.Types.Lua_State;
+import scripting.lua.*;
 #end
 #if ACHIEVEMENTS_ALLOWED
 import backend.Achievements;

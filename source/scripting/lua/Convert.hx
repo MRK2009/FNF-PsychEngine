@@ -1,5 +1,7 @@
-package llua;
+package scripting.lua;
 
+import hxluajit.Types.Lua_State;
+import scripting.hscript.HScript;
 import haxe.DynamicAccess;
 import hxluajit.Lua;
 import hxluajit.wrapper.LuaConverter;
@@ -32,7 +34,7 @@ import hxluajit.wrapper.LuaFunction;
 //    special-case to nil, so an `Array<NoteData>` reached Lua as a table of nils.
 class Convert {
 	/**
-	 * Proxy-userdata unwrap, installed by `psychlua.LuaProxy`. `convertTable` runs every
+	 * Proxy-userdata unwrap, installed by `scripting.lua.LuaProxy`. `convertTable` runs every
 	 * element through `fromLua`; when an element is an object proxy this returns the live
 	 * Haxe object it wraps, so `{proxyA, proxyB}` becomes a real `Array` of those objects.
 	 * Defaults to `rawUserdata` (plain `LuaConverter` marshalling) when no proxy bridge
@@ -43,13 +45,13 @@ class Convert {
 	 * function here makes it emit a `_dyn()` wrapper it never declares ("no member named
 	 * 'unwrapUserdata_dyn'" at C++ compile time, invisible to `haxe --no-output`).
 	 */
-	public static var userdataToHaxe:cpp.Callable<(L:State, idx:Int) -> Dynamic> = cpp.Callable.fromStaticFunction(rawUserdata);
+	public static var userdataToHaxe:cpp.Callable<(L:cpp.RawPointer<Lua_State>, idx:Int) -> Dynamic> = cpp.Callable.fromStaticFunction(rawUserdata);
 
-	static function rawUserdata(L:State, idx:Int):Dynamic
+	static function rawUserdata(L:cpp.RawPointer<Lua_State>, idx:Int):Dynamic
 		return LuaConverter.fromLua(L, idx);
 
 	/**
-	 * Container-ELEMENT push, installed by `psychlua.LuaProxy`. The container cases below run
+	 * Container-ELEMENT push, installed by `scripting.lua.LuaProxy`. The container cases below run
 	 * every element through this, so an `Array<NoteData>` becomes a real Lua table holding live
 	 * object proxies rather than the nils `LuaConverter` produces for any class it does not
 	 * special-case (its `toLua` has no proxy bridge and falls through to `pushnil`).
@@ -60,13 +62,13 @@ class Convert {
 	 * Defaults to plain `LuaConverter` marshalling when no proxy bridge is active. A
 	 * `cpp.Callable`, not a Haxe closure, for the same reason as `userdataToHaxe`.
 	 */
-	public static var haxeToLua:cpp.Callable<(L:State, v:Dynamic) -> Void> = cpp.Callable.fromStaticFunction(rawToLua);
+	public static var haxeToLua:cpp.Callable<(L:cpp.RawPointer<Lua_State>, v:Dynamic) -> Void> = cpp.Callable.fromStaticFunction(rawToLua);
 
-	static function rawToLua(L:State, v:Dynamic):Void
+	static function rawToLua(L:cpp.RawPointer<Lua_State>, v:Dynamic):Void
 		LuaConverter.toLua(L, v);
 
 	/**
-	 * The proxy state id owning `L`, installed by `psychlua.LuaProxy`. A wrapped Lua callback captures
+	 * The proxy state id owning `L`, installed by `scripting.lua.LuaProxy`. A wrapped Lua callback captures
 	 * this at CONVERT time (while the state is alive) so it can later check the state is still open
 	 * before dereferencing it -- see the TFUNCTION branch below. `0` means no proxy bridge is active,
 	 * which disables the check (the callback behaves exactly as before).
@@ -74,13 +76,13 @@ class Convert {
 	 * A `cpp.Callable`, not a Haxe closure, for the same reason as `userdataToHaxe`: `State` is a
 	 * `cpp.RawPointer` and can't be boxed into `Dynamic`.
 	 */
-	public static var stateIdOf:cpp.Callable<(L:State) -> Int> = cpp.Callable.fromStaticFunction(noStateId);
+	public static var stateIdOf:cpp.Callable<(L:cpp.RawPointer<Lua_State>) -> Int> = cpp.Callable.fromStaticFunction(noStateId);
 
-	static function noStateId(L:State):Int
+	static function noStateId(L:cpp.RawPointer<Lua_State>):Int
 		return 0;
 
 	/**
-	 * Whether a proxy state is still open, installed by `psychlua.LuaProxy` (a plain `Int` closure, so
+	 * Whether a proxy state is still open, installed by `scripting.lua.LuaProxy` (a plain `Int` closure, so
 	 * it needs no `cpp.Callable`). A wrapped Lua callback consults this before touching its state; once
 	 * the script's Lua state is closed this returns false and the callback no-ops instead of calling
 	 * `lua_rawgeti` on freed memory (a native crash when a surviving `FlxTimer`/`FlxTween` fires after
@@ -109,7 +111,7 @@ class Convert {
 	 * `ValueType`, and its `TClass(c)` carries a parameter, so classifying a value allocated an
 	 * enum instance just to be switched on. Each test below is a single type check.
 	 */
-	public static function toLua(L:State, val:Dynamic):Void {
+	public static function toLua(L:cpp.RawPointer<Lua_State>, val:Dynamic):Void {
 		if (val != null) {
 			if ((val is Array)) {
 				pushArray(L, val);
@@ -134,7 +136,7 @@ class Convert {
 		LuaConverter.toLua(L, val);
 	}
 
-	static function pushArray(L:State, arr:Array<Dynamic>):Void {
+	static function pushArray(L:cpp.RawPointer<Lua_State>, arr:Array<Dynamic>):Void {
 		if (pushDepth >= MAX_TABLE_DEPTH) {
 			Lua.pushnil(L);
 			return;
@@ -156,7 +158,7 @@ class Convert {
 		pushDepth--;
 	}
 
-	static function pushMap(L:State, map:haxe.Constraints.IMap<Dynamic, Dynamic>):Void {
+	static function pushMap(L:cpp.RawPointer<Lua_State>, map:haxe.Constraints.IMap<Dynamic, Dynamic>):Void {
 		if (pushDepth >= MAX_TABLE_DEPTH) {
 			Lua.pushnil(L);
 			return;
@@ -177,7 +179,7 @@ class Convert {
 		pushDepth--;
 	}
 
-	static function pushAnon(L:State, v:Dynamic):Void {
+	static function pushAnon(L:cpp.RawPointer<Lua_State>, v:Dynamic):Void {
 		if (pushDepth >= MAX_TABLE_DEPTH) {
 			Lua.pushnil(L);
 			return;
@@ -204,7 +206,7 @@ class Convert {
 	 * every key with `lua_pushstring` after casting the map to `Map<String, Dynamic>`, so an
 	 * `IntMap` produced garbage keys.
 	 */
-	static inline function pushKey(L:State, key:Dynamic):Void {
+	static inline function pushKey(L:cpp.RawPointer<Lua_State>, key:Dynamic):Void {
 		if ((key is Int))
 			Lua.pushinteger(L, (key : Int));
 		else if ((key is Float))
@@ -213,7 +215,7 @@ class Convert {
 			Lua.pushstring(L, Std.string(key));
 	}
 
-	public static function fromLua(L:State, idx:Int):Dynamic {
+	public static function fromLua(L:cpp.RawPointer<Lua_State>, idx:Int):Dynamic {
 		return switch (Lua.type(L, idx)) {
 			case t if (t == Lua.TFUNCTION):
 				// Duplicate so the haxelib's luaL_ref pops the COPY, leaving the
@@ -242,7 +244,7 @@ class Convert {
 	// String-keyed (or sparse/negative-indexed) tables -> anonymous DynamicAccess;
 	// 1..n integer-keyed tables -> Array. Mirrors hxluajit's convertTable but routes
 	// value conversion through our fromLua so callbacks survive.
-	static function convertTable(L:State, idx:Int):Dynamic {
+	static function convertTable(L:cpp.RawPointer<Lua_State>, idx:Int):Dynamic {
 		// A table that contains itself (`t.self = t`) would recurse forever; bail past the depth cap.
 		if (tableDepth >= MAX_TABLE_DEPTH)
 			return {};
@@ -260,7 +262,7 @@ class Convert {
 		return result;
 	}
 
-	static function convertTableInner(L:State, idx:Int):Dynamic {
+	static function convertTableInner(L:cpp.RawPointer<Lua_State>, idx:Int):Dynamic {
 		var isArray:Bool = true;
 		var count:Int = 0;
 		iterate(L, idx, function():Void {
@@ -293,7 +295,7 @@ class Convert {
 
 	// Walk a table leaving [key, value] on the stack for `fn`, popping the value
 	// after each step (the key stays for the next lua_next).
-	static function iterate(L:State, idx:Int, fn:Void->Void):Void {
+	static function iterate(L:cpp.RawPointer<Lua_State>, idx:Int, fn:Void->Void):Void {
 		Lua.pushnil(L);
 		while (Lua.next(L, idx < 0 ? idx - 1 : idx) != 0) {
 			fn();

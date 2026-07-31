@@ -1,5 +1,10 @@
 package stages.objects;
 
+import backend.CoolUtil;
+import backend.Paths;
+import flixel.FlxSprite;
+import states.PlayState;
+
 /** The school's bopping fangirls, pissed or not. Ported from the compiled version. **/
 class BackgroundGirls extends FlxSprite {
 	var isPissed:Bool = true;

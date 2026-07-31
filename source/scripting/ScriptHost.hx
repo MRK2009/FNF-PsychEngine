@@ -4,12 +4,12 @@ package scripting;
 import backend.Mods;
 import backend.Paths;
 import flixel.FlxG;
-import psychlua.LuaUtils;
+import scripting.lua.LuaUtils;
 #if LUA_ALLOWED
-import psychlua.FunkinLua;
+import scripting.lua.FunkinLua;
 #end
 #if HSCRIPT_ALLOWED
-import psychlua.HScript;
+import scripting.hscript.HScript;
 #end
 #if sys
 import sys.FileSystem;
@@ -283,6 +283,74 @@ class ScriptHost {
 		return luaValue;
 	}
 
+	/**
+		Per-hook subscriber lists: which loaded scripts actually implement a given hook.
+
+		Dispatch used to walk EVERY script for EVERY hook. Each miss was cheap -- both backends cache
+		"does this script define it" -- but the cost still scaled with how many scripts were loaded
+		rather than with how many care, and `onUpdate`/`onUpdatePost` pay it 60 times a second.
+
+		Built on first dispatch of a hook rather than at load, which keeps script order (the lists are
+		filled by walking the arrays) and costs nothing for hooks a song never fires. Dropped whenever
+		the script set changes, and by `defineHook` when a script grows one at runtime.
+	**/
+	var luaSubs:Map<String, Array<FunkinLua>> = new Map();
+
+	var hscriptSubs:Map<String, Array<HScript>> = new Map();
+
+	/** Script counts the cached lists were built against; a mismatch means they are stale. **/
+	var subsLuaCount:Int = -1;
+
+	var subsHScriptCount:Int = -1;
+
+	/** Drops every cached list. Call whenever the set of loaded scripts, or what they define, changes. **/
+	public function invalidateSubscribers():Void {
+		luaSubs.clear();
+		hscriptSubs.clear();
+		subsLuaCount = -1;
+		subsHScriptCount = -1;
+	}
+
+	#if LUA_ALLOWED
+	function luaSubscribers(hook:String):Array<FunkinLua> {
+		if (subsLuaCount != luaArray.length) {
+			luaSubs.clear();
+			subsLuaCount = luaArray.length;
+		}
+
+		var found:Array<FunkinLua> = luaSubs.get(hook);
+		if (found != null)
+			return found;
+
+		found = [];
+		for (script in luaArray)
+			if (script != null && (script.closed || script.definesHook(hook)))
+				found.push(script); // closed scripts stay in, so the dispatch loop still reaps them
+		luaSubs.set(hook, found);
+		return found;
+	}
+	#end
+
+	#if HSCRIPT_ALLOWED
+	function hscriptSubscribers(hook:String):Array<HScript> {
+		if (subsHScriptCount != hscriptArray.length) {
+			hscriptSubs.clear();
+			subsHScriptCount = hscriptArray.length;
+		}
+
+		var found:Array<HScript> = hscriptSubs.get(hook);
+		if (found != null)
+			return found;
+
+		found = [];
+		for (script in hscriptArray)
+			if (script != null && script.definesHook(hook))
+				found.push(script);
+		hscriptSubs.set(hook, found);
+		return found;
+	}
+	#end
+
 	public function callLua(funcToCall:String, args:Array<Dynamic> = null, ignoreStops:Bool = false, exclusions:Array<String> = null,
 			excludeValues:Array<Dynamic> = null):Dynamic {
 		var returnVal:Dynamic = LuaUtils.Function_Continue;
@@ -293,7 +361,7 @@ class ScriptHost {
 			excludeValues = DEFAULT_EXCLUDE_VALUES;
 
 		var arr:Array<FunkinLua> = null;
-		for (script in luaArray) {
+		for (script in luaSubscribers(funcToCall)) {
 			if (script.closed) {
 				if (arr == null)
 					arr = [];
@@ -321,9 +389,11 @@ class ScriptHost {
 				break;
 		}
 
-		if (arr != null)
+		if (arr != null) {
 			for (script in arr)
 				luaArray.remove(script);
+			invalidateSubscribers();
+		}
 		#end
 		return returnVal;
 	}
@@ -341,7 +411,7 @@ class ScriptHost {
 		if (hscriptArray.length < 1)
 			return returnVal;
 
-		for (script in hscriptArray) {
+		for (script in hscriptSubscribers(funcToCall)) {
 			if (script == null || (exclusions.length > 0 && exclusions.contains(script.origin)))
 				continue;
 

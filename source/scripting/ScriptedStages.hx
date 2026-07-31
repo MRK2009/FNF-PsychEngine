@@ -5,8 +5,8 @@ import backend.BaseStage;
 import backend.Mods;
 import insanity.types.IScriptedType;
 import insanity.types.ScriptedClass;
-import psychlua.HScript;
-import psychlua.HScript.HScriptInfos;
+import scripting.hscript.HScript;
+import scripting.hscript.HScript.HScriptInfos;
 import scripting.ScriptedStates.ResolveScope;
 #end
 

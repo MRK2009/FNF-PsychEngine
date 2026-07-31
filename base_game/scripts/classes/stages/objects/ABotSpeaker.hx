@@ -1,5 +1,13 @@
 package stages.objects;
 
+import backend.ClientPrefs;
+import backend.Paths;
+import flixel.FlxSprite;
+import flixel.group.FlxSpriteGroup;
+import flixel.math.FlxMath;
+import flixel.sound.FlxSound;
+import flixel.util.FlxColor;
+import lime.system.System;
 import backend.PsychFlxAnimate;
 import objects.ABotSpectrum;
 

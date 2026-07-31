@@ -1,5 +1,22 @@
 package stages;
 
+import backend.BaseStage;
+import backend.ClientPrefs;
+import backend.Conductor;
+import backend.Paths;
+import flixel.FlxG;
+import flixel.FlxSprite;
+import flixel.addons.transition.FlxTransitionableState;
+import flixel.group.FlxSpriteGroup;
+import flixel.math.FlxMath;
+import flixel.sound.FlxSound;
+import flixel.tweens.FlxEase;
+import flixel.tweens.FlxTween;
+import flixel.util.FlxColor;
+import flixel.util.FlxTimer;
+import objects.BGSprite;
+import openfl.display.BlendMode;
+import states.PlayState;
 import flixel.addons.display.FlxTiledSprite;
 // Imported as the MODULE, which brings every type declared in it (`FlxBasePoint`, used below) in as a
 // bare name. Neither `flixel.math.FlxBasePoint` nor `flixel.math.FlxPoint.FlxBasePoint` resolves: the

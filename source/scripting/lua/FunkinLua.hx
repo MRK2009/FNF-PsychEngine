@@ -1,6 +1,15 @@
 #if LUA_ALLOWED
-package psychlua;
+package scripting.lua;
 
+import hxluajit.Types.Lua_State;
+import scripting.lua.api.DeprecatedFunctions;
+import scripting.lua.api.ExtraFunctions;
+import scripting.lua.api.FlxAnimateFunctions;
+import scripting.lua.api.ReflectionFunctions;
+import scripting.lua.api.ShaderFunctions;
+import scripting.lua.api.TextFunctions;
+import hxluajit.LuaL;
+import hxluajit.Lua;
 import backend.WeekData;
 import backend.Highscore;
 import backend.Song;
@@ -24,19 +33,19 @@ import states.StoryMenuState;
 import states.FreeplayState;
 import substates.PauseSubState;
 import substates.GameOverSubstate;
-import psychlua.LuaUtils;
-import psychlua.LuaUtils.LuaTweenOptions;
+import scripting.lua.LuaUtils;
+import scripting.lua.LuaUtils.LuaTweenOptions;
 #if HSCRIPT_ALLOWED
-import psychlua.HScript;
+import scripting.hscript.HScript;
 #end
-import psychlua.DebugLuaText;
-import psychlua.ModchartSprite;
+import scripting.lua.DebugLuaText;
+import scripting.lua.ModchartSprite;
 import flixel.input.keyboard.FlxKey;
 import flixel.input.gamepad.FlxGamepadInputID;
 import haxe.Json;
 
 class FunkinLua {
-	public var lua:State = null;
+	public var lua:cpp.RawPointer<Lua_State> = null;
 	public var camTarget:FlxCamera;
 	public var scriptName:String = '';
 	public var modFolder:String = null;
@@ -722,7 +731,7 @@ class FunkinLua {
 						onComplete: function(twn:FlxTween) {
 							variables.remove(tag);
 							if (game != null)
-								game.callOnLuas('onTweenCompleted', [originalTag, vars]);
+								game.callOnLuas(scripting.ScriptHooks.TWEEN_COMPLETED, [originalTag, vars]);
 						}
 					}));
 					return tag;
@@ -875,7 +884,7 @@ class FunkinLua {
 			variables.set(tag, new FlxTimer().start(time, function(tmr:FlxTimer) {
 				if (tmr.finished)
 					variables.remove(tag);
-				game.callOnLuas('onTimerCompleted', [originalTag, tmr.loops, tmr.loopsLeft]);
+				game.callOnLuas(scripting.ScriptHooks.TIMER_COMPLETED, [originalTag, tmr.loops, tmr.loopsLeft]);
 				// trace('Timer Completed: ' + tag);
 			}, loops));
 			return tag;
@@ -1470,7 +1479,7 @@ class FunkinLua {
 					if (!loop)
 						variables.remove(tag);
 					if (game != null)
-						game.callOnLuas('onSoundFinished', [originalTag]);
+						game.callOnLuas(scripting.ScriptHooks.SOUND_FINISHED, [originalTag]);
 				}));
 				return tag;
 			}
@@ -1724,6 +1733,30 @@ class FunkinLua {
 	**/
 	public function defineHook(func:String):Void {
 		hookCache.remove(func);
+		if (scripting.ScriptHost.current != null)
+			scripting.ScriptHost.current.invalidateSubscribers();
+	}
+
+	/**
+		Whether this script defines `hook`, without calling it.
+
+		Feeds `ScriptHost`'s per-hook subscriber lists. Shares `hookCache` with `call`, so the answer
+		is resolved from Lua once and then reused by both.
+	**/
+	public function definesHook(hook:String):Bool {
+		if (closed || lua == null)
+			return false;
+
+		var known:Null<Bool> = hookCache.get(hook);
+		if (known != null)
+			return known;
+
+		Lua.getglobal(lua, hook);
+		var defined:Bool = Lua.type(lua, -1) == Lua.TFUNCTION;
+		Lua.pop(lua, 1);
+
+		hookCache.set(hook, defined);
+		return defined;
 	}
 
 	public function call(func:String, ?args:Array<Dynamic>):Dynamic {
@@ -1793,6 +1826,8 @@ class FunkinLua {
 		}
 
 		hookCache.remove(variable);
+		if (scripting.ScriptHost.current != null)
+			scripting.ScriptHost.current.invalidateSubscribers();
 
 		// Push Haxe objects as live proxies (game, characters, ...) instead of nil.
 		LuaProxy.pushHaxe(lua, data);
@@ -1917,7 +1952,7 @@ class FunkinLua {
 					onComplete: function(twn:FlxTween) {
 						variables.remove(tag);
 						if (PlayState.instance != null)
-							PlayState.instance.callOnLuas('onTweenCompleted', [originalTag, vars]);
+							PlayState.instance.callOnLuas(scripting.ScriptHooks.TWEEN_COMPLETED, [originalTag, vars]);
 					}
 				}));
 			} else
@@ -1951,7 +1986,7 @@ class FunkinLua {
 				onComplete: function(twn:FlxTween) {
 					variables.remove(tag);
 					if (PlayState.instance != null)
-						PlayState.instance.callOnLuas('onTweenCompleted', [originalTag]);
+						PlayState.instance.callOnLuas(scripting.ScriptHooks.TWEEN_COMPLETED, [originalTag]);
 				}
 			}));
 			return tag;
@@ -1983,7 +2018,7 @@ class FunkinLua {
 		if (lastCalledScript == null)
 			return false;
 
-		var lua:State = lastCalledScript.lua;
+		var lua:cpp.RawPointer<Lua_State> = lastCalledScript.lua;
 		if (lua == null)
 			return false;
 

@@ -19,7 +19,6 @@ import smidr.UIFonts;
 import smidr.UILocale;
 import smidr.UIComponent;
 import smidr.UIColor;
-import smidr.UIFonts;
 import smidr.input.UIFocus;
 import smidr.input.IUIFocusable;
 import smidr.widgets.UIPanel;

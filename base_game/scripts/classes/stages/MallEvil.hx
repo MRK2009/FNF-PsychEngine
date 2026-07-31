@@ -1,5 +1,16 @@
 package stages;
 
+import backend.BaseStage;
+import backend.Paths;
+import flixel.FlxG;
+import flixel.FlxSprite;
+import flixel.math.FlxPoint;
+import flixel.tweens.FlxEase;
+import flixel.tweens.FlxTween;
+import flixel.util.FlxColor;
+import flixel.util.FlxTimer;
+import objects.BGSprite;
+
 /** Week 5, Winter Horrorland. Ported from the compiled `states.stages.MallEvil`. **/
 class MallEvil extends BaseStage {
 	override function create():Void {

@@ -1,5 +1,11 @@
 package stages.objects;
 
+import backend.ClientPrefs;
+import backend.Conductor;
+import backend.Paths;
+import flixel.FlxG;
+import flixel.FlxSprite;
+
 /**
 	A henchman running across the field to be shot. Ported from the compiled version.
 
