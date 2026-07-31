@@ -104,7 +104,8 @@ and can be used as real field types (not `Dynamic`):
 
 Anything else still needs an `import` (see the import notes below).
 
-A full example lives in [docs/scripts/TemplateScriptedState.hx](scripts/TemplateScriptedState.hx).
+A full example lives in
+[docs/scripts/TemplateScriptedFreeplayState.hx](scripts/TemplateScriptedFreeplayState.hx).
 
 > **Gotcha — bare enum values don't resolve.** hscript has no type inference, so
 > a bare enum value like `CENTER` or `LEFT` (which compiled Haxe infers from the
@@ -250,7 +251,8 @@ The interpreter changed, so a few behaviours differ:
 - insanity adds Haxe features Iris lacked: map literals, string interpolation,
   full pattern matching, regex literals, null-coalescing (`??`, `??=`),
   abstracts (incl. `FlxColor`). These are supersets — existing scripts are
-  unaffected.
+  unaffected. For which abstracts are available and how to write them, see
+  [scripted-classes.md](scripted-classes.md#enum-abstracts).
 
 ## Security
 

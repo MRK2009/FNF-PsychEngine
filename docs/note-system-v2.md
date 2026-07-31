@@ -70,10 +70,12 @@ whole rather than head-only.
 
 **Known limitations (alias-impossible — handled by the Script Converter):** script *writes* to an
 adapter's visual props (`note.x`/`alpha`/strum position) do not reflect back onto the v2 drawables.
-The
-**`legacy.ScriptConverter`** is a non-destructive scanner that flags these patterns (and pre-v2 field
-names like `.strumTime`→`.time`) and writes annotated `*.converted.<ext>` copies + a `compat-report.txt`
-— it never edits originals. Wire `ScriptConverter.convertFolder(dir)` to a debug-menu entry to run it.
+The **Script Converter** (Converters menu; engine in `backend.tools.scriptconvert`, with
+`legacy.ScriptConverter` kept as a thin façade) flags these patterns and rewrites the mechanical ones
+into annotated `*.converted.<ext>` copies plus a `script-convert-report.txt` — it never edits
+originals. Its **Convert** dropdown chooses how far it goes: renames and moved type paths by default,
+or those plus structural rewrites such as `.isSustainNote` → `.isSustain()`. See
+[the migration guide](NOTE_SYSTEM_V2_MIGRATION.md#the-script-converter-two-modes).
 
 ## Known gaps (v2)
 

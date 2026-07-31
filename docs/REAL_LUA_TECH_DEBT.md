@@ -22,7 +22,7 @@ would have its key popped out from under `lua_next` and the table got silently
 **truncated**, dropping the callbacks.
 
 We fixed this for the paths the engine actually drives — **argument / options-table
-conversion** — in [`source/llua/Convert.hx`](../source/llua/Convert.hx) (duplicate the
+conversion** — in [`source/scripting/lua/Convert.hx`](../source/scripting/lua/Convert.hx) (duplicate the
 value with `Lua.pushvalue` before the haxelib's `ref` pops it; reimplement `TTABLE`
 iteration so it recurses through the corrected `fromLua`).
 
@@ -45,7 +45,7 @@ reading through our shim. Right now the logic is **duplicated** between the haxe
 
 ## 2. **[maintainability]** `Convert.hx` duplicates haxelib table-conversion logic
 
-`source/llua/Convert.hx` now reimplements `convertTable` / table iteration **and** the
+`source/scripting/lua/Convert.hx` now reimplements `convertTable` / table iteration **and** the
 Haxe→Lua container pushes (array / map / anonymous structure) that also exist in
 `hxluajit-wrapper`. They can drift. A cleaner setup: a single source of truth (proper
 vendored fork of the wrapper, or move *all* conversion into the project and stop

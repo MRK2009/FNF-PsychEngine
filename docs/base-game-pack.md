@@ -85,7 +85,8 @@ compiled stage and a scripted one:
   `new BGSprite('bg', x, y, 1, 1, ['anim'])`. Same for `scrollFactor.set()`, which needs `set(0, 0)`.
 - **Enum abstracts are not inferred from the field.** Write `blend = BlendMode.ADD`, never a bare
   `ADD`. Reaching the abstract at all needs a generated wrapper, which
-  `macros.ScriptedAbstractMacro` now produces for every abstract in the engine, Flixel and SmidrUI.
+  `macros.ScriptedAbstractMacro` produces for every abstract in the engine, Flixel and SmidrUI --
+  see [scripted-classes.md](scripted-classes.md#enum-abstracts) for the rules and how to list them.
 - **An array of abstracts does not unwrap at a native call.** A single wrapper unwraps when passed as
   an argument, but `Array<FlxPoint>` stays an array of wrappers, so `FlxTween.quadPath` receives the
   wrong thing. Annotate each point as `FlxBasePoint` (`FlxPoint` converts `to` it) and the array holds
@@ -133,7 +134,7 @@ play. A mod that leaned on base-game art it does not ship -- week 2-7 background
 `tankman`, the base charts -- has to bundle its own copy. The retained baseline above is deliberately
 the set most mods actually depend on.
 
-Compiled classes that only the pack's scripts use are kept alive by `psychlua.LuaProxy._importAnchors`
+Compiled classes that only the pack's scripts use are kept alive by `scripting.lua.LuaProxy._importAnchors`
 (`CutsceneHandler`, `PsychFlxAnimate`, `RainShader`, `ABotSpectrum`). Anything else a script imports
 by name and nothing compiled references will be dropped by DCE and resolve to nothing, so add it
 there.

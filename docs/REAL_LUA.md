@@ -26,7 +26,7 @@ lifecycle hooks) lives at [docs/scripts/ExampleStage.lua](scripts/ExampleStage.l
 ## How it works
 
 Haxe objects are pushed into Lua as **userdata with a shared metatable**
-(`source/psychlua/LuaProxy.hx`). `__index`/`__newindex` reflect onto the real object,
+(`source/scripting/lua/LuaProxy.hx`). `__index`/`__newindex` reflect onto the real object,
 methods become bound closures, and `import('pkg.Class')` returns a class proxy (static
 fields + `new`). Arrays index 0-based (like Haxe/HScript). This bridge is active in **both**
 modes, so even classic scripts can use `game.boyfriend.x`.

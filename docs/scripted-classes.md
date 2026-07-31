@@ -86,7 +86,7 @@ straight through.
 > so they are not extendable. Script the strumline, the splash, the stage, or `PlayState`
 > around them instead.
 
-### Enums
+### Enums you declare
 
 Full enums, including constructors with parameters, and `switch` pattern matching with
 captures, guards, and `|` alternatives:
@@ -112,6 +112,93 @@ function scoreOf(j:Judgement):Int {
     }
 }
 ```
+
+### Engine enums
+
+An engine or library `enum` needs nothing special. Constructors work qualified or bare, `switch`
+matches with captures and guards, constructors with parameters work, and `==` and
+`Type.enumConstructor` behave:
+
+```haxe
+override function countdownTick(count:Countdown, num:Int):Void {
+    switch (count) {
+        case THREE: bump();
+        case GO:    flash();
+        default:
+    }
+}
+```
+
+An enum declared beside a class in the same module -- `Countdown` in `BaseStage.hx`,
+`FlxTextBorderStyle` in `FlxText.hx` -- resolves without importing anything extra. Write the type on
+your parameters and locals; there is no reason to fall back to `Dynamic`.
+
+The one real limit is the same one classes have: the type must be **compiled into the build**. A type
+nothing in the engine references is never generated, so a script naming it finds nothing. Everything
+in a public engine signature is safe by definition; for anything else, `scripting.lua.LuaProxy._importAnchors`
+is the existing way to force a type in.
+
+### Enum abstracts
+
+Abstracts are the case that needs help, because an abstract is erased at runtime and has no type to
+resolve. `macros.ScriptedAbstractMacro` generates a wrapper for each one at build time, which is what
+makes `FlxColor`, `FlxAxes`, `FlxTextAlign`, `BlendMode`, `FlxKey` and SmidrUI's `UIAlign` usable at
+all. Two rules follow from that.
+
+**Qualify the constructor.** Unlike an enum, a bare `ADD` does not resolve -- there is no enum to take
+constructors from, only a wrapper class of statics. Always write the type:
+
+```haxe
+sprite.blend = BlendMode.ADD;              // not: blend = ADD
+box.screenCenter(FlxAxes.X);               // not: screenCenter(X)
+text.alignment = FlxTextAlign.RIGHT;       // not: alignment = RIGHT
+```
+
+**Get it in scope.** A handful arrive already imported because they are in
+`ScriptGlobals.TYPE_IMPORTS` (`FlxColor` is the one you will meet most). Every other abstract
+needs an ordinary import:
+
+```haxe
+import flixel.util.FlxAxes;
+import flixel.text.FlxText;   // module import: also brings FlxTextBorderStyle, FlxTextAlign
+```
+
+Import the **module**, not the type, when you want a sibling declared in the same file --
+`FlxTextBorderStyle` lives in `FlxText.hx`, so `import flixel.text.FlxText;` is what reaches it. A
+global import registers only the one type it names, which is why `FlxColor` being global does not
+bring the rest of `flixel.util` with it.
+
+**Annotate with the abstract, not with what it wraps.** In typed mode a wrapper does not satisfy a
+declared underlying type, so a local or a return typed `Int` and assigned an `FlxAxes` fails with
+"should be Int". Write the abstract's own name, or leave the local unannotated:
+
+```haxe
+var a = FlxAxes.XY;          // fine
+var b:Int = FlxAxes.XY;      // fails: the wrapper is not an Int
+```
+
+One thing that does not work: an **array** of abstracts does not unwrap when passed to a native
+function. A single value does, but `Array<FlxPoint>` stays an array of wrapper objects, so
+`FlxTween.quadPath` receives the wrong thing. Annotate the elements with the type the abstract
+converts `to` (`FlxBasePoint` for `FlxPoint`) and the array holds raw values.
+
+#### Which abstracts exist
+
+`macros.ScriptedAbstractMacro` scans `flixel`, `smidr` and the engine's own packages at build time
+and wraps everything it finds, so the set follows the libraries rather than a hand-kept list -- 96 of
+them at the time of writing. It prints the count on every build; to print the names:
+
+```
+haxe export/release/windows/haxe/release.hxml -D scripted_abstracts_list --no-output
+```
+
+Most of what that lists is incidental (gamepad ID tables, bitmap-font internals, debugger types). The
+ones scripts actually reach for are `FlxColor`, `FlxAxes`, `FlxTextAlign`, `FlxTweenType`, `FlxKey`,
+`BlendMode`, `FlxDirection`/`FlxDirectionFlags`, and SmidrUI's `types.UI*` set for scripted menus.
+
+Two shapes are skipped and cannot be reached: an `enum abstract` whose constructors have no values
+(the generator cannot build one), and anything named in the macro's `EXCLUDE`. If an abstract you
+expect is missing from the list, that is why.
 
 ### Interfaces
 

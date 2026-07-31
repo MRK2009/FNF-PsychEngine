@@ -64,7 +64,7 @@ ModSecurity adds a layer of protection:
 | Discord RPC     | 1.2.4              | **1.3.0**  |
 | VLC backend     | 2.0.1              | **2.2.6**  |
 | LuaJIT bindings | `linc_luajit`      | **`hxluajit` + `hxluajit-wrapper`** (LuaJIT now links statically) |
-| Texture Atlas   | `flxanimate` (Dot-Stuff) | **`flixel-animate`** (MaybeMaru) — see [migration notes](MIGRATION_1.0.4_to_1.1.md#flxanimate--flixel-animate-texture-atlas) |
+| Texture Atlas   | `flxanimate` (Dot-Stuff) | **`flixel-animate`** (MaybeMaru) — see [migration notes](MIGRATION.md#flxanimate-to-flixel-animate-texture-atlas) |
 
 ### Build & install overhaul
 
@@ -144,7 +144,7 @@ A non-exhaustive tour:
 ## Notes for modders & developers
 
 - A focused upgrade guide for mod authors lives at
-  [MIGRATION_1.0.4_to_1.1.md](MIGRATION_1.0.4_to_1.1.md) -- start there if
+  [MIGRATION.md](MIGRATION.md) -- start there if
   an existing mod breaks after updating.
 - Mods that previously relied on script behaviour that ModSecurity flags as
   dangerous will trigger a Trust prompt the first time they're enabled. End

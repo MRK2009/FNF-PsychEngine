@@ -10,8 +10,8 @@ classic way (as an anchor), and the LuaProxy way you should reach for.
 
 > The proxy entry points are `game` (the active PlayState/state) and
 > `import('pkg.Class')` for classes. Everything else is reached *through* those.
-> Implementation: [`LuaProxy.hx`](../source/psychlua/LuaProxy.hx),
-> preset globals in [`HScript.hx`](../source/psychlua/HScript.hx).
+> Implementation: [`LuaProxy.hx`](../source/scripting/lua/LuaProxy.hx),
+> preset globals in [`HScript.hx`](../source/scripting/hscript/HScript.hx).
 
 ---
 
@@ -47,7 +47,7 @@ classic way (as an anchor), and the LuaProxy way you should reach for.
 ## ⚠️ Status: experimental, expect changes
 
 LuaProxy is **still in active development.** The bridge itself
-([`LuaProxy.hx`](../source/psychlua/LuaProxy.hx) says so in its own header) is
+([`LuaProxy.hx`](../source/scripting/lua/LuaProxy.hx) says so in its own header) is
 being optimized and iterated on, so:
 
 - **Proxy behaviour can change between engine versions** — caching, how
@@ -86,7 +86,7 @@ If you remember those two, every pattern below is just a combination of them.
 > and **`Paths`**. Everything else — `FlxSprite`, `FlxTween`, `FlxText`,
 > `FlxColor`, … — is **not** a global until you `local FlxSprite =
 > import('flixel.FlxSprite')`. (HScript, by contrast, injects a big preset list —
-> see [`HScript.hx → preset()`](../source/psychlua/HScript.hx) — which does **not**
+> see [`HScript.hx → preset()`](../source/scripting/hscript/HScript.hx) — which does **not**
 > apply to Lua.) When in doubt, `import` it. That's why most patterns below open
 > with an `import(...)` line.
 
@@ -103,7 +103,7 @@ hands you the **real object**. That buys you:
   typo. `game.boyfriend.x = 800` instead of `setProperty('boyfriend.x', 800)`.
 - **Speed on hot paths.** A cached proxy classifies each key once; method calls
   then run with no per-call reflection (see the caching notes in
-  [`LuaProxy.hx`](../source/psychlua/LuaProxy.hx)). Tight `onUpdate` loops benefit.
+  [`LuaProxy.hx`](../source/scripting/lua/LuaProxy.hx)). Tight `onUpdate` loops benefit.
 - **Reach.** You're not limited to what someone added a callback for.
 
 ### Do the math in Lua, not across the bridge
@@ -442,11 +442,11 @@ end
 > LuaJIT is a Lua 5.1 core, which has no `__pairs`/`__ipairs`, so the engine
 > replaces the two globals with wrappers that recognise a proxy and fall through
 > to the originals for everything else. Ordinary tables behave exactly as before.
-> See [`installIterators`](../source/psychlua/LuaProxy.hx).
+> See [`installIterators`](../source/scripting/lua/LuaProxy.hx).
 
 > ⚠️ A callback that *returns* an array/map still hands you a native Lua table,
 > not a proxy — so it is a copy, and writing to it does not reach the Haxe object.
-> See [`CallbackHandler.hx`](../source/psychlua/CallbackHandler.hx).
+> See [`CallbackHandler.hx`](../source/scripting/lua/CallbackHandler.hx).
 
 Anonymous structures (chart sections, note structs, option tables) are proxies too,
 so writing through one reaches the real data:

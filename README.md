@@ -31,7 +31,7 @@ This is a maintained fork of Psych Engine (by [MeguminBOT](https://github.com/Me
 - **Configurable FPS / performance counter**: position, color, font size, update rate, and toggleable FPS / Memory / Peak / CPU / GPU / VRAM readouts (CPU/GPU/VRAM via the optional `hxhardware` lib).
 - **Setup overhaul**: pinned, dependency-isolated `haxelib` setup with a project-local `.haxelib/` repo and `hxcpp` built from source.
 
-See the [v1.3.0 release notes](docs/RELEASE_NOTES_1.3.md) for the latest changelog, [docs/FORK_CHANGES.md](docs/FORK_CHANGES.md) for the full per-commit history, and [docs/MIGRATION_1.0.4_to_1.1.md](docs/MIGRATION_1.0.4_to_1.1.md) for migration notes.
+See the [v1.3.0 release notes](docs/RELEASE_NOTES_1.3.md) for the latest changelog, [docs/FORK_CHANGES.md](docs/FORK_CHANGES.md) for the full per-commit history, and [docs/MIGRATION.md](docs/MIGRATION.md) for migration notes.
 
 ## Installation:
 

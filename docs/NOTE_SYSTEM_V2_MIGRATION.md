@@ -10,7 +10,10 @@ experienced, migrating your scripts and skins now is how you stay working when l
 out. This guide is the checklist for that.
 
 **Fastest path:** run the in-engine **Script Converter** (Editors menu) on your modpack first - it
-auto-fixes the mechanical renames - then hand-fix the rest using this guide.
+auto-fixes the mechanical renames - then hand-fix the rest using this guide. It writes `*.converted`
+copies next to your scripts and never edits the originals, so there is nothing to undo if you don't
+like the result. See [Script Converter modes](#the-script-converter-two-modes) for what it will and
+won't touch.
 
 ---
 
@@ -25,10 +28,11 @@ auto-fixes the mechanical renames - then hand-fix the rest using this guide.
   - [2.1 Notes: point at the FIELDS](#21-notes-point-at-the-fields)
   - [2.2 Strums / receptors](#22-strums--receptors)
   - [2.3 Note skins from a script](#23-note-skins-from-a-script)
-  - [2.4 Two easy mistakes](#24-two-easy-mistakes)
+  - [2.4 Three easy mistakes](#24-three-easy-mistakes)
   - [2.5 Worked example: a custom note type](#25-worked-example-a-custom-note-type)
   - [2.6 Worked example: a hit callback](#26-worked-example-a-hit-callback)
 - [3. Checklist](#3-checklist)
+  - [The Script Converter: two modes](#the-script-converter-two-modes)
 - [4. Note skins](#4-note-skins)
 - [5. Full reference: what broke or changed](#5-full-reference-what-broke-or-changed)
 - [6. compatibilityMode (the legacy bridge)](#6-compatibilitymode-the-legacy-bridge---a-last-resort)
@@ -81,10 +85,13 @@ Shorter names. Use these anywhere you read a note (`note.data.<field>` in HScrip
 (HScript still lets old scripts read `strumTime` / `noteData` / `isSustainNote` off the note so they
 don't crash, but they're read-only - prefer `note.data.time` etc.)
 
-`noteType` is the one the Script Converter leaves alone: `noteType` is also the usual name of the
-callback's third argument, and it can't tell a field read from the argument, so **you** rename it when
-you read it off a note (`getPropertyFromGroup(..., 'type')`, HScript `note.data.type`). The callback
-argument can stay named whatever you like.
+`noteType` is the one rename the Script Converter can never do for you: `noteType` is also the usual
+name of the callback's third argument, and it can't tell a field read from the argument, so **you**
+rename it when you read it off a note (`getPropertyFromGroup(..., 'type')`, HScript `note.data.type`).
+The callback argument can stay named whatever you like.
+
+`isSustainNote` it *can* do, but only in the rewrites mode - it becomes a call rather than a name.
+See [Script Converter modes](#the-script-converter-two-modes).
 
 ### 1.2 Callback arguments
 
@@ -339,7 +346,7 @@ two patterns cover most of what you will run into.
 
 ## 3. Checklist
 
-1. Run the **Script Converter** (fixes the field renames + `isSustainNote` -> `isSustain()`).
+1. Run the **Script Converter** (fixes the field renames and the moved type paths).
 2. In hit/miss callbacks, read `game.lastJudgedNote` instead of the first argument.
 3. Target `game.playerField` / `game.opponentField` (with the `onSpawnNote` `id`) instead of
    `game.notes` / `unspawnNotes`.
@@ -347,6 +354,33 @@ two patterns cover most of what you will run into.
 5. Move strum edits to `playerReceptors` / `opponentReceptors`.
 6. Can't do the above? Set `compatibilityMode: true` in `pack.json` (a temporary bridge - see
    section 6).
+
+### The Script Converter: two modes
+
+The **Convert** dropdown picks how much the converter is allowed to change. The split is by the KIND
+of edit, not by how confident the tool is:
+
+| Mode | Applies | Leaves alone |
+|------|---------|--------------|
+| **Renames and paths only** (default) | note-field renames (`strumTime` -> `time` and the rest of [1.1](#11-renamed-note-fields)), the old Lua callback renames (`characterPlayAnim` -> `playAnim`, ...), and moved type paths (`psychlua.LuaUtils` -> `scripting.lua.LuaUtils`) | anything that changes the shape of a line |
+| **Renames plus code rewrites** | the above, plus `isSustainNote` -> `isSustain()` | assignment targets and Lua string properties (see below) |
+
+A rename swaps one name for another and leaves the structure of the line intact, so you can check the
+whole diff by eye. A rewrite can be right about the API and still wrong about your code - which is why
+it is opt-in rather than a judgement the tool makes for you.
+
+`isSustainNote` is the one rewrite that exists today, and it is a good example of the difference: it
+was a field and `isSustain()` is a method, so the read has to become a call. That is correct for a
+plain `note.isSustainNote` read, and wrong the moment the name is being *assigned to* -
+`note.isSustain() = true` is not valid in either language. The converter skips assignments and Lua
+string properties (`setProperty('isSustainNote', ...)`, which can't carry a call) in both modes.
+
+Whatever a mode declines to rewrite is not lost: it is reported in `script-convert-report.txt` and
+commented in place in the `.converted` copy, so you can fix it by hand with the context in front of
+you. The report names the mode it ran in.
+
+**Suggested order:** run the default first and read the report. If the only thing left is
+`isSustainNote` reads, run again with rewrites on and diff the two.
 
 ---
 
@@ -388,7 +422,8 @@ Renamed or removed - see the table in [1.1](#11-renamed-note-fields) (`strumTime
 `noteData`->`column`, `noteType`->`type`, `sustainLength`->`length`, `wasGoodHit`/`noteWasHit`->`hit`,
 `ignoreNote`->`ignore`, `isSustainNote`->`isSustain()`, and `distance`, `prevNote`, `nextNote`, `tail`,
 `parent` removed). The Script Converter fixes all of these except `noteType` (see
-[1.1](#11-renamed-note-fields)).
+[1.1](#11-renamed-note-fields)) and `isSustainNote`, which needs the rewrites mode (see
+[Script Converter modes](#the-script-converter-two-modes)).
 
 ### Callbacks
 
@@ -444,8 +479,9 @@ its `game.notes` members aren't real sprites, and hit/miss callbacks still pass 
 - `objects/notes/NoteData.hx` - the note fields.
 - `objects/notes/NoteField.hx`, `NoteSprite.hx`, `SustainSprite.hx` - the sprites/pool.
 - `states/PlayState.hx` - callbacks, `lastJudgedNote`, the fields and strum aliases.
-- `psychlua/ReflectionFunctions.hx`, `psychlua/LuaUtils.hx` - `getProperty` family, `setNoteSkin`.
-- `psychlua/FunkinLua.hx` - `setNoteTexture` / `setNoteTexturePart` / `setNoteColorable`.
+- `scripting/lua/api/ReflectionFunctions.hx`, `scripting/lua/LuaUtils.hx` - `getProperty` family,
+  `setNoteSkin`.
+- `scripting/lua/FunkinLua.hx` - `setNoteTexture` / `setNoteTexturePart` / `setNoteColorable`.
 - `backend/tools/scriptconvert/` - the Script Converter.
 - `backend/NoteSkinConfig.hx`, `backend/noteskin/` - the skin system.
 - `legacy/NoteCompatLayer.hx` - the `compatibilityMode` bridge.

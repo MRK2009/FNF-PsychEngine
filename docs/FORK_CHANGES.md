@@ -56,7 +56,7 @@ This document covers distinct eras of work, and is split accordingly:
 | Removed                                | Replaced by                                                                                                                          |
 | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
 | `linc_luajit` (git, pinned `1906c4a`)  | **`hxluajit` + `hxluajit-wrapper`** (git, `MAJigsaw77/hxluajit` and `MAJigsaw77/hxluajit-wrapper`) — commit [`9dffe42`](https://github.com/MeguminBOT/FNF-PsychEngine/commit/9dffe42)                |
-| `flxanimate` (git, `Dot-Stuff/flxanimate`) | **`flixel-animate`** (git, [`MaybeMaru/flixel-animate`](https://github.com/MaybeMaru/flixel-animate)) — see [migration notes](MIGRATION_1.0.4_to_1.1.md#flxanimate--flixel-animate-texture-atlas) |
+| `flxanimate` (git, `Dot-Stuff/flxanimate`) | **`flixel-animate`** (git, [`MaybeMaru/flixel-animate`](https://github.com/MaybeMaru/flixel-animate)) — see [migration notes](MIGRATION.md#flxanimate-to-flixel-animate-texture-atlas) |
 
 The `<haxedef name="LINC_LUA_RELATIVE_DYNAMIC_LIB"/>` line in
 [Project.xml](../Project.xml) was deleted with the Lua swap (hxluajit links
@@ -535,7 +535,7 @@ Reworked across three commits:
 
 - `compatibilityMode` and the legacy editor package (`legacy.editors.*`, `legacy.*` note runtime) are
   the escape hatch for mods that poke pre-v2 internals directly. Keep them in sync with any future
-  v2-side renames, or document the break in [MIGRATION_1.0.4_to_1.1.md](MIGRATION_1.0.4_to_1.1.md).
+  v2-side renames, or document the break in [MIGRATION.md](MIGRATION.md).
 - The `ui` package (`source/ui/`) is written to be extractable as a standalone haxelib later: it has
   zero references to Flixel, Psych Engine states, or asset paths. Keep it that way if you touch it.
 - The osu! converter bundles its own ffmpeg binary; if that binary is ever swapped or upgraded, retest

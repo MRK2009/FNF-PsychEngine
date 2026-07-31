@@ -585,9 +585,11 @@ or (`legacyMode`) flag to bridge legacy Lua/HScript mods onto the new note runti
 - **Chart Converter**: migrates a mod's legacy / psych_v1 charts to psych_v2 and
   folds `events.json` in, backing up the originals.
 - *BETA*: **Script Converter**: detects outdated Lua/HScript and auto-rewrites common
-  idioms behind an opt-in button (callback plus note-field renames,
-  `isSustainNote` to `isSustain()`), with `unspawnNotes` to `onSpawnNote`
-  guidance. Highly adviced against auto rewriting currently, it's buggy and flawed, instead use it for reference.
+  idioms behind an opt-in button, with `unspawnNotes` to `onSpawnNote` guidance. A
+  Convert dropdown picks how far it goes: callback, note-field and moved type-path
+  renames by default, or those plus structural rewrites (`isSustainNote` to
+  `isSustain()`).
+  Highly adviced against auto rewriting currently, it's buggy and flawed, instead use it for reference.
 - *BETA*: In-engine benchmark suites with frame-time and sync logging.
 
 ### Menus and miscellaneous
