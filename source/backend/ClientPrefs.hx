@@ -30,6 +30,10 @@ import states.TitleState;
 	/** Ignore per-skin `noteColors` and use the player's own arrow colours instead. **/
 	public var overrideSkinColors:Bool = false;
 	public var uiSkin:String = 'Default';
+
+	// Locks the selected UI skin: a song can't replace it via its chart `uiSkin`, and a mod's own
+	// judgement art can't stand in for the base skin. Mirrors `forceNoteSkin`.
+	public var forceUISkin:Bool = false;
 	public var splashSkin:String = 'From Noteskin';
 	public var splashAlpha:Float = 0.6;
 	public var lowQuality:Bool = false;

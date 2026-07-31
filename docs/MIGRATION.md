@@ -20,6 +20,7 @@ change gets listed with its replacement rather than just being removed.
   - [Script hooks](#script-hooks)
   - [Older Lua callback renames](#older-lua-callback-renames)
   - [objects.BGSprite is gone](#objectsbgsprite-is-gone)
+  - [UI skins gained the note-skin model](#ui-skins-gained-the-note-skin-model)
   - [Data and folder layout](#data-and-folder-layout)
 - [1.1](#11)
   - [Modpack metadata](#modpack-metadata)
@@ -212,6 +213,20 @@ A stage that builds many props is better off with a private helper than with the
 
 Subclassing it is also gone, and that is a small mercy: a scripted subclass of `BGSprite` threw
 "Null Function Pointer" from its constructor for two of the three base-game props that tried it.
+
+### UI skins gained the note-skin model
+
+Nothing breaks; these are additions.
+
+- A chart can carry **`uiSkin`**, the judgement-popup counterpart of `arrowSkin`, and
+  **Options > Force Selected UI Skin** overrides it the way Force Selected Skin does for notes.
+- An element your skin does not ship now falls back to the engine's `Default` skin before the base
+  values, so a partial skin borrows the engine's art rather than nothing. The engine's pixel art
+  moved to `uiSkins/Default/pixel/`; a skin's own `pixel/` subfolder works the same way.
+- A mod shipping its own base judgement art is no longer shadowed by the engine's `Default` UI skin.
+  If you relied on the base skin winning, turn on Force Selected UI Skin.
+
+See [UI skinning guidelines](ui-skinning-guidelines.md) for what makes a skin and the precedence order.
 
 ### Data and folder layout
 

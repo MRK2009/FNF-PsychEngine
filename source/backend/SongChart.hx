@@ -112,6 +112,9 @@ class SongChart {
 	public var timeSignature:Array<Int> = null;
 	public var keyCount:Int = 4;
 	public var arrowSkin:String = null;
+
+	/** The song's own UI skin, the judgement-popup counterpart of `arrowSkin`. **/
+	public var uiSkin:String = null;
 	public var splashSkin:String = null;
 	public var disableNoteRGB:Bool = false;
 	public var gameOverChar:String = null;
@@ -306,6 +309,7 @@ class SongChart {
 		this.timeSignature = song.timeSignature;
 		if (song.keyCount != null) this.keyCount = song.keyCount;
 		this.arrowSkin = song.arrowSkin;
+		this.uiSkin = song.uiSkin;
 		this.splashSkin = song.splashSkin;
 		this.disableNoteRGB = (song.disableNoteRGB == true);
 		this.gameOverChar = song.gameOverChar;
@@ -461,6 +465,7 @@ class SongChart {
 		chart.format = 'psych_v2';
 		if (meta.timeSignature != null) chart.timeSignature = meta.timeSignature;
 		if (meta.arrowSkin != null) chart.arrowSkin = meta.arrowSkin;
+		if (meta.uiSkin != null) chart.uiSkin = meta.uiSkin;
 		if (meta.splashSkin != null) chart.splashSkin = meta.splashSkin;
 		if (meta.disableNoteRGB != null) chart.disableNoteRGB = meta.disableNoteRGB;
 		if (meta.gameOverChar != null) chart.gameOverChar = meta.gameOverChar;
@@ -585,6 +590,7 @@ class SongChart {
 		s.keyCount = keyCount;
 		if (timeSignature != null) s.timeSignature = timeSignature;
 		if (arrowSkin != null) s.arrowSkin = arrowSkin;
+		if (uiSkin != null) s.uiSkin = uiSkin;
 		if (splashSkin != null) s.splashSkin = splashSkin;
 		if (disableNoteRGB) s.disableNoteRGB = true;
 		if (gameOverChar != null) s.gameOverChar = gameOverChar;

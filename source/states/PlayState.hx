@@ -451,6 +451,7 @@ class PlayState extends MusicBeatState {
 
 		NoteSkinConfig.reset();
 		UISkinConfig.reset();
+		backend.uiskin.UISkinService.reset();
 
 		if (FlxG.sound.music != null)
 			FlxG.sound.music.stop();
@@ -2543,18 +2544,13 @@ class PlayState extends MusicBeatState {
 	// Stores Note Objects in a Group
 	public var noteGroup:FlxTypedGroup<FlxBasic>;
 
+	/**
+		Warms the popup art. Only the skin chain is asked, because the chain is what `popUpScore` draws
+		through and it already ends at the base `stageUI` assets -- precaching those paths separately
+		would ask for files the active skin never reads, and on a pixel stage those names no longer all
+		exist now that the engine's pixel art lives in `uiSkins/Default/pixel/`.
+	**/
 	private function cachePopUpScore() {
-		var uiFolder:String = "";
-		if (stageUI != "normal")
-			uiFolder = uiPrefix + "UI/";
-
-		for (rating in ratingsData)
-			Paths.image(uiFolder + rating.image + uiPostfix);
-		for (i in 0...10)
-			Paths.image(uiFolder + 'num' + i + uiPostfix);
-
-		// UI Skin: warm the active skin's folder images (resolveImage caches them). No-op when the
-		// pref has no folder skin, in which case the base assets above are used.
 		UISkinConfig.image('combo');
 		for (rating in ratingsData)
 			UISkinConfig.image(rating.image);
@@ -4390,12 +4386,11 @@ class PlayState extends MusicBeatState {
 		if (doSplash && !data.splashDisabled)
 			splashOnColumn(data.column);
 
-		var uiFolder:String = "";
+		// The asset path is the skin provider's job now; this is only the antialiasing default the
+		// stage implies, which each element may still override.
 		var antialias:Bool = ClientPrefs.data.antialiasing;
-		if (stageUI != "normal") {
-			uiFolder = uiPrefix + "UI/";
+		if (stageUI != "normal")
 			antialias = !isPixelStage;
-		}
 
 		// UI Skin: motion config per element (null = use the engine defaults below), and the *visual*
 		// rating tier (a custom window-keyed image swap; scoring/combo already came from daRating).
@@ -4404,13 +4399,11 @@ class PlayState extends MusicBeatState {
 		var twN:Dynamic = UISkinConfig.tweenFor('numbers');
 		var vis:UIJudgement = UISkinConfig.pickVisual(noteDiff / playbackRate, daRating.name);
 
-		var ratingFactor:Float = 1;
-		var ratingImg = UISkinConfig.image(vis.image);
-		if (ratingImg != null) {
-			rating.loadGraphic(ratingImg.graphic);
-			ratingFactor = ratingImg.factor;
-		} else
-			rating.loadGraphic(Paths.image(uiFolder + vis.image + uiPostfix));
+		// The skin decides which asset tier this comes from; a folder skin missing the image falls
+		// through to classic and then to the base stageUI art inside the provider.
+		var skin:backend.uiskin.IUISkin = backend.uiskin.UISkinService.current();
+		var ratingLook = skin.applyRating(rating, vis.image);
+		var ratingFactor:Float = ratingLook.factor;
 		var ratingScaleMul:Float = (vis.scale != null) ? vis.scale : 1;
 		rating.screenCenter();
 		rating.x = placement + pl.rating[0];
@@ -4419,16 +4412,11 @@ class PlayState extends MusicBeatState {
 		rating.velocity.y -= UISkinConfig.tRange(twR, 'velocityY', 140, 175) * playbackRate;
 		rating.velocity.x -= UISkinConfig.tRange(twR, 'velocityX', 0, 10) * playbackRate;
 		rating.visible = (!ClientPrefs.data.hideHud && showRating);
-		rating.antialiasing = (vis.antialias != null) ? vis.antialias : antialias;
+		rating.antialiasing = (vis.antialias != null) ? vis.antialias : (ratingLook.antialias != null ? ratingLook.antialias : antialias);
 
 		var comboSpr:FlxSprite = acquirePopupSprite();
-		var comboFactor:Float = 1;
-		var comboImg = UISkinConfig.image('combo');
-		if (comboImg != null) {
-			comboSpr.loadGraphic(comboImg.graphic);
-			comboFactor = comboImg.factor;
-		} else
-			comboSpr.loadGraphic(Paths.image(uiFolder + 'combo' + uiPostfix));
+		var comboLook = skin.applyCombo(comboSpr);
+		var comboFactor:Float = comboLook.factor;
 		comboSpr.screenCenter();
 		comboSpr.x = placement;
 		comboSpr.acceleration.y = UISkinConfig.tRange(twC, 'accelY', 200, 300) * playbackRate * playbackRate;
@@ -4458,13 +4446,8 @@ class PlayState extends MusicBeatState {
 		var separatedScore:String = Std.string(combo).lpad('0', 3);
 		for (i in 0...separatedScore.length) {
 			var numScore:FlxSprite = acquirePopupSprite();
-			var numFactor:Float = 1;
-			var numImg = UISkinConfig.image('num' + Std.parseInt(separatedScore.charAt(i)));
-			if (numImg != null) {
-				numScore.loadGraphic(numImg.graphic);
-				numFactor = numImg.factor;
-			} else
-				numScore.loadGraphic(Paths.image(uiFolder + 'num' + Std.parseInt(separatedScore.charAt(i)) + uiPostfix));
+			var numLook = skin.applyDigit(numScore, Std.parseInt(separatedScore.charAt(i)));
+			var numFactor:Float = numLook.factor;
 			numScore.screenCenter();
 			numScore.x = placement + (pl.numSpacing * daLoop) + pl.numbers[0];
 			numScore.y += pl.numbers[1];

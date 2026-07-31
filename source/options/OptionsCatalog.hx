@@ -222,6 +222,9 @@ class OptionsCatalog {
 		uiSkins.remove(ClientPrefs.defaultData.uiSkin);
 		uiSkins.insert(0, ClientPrefs.defaultData.uiSkin);
 		rows.push(Setting(new Option('UI Skin:', 'Select your prefered judgement UI skin\n(rating popups, combo, countdown).', 'uiSkin', STRING, uiSkins)));
+		rows.push(Setting(new Option('Force Selected UI Skin',
+			"Locks your chosen UI skin: a song can't replace it via its chart uiSkin, and a mod's own judgement art can't stand in for the base skin.",
+			'forceUISkin', BOOL)));
 
 		var noteSplashes:Array<String> = Mods.mergeAllTextsNamed('images/noteSplashes/list.txt');
 		if (!noteSplashes.contains(objects.NoteSplash.BASE_SKIN))

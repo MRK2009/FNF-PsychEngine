@@ -2,6 +2,7 @@ package backend;
 
 import flixel.tweens.FlxEase;
 import backend.NoteSkinConfig.SkinImage;
+import backend.NoteSkinConfig.LocatedSkin;
 
 using StringTools;
 
@@ -61,8 +62,31 @@ class UISkinConfig {
 	static var judgeCache:Map<String, Array<UIJudgement>> = new Map();
 	static var pixelVariantCache:String = null;
 	static var pixelVariantComputed:Bool = false;
+	static var locateCache:Map<String, Null<LocatedSkin>> = new Map();
+	static var modDefaultCache:Null<Bool> = null;
 
 	public static inline var DEFAULT:String = 'uiSkins/Default';
+
+	/**
+		Whether a `uiSkins/` subfolder is a skin, judged only from the file names inside it.
+
+		A skin is a folder with a `skin.tcfg` (or `.json`). Art alone is not a skin: without a config
+		there is nothing to read the element names, motion or placement from, so such a folder is
+		ignored and the base `stageUI` values are used instead.
+
+		Kept free of the filesystem so the rule can be exercised directly -- a misjudged folder just
+		quietly stops appearing in the options list. `list` walks the directories and defers to this.
+
+		@param entries file names directly inside the folder
+	**/
+	public static function isSkinFolder(entries:Array<String>):Bool {
+		if (entries == null)
+			return false;
+		for (ext in EXTS)
+			if (entries.contains('skin.$ext'))
+				return true;
+		return false;
+	}
 
 	/** Editor live-preview override; when set, `activeSkin` returns it. **/
 	public static var editorOverride:String = null;
@@ -71,6 +95,20 @@ class UISkinConfig {
 		configCache.clear();
 		folderCache.clear();
 		judgeCache.clear();
+		locateCache.clear();
+		modDefaultCache = null;
+		pixelVariantCache = null;
+		pixelVariantComputed = false;
+	}
+
+	/** Drops one skin's cached entries, leaving the rest warm. Mirrors `NoteSkinConfig.invalidate`. **/
+	public static function invalidate(name:String):Void {
+		if (name == null)
+			return;
+		configCache.remove(name);
+		folderCache.remove(name);
+		judgeCache.remove(name);
+		locateCache.remove(name);
 		pixelVariantCache = null;
 		pixelVariantComputed = false;
 	}
@@ -86,7 +124,87 @@ class UISkinConfig {
 		return null;
 	}
 
-	public static function isFolderSkin(name:String):Bool {
+	/**
+		Where a skin's config actually lives, and which mod root owns it -- shared assets first, then the
+		mod roots in priority order. Ported from `NoteSkinConfig.locateSkinFile`; `root` is what
+		`activeSkinPinRoot` hands to the asset resolver so a mod's skin loads its OWN images rather than
+		a same-named file from another root.
+	**/
+	static function locateSkinFile(name:String):Null<LocatedSkin> {
+		if (name == null || name.length < 1)
+			return null;
+		if (locateCache.exists(name))
+			return locateCache.get(name);
+
+		var found:LocatedSkin = null;
+		#if sys
+		var rel:String = 'images/$name/skin.';
+		for (ext in EXTS) {
+			var base:String = Paths.getSharedPath('$rel$ext');
+			if (sys.FileSystem.exists(base)) {
+				found = {path: base, ext: ext, root: ''};
+				break;
+			}
+		}
+		#if MODS_ALLOWED
+		if (found == null) {
+			for (root in skinModRoots()) {
+				for (ext in EXTS) {
+					var p:String = (root.length > 0) ? Paths.mods('$root/$rel$ext') : Paths.mods('$rel$ext');
+					if (sys.FileSystem.exists(p)) {
+						found = {path: p, ext: ext, root: root};
+						break;
+					}
+				}
+				if (found != null)
+					break;
+			}
+		}
+		#end
+		#end
+		locateCache.set(name, found);
+		return found;
+	}
+
+	/** Mod roots in resolution order. Same order `NoteSkinConfig.skinModRoots` uses. **/
+	static function skinModRoots():Array<String> {
+		var roots:Array<String> = [];
+		#if MODS_ALLOWED
+		if (Mods.allowCurrentModAssets && Mods.currentModDirectory != null && Mods.currentModDirectory.length > 0)
+			roots.push(Mods.currentModDirectory);
+		for (m in Mods.getGlobalMods())
+			if (!roots.contains(m))
+				roots.push(m);
+		roots.push(''); // the always-scanned bare mods/ root
+		for (m in Mods.parseList().enabled)
+			if (!roots.contains(m))
+				roots.push(m);
+		#end
+		return roots;
+	}
+
+	static function skinOwnerRoot(name:String):String {
+		var loc:LocatedSkin = locateSkinFile(name);
+		return (loc != null) ? loc.root : '';
+	}
+
+	/**
+		The mod root the active skin's images must resolve from, or null for the normal search order.
+
+		Without this a mod skin can draw another root's same-named image. With Force UI Skin on, the
+		owner is returned even when empty so the base skin cannot be overridden by a mod.
+	**/
+	public static function activeSkinPinRoot():Null<String> {
+		var active:String = activeSkin();
+		if (active == null)
+			return null;
+		var owner:String = skinOwnerRoot(active);
+		if (ClientPrefs.data.forceUISkin)
+			return owner;
+		return (owner != null && owner.length > 0) ? owner : null;
+	}
+
+	public static function isSkin(name:String):Bool {
 		if (name == null || name.length < 1)
 			return false;
 		if (folderCache.exists(name))
@@ -138,13 +256,7 @@ class UISkinConfig {
 				var dir:String = '$root/$entry';
 				if (!sys.FileSystem.isDirectory(dir))
 					continue;
-				var hasSkin:Bool = false;
-				for (ext in EXTS)
-					if (sys.FileSystem.exists('$dir/skin.$ext')) {
-						hasSkin = true;
-						break;
-					}
-				if (hasSkin) {
+				if (isSkinFolder(sys.FileSystem.readDirectory(dir))) {
 					var name:String = 'uiSkins/$entry';
 					if (!result.contains(name))
 						result.push(name);
@@ -175,14 +287,76 @@ class UISkinConfig {
 		return sel;
 	}
 
+	/**
+		Which skin the song should use, in the same precedence `NoteSkinConfig.selectSkin` applies:
+		the chart's own choice unless the player forced theirs, then the pref, then the default.
+
+		Returns null when nothing resolves, which is the legacy tier -- the base `stageUI` assets.
+	**/
 	static function selectSkin():String {
+		// Force UI Skin: ignore the chart's uiSkin so a song can't swap the player's choice.
+		var song = PlayState.SONG;
+		if (!ClientPrefs.data.forceUISkin && song != null && song.uiSkin != null && song.uiSkin.length > 1) {
+			var c:String = song.uiSkin.trim();
+			var chartSkin:String = c.startsWith('uiSkins/') ? c : 'uiSkins/' + c;
+			if (isSkin(chartSkin))
+				return chartSkin;
+			return null;
+		}
+
 		var pref:String = ClientPrefs.data.uiSkin;
-		if (pref != null && pref.trim().length > 0) {
+		if (pref != null && pref.trim().length > 0 && pref != ClientPrefs.defaultData.uiSkin) {
 			var p:String = 'uiSkins/' + pref.trim();
-			if (isFolderSkin(p))
+			if (isSkin(p))
 				return p;
 		}
-		return isFolderSkin(DEFAULT) ? DEFAULT : null;
+
+		// Default pref: a mod shipping its own UI art renders that rather than the base Default folder
+		// skin, so the mod's art still applies -- unless the skin is forced, which keeps the base one.
+		if (!ClientPrefs.data.forceUISkin && modProvidesDefault())
+			return null;
+		return isSkin(DEFAULT) ? DEFAULT : null;
+	}
+
+	/**
+		Whether an enabled mod ships its own base UI art (the loose `combo`/`num0`/rating images the
+		legacy tier draws). Without this the base `uiSkins/Default` shadows it and the mod's art never
+		shows -- the same bug note skins carried until `modProvidesClassicDefault` was added.
+	**/
+	static function modProvidesDefault():Bool {
+		if (modDefaultCache != null)
+			return modDefaultCache;
+		var found:Bool = false;
+		#if (sys && MODS_ALLOWED)
+		var path:String = PlayState.isPixelStage ? 'pixelUI/' : '';
+		// The legacy pixel assets carry a `-pixel` suffix, so probing the plain names on a pixel
+		// stage never matched and a mod's pixel art went unnoticed.
+		var suffix:String = PlayState.isPixelStage ? '-pixel' : '';
+		var names:Array<String> = [
+			'images/${path}combo${suffix}.png',
+			'images/${path}num0${suffix}.png',
+			'images/${path}sick${suffix}.png'
+		];
+		if (Mods.allowCurrentModAssets && Mods.currentModDirectory != null && Mods.currentModDirectory.length > 0)
+			found = modHasAny(Mods.currentModDirectory, names);
+		if (!found)
+			for (mod in Mods.getGlobalMods())
+				if (modHasAny(mod, names)) {
+					found = true;
+					break;
+				}
+		#end
+		modDefaultCache = found;
+		return found;
+	}
+
+	static function modHasAny(mod:String, names:Array<String>):Bool {
+		#if (sys && MODS_ALLOWED)
+		for (n in names)
+			if (sys.FileSystem.exists(Paths.mods('$mod/$n')))
+				return true;
+		#end
+		return false;
 	}
 
 	public static function pixelVariantSkin():Null<String> {
@@ -213,9 +387,21 @@ class UISkinConfig {
 	**/
 	public static function image(name:String):Null<SkinImage> {
 		var skin:String = activeSkin();
+		return (skin == null) ? null : imageFor(skin, name);
+	}
+
+	/**
+		Resolves an element against a NAMED skin rather than the active one.
+
+		`image` is bound to whatever is active, which is right for gameplay but useless for a fallback
+		chain: the Default skin is what an incomplete skin should fall back to, and asking for its art
+		while another skin is active needs the name to be explicit.
+
+		@param skin the skin to read from, e.g. `uiSkins/Default`
+		@param name the logical element (`combo`, `num<digit>`, `ready`/`set`/`go`, or a rating key)
+	**/
+	public static function imageFor(skin:String, name:String):Null<SkinImage> {
 		if (skin == null)
-			return null;
-		if (editorOverride == null && skin == DEFAULT)
 			return null;
 		var cfg:UISkinData = get(skin);
 		if (cfg == null)

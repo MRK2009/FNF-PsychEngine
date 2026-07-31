@@ -39,6 +39,34 @@ completely fine.
 
 ---
 
+## What makes a skin
+
+A UI skin is a folder under `uiSkins/` containing a **`skin.tcfg`** (or `skin.json`) and its element
+images. The config is required: without it there is nothing to read the element names, motion,
+placement or custom tiers from, so such a folder is not a skin and the engine's base values are used.
+
+Fallback runs per element, not per skin. An image your skin does not ship is drawn by the engine's
+own `Default` skin, and failing that by the base `stageUI` values -- so a skin containing only
+`sick.png` still gets everything else.
+
+The engine's own art lives in `uiSkins/Default/`, with its pixel set in `uiSkins/Default/pixel/`.
+Yours can do the same: a `pixel/` subfolder is used automatically on pixel stages.
+
+---
+
+## Which skin a song uses
+
+In precedence order, highest first:
+
+1. **Options > Force Selected UI Skin** -- when on, your choice wins and nothing below can change it.
+2. The song's own `uiSkin`, set in the chart. The judgement-popup counterpart of `arrowSkin`.
+3. **Options > UI Skin**.
+4. A mod shipping its own base judgement art (loose `combo`/`num0`/`sick` images), which beats the
+   engine's `Default` skin so the mod's art actually shows.
+5. `uiSkins/Default`, then the `stageUI` assets.
+
+---
+
 ## What a UI skin covers (and doesn't)
 
 | Covered | Not covered |

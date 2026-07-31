@@ -151,7 +151,7 @@ class MasterEditorMenu extends MusicBeatState {
 				case 'Note Skin Editor':
 					MusicBeatState.switchState(new editors.noteskin.NoteSkinEditorState());
 				case 'UI Skin Editor':
-					MusicBeatState.switchState(new UISkinEditorState());
+					MusicBeatState.switchState(new editors.uiskin.UISkinEditorState());
 				case 'Benchmark':
 					MusicBeatState.switchState(new debug.bench.BenchmarkState());
 			}

@@ -35,6 +35,9 @@ typedef SwagSong = {
 
 	@:optional var arrowSkin:String;
 	@:optional var splashSkin:String;
+
+	/** The song's judgement-UI skin, the popup counterpart of `arrowSkin`. **/
+	@:optional var uiSkin:String;
 }
 
 typedef SwagSection = {

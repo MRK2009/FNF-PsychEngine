@@ -255,7 +255,9 @@ class CutsceneRunner {
 	public function cacheCountdown() {
 		var introAssets:Map<String, Array<String>> = new Map<String, Array<String>>();
 		var introImagesArray:Array<String> = switch (PlayState.stageUI) {
-			case "pixel": ['pixelUI/ready-pixel', 'pixelUI/set-pixel', 'pixelUI/date-pixel'];
+			// The engine's pixel countdown art moved into the Default skin's `pixel/` folder; these are
+			// only the last resort for when the skin chain resolves nothing.
+			case "pixel": ['uiSkins/Default/pixel/ready', 'uiSkins/Default/pixel/set', 'uiSkins/Default/pixel/go'];
 			case "normal": ["ready", "set", "go"];
 			default: [
 					'${PlayState.uiPrefix}UI/ready${PlayState.uiPostfix}',
@@ -280,11 +282,12 @@ class CutsceneRunner {
 
 	inline private function createCountdownSprite(image:String, antialias:Bool, ?logical:String):FlxSprite {
 		var spr:FlxSprite = new FlxSprite();
-		// UI Skin: prefer the active skin's ready/set/go image; fall back to the base stageUI asset.
-		var skinImg = (logical != null) ? UISkinConfig.image(logical) : null;
-		if (skinImg != null)
-			spr.loadGraphic(skinImg.graphic);
-		else
+		// The skin provider picks the tier: a folder or classic skin's ready/set/go if it ships one,
+		// otherwise the base stageUI asset. `image` stays the path for a caller that named one directly.
+		var look:backend.uiskin.UIVisual = null;
+		if (logical != null)
+			look = backend.uiskin.UISkinService.current().applyCountdown(spr, logical);
+		if (look == null || !look.ok)
 			spr.loadGraphic(Paths.image(image));
 		spr.cameras = [game.camHUD];
 		spr.scrollFactor.set();
@@ -292,8 +295,8 @@ class CutsceneRunner {
 
 		if (PlayState.isPixelStage)
 			spr.setGraphicSize(Std.int(spr.width * PlayState.daPixelZoom));
-		else if (skinImg != null && skinImg.factor != 1)
-			spr.setGraphicSize(Std.int(spr.width * skinImg.factor));
+		else if (look != null && look.ok && look.factor != 1)
+			spr.setGraphicSize(Std.int(spr.width * look.factor));
 
 		spr.screenCenter();
 		spr.antialiasing = antialias;
