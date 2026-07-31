@@ -13,14 +13,16 @@ import sys.FileSystem;
 /**
  * Resolves and prepares the engine's read/write storage location on mobile.
  *
- * The whole point of the Android port's storage strategy: mods/saves/crash logs
- * live in a public, top-level folder (`/storage/emulated/0/PsychEngine`) so users
- * can drop mods in with any file manager -- unlike `Android/data/<pkg>/files`, which
- * is hidden on non-rooted Android 11+. That public path requires All Files Access
- * (MANAGE_EXTERNAL_STORAGE) on Android 11+, which we request on launch.
+ * The whole point of the Android port's storage strategy: mods, crash logs and the engine's own
+ * databases live in a public, top-level folder (`/storage/emulated/0/PsychEngine`) so users can drop
+ * mods in with any file manager -- unlike `Android/data/<pkg>/files`, which is hidden on non-rooted
+ * Android 11+. That public path requires All Files Access (MANAGE_EXTERNAL_STORAGE) on Android 11+,
+ * which we request on launch.
  *
- * Bundled game assets stay inside the APK (served via openfl.Assets); only writable
- * content (mods/, saves, crash/) is placed on external storage.
+ * Bundled game assets stay inside the APK (served via openfl.Assets); only writable content
+ * (`mods/`, `crash/`, `database/`) is placed here.
+ *
+ * Not the flixel save -- that root is the platform's, not ours. See `CoolUtil.getSavePath`.
  */
 class StorageUtil
 {
@@ -124,14 +126,14 @@ class StorageUtil
 	}
 
 	/**
-	 * Creates the writable subfolders the engine expects (mods/, saves/, crash/).
+	 * Creates the writable subfolders the engine expects (`mods/`, `crash/`, `database/`).
 	 * Safe to call every launch -- existing folders are left untouched.
 	 */
 	public static function prepareDirectories():Void
 	{
 		#if (android || ios)
 		final root:String = getStorageDirectory();
-		for (folder in ['', 'mods', 'saves', 'crash'])
+		for (folder in ['', 'mods', 'crash', backend.DataPaths.ROOT])
 		{
 			final dir:String = Path.join([root, folder]);
 			if (!FileSystem.exists(dir))

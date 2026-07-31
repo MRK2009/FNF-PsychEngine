@@ -207,26 +207,21 @@ class CoolUtil {
 	}
 
 	/**
-		Helper Function to Fix Save Files for Flixel 5
+		The `localPath` the engine's `FlxSave` is bound with.
 
-		-- EDIT: [November 29, 2023] --
-
-		this function is used to get the save path, period.
-		since newer flixel versions are being enforced anyways.
-		@crowplexus
+		A folder name only -- the root is the platform's, and `FlxSharedObject` rejects `../`, so the
+		save cannot be moved next to the game. It lands under AppData on desktop and under app-private
+		storage on Android, NOT in the public folder an older comment here claimed. Engine state we do
+		own the location of lives under `database/` (`backend.DataPaths`).
 	**/
 	@:access(flixel.util.FlxSave.validate)
 	inline public static function getSavePath():String {
 		final company:String = FlxG.stage.application.meta.get('company');
-		// #if (flixel < "5.0.0") return company; #else
 		#if mobile
-		// Keep saves in the public, browsable folder (cwd is already set to it in Main),
-		// so they survive reinstalls and can be backed up by the user.
 		return 'saves/${flixel.util.FlxSave.validate(FlxG.stage.application.meta.get('file'))}';
 		#else
 		return '${company}/${flixel.util.FlxSave.validate(FlxG.stage.application.meta.get('file'))}';
 		#end
-		// #end
 	}
 
 	public static function setTextBorderFromString(text:FlxText, border:String) {

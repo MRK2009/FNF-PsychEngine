@@ -9,7 +9,7 @@ import sys.FileSystem;
 /**
  * The unlimited per-profile highscore database: every recorded play of every song, kept in memory
  * as songKey -> records sorted by score descending and persisted as a versioned `haxe.Serializer`
- * snapshot at `profiles/<id>/scores.db` (the `LibraryDB` pattern). A version bump or read error
+ * snapshot at `database/profiles/<id>/scores.db` (the `LibraryDB` pattern). A version bump or read error
  * falls back to an empty DB.
  *
  * Psych-system top scores mirror into the legacy `Highscore` maps so weeks and older UI keep

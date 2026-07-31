@@ -40,7 +40,8 @@ typedef LibrarySnapshot = {
 
 /**
  * The persistent Freeplay library index: a compact on-disk database of the discovered ("loose")
- * songs, stored next to the game and reused across launches. Keyed by a mod-set `signature`; each
+ * songs, stored at `database/freeplayLibrary.db` and reused across launches. Keyed by a mod-set
+ * `signature`; each
  * entry carries its folder `mtime` so `SongLibrary` reconciles the disk against it per folder (the
  * reconcile itself is an O(1) `Map` lookup) — unchanged folders are rehydrated from here (no directory
  * read, no metadata parse), only added / changed / removed folders touch the disk. Written back only
@@ -53,8 +54,12 @@ typedef LibrarySnapshot = {
  */
 class LibraryDB {
 	static inline final VERSION:Int = 3; // bumped: `key` is now the song package folder, not the display name
-	static inline final FILE:String = 'freeplayLibrary.db';
+	static inline final NAME:String = 'freeplayLibrary.db';
 	static inline final LEGACY_JSON:String = 'freeplayLibrary.json';
+
+	/** Under `database/`, with anything left beside the executable moved there on first use. **/
+	static inline function file():String
+		return backend.DataPaths.file(NAME);
 
 	/**
 	 * Reads the persisted loose-song index.
@@ -64,9 +69,9 @@ class LibraryDB {
 	public static function load(sig:String):Null<Array<DBEntry>> {
 		#if sys
 		try {
-			if (!FileSystem.exists(FILE))
+			if (!FileSystem.exists(file()))
 				return null;
-			var snap:LibrarySnapshot = haxe.Unserializer.run(File.getContent(FILE));
+			var snap:LibrarySnapshot = haxe.Unserializer.run(File.getContent(file()));
 			if (snap == null || snap.v != VERSION || snap.sig != sig || snap.entries == null)
 				return null;
 			return snap.entries;
@@ -87,7 +92,7 @@ class LibraryDB {
 		#if sys
 		try {
 			var snap:LibrarySnapshot = {v: VERSION, sig: sig, entries: entries};
-			File.saveContent(FILE, haxe.Serializer.run(snap));
+			File.saveContent(file(), haxe.Serializer.run(snap));
 			// Drop the old JSON index if it's still lying around from a previous build.
 			if (FileSystem.exists(LEGACY_JSON))
 				FileSystem.deleteFile(LEGACY_JSON);
@@ -99,8 +104,8 @@ class LibraryDB {
 	public static function clear():Void {
 		#if sys
 		try {
-			if (FileSystem.exists(FILE))
-				FileSystem.deleteFile(FILE);
+			if (FileSystem.exists(file()))
+				FileSystem.deleteFile(file());
 		} catch (e:Dynamic) {}
 		#end
 	}

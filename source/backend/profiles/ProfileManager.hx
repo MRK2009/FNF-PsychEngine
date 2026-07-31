@@ -35,7 +35,7 @@ typedef ProfileData = {
 /**
  * Local profiles: who is playing and their lifetime stats (plays, keypresses, playtime, grades,
  * skill ratings), plus the active profile's `ScoreDB`. Persisted as a versioned `haxe.Serializer`
- * snapshot in `profiles.db` next to the game, with per-profile data under `profiles/<id>/`
+ * snapshot at `database/profiles.db`, with per-profile data under `database/profiles/<id>/`
  * (the `LibraryDB` pattern; a version bump or read error falls back to a fresh default profile).
  *
  * Gameplay feeds the cheap static session counters (`noteKeypress`, `notePlaytime`) -- one int/
@@ -44,7 +44,11 @@ typedef ProfileData = {
  */
 class ProfileManager {
 	static inline final VERSION:Int = 1;
-	static inline final FILE:String = 'profiles.db';
+	static inline final NAME:String = 'profiles.db';
+
+	/** Under `database/`, with anything left beside the executable moved there on first use. **/
+	static inline function file():String
+		return backend.DataPaths.file(NAME);
 
 	static var profiles:Array<ProfileData> = [];
 	static var activeId:Int = 1;
@@ -254,7 +258,7 @@ class ProfileManager {
 	 * @return the profile's data directory (created on demand by `ensureProfileDir`)
 	 */
 	public static inline function profileDir(id:Int):String
-		return 'profiles/$id';
+		return backend.DataPaths.file('profiles/$id');
 
 	/**
 	 * Creates the profile's data directory when missing.
@@ -263,6 +267,9 @@ class ProfileManager {
 	public static function ensureProfileDir(id:Int):Void {
 		#if sys
 		try {
+			var parent:String = backend.DataPaths.file('profiles');
+			if (!FileSystem.exists(parent))
+				FileSystem.createDirectory(parent);
 			if (!FileSystem.exists(profileDir(id)))
 				FileSystem.createDirectory(profileDir(id));
 		} catch (e:Dynamic) {}
@@ -284,8 +291,9 @@ class ProfileManager {
 	public static function ensureReplaysDir(id:Int):Void {
 		#if sys
 		try {
-			if (!FileSystem.exists('profiles'))
-				FileSystem.createDirectory('profiles');
+			var parent:String = backend.DataPaths.file('profiles');
+			if (!FileSystem.exists(parent))
+				FileSystem.createDirectory(parent);
 			if (!FileSystem.exists(profileDir(id)))
 				FileSystem.createDirectory(profileDir(id));
 			if (!FileSystem.exists(replaysDir(id)))
@@ -303,8 +311,8 @@ class ProfileManager {
 		loaded = true;
 		#if sys
 		try {
-			if (FileSystem.exists(FILE)) {
-				var snap:{v:Int, activeId:Int, nextId:Int, profiles:Array<ProfileData>} = haxe.Unserializer.run(File.getContent(FILE));
+			if (FileSystem.exists(file())) {
+				var snap:{v:Int, activeId:Int, nextId:Int, profiles:Array<ProfileData>} = haxe.Unserializer.run(File.getContent(file()));
 				if (snap != null && snap.v == VERSION && snap.profiles != null && snap.profiles.length > 0) {
 					profiles = snap.profiles;
 					activeId = snap.activeId;
@@ -323,7 +331,7 @@ class ProfileManager {
 	public static function save():Void {
 		#if sys
 		try {
-			File.saveContent(FILE, haxe.Serializer.run({v: VERSION, activeId: activeId, nextId: nextId, profiles: profiles}));
+			File.saveContent(file(), haxe.Serializer.run({v: VERSION, activeId: activeId, nextId: nextId, profiles: profiles}));
 		} catch (e:Dynamic) {}
 		#end
 	}
