@@ -5,7 +5,7 @@ import backend.tools.scriptconvert.ScriptRule;
 /**
 	The Script Converter's detection catalog: every outdated Lua/HScript idiom the engine knows
 	about, paired with the guidance to show. Each row is seeded from a real source -- the Lua
-	renames mirror `psychlua.DeprecatedFunctions`, the note-field mappings mirror
+	renames mirror `scripting.lua.api.DeprecatedFunctions`, the note-field mappings mirror
 	`objects.notes.NoteData`, and the `compatibilityMode` notes mirror the `legacy/` layer
 	(`NoteCompatLayer`, `UnspawnNoteProxy`). Adding a new deprecation is a one-line append.
 
@@ -15,7 +15,7 @@ import backend.tools.scriptconvert.ScriptRule;
 class ScriptRules {
 	/** The full rule set. `ScriptScanner` filters this per file by `appliesTo`. **/
 	public static final RULES:Array<ScriptRule> = [
-		// ---- Renamed Lua callbacks (mirror psychlua.DeprecatedFunctions) --------------------
+		// ---- Renamed Lua callbacks (mirror scripting.lua.api.DeprecatedFunctions) --------------------
 		{re: ~/\baddAnimationByIndicesLoop\b/, kind: RENAMED, appliesTo: LUA, message: 'addAnimationByIndicesLoop was replaced.', suggestion: 'Use addAnimationByIndices.', replace: 'addAnimationByIndices'},
 		{re: ~/\bobjectPlayAnimation\b/, kind: RENAMED, appliesTo: LUA, message: 'objectPlayAnimation was replaced.', suggestion: 'Use playAnim.', replace: 'playAnim'},
 		{re: ~/\bcharacterPlayAnim\b/, kind: RENAMED, appliesTo: LUA, message: 'characterPlayAnim was replaced.', suggestion: 'Use playAnim.', replace: 'playAnim'},

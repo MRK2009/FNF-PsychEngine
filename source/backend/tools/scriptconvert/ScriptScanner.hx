@@ -204,9 +204,10 @@ class ScriptScanner {
 		`*.converted.<ext>` beside each flagged script plus a `script-convert-report.txt` at the
 		folder root. Originals are left untouched.
 		@param report a `FolderReport` from `scanFolder`
+		@param mode how much the rewrite is allowed to change; renames and paths only unless told otherwise
 		@return the number of annotated copies written
 	**/
-	public static function exportFolder(report:FolderReport):Int {
+	public static function exportFolder(report:FolderReport, mode:ScriptRewriter.RewriteMode = RENAMES_ONLY):Int {
 		if (report == null || report.files.length == 0)
 			return 0;
 		var summary:StringBuf = new StringBuf();
@@ -219,10 +220,10 @@ class ScriptScanner {
 			if (kind == null)
 				continue;
 
-			// Auto-fix the safe renames in place, then annotate ONLY what couldn't be rewritten
-			// (compat-only mirrors, removed APIs, patterns) on the rewritten source.
+			// Auto-fix what this mode allows, then annotate ONLY what is left (whatever the mode
+			// declined, plus compat-only mirrors, removed APIs and patterns) on the rewritten source.
 			var src:String = File.getContent(file.fullPath);
-			var rewritten:ScriptRewriter.RewriteResult = ScriptRewriter.rewrite(src, kind);
+			var rewritten:ScriptRewriter.RewriteResult = ScriptRewriter.rewrite(src, kind, mode);
 			var residual:ScanReport = analyze(rewritten.text, kind);
 
 			var outPath:String = file.fullPath.substr(0, file.fullPath.length - (ext.length + 1)) + '.converted.' + ext;
@@ -237,9 +238,10 @@ class ScriptScanner {
 			summary.add('\n');
 		}
 		File.saveContent(haxe.io.Path.join([report.root, 'script-convert-report.txt']),
-			'Script conversion report\nFiles processed: ${report.files.length}\n'
+			'Script conversion report\nMode: ${mode.label()} (${mode.describe()})\n'
+			+ 'Files processed: ${report.files.length}\n'
 			+ 'Auto-fixed substitutions: $totalRenames\nIssues left to migrate by hand: $totalResidual\n\n'
-			+ 'The .converted.* copies have the safe renames applied; remaining lines are commented with\n'
+			+ 'The .converted.* copies have this mode\'s substitutions applied; remaining lines are commented with\n'
 			+ 'COMPAT(...) advice. Legacy support runs when a pack sets "legacyMode": true (or\n'
 			+ '"compatibilityMode": true) in pack.json; the strum groups + note fields work there.\n\n'
 			+ summary.toString());

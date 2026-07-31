@@ -7,6 +7,8 @@ import backend.tools.scriptconvert.ScriptScanner.FolderReport;
 import backend.tools.scriptconvert.ScriptScanner.FileReport;
 import backend.tools.scriptconvert.ScriptScanner.ScanIssue;
 import backend.tools.scriptconvert.ScriptRule;
+import backend.tools.scriptconvert.ScriptRewriter;
+import backend.tools.scriptconvert.ScriptRewriter.RewriteMode;
 import smidr.UIRoot;
 import smidr.UITheme;
 import smidr.UIFonts;
@@ -67,9 +69,16 @@ class ScriptConverterState extends MusicBeatState {
 	var exportBtn:UIButton;
 	var flagBtn:UIButton;
 	var filterDrop:UIDropdown;
+	var modeDrop:UIDropdown;
 
 	/** 0 = all, 1 = warnings only, 2 = info only, 3 = compat-only. **/
 	var filterMode:Int = 0;
+
+	/**
+		How much the Convert button is allowed to change. Renames only by default: those are the edits a
+		modder can check by eye in a diff, so the safe run is the one you get without asking for anything.
+	**/
+	var rewriteMode:RewriteMode = RENAMES_ONLY;
 
 	/** The most recent scan, or null before the first scan. **/
 	var lastReport:FolderReport = null;
@@ -155,6 +164,21 @@ class ScriptConverterState extends MusicBeatState {
 		exportBtn.y = 74;
 		exportBtn.visible = false;
 		uiRoot.content.addChild(exportBtn);
+
+		// Changing the mode re-arms the guard: the confirmation the modder saw described the old mode.
+		modeDrop = new UIDropdown('Convert', 300, function(i:Int, _:String):Void {
+			rewriteMode = i;
+			disarmConvert();
+			updateModeTooltip();
+		});
+		modeDrop.fontSize = 14;
+		modeDrop.setItems([RENAMES_ONLY.label(), FULL.label()]);
+		modeDrop.select(rewriteMode);
+		modeDrop.x = CONTENT_X + 396;
+		modeDrop.y = 78;
+		modeDrop.visible = false;
+		uiRoot.content.addChild(modeDrop);
+		updateModeTooltip();
 
 		filterDrop = new UIDropdown('Show', 250, function(i:Int, _:String):Void {
 			filterMode = i;
@@ -260,6 +284,7 @@ class ScriptConverterState extends MusicBeatState {
 		lastReport = null;
 		disarmConvert();
 		exportBtn.visible = false;
+		modeDrop.visible = false;
 		flagBtn.visible = false;
 		bannerLabel.text = '';
 		headerLabel.text = modFolders[curMod];
@@ -363,12 +388,14 @@ class ScriptConverterState extends MusicBeatState {
 			summaryLabel.text = 'No outdated idioms found. This mod looks clean.';
 			bannerLabel.text = '';
 			exportBtn.visible = false;
+			modeDrop.visible = false;
 			flagBtn.visible = false;
 			return;
 		}
 
 		summaryLabel.text = lastReport.total + ' issue(s) across ' + lastReport.files.length + ' file(s).';
 		exportBtn.visible = true;
+		modeDrop.visible = true;
 
 		if (hasLegacyOnly()) {
 			#if (MODS_ALLOWED && sys)
@@ -444,15 +471,23 @@ class ScriptConverterState extends MusicBeatState {
 			convertArmed = true;
 			exportBtn.label = 'Click again to convert';
 			exportBtn.danger = true;
-			UIToast.show('Attempt conversion? This writes *.converted copies + a report next to your scripts (originals untouched). Click again to confirm.');
+			UIToast.show('Convert with "' + rewriteMode.label() + '"? This writes *.converted copies + a report next to your scripts (originals untouched). Click again to confirm.');
 			return;
 		}
 		disarmConvert();
-		var written:Int = ScriptScanner.exportFolder(lastReport);
+		var written:Int = ScriptScanner.exportFolder(lastReport, rewriteMode);
 		UIToast.show('Converted ' + written + ' script(s) to *.converted copies + report in ' + modFolders[curMod] + '.');
 		#else
 		UIToast.show('Converting is only available on desktop.');
 		#end
+	}
+
+	/** Spells out what the selected mode will and won't touch, so the choice isn't guesswork. **/
+	function updateModeTooltip():Void {
+		modeDrop.tooltip = switch (rewriteMode) {
+			case FULL: 'Also applies rewrites that change the shape of a line, such as the isSustainNote field becoming an isSustain() call. Right for a plain read, wrong where the name is assigned to or passed as a string, so check the diff.';
+			default: 'Only swaps old names for new ones: Lua callbacks, note fields, and moved type paths. Anything that would restructure code is reported instead of applied.';
+		}
 	}
 
 	/** Resets the Convert button to its unarmed state (label + styling). **/
