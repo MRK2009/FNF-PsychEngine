@@ -79,7 +79,23 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 		['Change Scroll Speed', "Value 1: Scroll Speed Multiplier (1 is default)\nValue 2: Time it takes to change fully in seconds."],
 		['Change Key Amount', "Multikey: rebuilds the lanes to a new key count (1-9).\nValue 1: New key count (number of columns per side)."],
 		['Set Property', "Value 1: Variable name\nValue 2: New value"],
-		['Play Sound', "Value 1: Sound file name\nValue 2: Volume (Default: 1), ranges from 0 to 1"]
+		['Play Sound', "Value 1: Sound file name\nValue 2: Volume (Default: 1), ranges from 0 to 1"],
+		[
+			'Camera Flash',
+			"Flashes a camera with a colour.\nSkipped when Flashing Lights is off.\n\nValue 1: Camera (camGame/camHUD/camOther),\nForced (true/false)\n(Example: camHUD, true)\n\nValue 2: Colour, Duration in seconds.\nColour takes hex, an R, G, B triplet, or 'random'.\n(Example: 9DCFED, 4)\n(Example: 157, 207, 237, 4)\n\nLeave fields blank for the defaults\n(camGame, false, FFFFFF, 1)."
+		],
+		[
+			'Video Player',
+			"Plays a video from the videos folder.\n\nValue 1: Filename (no extension), Camera, Layer\n(Example: cutscene1)\n(Example: cutscene1, camHUD, 0)\n\nValue 2: Skip, Mid-Song, Loop, Play On Load\n(Example: true, true, false, true)\n\nMid-Song true plays it over gameplay;\nfalse treats it as a cutscene and pauses the song.\nDefaults: true, true, false, true."
+		],
+		[
+			'Tween',
+			"Tweens one property of one object.\n\nValue 1: Type, Tag, Object\n(Example: alpha, byeDad, dad)\nTypes: alpha, angle, x, y, color, zoom, scale\n(opacity/fade, rotate, colour/tint and size also work)\nFor zoom the object is a camera instead.\n\nValue 2: Value, Duration in seconds, Ease\n(Example: 0, 4, bounceIn)\nEase defaults to linear. For color, Value is a hex colour.\n\nThe tag works with cancelTween() and onTweenCompleted."
+		],
+		[
+			'Change Stage',
+			"Swaps the stage mid-song, moving the camera\nand characters onto it.\n\nValue 1: New stage name (as in the chart's stage field)\nValue 2: Move characters (true/false, default true)\nFalse leaves them where they are, for a\nbackdrop-only swap.\n\nThe judgement UI skin is left alone, since popups\nalready on screen keep the old one.\nScripts get onStageChanged when this lands."
+		]
 	];
 
 	public static var keysArray:Array<FlxKey> = [ONE, TWO, THREE, FOUR, FIVE, SIX, SEVEN, EIGHT]; // Used for Vortex Editor

@@ -1,19 +1,36 @@
--- Lua stuff
+-- Lua template: every hook the engine calls, with the arguments it actually passes.
+-- Delete what you do not need -- a hook you do not declare costs nothing.
+--
+-- Naming: every hook here is written "onX". Eight of them are dispatched by the engine under older
+-- names without the prefix (goodNoteHit, noteMiss, eventEarlyTrigger and friends); the "onX" spelling
+-- is bound to those at load, so it works everywhere. Declare one spelling or the other, never both.
+
+
+---------------------------------------------------------------------------
+-- Lifecycle -- these fire in menus and editors too, not only in a song
+---------------------------------------------------------------------------
 
 function onCreate()
-	-- Triggered when the lua file is started, some variables weren't created yet
+	-- The script just started. Most of the state around it does not exist yet.
 end
 
 function onCreatePost()
-	-- End of "create"
+	-- End of "create". Everything the state builds is up.
 end
 
 function onDestroy()
-	-- Triggered when the lua file is ended
+	-- The script is going away.
+end
+
+function onStateChange(className)
+	-- The game switched state. "className" is the full path, e.g. 'states.PlayState'.
 end
 
 
--- Gameplay/Song interactions
+---------------------------------------------------------------------------
+-- Song lifecycle
+---------------------------------------------------------------------------
+
 function onSectionHit()
 	-- Triggered after it goes to the next section
 end
@@ -38,12 +55,13 @@ end
 
 function onStartCountdown()
 	-- Countdown started, duh
-	-- return Function_Stop if you want to stop the countdown from happening (Can be used to trigger dialogues and stuff! You can trigger the countdown with startCountdown())
+	-- return Function_Stop if you want to stop the countdown from happening (Can be used to trigger
+	-- dialogues and stuff! You can trigger the countdown with startCountdown())
 	return Function_Continue;
 end
 
 function onCountdownStarted()
-	-- Called AFTER countdown started, if you want to stop it from starting, refer to the previous function (onStartCountdown)
+	-- Called AFTER countdown started. To stop it, use onStartCountdown above.
 end
 
 function onCountdownTick(counter)
@@ -51,12 +69,7 @@ function onCountdownTick(counter)
 	-- counter = 1 -> "Two"
 	-- counter = 2 -> "One"
 	-- counter = 3 -> "Go!"
-	-- counter = 4 -> Nothing happens lol, tho it is triggered at the same time as onSongStart i think
-end
-
-function onSpawnNote(id, data, type, isSustainNote, strumTime)
-	--You can use id to get other properties from notes, for example:
-	--getPropertyFromGroup('notes', id, 'texture')
+	-- counter = 4 -> no visual indication, this is nearly the exact moment the song starts
 end
 
 function onSongStart()
@@ -69,8 +82,138 @@ function onEndSong()
 	return Function_Continue;
 end
 
+function onSongRetry()
+	-- The song is restarting. Pause menu and game over both route here.
+end
 
--- Substate interactions
+function onSongExit()
+	-- The player is leaving the song for a menu.
+end
+
+function onResults()
+	-- The results screen is about to open. Read the finished score off game.playResult.
+end
+
+
+---------------------------------------------------------------------------
+-- Notes and strumlines
+---------------------------------------------------------------------------
+-- A note is data plus a pooled drawable. "id" is the note's index in its field, so it is only valid
+-- while the callback runs -- the slot is reused for a different note afterwards.
+--
+-- Reach a note's fields with the field group and that id:
+--   getPropertyFromGroup('game.playerField.notes', id, 'x')
+--   setPropertyFromGroup('game.opponentField.notes', id, 'alpha', 0.5)
+-- and pick the group with mustPress: 'game.playerField' when true, 'game.opponentField' when false.
+
+function onNotesGenerated(notes)
+	-- The decoded chart, before the strumlines bucket it. The window for adding, removing or
+	-- retiming notes wholesale.
+	--
+	-- "notes" is a real 1-based table of live NoteData, so notes[1].time reads and writes through to
+	-- the chart. Unlike the id above, these are the data objects and outlive the callback.
+end
+
+function onSpawnNote(id, column, noteType, isSustain, time, mustPress)
+	-- A note entered play. Reskin it here with setNoteTexture / setNoteTexturePart / setNoteColorable.
+end
+
+function onDespawnNote(id, column, noteType, isSustain, time, mustPress)
+	-- The note left play, however it left -- hit, missed, or simply scrolled past. "id" is -1: its
+	-- drawables are already back in the pool, so there is nothing left to point at. This is where you
+	-- drop whatever you were tracking for it.
+end
+
+function onSustainRelease(id, column, noteType, time)
+	-- A hold was dropped early. onNoteMiss fires too; this exists so you can tell a dropped hold from a
+	-- note that was never pressed. "id" is -1.
+end
+
+function onStrumsCreated(strumlineCount)
+	-- Receptors and note fields all exist. The earliest point you can safely move or restyle them.
+end
+
+function onKeyCountChange(totalColumns)
+	-- A strumline's key count changed.
+end
+
+function onNoteSkinLoaded(skinName)
+	-- The note skin this song resolved to.
+end
+
+function onUISkinLoaded(skinName)
+	-- The judgement-UI skin this song resolved to.
+end
+
+
+---------------------------------------------------------------------------
+-- Judgement
+---------------------------------------------------------------------------
+-- These four plus onNoteMiss/onNoteMissPress are dispatched as goodNoteHit, noteMiss and so on; the
+-- onX names below are aliases bound at load. Either spelling works, so pick one.
+--
+-- "id" is -1 in all of them: the note is being judged, not spawned, so there is no live index to
+-- hand you. Read the note that was just judged off game.lastJudgedNote, e.g.
+--   getProperty('lastJudgedNote.time')
+
+function onGoodNoteHitPre(id, column, noteType, isSustain)
+	-- You hit a note, BEFORE the hit is scored.
+	-- return Function_Stop to cancel the hit entirely.
+	return Function_Continue;
+end
+
+function onOpponentNoteHitPre(id, column, noteType, isSustain)
+	-- Same, for the opponent's notes.
+	return Function_Continue;
+end
+
+function onGoodNoteHit(id, column, noteType, isSustain)
+	-- You hit a note, AFTER the hit is scored.
+end
+
+function onOpponentNoteHit(id, column, noteType, isSustain)
+	-- Same, for the opponent's notes.
+end
+
+function onNoteMiss(id, column, noteType, isSustain)
+	-- A note was missed by letting it go past.
+end
+
+function onNoteMissPress(direction)
+	-- You pressed a key with no note under it (ghost miss).
+end
+
+function onGhostTap(key)
+	-- You pressed a key with no note under it while Ghost Tapping is ON, so it was not a miss.
+end
+
+
+---------------------------------------------------------------------------
+-- Input
+---------------------------------------------------------------------------
+-- "key" is the lane index: 0 - left, 1 - down, 2 - up, 3 - right on a 4-key chart.
+
+function onKeyPressPre(key)
+	-- Before the note key press calculations
+end
+
+function onKeyPress(key)
+	-- After the note key press calculations
+end
+
+function onKeyReleasePre(key)
+	-- Before the note key release calculations
+end
+
+function onKeyRelease(key)
+	-- After the note key release calculations
+end
+
+
+---------------------------------------------------------------------------
+-- Pausing and dying
+---------------------------------------------------------------------------
+
 function onPause()
 	-- Called when you press Pause while not on a cutscene/etc
 	-- return Function_Stop if you want to stop the player from pausing the game
@@ -78,200 +221,170 @@ function onPause()
 end
 
 function onResume()
-	-- Called after the game has been resumed from a pause (WARNING: Not necessarily from the pause screen, but most likely is!!!)
+	-- The game resumed (WARNING: not necessarily from the pause screen, but most likely is!!!)
 end
 
 function onGameOver()
-	-- You died! Called every single frame your health is lower (or equal to) zero
-	-- return Function_Stop if you want to stop the player from going into the game over screen
+	-- You died! Called every single frame your health is at or below zero.
+	-- return Function_Stop to stop the player from going into the game over screen (extra lives, shields).
 	return Function_Continue;
 end
 
 function onGameOverStart()
-	-- Called when you have entered the game over screen and "onGameOver" wasn't stopped
+	-- You entered the game over screen and "onGameOver" wasn't stopped
 end
 
 function onGameOverConfirm(retry)
-	-- Called when you Press Enter/Esc on Game Over
-	-- If you've pressed Esc, value "retry" will be false
+	-- You pressed Enter/Esc on Game Over. "retry" is false if you pressed Esc.
 end
 
 
--- Dialogue (When a dialogue is finished, it calls startCountdown again)
+---------------------------------------------------------------------------
+-- Dialogue (when a dialogue finishes it calls startCountdown again)
+---------------------------------------------------------------------------
+
 function onNextDialogue(line)
-	-- triggered when the next dialogue line starts, dialogue line starts at 0 (first line), although it won't be triggered on line 0
+	-- The next dialogue line started. Lines start at 0, and line 0 does not trigger this.
 end
 
 function onSkipDialogue(line)
-	-- triggered when you press Enter and skip a dialogue line that was still being typed, dialogue line starts at 0 (first line)
+	-- You pressed Enter and skipped a line that was still being typed. Lines start at 0.
 end
 
 
--- Key Press/Release
-function onKeyPressPre(key)
-	-- Called before the note key press calculations
-	-- "key" can be: 0 - left, 1 - down, 2 - up, 3 - right
-end
+---------------------------------------------------------------------------
+-- Score, camera, characters
+---------------------------------------------------------------------------
 
-function onKeyReleasePre(key)
-	-- Called before the note key release calculations
-	-- "key" can be: 0 - left, 1 - down, 2 - up, 3 - right
-end
-
-function onKeyPress(key)
-	-- Called after the note key press calculations
-	-- "key" can be: 0 - left, 1 - down, 2 - up, 3 - right
-end
-
-function onKeyRelease(key)
-	-- Called after the note key release calculations
-	-- "key" can be: 0 - left, 1 - down, 2 - up, 3 - right
-end
-
-function onGhostTap(key)
-	-- Player pressed a button, but there was no note to hit and "Ghost Tapping" is enabled (ghost tap)
-	-- "key" can be: 0 - left, 1 - down, 2 - up, 3 - right
-end
-
-
--- Note miss/hit
----- PRE
-function goodNoteHitPre(id, noteData, noteType, isSustainNote)
-	-- Function called when you hit a note (***before*** note hit calculations)
-	-- id: The note member id, you can get whatever variable you want from this note, example: "getPropertyFromGroup('notes', id, 'strumTime')"
-	-- noteData: 0 = Left, 1 = Down, 2 = Up, 3 = Right
-	-- noteType: The note type string
-	-- isSustainNote: If it's a hold note, can be either true or false
-end
-function opponentNoteHitPre(id, noteData, noteType, isSustainNote)
-	-- Function called when the opponent hits a note (***before*** note hit calculations)
-	-- id: The note member id, you can get whatever variable you want from this note, example: "getPropertyFromGroup('notes', id, 'strumTime')"
-	-- noteData: 0 = Left, 1 = Down, 2 = Up, 3 = Right
-	-- noteType: The note type string
-	-- isSustainNote: If it's a hold note, can be either true or false
-end
-
----- POST
-function goodNoteHit(id, noteData, noteType, isSustainNote)
-	-- Function called when you hit a note (***after*** note hit calculations)
-	-- id: The note member id, you can get whatever variable you want from this note, example: "getPropertyFromGroup('notes', id, 'strumTime')"
-	-- noteData: 0 = Left, 1 = Down, 2 = Up, 3 = Right
-	-- noteType: The note type string
-	-- isSustainNote: If it's a hold note, can be either true or false
-end
-function opponentNoteHit(id, noteData, noteType, isSustainNote)
-	-- Function called when the opponent hits a note (***after*** note hit calculations)
-	-- id: The note member id, you can get whatever variable you want from this note, example: "getPropertyFromGroup('notes', id, 'strumTime')"
-	-- noteData: 0 = Left, 1 = Down, 2 = Up, 3 = Right
-	-- noteType: The note type string
-	-- isSustainNote: If it's a hold note, can be either true or false
-end
-
-function noteMissPress(direction)
-	-- Called after the note press miss calculations
-	-- Player pressed a button, but there was no note to hit (ghost miss)
-end
-
-function noteMiss(id, direction, noteType, isSustainNote)
-	-- Called after the note miss calculations
-	-- Player missed a note by letting it go offscreen
-end
-
-
--- Other function hooks
-function preUpdateScore(miss)
-	-- Called before the score text updates
-	-- "miss" will be true if you missed
-	-- return Function_Stop if you want to stop the score text from updating
-	return Function_Continue
+function onUpdateScorePre(miss)
+	-- Before the score text updates. "miss" is true if you missed.
+	-- return Function_Stop to stop the score text from updating.
+	-- The engine dispatches this as preUpdateScore; onUpdateScorePre is the alias.
+	return Function_Continue;
 end
 
 function onUpdateScore(miss)
-	-- Called after the score text updates
-	-- "miss" will be true if you missed
+	-- After the score text updates. "miss" is true if you missed.
 end
 
 function onRecalculateRating()
-	-- return Function_Stop if you want to do your own rating calculation,
-	-- use setRatingPercent() to set the number on the calculation and setRatingString() to set the funny rating name
+	-- return Function_Stop to do your own rating calculation, then use setRatingPercent() for the
+	-- number and setRatingString() for the funny rating name.
 	-- NOTE: THIS IS CALLED BEFORE THE CALCULATION!!!
 	return Function_Continue;
 end
 
 function onMoveCamera(focus)
-	--Called when the camera focuses to a character
+	-- The camera focused on a character: 'boyfriend', 'dad' or 'gf'.
+end
 
-	if focus == 'boyfriend' then
-		-- Called when the camera focuses on boyfriend
-	elseif focus == 'dad' then
-		-- Called when the camera focuses on dad
-	elseif focus == 'gf' then
-		-- Called when the camera focuses on girlfriend
-	end
+function onStageChanged(stageName)
+	-- The "Change Stage" event swapped the stage. Anything you cached from the old one -- a prop out
+	-- of getVar, a sprite you held on to -- is destroyed by now, so re-fetch it here.
+end
+
+function onCharacterChange(line, oldCharacter, newCharacter)
+	-- A Change Character swap FINISHED, so the new character is loaded and on stage.
+end
+
+function onHealthChange(previous, current)
+	-- Health changed. Beats polling it in onUpdatePost.
 end
 
 
--- Event notes hooks
-function onEvent(name, value1, value2, strumTime)
-	-- Event note triggered
+---------------------------------------------------------------------------
+-- Chart events
+---------------------------------------------------------------------------
 
-	-- print('Event triggered: ', name, value1, value2, strumTime);
+function onEvent(name, value1, value2, strumTime)
+	-- Event note triggered.
 end
 
 function onEventPushed(name, value1, value2, strumTime)
-	-- Called for every event note, recommended to precache assets
+	-- Called once for every event note in the chart. The place to precache its assets.
 end
 
-function eventEarlyTrigger(name, value1, value2, strumTime)
-	--[[
-	Here's a port of the Kill Henchmen early trigger but on Lua instead of Haxe:
-
-	if name == 'Kill Henchmen' then
-		return 280;
-	end
-
-	This makes the "Kill Henchmen" event be triggered 280 miliseconds earlier so that the kill sound is perfectly timed with the song
-	]]--
-
-	-- write your shit under this line, the new return value will override the ones hardcoded on the engine
+function onEventEarlyTrigger(name, value1, value2, strumTime)
+	-- Return how many milliseconds early the event should fire. A port of the Kill Henchmen trigger:
+	--
+	--   if name == 'Kill Henchmen' then
+	--     return 280;
+	--   end
+	--
+	-- which fires it 280ms early so the kill sound lands with the song.
+	-- The engine dispatches this as eventEarlyTrigger; onEventEarlyTrigger is the alias.
 end
 
-
--- Custom Substates
-function onCustomSubstateCreate(name)
-	-- "name" is defined on "openCustomSubstate(name)"
-end
-
-function onCustomSubstateCreatePost(name)
-	-- "name" is defined on "openCustomSubstate(name)"
-end
-
-function onCustomSubstateUpdate(name, elapsed)
-	-- "name" is defined on "openCustomSubstate(name)"
-end
-
-function onCustomSubstateUpdatePost(name, elapsed)
-	-- "name" is defined on "openCustomSubstate(name)"
-end
-
-function onCustomSubstateDestroy(name)
-	-- "name" is defined on "openCustomSubstate(name)"
-	-- Called when you use "closeCustomSubstate()"
+function onChartParsed()
+	-- The chart is parsed but not yet turned into notes -- the window to rewrite its metadata,
+	-- events or strumlines before anything is built from it.
 end
 
 
--- Tween/Timer/Sound hooks
-function onTweenCompleted(tag, vars)
-	-- A tween you called has been completed, value "tag" is it's tag
-	-- vars = the tag of the sprite that was tweened
+---------------------------------------------------------------------------
+-- Menus (Freeplay and Story)
+---------------------------------------------------------------------------
+
+function onSelectionChange(index, total)
+	-- The highlighted entry changed.
+end
+
+function onDifficultyChange(index, name)
+	-- The chosen difficulty changed.
+end
+
+function onSongSelected(songKey, difficulty)
+	-- A song is about to load. return Function_Stop to cancel it.
+	return Function_Continue;
+end
+
+function onWeekSelected(weekName, difficulty)
+	-- A week is about to load. return Function_Stop to cancel it.
+	return Function_Continue;
+end
+
+
+---------------------------------------------------------------------------
+-- Engine services -- these reach whichever script host is current, menus included
+---------------------------------------------------------------------------
+
+function onTweenCompleted(tag)
+	-- A tween you started with a tag finished.
 end
 
 function onTimerCompleted(tag, loops, loopsLeft)
-	-- A loop from a timer you called has been completed, value "tag" is it's tag
-	-- loops = how many loops it will have done when it ends completely
-	-- loopsLeft = how many are remaining
+	-- A timer you started with a tag ticked.
 end
 
 function onSoundFinished(tag)
-	-- Only called if you use playSound() with a tag
+	-- A sound you started with a tag finished.
+end
+
+function onAchievementUnlocked(name)
+	-- An achievement unlocked, whether a script or the engine did it.
+end
+
+function onModSwitched(folder)
+	-- The active mod changed.
+end
+
+
+---------------------------------------------------------------------------
+-- Custom substates -- one you opened yourself with openCustomSubstate(name)
+---------------------------------------------------------------------------
+
+function onCustomSubstateCreate(name)
+end
+
+function onCustomSubstateCreatePost(name)
+end
+
+function onCustomSubstateUpdate(name, elapsed)
+end
+
+function onCustomSubstateUpdatePost(name, elapsed)
+end
+
+function onCustomSubstateDestroy(name)
+	-- Called when you use closeCustomSubstate()
 end

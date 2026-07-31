@@ -6,6 +6,7 @@ import backend.NoteSkinConfig.SkinImage;
 import backend.UISkinConfig;
 import backend.UISkinConfig.UIJudgement;
 import backend.UISkinConfig.UIPlacement;
+import backend.EventTools;
 import backend.StageData;
 import backend.WeekData;
 import backend.Song;
@@ -89,6 +90,7 @@ typedef UnderlayBand = {
 	var width:Float;
 };
 
+@:allow(states.play)
 class PlayState extends MusicBeatState {
 	public static var STRUM_X = 42;
 	public static var STRUM_X_MIDDLESCROLL = -278;
@@ -139,6 +141,12 @@ class PlayState extends MusicBeatState {
 	public var gfGroup:FlxSpriteGroup;
 
 	public static var curStage:String = '';
+
+	/**
+		The props the current stage's JSON declared, kept so `changeStage` can take them back out.
+		Null when the stage declares no object list.
+	**/
+	var stageObjects:Map<String, FlxSprite> = null;
 	public static var stageUI(default, set):String = "normal";
 	public static var uiPrefix:String = "";
 	public static var uiPostfix:String = "";
@@ -245,6 +253,12 @@ class PlayState extends MusicBeatState {
 		system owns the displayed score/accuracy/grade and the fields here mirror it.
 	**/
 	public var scoring:backend.scoring.ScoreController = new backend.scoring.ScoreController(ClientPrefs.data.scoreSystem);
+
+	/** The chart-event interpreter. See `states.play.EventRunner`. **/
+	public var events:states.play.EventRunner;
+
+	/** Video, dialogue and countdown. See `states.play.CutsceneRunner`. **/
+	public var cutscenes:states.play.CutsceneRunner;
 
 	/** Highest combo reached this run. */
 	public var maxCombo:Int = 0;
@@ -392,6 +406,8 @@ class PlayState extends MusicBeatState {
 
 	override public function create() {
 		// trace('Playback Rate: ' + playbackRate);
+		events = new states.play.EventRunner(this);
+		cutscenes = new states.play.CutsceneRunner(this);
 		Mods.allowCurrentModAssets = true; // gameplay: ensure the active mod's assets resolve
 		_lastLoadedModDirectory = Mods.currentModDirectory;
 		Paths.clearStoredMemory();
@@ -555,9 +571,8 @@ class PlayState extends MusicBeatState {
 		bindStrumCharacter(bfName, boyfriend);
 
 		if (stageData.objects != null && stageData.objects.length > 0) {
-			var list:Map<String, FlxSprite> = StageData.addObjectsToState(stageData.objects, !stageData.hide_girlfriend ? gfGroup : null, dadGroup,
-				boyfriendGroup, this);
-			for (key => spr in list)
+			stageObjects = StageData.addObjectsToState(stageData.objects, !stageData.hide_girlfriend ? gfGroup : null, dadGroup, boyfriendGroup, this);
+			for (key => spr in stageObjects)
 				if (!StageData.reservedNames.contains(key))
 					variables.set(key, spr);
 		} else {
@@ -737,7 +752,7 @@ class PlayState extends MusicBeatState {
 		for (notetype in noteTypes)
 			loadNoteTypeScripts(notetype);
 		for (event in eventsPushed)
-			loadEventScripts(event);
+			events.loadEventScripts(event);
 		scriptedContentReady = true;
 
 		// SONG SPECIFIC SCRIPTS
@@ -758,7 +773,7 @@ class PlayState extends MusicBeatState {
 
 		if (eventNotes.length > 0) {
 			for (event in eventNotes)
-				event.strumTime -= eventEarlyTrigger(event);
+				event.strumTime -= events.eventEarlyTrigger(event);
 			eventNotes.sort(sortByTime);
 		}
 
@@ -817,7 +832,7 @@ class PlayState extends MusicBeatState {
 		super.create();
 		Paths.clearUnusedMemory();
 
-		cacheCountdown();
+		cutscenes.cacheCountdown();
 		cachePopUpScore();
 
 		if (eventNotes.length > 0)
@@ -994,142 +1009,13 @@ class PlayState extends MusicBeatState {
 	/** Videos warmed by `precacheVideo`, keyed by name, adopted on the matching `startVideo` call. */
 	public var precachedVideos:Map<String, VideoSprite> = new Map<String, VideoSprite>();
 
-	/**
-	 * Warms a video ahead of time so the matching `startVideo` starts without the open/decode hitch.
-	 * Pass the same `forMidSong`/`canSkip`/`loop` you'll later hand to `startVideo`; a mismatch on
-	 * `forMidSong` or `loop` (which are baked in at load time) discards the warmed copy and rebuilds.
-	 */
-	public function precacheVideo(name:String, forMidSong:Bool = false, canSkip:Bool = true, loop:Bool = false):Void {
-		#if VIDEOS_ALLOWED
-		if (precachedVideos.exists(name))
-			return;
 
-		final fileName:String = Paths.video(name);
-		#if sys
-		if (!FileSystem.exists(fileName))
-		#else
-		if (!OpenFlAssets.exists(fileName))
-		#end
-			return;
 
-		precachedVideos.set(name, new VideoSprite(fileName, forMidSong, canSkip, loop, true));
-		#end
-	}
-
-	public function startVideo(name:String, forMidSong:Bool = false, canSkip:Bool = true, loop:Bool = false, playOnLoad:Bool = true) {
-		#if VIDEOS_ALLOWED
-		inCutscene = !forMidSong;
-		canPause = forMidSong;
-
-		var foundFile:Bool = false;
-		var fileName:String = Paths.video(name);
-
-		#if sys
-		if (FileSystem.exists(fileName))
-		#else
-		if (OpenFlAssets.exists(fileName))
-		#end
-		foundFile = true;
-
-		if (foundFile) {
-			var reused:VideoSprite = precachedVideos.get(name);
-			if (reused != null) {
-				precachedVideos.remove(name);
-				// The warmed copy is only valid if the load-time options match; otherwise rebuild.
-				if (reused.waiting != forMidSong || reused.looping != loop) {
-					reused.destroy();
-					reused = null;
-				}
-			}
-
-			videoCutscene = reused != null ? reused : new VideoSprite(fileName, forMidSong, canSkip, loop);
-			videoCutscene.canSkip = canSkip;
-			if (forMidSong)
-				videoCutscene.videoSprite.bitmap.rate = playbackRate;
-
-			// Finish callback
-			if (!forMidSong) {
-				function onVideoEnd() {
-					if (!isDead
-						&& generatedMusic
-						&& PlayState.SONG.notes[Std.int(curStep / 16)] != null
-						&& !endingSong
-						&& !isCameraOnForcedPos) {
-						moveCameraSection();
-						FlxG.camera.snapToTarget();
-					}
-					videoCutscene = null;
-					canPause = true;
-					inCutscene = false;
-					startAndEnd();
-				}
-				videoCutscene.finishCallback = onVideoEnd;
-				videoCutscene.onSkip = onVideoEnd;
-			}
-			if (GameOverSubstate.instance != null && isDead)
-				GameOverSubstate.instance.add(videoCutscene);
-			else
-				add(videoCutscene);
-
-			if (playOnLoad)
-				videoCutscene.play();
-			return videoCutscene;
-		}
-		#if (LUA_ALLOWED || HSCRIPT_ALLOWED)
-		else
-			addTextToDebug("Video not found: " + fileName, FlxColor.RED);
-		#else
-		else
-			FlxG.log.error("Video not found: " + fileName);
-		#end
-		#else
-		FlxG.log.warn('Platform not supported!');
-		startAndEnd();
-		#end
-		return null;
-	}
-
-	function startAndEnd() {
-		if (endingSong)
-			endSong();
-		else
-			startCountdown();
-	}
 
 	var dialogueCount:Int = 0;
 
 	public var psychDialogue:DialogueBoxPsych;
 
-	// You don't have to add a song, just saying. You can just do "startDialogue(DialogueBoxPsych.parseDialogue(Paths.json(songName + '/dialogue')))" and it should load dialogue.json
-	public function startDialogue(dialogueFile:DialogueFile, ?song:String = null):Void {
-		// TO DO: Make this more flexible, maybe?
-		if (psychDialogue != null)
-			return;
-
-		if (dialogueFile.dialogue.length > 0) {
-			inCutscene = true;
-			psychDialogue = new DialogueBoxPsych(dialogueFile, song);
-			psychDialogue.scrollFactor.set();
-			if (endingSong) {
-				psychDialogue.finishThing = function() {
-					psychDialogue = null;
-					endSong();
-				}
-			} else {
-				psychDialogue.finishThing = function() {
-					psychDialogue = null;
-					startCountdown();
-				}
-			}
-			psychDialogue.nextDialogueThing = startNextDialogue;
-			psychDialogue.skipDialogueThing = skipDialogue;
-			psychDialogue.cameras = [camHUD];
-			add(psychDialogue);
-		} else {
-			FlxG.log.warn('Your dialogue file is badly formatted!');
-			startAndEnd();
-		}
-	}
 
 	var startTimer:FlxTimer;
 	var finishTimer:FlxTimer = null;
@@ -1141,162 +1027,8 @@ class PlayState extends MusicBeatState {
 
 	public static var startOnTime:Float = 0;
 
-	function cacheCountdown() {
-		var introAssets:Map<String, Array<String>> = new Map<String, Array<String>>();
-		var introImagesArray:Array<String> = switch (stageUI) {
-			case "pixel": ['pixelUI/ready-pixel', 'pixelUI/set-pixel', 'pixelUI/date-pixel'];
-			case "normal": ["ready", "set", "go"];
-			default: [
-					'${uiPrefix}UI/ready${uiPostfix}',
-					'${uiPrefix}UI/set${uiPostfix}',
-					'${uiPrefix}UI/go${uiPostfix}'
-				];
-		}
-		introAssets.set(stageUI, introImagesArray);
-		var introAlts:Array<String> = introAssets.get(stageUI);
-		for (asset in introAlts)
-			Paths.image(asset);
 
-		// UI Skin: warm the active skin's countdown images (no-op when the pref has no folder skin).
-		for (logical in ['ready', 'set', 'go'])
-			UISkinConfig.image(logical);
 
-		Paths.sound('intro3' + introSoundsSuffix);
-		Paths.sound('intro2' + introSoundsSuffix);
-		Paths.sound('intro1' + introSoundsSuffix);
-		Paths.sound('introGo' + introSoundsSuffix);
-	}
-
-	public function startCountdown() {
-		if (startedCountdown) {
-			callOnScripts(ScriptHooks.START_COUNTDOWN);
-			return false;
-		}
-
-		seenCutscene = true;
-		inCutscene = false;
-		var ret:Dynamic = callOnScripts(ScriptHooks.START_COUNTDOWN, null, true);
-		if (ret != LuaUtils.Function_Stop) {
-			if (skipCountdown || startOnTime > 0)
-				skipArrowStartTween = true;
-
-			canPause = true;
-			// NoteSystem V2
-			buildNoteFields();
-
-			// Always arm the recorder (recording is two array pushes per press) — whether the run
-			// PERSISTS a replay is decided once at endSong, where ranked/saveReplays are evaluated.
-			// Deciding here is fragile: botplay/practice can be toggled mid-song from the pause menu.
-			if (!replayMode && !chartingMode && replayRecorder != null)
-				replayRecorder.begin(Highscore.formatSong(Song.loadedSongName, storyDifficulty) + '_' + playerKeyCount() + 'k', Song.loadedSongName,
-					(Mods.currentModDirectory != null) ? Mods.currentModDirectory : '', storyDifficulty, playerKeyCount(), playbackRate,
-					scoring.system.id());
-
-			startedCountdown = true;
-			Conductor.songPosition = -Conductor.crochet * 5 + Conductor.offset;
-			setOnScripts('startedCountdown', true);
-			callOnScripts(ScriptHooks.COUNTDOWN_STARTED);
-
-			var swagCounter:Int = 0;
-			if (startOnTime > 0) {
-				clearNotesBefore(startOnTime);
-				setSongTime(startOnTime - 350);
-				return true;
-			} else if (skipCountdown) {
-				setSongTime(0);
-				return true;
-			}
-			moveCameraSection();
-
-			startTimer = new FlxTimer().start(Conductor.crochet / 1000 / playbackRate, function(tmr:FlxTimer) {
-				characterBopper(tmr.loopsLeft);
-
-				var introAssets:Map<String, Array<String>> = new Map<String, Array<String>>();
-				var introImagesArray:Array<String> = switch (stageUI) {
-					case "pixel": ['pixelUI/ready-pixel', 'pixelUI/set-pixel', 'pixelUI/date-pixel'];
-					case "normal": ["ready", "set", "go"];
-					default: [
-							'${uiPrefix}UI/ready${uiPostfix}',
-							'${uiPrefix}UI/set${uiPostfix}',
-							'${uiPrefix}UI/go${uiPostfix}'
-						];
-				}
-				introAssets.set(stageUI, introImagesArray);
-
-				var introAlts:Array<String> = introAssets.get(stageUI);
-				var antialias:Bool = (ClientPrefs.data.antialiasing && !isPixelStage);
-				var tick:Countdown = THREE;
-
-				switch (swagCounter) {
-					case 0:
-						FlxG.sound.play(Paths.sound('intro3' + introSoundsSuffix), 0.6);
-						tick = THREE;
-					case 1:
-						countdownReady = createCountdownSprite(introAlts[0], antialias, 'ready');
-						FlxG.sound.play(Paths.sound('intro2' + introSoundsSuffix), 0.6);
-						tick = TWO;
-					case 2:
-						countdownSet = createCountdownSprite(introAlts[1], antialias, 'set');
-						FlxG.sound.play(Paths.sound('intro1' + introSoundsSuffix), 0.6);
-						tick = ONE;
-					case 3:
-						countdownGo = createCountdownSprite(introAlts[2], antialias, 'go');
-						FlxG.sound.play(Paths.sound('introGo' + introSoundsSuffix), 0.6);
-						tick = GO;
-					case 4:
-						tick = START;
-				}
-
-				if (!skipArrowStartTween) {
-					notes.forEachAlive(function(note:Note) {
-						if (ClientPrefs.data.opponentStrums || note.mustPress) {
-							note.copyAlpha = false;
-							note.alpha = note.multAlpha;
-							if (ClientPrefs.data.middleScroll && !note.mustPress)
-								note.alpha *= 0.35;
-						}
-					});
-				}
-
-				stagesFunc(function(stage:BaseStage) stage.countdownTick(tick, swagCounter));
-				callOnLuas(ScriptHooks.COUNTDOWN_TICK, [swagCounter]);
-				callOnHScript(ScriptHooks.COUNTDOWN_TICK, [tick, swagCounter]);
-
-				swagCounter += 1;
-			}, 5);
-		}
-		return true;
-	}
-
-	inline private function createCountdownSprite(image:String, antialias:Bool, ?logical:String):FlxSprite {
-		var spr:FlxSprite = new FlxSprite();
-		// UI Skin: prefer the active skin's ready/set/go image; fall back to the base stageUI asset.
-		var skinImg = (logical != null) ? UISkinConfig.image(logical) : null;
-		if (skinImg != null)
-			spr.loadGraphic(skinImg.graphic);
-		else
-			spr.loadGraphic(Paths.image(image));
-		spr.cameras = [camHUD];
-		spr.scrollFactor.set();
-		spr.updateHitbox();
-
-		if (PlayState.isPixelStage)
-			spr.setGraphicSize(Std.int(spr.width * daPixelZoom));
-		else if (skinImg != null && skinImg.factor != 1)
-			spr.setGraphicSize(Std.int(spr.width * skinImg.factor));
-
-		spr.screenCenter();
-		spr.antialiasing = antialias;
-		insert(members.indexOf(noteGroup), spr);
-		FlxTween.tween(spr, {/*y: spr.y + 100,*/ alpha: 0}, Conductor.crochet / 1000, {
-			ease: FlxEase.cubeInOut,
-			onComplete: function(twn:FlxTween) {
-				remove(spr);
-				spr.destroy();
-			}
-		});
-		return spr;
-	}
 
 	public function addBehindGF(obj:FlxBasic) {
 		insert(members.indexOf(gfGroup), obj);
@@ -1412,14 +1144,7 @@ class PlayState extends MusicBeatState {
 		Conductor.songPosition = time;
 	}
 
-	public function startNextDialogue() {
-		dialogueCount++;
-		callOnScripts(ScriptHooks.NEXT_DIALOGUE, [dialogueCount]);
-	}
 
-	public function skipDialogue() {
-		callOnScripts(ScriptHooks.SKIP_DIALOGUE, [dialogueCount]);
-	}
 
 	function startSong():Void {
 		startingSong = false;
@@ -1526,7 +1251,7 @@ class PlayState extends MusicBeatState {
 			if (eventsChart != null)
 				for (event in Song.eventsFromV2(eventsChart.events)) // Event Notes
 					for (i in 0...event[1].length)
-						makeEvent(event, i);
+						events.makeEvent(event, i);
 		} catch (e:Dynamic) {}
 
 		// NoteSystem V2: precache note types from the native note list (types already resolved to strings).
@@ -1541,7 +1266,7 @@ class PlayState extends MusicBeatState {
 		applyKeyCountGlobals(totalColumns);
 		for (event in songData.events) // Event Notes
 			for (i in 0...event[1].length)
-				makeEvent(event, i);
+				events.makeEvent(event, i);
 
 		// compatibilityMode: stand up the legacy-API mirror now (before onCreatePost) and pre-decode the
 		// chart so old `unspawnNotes` load-time scripts have a note list to mutate. buildNoteFields reuses
@@ -1556,21 +1281,6 @@ class PlayState extends MusicBeatState {
 	}
 
 	// called only once per different event (Used for precaching)
-	function eventPushed(event:EventNote) {
-		eventPushedUnique(event);
-		if (eventsPushed.contains(event.event)) {
-			return;
-		}
-
-		stagesFunc(function(stage:BaseStage) stage.eventPushed(event));
-		eventsPushed.push(event.event);
-
-		// An event a script pushed after create() still needs its own script. Before the bootstrap has
-		// run the create() loop below picks these up; after it, nothing else would.
-		if (scriptedContentReady)
-			loadEventScripts(event.event);
-	}
-
 	/**
 		Whether the create()-time pass over `noteTypes`/`eventsPushed` has run.
 
@@ -1579,12 +1289,6 @@ class PlayState extends MusicBeatState {
 		load its script itself, or it runs with no implementation and no error.
 	**/
 	var scriptedContentReady:Bool = false;
-
-	/** Loads `custom_events/<name>` for both scripting languages. Idempotent per name by caller. **/
-	function loadEventScripts(name:String) {
-		#if LUA_ALLOWED startLuasNamed('custom_events/$name.lua'); #end
-		#if HSCRIPT_ALLOWED startHScriptsNamed('custom_events/$name.hx'); #end
-	}
 
 	/**
 		Loads `custom_notetypes/<name>` for both scripting languages, registering the type so a later
@@ -1608,106 +1312,6 @@ class PlayState extends MusicBeatState {
 	var charTargetType:Int = 0;
 
 	/** The strumline holding a legacy character slot's character. **/
-	inline function lineForCharType(type:Int):backend.SongChart.StrumLineData {
-		return switch (type) {
-			case 1: SONG.opponentLine();
-			case 2: SONG.gfLine();
-			default: SONG.playerLine();
-		}
-	}
-
-	/** The legacy character slot a strumline feeds (0 = bf, 1 = dad, 2 = gf). **/
-	function charTypeOfLine(line:backend.SongChart.StrumLineData):Int {
-		if (line == null)
-			return 0;
-		if (line.isPlayer)
-			return 0;
-		return (line == SONG.gfLine()) ? 2 : 1;
-	}
-
-	/**
-		Resolves a "Change Character" target into `charTargetLine` + `charTargetType`. psych_v2 ties characters
-		to their strumline, so the value may name one -- any line id (`player`, `opponent`, `gf`, or a custom
-		one) or `line:<index>`/`strum:<index>`. The legacy `bf`/`dad`/`gf` aliases and the plain numeric
-		character slot still resolve exactly as they used to.
-		@param value the event's value 1
-	**/
-	function resolveCharTarget(value:String):Void {
-		charTargetLine = -1;
-		charTargetType = 0;
-		if (value == null)
-			return;
-
-		var name:String = value.trim().toLowerCase();
-		var explicit:Bool = false;
-		if (name.startsWith('line:')) {
-			name = name.substr(5).trim();
-			explicit = true;
-		} else if (name.startsWith('strum:')) {
-			name = name.substr(6).trim();
-			explicit = true;
-		}
-
-		if (name.length > 0) {
-			for (sd in SONG.strumLines)
-				if (sd.id != null && sd.id.toLowerCase() == name) {
-					charTargetLine = sd.index;
-					charTargetType = charTypeOfLine(sd);
-					return;
-				}
-
-			var num:Null<Int> = Std.parseInt(name);
-			if (num != null) {
-				if (explicit) { // `line:2` -- an absolute strumline index
-					if (num >= 0 && num < SONG.strumLines.length) {
-						var sd:backend.SongChart.StrumLineData = SONG.strumLines[num];
-						charTargetLine = sd.index;
-						charTargetType = charTypeOfLine(sd);
-					}
-					return;
-				}
-				charTargetType = (num == 1 || num == 2) ? num : 0; // legacy: the slot itself
-			} else {
-				charTargetType = switch (name) {
-					case 'gf' | 'girlfriend': 2;
-					case 'dad' | 'opponent': 1;
-					default: 0;
-				}
-			}
-		}
-
-		var line:backend.SongChart.StrumLineData = lineForCharType(charTargetType);
-		if (line != null)
-			charTargetLine = line.index;
-	}
-
-	// called by every event with the same name
-	function eventPushedUnique(event:EventNote) {
-		switch (event.event) {
-			case "Change Character":
-				resolveCharTarget(event.value1);
-				addCharacterToList(event.value2, charTargetType);
-
-			case 'Play Sound':
-				Paths.sound(event.value1); // Precache sound
-		}
-		stagesFunc(function(stage:BaseStage) stage.eventPushedUnique(event));
-	}
-
-	/**
-		How many milliseconds early an event should fire, from whichever script claims it.
-
-		The engine has no offsets of its own: an event that needs one belongs to whatever implements it,
-		so it declares the offset from the same place (see the base-game pack's `custom_events/`).
-	**/
-	function eventEarlyTrigger(event:EventNote):Float {
-		var returnedValue:Null<Float> = callOnScripts(ScriptHooks.EVENT_EARLY_TRIGGER, [event.event, event.value1, event.value2, event.strumTime], true);
-		if (returnedValue != null && returnedValue != 0) {
-			return returnedValue;
-		}
-		return 0;
-	}
-
 	/**
 		Orders anything carrying a `strumTime` -- chart notes, events, editor rows -- ascending.
 
@@ -1720,23 +1324,6 @@ class PlayState extends MusicBeatState {
 		var a:Float = Obj1.strumTime;
 		var b:Float = Obj2.strumTime;
 		return FlxSort.byValues(FlxSort.ASCENDING, a, b);
-	}
-
-	function makeEvent(event:Array<Dynamic>, i:Int) {
-		var subEvent:EventNote = {
-			strumTime: event[0] + ClientPrefs.data.noteOffset,
-			event: event[1][i][0],
-			value1: event[1][i][1],
-			value2: event[1][i][2]
-		};
-		eventNotes.push(subEvent);
-		eventPushed(subEvent);
-		callOnScripts(ScriptHooks.EVENT_PUSHED, [
-			subEvent.event,
-			subEvent.value1 != null ? subEvent.value1 : '',
-			subEvent.value2 != null ? subEvent.value2 : '',
-			subEvent.strumTime
-		]);
 	}
 
 	public var skipArrowStartTween:Bool = false; // for lua
@@ -2255,6 +1842,111 @@ class PlayState extends MusicBeatState {
 		return false;
 	}
 
+	/**
+		Fires a chart event by name, as if the chart had one at this moment.
+
+		Forwards to `events`; kept on `PlayState` because Lua's `triggerEvent` callback and scripts
+		reach it here. Deliberately not `inline` -- reflection needs a real method to find.
+	**/
+	public function triggerEvent(eventName:String, value1:String, value2:String, strumTime:Float) {
+		events.triggerEvent(eventName, value1, value2, strumTime);
+	}
+
+	/** Swaps the stage mid-song. Forwards to `events`; see `EventRunner.changeStage`. **/
+	public function changeStage(newStage:String, moveCharacters:Bool = true):Void {
+		events.changeStage(newStage, moveCharacters);
+	}
+
+	// Forwarders to `cutscenes`. Scripts and the Lua API reach these on PlayState, so they keep their
+	// names and signatures here. None are `inline`: an inlined method has no runtime entry for
+	// reflection to resolve.
+
+	/** Plays a video from `videos/`. See `CutsceneRunner.startVideo`. **/
+	public function startVideo(name:String, forMidSong:Bool = false, canSkip:Bool = true, loop:Bool = false, playOnLoad:Bool = true) {
+		return cutscenes.startVideo(name, forMidSong, canSkip, loop, playOnLoad);
+	}
+
+	/** Warms a video ahead of the `startVideo` that will use it. See `CutsceneRunner.precacheVideo`. **/
+	public function precacheVideo(name:String, forMidSong:Bool = false, canSkip:Bool = true, loop:Bool = false):Void {
+		cutscenes.precacheVideo(name, forMidSong, canSkip, loop);
+	}
+
+	/** Opens a dialogue box. See `CutsceneRunner.startDialogue`. **/
+	public function startDialogue(dialogueFile:DialogueFile, ?song:String = null):Void {
+		cutscenes.startDialogue(dialogueFile, song);
+	}
+
+	/** Advances to the next dialogue line. **/
+	public function startNextDialogue() {
+		cutscenes.startNextDialogue();
+	}
+
+	/** Skips the line currently being typed. **/
+	public function skipDialogue() {
+		cutscenes.skipDialogue();
+	}
+
+	/**
+		Starts play: builds the note fields, arms the replay recorder, starts the conductor, and shows
+		the countdown unless it is being skipped.
+
+		The countdown ART is `cutscenes.runCountdown`; everything here is song lifecycle and belongs
+		with the state that owns it. `startCallback` points here.
+
+		@return `false` when a countdown was already running, `true` otherwise
+	**/
+	public function startCountdown():Bool {
+		if (startedCountdown) {
+			callOnScripts(ScriptHooks.START_COUNTDOWN);
+			return false;
+		}
+
+		seenCutscene = true;
+		inCutscene = false;
+		if (callOnScripts(ScriptHooks.START_COUNTDOWN, null, true) == LuaUtils.Function_Stop)
+			return true;
+
+		if (skipCountdown || startOnTime > 0)
+			skipArrowStartTween = true;
+
+		canPause = true;
+		buildNoteFields();
+		armReplayRecorder();
+
+		startedCountdown = true;
+		Conductor.songPosition = -Conductor.crochet * 5 + Conductor.offset;
+		setOnScripts('startedCountdown', true);
+		callOnScripts(ScriptHooks.COUNTDOWN_STARTED);
+
+		if (startOnTime > 0) {
+			clearNotesBefore(startOnTime);
+			setSongTime(startOnTime - 350);
+			return true;
+		}
+		if (skipCountdown) {
+			setSongTime(0);
+			return true;
+		}
+
+		moveCameraSection();
+		cutscenes.runCountdown();
+		return true;
+	}
+
+	/**
+		Arms the replay recorder for this run.
+
+		Always armed -- recording is two array pushes per press -- because whether the run PERSISTS a
+		replay is decided once at `endSong`, where ranked/saveReplays are evaluated. Deciding here is
+		fragile: botplay and practice can be toggled mid-song from the pause menu.
+	**/
+	function armReplayRecorder():Void {
+		if (replayMode || chartingMode || replayRecorder == null)
+			return;
+		replayRecorder.begin(Highscore.formatSong(Song.loadedSongName, storyDifficulty) + '_' + playerKeyCount() + 'k', Song.loadedSongName,
+			(Mods.currentModDirectory != null) ? Mods.currentModDirectory : '', storyDifficulty, playerKeyCount(), playbackRate, scoring.system.id());
+	}
+
 	public function checkEventNote() {
 		while (eventNotes.length > 0) {
 			var leStrumTime:Float = eventNotes[0].strumTime;
@@ -2270,310 +1962,9 @@ class PlayState extends MusicBeatState {
 			if (eventNotes[0].value2 != null)
 				value2 = eventNotes[0].value2;
 
-			triggerEvent(eventNotes[0].event, value1, value2, leStrumTime);
+			events.triggerEvent(eventNotes[0].event, value1, value2, leStrumTime);
 			eventNotes.shift();
 		}
-	}
-
-	public function triggerEvent(eventName:String, value1:String, value2:String, strumTime:Float) {
-		var flValue1:Null<Float> = Std.parseFloat(value1);
-		var flValue2:Null<Float> = Std.parseFloat(value2);
-		if (Math.isNaN(flValue1))
-			flValue1 = null;
-		if (Math.isNaN(flValue2))
-			flValue2 = null;
-
-		switch (eventName) {
-			case 'Hey!':
-				var value:Int = 2;
-				switch (value1.toLowerCase().trim()) {
-					case 'bf' | 'boyfriend' | '0':
-						value = 0;
-					case 'gf' | 'girlfriend' | '1':
-						value = 1;
-				}
-
-				if (flValue2 == null || flValue2 <= 0)
-					flValue2 = 0.6;
-
-				if (value != 0) {
-					if (dad.curCharacter.startsWith('gf')) { // Tutorial GF is actually Dad! The GF is an imposter!! ding ding ding ding ding ding ding, dindinding, end my suffering
-						dad.playAnim('cheer', true);
-						dad.specialAnim = true;
-						dad.heyTimer = flValue2;
-					} else if (gf != null) {
-						gf.playAnim('cheer', true);
-						gf.specialAnim = true;
-						gf.heyTimer = flValue2;
-					}
-				}
-				if (value != 1) {
-					boyfriend.playAnim('hey', true);
-					boyfriend.specialAnim = true;
-					boyfriend.heyTimer = flValue2;
-				}
-
-			case 'Set GF Speed':
-				if (flValue1 == null || flValue1 < 1)
-					flValue1 = 1;
-				gfSpeed = Math.round(flValue1);
-
-			case 'Add Camera Zoom':
-				if (ClientPrefs.data.camZooms && FlxG.camera.zoom < 1.35) {
-					if (flValue1 == null)
-						flValue1 = 0.015;
-					if (flValue2 == null)
-						flValue2 = 0.03;
-
-					FlxG.camera.zoom += flValue1;
-					camHUD.zoom += flValue2;
-				}
-
-			case 'Play Animation':
-				// trace('Anim to play: ' + value1);
-				var char:Character = dad;
-				switch (value2.toLowerCase().trim()) {
-					case 'bf' | 'boyfriend':
-						char = boyfriend;
-					case 'gf' | 'girlfriend':
-						char = gf;
-					default:
-						if (flValue2 == null)
-							flValue2 = 0;
-						switch (Math.round(flValue2)) {
-							case 1: char = boyfriend;
-							case 2: char = gf;
-						}
-				}
-
-				if (char != null) {
-					char.playAnim(value1, true);
-					char.specialAnim = true;
-				}
-
-			case 'Camera Follow Pos':
-				if (camFollow != null) {
-					isCameraOnForcedPos = false;
-					if (flValue1 != null || flValue2 != null) {
-						isCameraOnForcedPos = true;
-						if (flValue1 == null)
-							flValue1 = 0;
-						if (flValue2 == null)
-							flValue2 = 0;
-						camFollow.x = flValue1;
-						camFollow.y = flValue2;
-					}
-				}
-
-			case 'Alt Idle Animation':
-				var char:Character = dad;
-				switch (value1.toLowerCase().trim()) {
-					case 'gf' | 'girlfriend':
-						char = gf;
-					case 'boyfriend' | 'bf':
-						char = boyfriend;
-					default:
-						var parsed:Null<Int> = Std.parseInt(value1);
-						var val:Int = (parsed != null) ? parsed : 0;
-
-						switch (val) {
-							case 1: char = boyfriend;
-							case 2: char = gf;
-						}
-				}
-
-				if (char != null) {
-					char.idleSuffix = value2;
-					char.recalculateDanceIdle();
-				}
-
-			case 'Screen Shake':
-				var valuesArray:Array<String> = [value1, value2];
-				var targetsArray:Array<FlxCamera> = [camGame, camHUD];
-				for (i in 0...targetsArray.length) {
-					var split:Array<String> = valuesArray[i].split(',');
-					var duration:Float = 0;
-					var intensity:Float = 0;
-					if (split[0] != null)
-						duration = Std.parseFloat(split[0].trim());
-					if (split[1] != null)
-						intensity = Std.parseFloat(split[1].trim());
-					if (Math.isNaN(duration))
-						duration = 0;
-					if (Math.isNaN(intensity))
-						intensity = 0;
-
-					if (duration > 0 && intensity != 0) {
-						targetsArray[i].shake(intensity, duration);
-					}
-				}
-
-			case 'Change Character':
-				resolveCharTarget(value1);
-				var type:Int = charTargetType;
-				var targetLine:Int = charTargetLine;
-
-				var characterName:String = 'boyfriend';
-				var character:Character = boyfriend;
-				var characterMap:Map<String, Character> = boyfriendMap;
-				var icon:HealthIcon = iconP1;
-				switch (type)
-				{
-					case 1:
-						characterName = 'dad';
-						character = dad;
-						characterMap = dadMap;
-						icon = iconP2;
-					case 2:
-						characterName = 'gf';
-						character = gf;
-						characterMap = gfMap;
-						icon = null;
-				}
-
-				// A targeted strumline swaps the character IT is bound to (extra lines can share a slot).
-				if (targetLine >= 0 && targetLine < strumLines.length) {
-					var bound:Array<Character> = strumLines[targetLine].characters;
-					if (bound.length > 0 && bound[0] != null)
-						character = bound[0];
-				}
-				// The strumline owns the character in psych_v2, so keep the chart data (and the legacy
-				// mirrors derived off it) truthful even when the line has no live character bound yet.
-				// Skipped in charting mode: there the chart object IS the editor's, and a playtest must
-				// never write an event's swap back into the file being edited.
-				if (!chartingMode && targetLine >= 0 && targetLine < SONG.strumLines.length)
-					SONG.setLineCharacter(SONG.strumLines[targetLine], value2);
-
-				if (character != null)
-				{
-					if (character.curCharacter != value2)
-					{
-						if (!characterMap.exists(value2))
-							addCharacterToList(value2, type);
-
-						var newCharacter:Character = characterMap[value2];
-						newCharacter.alpha = 1;
-						bindStrumCharacter(value2, newCharacter);
-
-						var lastAlpha:Float = character.alpha;
-						character.alpha = .0001;
-
-						var wasGf:Bool = character.curCharacter.startsWith('gf-') || character.curCharacter == 'gf';
-
-						switch (type)
-						{
-							case 0:
-								boyfriend = newCharacter;
-
-							case 1:
-								dad = newCharacter;
-								if (!newCharacter.curCharacter.startsWith('gf-') && newCharacter.curCharacter != 'gf')
-								{
-									if (wasGf && gf != null)
-										gf.visible = false;
-								}
-								else if (gf != null)
-									gf.visible = false;
-
-							case 2:
-								gf = newCharacter; // character != null which would already be this.gf
-						}
-
-						// v2 note runtime sings through each strumline's cached Character list; repoint
-						// any line that was singing the swapped-out character to the new one, otherwise
-						// it keeps animating the old (now-hidden) instance and the new one sits idle.
-						if (strumLines != null)
-							for (line in strumLines)
-								for (ci in 0...line.characters.length)
-									if (line.characters[ci] == character)
-										line.characters[ci] = newCharacter;
-
-						// Notes are processed (updateFields) BEFORE events this frame, so a note on the same
-						// step the swap happens already made the OLD character sing. Carry that live sing/special
-						// state onto the new character so it doesn't sit idle on the swap step.
-						var carryAnim:String = character.getAnimationName();
-						if (carryAnim != null && (carryAnim.startsWith('sing') || character.specialAnim)) {
-							newCharacter.playAnim(carryAnim, true);
-							newCharacter.holdTimer = character.holdTimer;
-							newCharacter.specialAnim = character.specialAnim;
-						}
-
-						icon?.changeIcon(newCharacter.healthIcon);
-						reloadHealthBarColors();
-
-						setOnScripts('${characterName}Name', newCharacter.curCharacter);
-
-						// `onEvent` says a Change Character event fired; this says the swap FINISHED and
-						// hands over both characters, so a script does not have to re-find the new one.
-						callOnScripts(ScriptHooks.CHARACTER_CHANGE, [charTargetLine, character, newCharacter]);
-					}
-				}
-
-			case 'Change Scroll Speed':
-				if (songSpeedType != "constant") {
-					if (flValue1 == null)
-						flValue1 = 1;
-					if (flValue2 == null)
-						flValue2 = 0;
-
-					var newValue:Float = SONG.speed * ClientPrefs.getGameplaySetting('scrollspeed') * flValue1;
-					if (flValue2 <= 0)
-						songSpeed = newValue;
-					else
-						songSpeedTween = FlxTween.tween(this, {songSpeed: newValue}, flValue2 / playbackRate, {
-							ease: FlxEase.linear,
-							onComplete: function(twn:FlxTween) {
-								songSpeedTween = null;
-							}
-						});
-				}
-
-			case 'Change Key Amount':
-				if (flValue1 != null)
-					changeKeyCount(Std.int(flValue1));
-
-			case 'Set Property':
-				try {
-					var trueValue:Dynamic = value2.trim();
-					if (trueValue == 'true' || trueValue == 'false')
-						trueValue = trueValue == 'true';
-					else if (flValue2 != null)
-						trueValue = flValue2;
-					else
-						trueValue = value2;
-
-					var split:Array<String> = value1.split('.');
-					if (split.length > 1) {
-						LuaUtils.setVarInArray(LuaUtils.getPropertyLoop(split), split[split.length - 1], trueValue);
-					} else {
-						LuaUtils.setVarInArray(this, value1, trueValue);
-					}
-				} catch (e:Dynamic) {
-					// Not every throw is an exception object: a thrown String has no `message`, and
-					// reading it made the error handler itself null-ref, turning a mistyped variable
-					// name in a chart event into a crash instead of a red line in the debug overlay.
-					var message:String = Std.string(Reflect.hasField(e, 'message') ? Reflect.field(e, 'message') : e);
-					var len:Int = message.indexOf('\n') + 1;
-					if (len <= 0)
-						len = message.length;
-					#if (LUA_ALLOWED || HSCRIPT_ALLOWED)
-					addTextToDebug('ERROR ("Set Property" Event) - ' + message.substr(0, len), FlxColor.RED);
-					#else
-					FlxG.log.warn('ERROR ("Set Property" Event) - ' + message.substr(0, len));
-					#end
-				}
-
-			case 'Play Sound':
-				if (flValue2 == null)
-					flValue2 = 1;
-				FlxG.sound.play(Paths.sound(value1), flValue2);
-		}
-
-		// inline stagesFunc to avoid closure allocation in event hot path
-		for (stage in stages)
-			if (stage != null && stage.exists && stage.active)
-				stage.eventCalled(eventName, value1, value2, flValue1, flValue2, strumTime);
-		callOnScripts(ScriptHooks.EVENT, [eventName, value1, value2, strumTime]);
 	}
 
 	public function moveCameraSection(?sec:Null<Int>):Void {

@@ -9,6 +9,9 @@ import mobile.input.TouchPad;
 import mobile.input.Hitbox;
 #end
 
+// PlayState's subsystems in `states.play` are part of that state, split out only for size, so they
+// get the same reach into the base class the state itself has (`curStep`, `stagesFunc`, ...).
+@:allow(states.play)
 class MusicBeatState extends FlxState {
 	#if mobile
 	// On-screen controls for this state. `touchPad` drives menu navigation (read by

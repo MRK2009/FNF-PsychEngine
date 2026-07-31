@@ -138,17 +138,56 @@ class BaseStage extends FlxBasic {
 	public function gameOverLoopStart(gameOver:GameOverSubstate):Bool
 		return false;
 
+	/**
+		Everything this stage put into the state, in the order it was added.
+
+		A stage injects its props straight into `FlxG.state` rather than holding a group of its own, so
+		without this there is no way to tell its sprites from the characters and HUD around them. The
+		`Change Stage` event needs exactly that to take a stage back out again.
+	**/
+	public var owned:Array<FlxBasic> = [];
+
 	// Things to replace FlxGroup stuff and inject sprites directly into the state.
 	// Public because a scripted stage reaches these the same way a compiled one does, and the
 	// script side resolves them by reflection rather than through the compiler.
-	public function add(object:FlxBasic)
+	public function add(object:FlxBasic) {
+		if (object != null)
+			owned.push(object);
 		return FlxG.state.add(object);
+	}
 
-	public function remove(object:FlxBasic, splice:Bool = false)
+	public function remove(object:FlxBasic, splice:Bool = false) {
+		if (object != null)
+			owned.remove(object);
 		return FlxG.state.remove(object, splice);
+	}
 
-	public function insert(position:Int, object:FlxBasic)
+	public function insert(position:Int, object:FlxBasic) {
+		if (object != null)
+			owned.push(object);
 		return FlxG.state.insert(position, object);
+	}
+
+	/**
+		Takes everything this stage added back out of the state, newest first so an index-based
+		insert cannot be invalidated by an earlier removal.
+
+		The character groups are skipped: a stage only ever borrows those through `addBehind*`, and
+		removing them would strip the characters off the screen along with the scenery.
+	**/
+	public function removeOwned():Void {
+		var i:Int = owned.length;
+		while (--i >= 0) {
+			var object:FlxBasic = owned[i];
+			if (object == null)
+				continue;
+			if (object == game.boyfriendGroup || object == game.dadGroup || object == game.gfGroup)
+				continue;
+			FlxG.state.remove(object, true);
+			object.destroy();
+		}
+		owned = [];
+	}
 
 	public function addBehindGF(obj:FlxBasic)
 		return insert(members.indexOf(game.gfGroup), obj);

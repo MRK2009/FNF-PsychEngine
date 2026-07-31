@@ -133,6 +133,14 @@ class ScriptHooks {
 	/** `(previous, current)` -- replaces polling health in onUpdatePost. **/
 	public static inline var HEALTH_CHANGE:String = 'onHealthChange';
 
+	/**
+		The stage was swapped mid-song by the `Change Stage` event. `(stageName)`
+
+		Anything a script cached from the old stage -- a prop out of `variables`, a sprite it kept a
+		reference to -- is destroyed by then, so this is where it re-fetches or rebuilds.
+	**/
+	public static inline var STAGE_CHANGED:String = 'onStageChanged';
+
 	// --------------------------------------------------------------------------
 	// PLAYSTATE  --  dialogue
 	// --------------------------------------------------------------------------
@@ -236,6 +244,7 @@ class ScriptHooks {
 		MOVE_CAMERA,
 		CHARACTER_CHANGE,
 		HEALTH_CHANGE,
+		STAGE_CHANGED,
 		NEXT_DIALOGUE,
 		SKIP_DIALOGUE,
 		SUBSTATE_CREATE,
