@@ -8,7 +8,6 @@ import flixel.FlxG;
 import flixel.FlxSprite;
 import flixel.util.FlxColor;
 import flixel.util.FlxTimer;
-import objects.BGSprite;
 import states.PlayState;
 import stages.objects.SenpaiDialogueBox;
 import stages.objects.BackgroundGirls;
@@ -40,23 +39,23 @@ class School extends BaseStage {
 			GameOverSubstate.characterName = 'bf-pixel-dead';
 		}
 
-		var bgSky:BGSprite = new BGSprite('weeb/weebSky', 0, 0, 0.1, 0.1);
+		var bgSky:FlxSprite = backdrop('weeb/weebSky', 0, 0, 0.1, 0.1);
 		add(bgSky);
 		bgSky.antialiasing = false;
 
 		var repositionShit:Int = -200;
 
-		var bgSchool:BGSprite = new BGSprite('weeb/weebSchool', repositionShit, 0, 0.6, 0.90);
+		var bgSchool:FlxSprite = backdrop('weeb/weebSchool', repositionShit, 0, 0.6, 0.90);
 		add(bgSchool);
 		bgSchool.antialiasing = false;
 
-		var bgStreet:BGSprite = new BGSprite('weeb/weebStreet', repositionShit, 0, 0.95, 0.95);
+		var bgStreet:FlxSprite = backdrop('weeb/weebStreet', repositionShit, 0, 0.95, 0.95);
 		add(bgStreet);
 		bgStreet.antialiasing = false;
 
 		var widShit:Int = Std.int(bgSky.width * PlayState.daPixelZoom);
 		if (!ClientPrefs.data.lowQuality) {
-			var fgTrees:BGSprite = new BGSprite('weeb/weebTreesBack', repositionShit + 170, 130, 0.9, 0.9);
+			var fgTrees:FlxSprite = backdrop('weeb/weebTreesBack', repositionShit + 170, 130, 0.9, 0.9);
 			fgTrees.setGraphicSize(Std.int(widShit * 0.8));
 			fgTrees.updateHitbox();
 			add(fgTrees);
@@ -72,7 +71,7 @@ class School extends BaseStage {
 		bgTrees.antialiasing = false;
 
 		if (!ClientPrefs.data.lowQuality) {
-			var treeLeaves:BGSprite = new BGSprite('weeb/petals', repositionShit, -40, 0.85, 0.85, ['PETALS ALL'], true);
+			var treeLeaves:FlxSprite = animProp('weeb/petals', repositionShit, -40, 0.85, 0.85, ['PETALS ALL'], true);
 			treeLeaves.setGraphicSize(widShit);
 			treeLeaves.updateHitbox();
 			add(treeLeaves);
@@ -176,5 +175,33 @@ class School extends BaseStage {
 				tmr.reset(0.3);
 			}
 		});
+	}
+
+	/**
+		A static backdrop at a scroll factor, inert because it never animates. This is what the
+		engine's old `BGSprite` constructor did; the class is gone, so each stage does it itself.
+	**/
+	function backdrop(image:String, x:Float, y:Float, scrollX:Float = 1, scrollY:Float = 1):FlxSprite {
+		var spr:FlxSprite = new FlxSprite(x, y);
+		if (image != null) {
+			spr.loadGraphic(Paths.image(image));
+		}
+		spr.scrollFactor.set(scrollX, scrollY);
+		spr.active = false;
+		spr.antialiasing = ClientPrefs.data.antialiasing;
+		return spr;
+	}
+
+	/** An animated backdrop: one animation per prefix, the first playing as the idle. **/
+	function animProp(image:String, x:Float, y:Float, scrollX:Float, scrollY:Float, anims:Array<String>, loop:Bool = false):FlxSprite {
+		var spr:FlxSprite = new FlxSprite(x, y);
+		spr.frames = Paths.getSparrowAtlas(image);
+		for (anim in anims) {
+			spr.animation.addByPrefix(anim, anim, 24, loop);
+		}
+		spr.animation.play(anims[0]);
+		spr.scrollFactor.set(scrollX, scrollY);
+		spr.antialiasing = ClientPrefs.data.antialiasing;
+		return spr;
 	}
 }

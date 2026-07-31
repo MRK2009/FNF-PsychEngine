@@ -1214,10 +1214,10 @@ class CharacterEditorState extends MusicBeatState {
 		/////////////
 		// bg data //
 		/////////////
-		var bg:BGSprite = new BGSprite('stageback', -600, -200, 0.9, 0.9);
+		var bg:FlxSprite = editorBackdrop('stageback', -600, -200, 0.9, 0.9);
 		add(bg);
 
-		var stageFront:BGSprite = new BGSprite('stagefront', -650, 600, 0.9, 0.9);
+		var stageFront:FlxSprite = editorBackdrop('stagefront', -650, 600, 0.9, 0.9);
 		stageFront.setGraphicSize(Std.int(stageFront.width * 1.1));
 		stageFront.updateHitbox();
 		add(stageFront);
@@ -1467,4 +1467,17 @@ class CharacterEditorState extends MusicBeatState {
 		}
 		super.destroy();
 	}
+
+	/**
+		The character editor's stand-in stage backdrop, set up the way the engine's old `BGSprite`
+		constructor did.
+	**/
+	inline function editorBackdrop(image:String, x:Float, y:Float, scrollX:Float, scrollY:Float):FlxSprite {
+		var spr:FlxSprite = new FlxSprite(x, y).loadGraphic(Paths.image(image));
+		spr.scrollFactor.set(scrollX, scrollY);
+		spr.active = false;
+		spr.antialiasing = ClientPrefs.data.antialiasing;
+		return spr;
+	}
+
 }

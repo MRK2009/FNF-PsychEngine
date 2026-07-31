@@ -9,7 +9,6 @@ import flixel.math.FlxPoint;
 import flixel.tweens.FlxEase;
 import flixel.tweens.FlxTween;
 import flixel.util.FlxColor;
-import objects.BGSprite;
 import openfl.display.BlendMode;
 import states.PlayState;
 
@@ -17,22 +16,22 @@ import states.PlayState;
 	Week 2. Ported from the compiled `states.stages.Spooky`.
 
 	Two things the compiler does for a compiled stage that the interpreter does not, so both are
-	written out here: optional arguments are never skipped (`BGSprite`'s `1, 1` scroll, and
+	written out here: optional arguments are never skipped (`backdrop`'s `1, 1` scroll, and
 	`scrollFactor.set(0, 0)`), and an enum abstract is never inferred from the field it is assigned
 	to (`BlendMode.ADD`, not a bare `ADD`).
 **/
 class Spooky extends BaseStage {
-	var halloweenBG:BGSprite;
-	var halloweenWhite:BGSprite;
+	var halloweenBG:FlxSprite;
+	var halloweenWhite:FlxSprite;
 
 	var lightningStrikeBeat:Int = 0;
 	var lightningOffset:Int = 8;
 
 	override function create():Void {
 		if (!ClientPrefs.data.lowQuality) {
-			halloweenBG = new BGSprite('halloween_bg', -200, -100, 1, 1, ['halloweem bg0', 'halloweem bg lightning strike']);
+			halloweenBG = animProp('halloween_bg', -200, -100, 1, 1, ['halloweem bg0', 'halloweem bg lightning strike']);
 		} else {
-			halloweenBG = new BGSprite('halloween_bg_low', -200, -100);
+			halloweenBG = backdrop('halloween_bg_low', -200, -100);
 		}
 		add(halloweenBG);
 
@@ -45,7 +44,7 @@ class Spooky extends BaseStage {
 	}
 
 	override function createPost():Void {
-		halloweenWhite = new BGSprite(null, -800, -400, 0, 0);
+		halloweenWhite = backdrop(null, -800, -400, 0, 0);
 		halloweenWhite.makeGraphic(Std.int(FlxG.width * 2), Std.int(FlxG.height * 2), FlxColor.WHITE);
 		halloweenWhite.alpha = 0;
 		halloweenWhite.blend = BlendMode.ADD;
@@ -124,5 +123,33 @@ class Spooky extends BaseStage {
 				startCountdown();
 			}
 		});
+	}
+
+	/**
+		A static backdrop at a scroll factor, inert because it never animates. This is what the
+		engine's old `BGSprite` constructor did; the class is gone, so each stage does it itself.
+	**/
+	function backdrop(image:String, x:Float, y:Float, scrollX:Float = 1, scrollY:Float = 1):FlxSprite {
+		var spr:FlxSprite = new FlxSprite(x, y);
+		if (image != null) {
+			spr.loadGraphic(Paths.image(image));
+		}
+		spr.scrollFactor.set(scrollX, scrollY);
+		spr.active = false;
+		spr.antialiasing = ClientPrefs.data.antialiasing;
+		return spr;
+	}
+
+	/** An animated backdrop: one animation per prefix, the first playing as the idle. **/
+	function animProp(image:String, x:Float, y:Float, scrollX:Float, scrollY:Float, anims:Array<String>, loop:Bool = false):FlxSprite {
+		var spr:FlxSprite = new FlxSprite(x, y);
+		spr.frames = Paths.getSparrowAtlas(image);
+		for (anim in anims) {
+			spr.animation.addByPrefix(anim, anim, 24, loop);
+		}
+		spr.animation.play(anims[0]);
+		spr.scrollFactor.set(scrollX, scrollY);
+		spr.antialiasing = ClientPrefs.data.antialiasing;
+		return spr;
 	}
 }

@@ -8,7 +8,6 @@ import flixel.FlxG;
 import flixel.FlxSprite;
 import flixel.group.FlxGroup;
 import flixel.util.FlxColor;
-import objects.BGSprite;
 import objects.Character;
 import stages.objects.PhillyGlowGradient;
 import stages.objects.PhillyGlowParticle;
@@ -23,8 +22,8 @@ import stages.objects.PhillyTrain;
 **/
 class Philly extends BaseStage {
 	var phillyLightsColors:Array<FlxColor>;
-	var phillyWindow:BGSprite;
-	var phillyStreet:BGSprite;
+	var phillyWindow:FlxSprite;
+	var phillyStreet:FlxSprite;
 	var phillyTrain:PhillyTrain;
 	var curLight:Int = -1;
 
@@ -33,36 +32,36 @@ class Philly extends BaseStage {
 	var phillyGlowGradient:PhillyGlowGradient;
 	var phillyGlowParticles:FlxGroup;
 	var particlePool:Array<PhillyGlowParticle> = [];
-	var phillyWindowEvent:BGSprite;
+	var phillyWindowEvent:FlxSprite;
 	var curLightEvent:Int = -1;
 
 	override function create():Void {
 		if (!ClientPrefs.data.lowQuality) {
-			var bg:BGSprite = new BGSprite('philly/sky', -100, 0, 0.1, 0.1);
+			var bg:FlxSprite = backdrop('philly/sky', -100, 0, 0.1, 0.1);
 			add(bg);
 		}
 
-		var city:BGSprite = new BGSprite('philly/city', -10, 0, 0.3, 0.3);
+		var city:FlxSprite = backdrop('philly/city', -10, 0, 0.3, 0.3);
 		city.setGraphicSize(Std.int(city.width * 0.85));
 		city.updateHitbox();
 		add(city);
 
 		phillyLightsColors = [0xFF31A2FD, 0xFF31FD8C, 0xFFFB33F5, 0xFFFD4531, 0xFFFBA633];
-		phillyWindow = new BGSprite('philly/window', city.x, city.y, 0.3, 0.3);
+		phillyWindow = backdrop('philly/window', city.x, city.y, 0.3, 0.3);
 		phillyWindow.setGraphicSize(Std.int(phillyWindow.width * 0.85));
 		phillyWindow.updateHitbox();
 		add(phillyWindow);
 		phillyWindow.alpha = 0;
 
 		if (!ClientPrefs.data.lowQuality) {
-			var streetBehind:BGSprite = new BGSprite('philly/behindTrain', -40, 50);
+			var streetBehind:FlxSprite = backdrop('philly/behindTrain', -40, 50);
 			add(streetBehind);
 		}
 
 		phillyTrain = new PhillyTrain(2000, 360);
 		add(phillyTrain);
 
-		phillyStreet = new BGSprite('philly/street', -40, 50);
+		phillyStreet = backdrop('philly/street', -40, 50);
 		add(phillyStreet);
 	}
 
@@ -76,7 +75,7 @@ class Philly extends BaseStage {
 		blammedLightsBlack.visible = false;
 		insert(members.indexOf(phillyStreet), blammedLightsBlack);
 
-		phillyWindowEvent = new BGSprite('philly/window', phillyWindow.x, phillyWindow.y, 0.3, 0.3);
+		phillyWindowEvent = backdrop('philly/window', phillyWindow.x, phillyWindow.y, 0.3, 0.3);
 		phillyWindowEvent.setGraphicSize(Std.int(phillyWindowEvent.width * 0.85));
 		phillyWindowEvent.updateHitbox();
 		phillyWindowEvent.visible = false;
@@ -232,5 +231,20 @@ class Philly extends BaseStage {
 		}
 
 		FlxG.camera.flash(color, 0.15, null, true);
+	}
+
+	/**
+		A static backdrop at a scroll factor, inert because it never animates. This is what the
+		engine's old `BGSprite` constructor did; the class is gone, so each stage does it itself.
+	**/
+	function backdrop(image:String, x:Float, y:Float, scrollX:Float = 1, scrollY:Float = 1):FlxSprite {
+		var spr:FlxSprite = new FlxSprite(x, y);
+		if (image != null) {
+			spr.loadGraphic(Paths.image(image));
+		}
+		spr.scrollFactor.set(scrollX, scrollY);
+		spr.active = false;
+		spr.antialiasing = ClientPrefs.data.antialiasing;
+		return spr;
 	}
 }

@@ -7,41 +7,40 @@ import flixel.FlxG;
 import flixel.FlxSprite;
 import flixel.util.FlxColor;
 import flixel.util.FlxTimer;
-import objects.BGSprite;
 import states.PlayState;
 import stages.objects.MallCrowd;
 
 /** Week 5, Cocoa and Eggnog. Ported from the compiled `states.stages.Mall`. **/
 class Mall extends BaseStage {
-	var upperBoppers:BGSprite;
+	var upperBoppers:FlxSprite;
 	var bottomBoppers:MallCrowd;
-	var santa:BGSprite;
+	var santa:FlxSprite;
 
 	override function create():Void {
-		var bg:BGSprite = new BGSprite('christmas/bgWalls', -1000, -500, 0.2, 0.2);
+		var bg:FlxSprite = backdrop('christmas/bgWalls', -1000, -500, 0.2, 0.2);
 		bg.setGraphicSize(Std.int(bg.width * 0.8));
 		bg.updateHitbox();
 		add(bg);
 
 		if (!ClientPrefs.data.lowQuality) {
-			upperBoppers = new BGSprite('christmas/upperBop', -240, -90, 0.33, 0.33, ['Upper Crowd Bob']);
+			upperBoppers = animProp('christmas/upperBop', -240, -90, 0.33, 0.33, ['Upper Crowd Bob']);
 			upperBoppers.setGraphicSize(Std.int(upperBoppers.width * 0.85));
 			upperBoppers.updateHitbox();
 			add(upperBoppers);
 
-			var bgEscalator:BGSprite = new BGSprite('christmas/bgEscalator', -1100, -600, 0.3, 0.3);
+			var bgEscalator:FlxSprite = backdrop('christmas/bgEscalator', -1100, -600, 0.3, 0.3);
 			bgEscalator.setGraphicSize(Std.int(bgEscalator.width * 0.9));
 			bgEscalator.updateHitbox();
 			add(bgEscalator);
 		}
 
-		var tree:BGSprite = new BGSprite('christmas/christmasTree', 370, -250, 0.40, 0.40);
+		var tree:FlxSprite = backdrop('christmas/christmasTree', 370, -250, 0.40, 0.40);
 		add(tree);
 
 		bottomBoppers = new MallCrowd(-300, 140);
 		add(bottomBoppers);
 
-		var fgSnow:BGSprite = new BGSprite('christmas/fgSnow', -600, 700);
+		var fgSnow:FlxSprite = backdrop('christmas/fgSnow', -600, 700);
 		add(fgSnow);
 
 		Paths.sound('Lights_Shut_off');
@@ -55,7 +54,7 @@ class Mall extends BaseStage {
 	override function createPost():Void {
 		// Added after the characters exist so it renders in front of dad (who sits behind santa)
 		// while staying behind bf.
-		santa = new BGSprite('christmas/santa', -840, 150, 1, 1, ['santa idle in fear']);
+		santa = animProp('christmas/santa', -840, 150, 1, 1, ['santa idle in fear']);
 		addBehindBF(santa);
 	}
 
@@ -83,11 +82,11 @@ class Mall extends BaseStage {
 
 	function everyoneDance():Void {
 		if (!ClientPrefs.data.lowQuality) {
-			upperBoppers.dance(true);
+			upperBoppers.animation.play('Upper Crowd Bob', true);
 		}
 
 		bottomBoppers.dance(true);
-		santa.dance(true);
+		santa.animation.play('santa idle in fear', true);
 	}
 
 	function eggnogEndCutscene():Void {
@@ -116,5 +115,33 @@ class Mall extends BaseStage {
 		new FlxTimer().start(1.5, function(tmr:FlxTimer):Void {
 			endSong();
 		});
+	}
+
+	/**
+		A static backdrop at a scroll factor, inert because it never animates. This is what the
+		engine's old `BGSprite` constructor did; the class is gone, so each stage does it itself.
+	**/
+	function backdrop(image:String, x:Float, y:Float, scrollX:Float = 1, scrollY:Float = 1):FlxSprite {
+		var spr:FlxSprite = new FlxSprite(x, y);
+		if (image != null) {
+			spr.loadGraphic(Paths.image(image));
+		}
+		spr.scrollFactor.set(scrollX, scrollY);
+		spr.active = false;
+		spr.antialiasing = ClientPrefs.data.antialiasing;
+		return spr;
+	}
+
+	/** An animated backdrop: one animation per prefix, the first playing as the idle. **/
+	function animProp(image:String, x:Float, y:Float, scrollX:Float, scrollY:Float, anims:Array<String>, loop:Bool = false):FlxSprite {
+		var spr:FlxSprite = new FlxSprite(x, y);
+		spr.frames = Paths.getSparrowAtlas(image);
+		for (anim in anims) {
+			spr.animation.addByPrefix(anim, anim, 24, loop);
+		}
+		spr.animation.play(anims[0]);
+		spr.scrollFactor.set(scrollX, scrollY);
+		spr.antialiasing = ClientPrefs.data.antialiasing;
+		return spr;
 	}
 }

@@ -44,7 +44,6 @@ class ScriptGlobals {
 		// NOTE: backend.DebugPrefs is deliberately absent -- it's on ModSecurity's blocklist
 		// (a debug-only settings store scripts must not reach), so it's never a global import.
 		'objects.Alphabet',
-		'objects.BGSprite',
 		'states.PlayState',
 		'states.LoadingState',
 		'flixel.FlxG',

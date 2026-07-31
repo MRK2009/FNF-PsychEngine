@@ -9,20 +9,19 @@ import flixel.tweens.FlxEase;
 import flixel.tweens.FlxTween;
 import flixel.util.FlxColor;
 import flixel.util.FlxTimer;
-import objects.BGSprite;
 
 /** Week 5, Winter Horrorland. Ported from the compiled `states.stages.MallEvil`. **/
 class MallEvil extends BaseStage {
 	override function create():Void {
-		var bg:BGSprite = new BGSprite('christmas/evilBG', -400, -500, 0.2, 0.2);
+		var bg:FlxSprite = backdrop('christmas/evilBG', -400, -500, 0.2, 0.2);
 		bg.setGraphicSize(Std.int(bg.width * 0.8));
 		bg.updateHitbox();
 		add(bg);
 
-		var evilTree:BGSprite = new BGSprite('christmas/evilTree', 300, -300, 0.2, 0.2);
+		var evilTree:FlxSprite = backdrop('christmas/evilTree', 300, -300, 0.2, 0.2);
 		add(evilTree);
 
-		var evilSnow:BGSprite = new BGSprite('christmas/evilSnow', -200, 700);
+		var evilSnow:FlxSprite = backdrop('christmas/evilSnow', -200, 700);
 		add(evilSnow);
 		setDefaultGF('gf-christmas');
 
@@ -62,5 +61,20 @@ class MallEvil extends BaseStage {
 				}
 			});
 		});
+	}
+
+	/**
+		A static backdrop at a scroll factor, inert because it never animates. This is what the
+		engine's old `BGSprite` constructor did; the class is gone, so each stage does it itself.
+	**/
+	function backdrop(image:String, x:Float, y:Float, scrollX:Float = 1, scrollY:Float = 1):FlxSprite {
+		var spr:FlxSprite = new FlxSprite(x, y);
+		if (image != null) {
+			spr.loadGraphic(Paths.image(image));
+		}
+		spr.scrollFactor.set(scrollX, scrollY);
+		spr.active = false;
+		spr.antialiasing = ClientPrefs.data.antialiasing;
+		return spr;
 	}
 }

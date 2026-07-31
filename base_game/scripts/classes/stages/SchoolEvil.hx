@@ -8,7 +8,6 @@ import flixel.FlxG;
 import flixel.FlxSprite;
 import flixel.util.FlxColor;
 import flixel.util.FlxTimer;
-import objects.BGSprite;
 import states.PlayState;
 import stages.objects.SenpaiDialogueBox;
 import flixel.addons.effects.FlxTrail;
@@ -17,7 +16,7 @@ import substates.GameOverSubstate;
 /** Week 6, Thorns. Ported from the compiled `states.stages.SchoolEvil`. **/
 class SchoolEvil extends BaseStage {
 	// Ghouls event
-	var bgGhouls:BGSprite;
+	var bgGhouls:FlxSprite;
 	var doof:SenpaiDialogueBox = null;
 
 	override function create():Void {
@@ -38,11 +37,11 @@ class SchoolEvil extends BaseStage {
 		var posX:Int = 400;
 		var posY:Int = 200;
 
-		var bg:BGSprite;
+		var bg:FlxSprite;
 		if (!ClientPrefs.data.lowQuality) {
-			bg = new BGSprite('weeb/animatedEvilSchool', posX, posY, 0.8, 0.9, ['background 2'], true);
+			bg = animProp('weeb/animatedEvilSchool', posX, posY, 0.8, 0.9, ['background 2'], true);
 		} else {
-			bg = new BGSprite('weeb/animatedEvilSchool_low', posX, posY, 0.8, 0.9);
+			bg = backdrop('weeb/animatedEvilSchool_low', posX, posY, 0.8, 0.9);
 		}
 
 		bg.scale.set(PlayState.daPixelZoom, PlayState.daPixelZoom);
@@ -65,7 +64,7 @@ class SchoolEvil extends BaseStage {
 
 	override function eventCalled(eventName:String, value1:String, value2:String, flValue1:Null<Float>, flValue2:Null<Float>, strumTime:Float):Void {
 		if (eventName == 'Trigger BG Ghouls' && !ClientPrefs.data.lowQuality) {
-			bgGhouls.dance(true);
+			bgGhouls.animation.play('BG freaks glitch instance', true);
 			bgGhouls.visible = true;
 		}
 	}
@@ -76,7 +75,7 @@ class SchoolEvil extends BaseStage {
 			return;
 		}
 
-		bgGhouls = new BGSprite('weeb/bgGhouls', -100, 190, 0.9, 0.9, ['BG freaks glitch instance'], false);
+		bgGhouls = animProp('weeb/bgGhouls', -100, 190, 0.9, 0.9, ['BG freaks glitch instance'], false);
 		bgGhouls.setGraphicSize(Std.int(bgGhouls.width * PlayState.daPixelZoom));
 		bgGhouls.updateHitbox();
 		bgGhouls.visible = false;
@@ -162,5 +161,33 @@ class SchoolEvil extends BaseStage {
 				});
 			});
 		});
+	}
+
+	/**
+		A static backdrop at a scroll factor, inert because it never animates. This is what the
+		engine's old `BGSprite` constructor did; the class is gone, so each stage does it itself.
+	**/
+	function backdrop(image:String, x:Float, y:Float, scrollX:Float = 1, scrollY:Float = 1):FlxSprite {
+		var spr:FlxSprite = new FlxSprite(x, y);
+		if (image != null) {
+			spr.loadGraphic(Paths.image(image));
+		}
+		spr.scrollFactor.set(scrollX, scrollY);
+		spr.active = false;
+		spr.antialiasing = ClientPrefs.data.antialiasing;
+		return spr;
+	}
+
+	/** An animated backdrop: one animation per prefix, the first playing as the idle. **/
+	function animProp(image:String, x:Float, y:Float, scrollX:Float, scrollY:Float, anims:Array<String>, loop:Bool = false):FlxSprite {
+		var spr:FlxSprite = new FlxSprite(x, y);
+		spr.frames = Paths.getSparrowAtlas(image);
+		for (anim in anims) {
+			spr.animation.addByPrefix(anim, anim, 24, loop);
+		}
+		spr.animation.play(anims[0]);
+		spr.scrollFactor.set(scrollX, scrollY);
+		spr.antialiasing = ClientPrefs.data.antialiasing;
+		return spr;
 	}
 }

@@ -4,10 +4,10 @@ import backend.BaseStage;
 import backend.ClientPrefs;
 import backend.Paths;
 import flixel.FlxG;
+import flixel.FlxSprite;
 import flixel.group.FlxGroup;
 import flixel.math.FlxMath;
 import flixel.util.FlxTimer;
-import objects.BGSprite;
 import backend.Achievements;
 import stages.objects.BackgroundDancer;
 
@@ -31,17 +31,17 @@ class Limo extends BaseStage {
 	var stStopping:Int = 4;
 
 	var grpLimoDancers:FlxGroup;
-	var fastCar:BGSprite;
+	var fastCar:FlxSprite;
 	var fastCarCanDrive:Bool = true;
 
 	// event
 	/** One of the `st*` values above; starts at `stWait`, written as its value. **/
 	var limoKillingState:Int = 0;
-	var limoMetalPole:BGSprite;
-	var limoLight:BGSprite;
-	var limoCorpse:BGSprite;
-	var limoCorpseTwo:BGSprite;
-	var bgLimo:BGSprite;
+	var limoMetalPole:FlxSprite;
+	var limoLight:FlxSprite;
+	var limoCorpse:FlxSprite;
+	var limoCorpseTwo:FlxSprite;
+	var bgLimo:FlxSprite;
 	var grpLimoParticles:FlxGroup;
 	var dancersDiff:Float = 320;
 
@@ -49,20 +49,20 @@ class Limo extends BaseStage {
 	var carTimer:FlxTimer;
 
 	override function create():Void {
-		var skyBG:BGSprite = new BGSprite('limo/limoSunset', -120, -50, 0.1, 0.1);
+		var skyBG:FlxSprite = backdrop('limo/limoSunset', -120, -50, 0.1, 0.1);
 		add(skyBG);
 
 		if (!ClientPrefs.data.lowQuality) {
-			limoMetalPole = new BGSprite('gore/metalPole', -500, 220, 0.4, 0.4);
+			limoMetalPole = backdrop('gore/metalPole', -500, 220, 0.4, 0.4);
 			add(limoMetalPole);
 
-			bgLimo = new BGSprite('limo/bgLimo', -150, 480, 0.4, 0.4, ['background limo pink'], true);
+			bgLimo = animProp('limo/bgLimo', -150, 480, 0.4, 0.4, ['background limo pink'], true);
 			add(bgLimo);
 
-			limoCorpse = new BGSprite('gore/noooooo', -500, limoMetalPole.y - 130, 0.4, 0.4, ['Henchmen on rail'], true);
+			limoCorpse = animProp('gore/noooooo', -500, limoMetalPole.y - 130, 0.4, 0.4, ['Henchmen on rail'], true);
 			add(limoCorpse);
 
-			limoCorpseTwo = new BGSprite('gore/noooooo', -500, limoMetalPole.y, 0.4, 0.4, ['henchmen death'], true);
+			limoCorpseTwo = animProp('gore/noooooo', -500, limoMetalPole.y, 0.4, 0.4, ['henchmen death'], true);
 			add(limoCorpseTwo);
 
 			grpLimoDancers = new FlxGroup();
@@ -74,14 +74,14 @@ class Limo extends BaseStage {
 				grpLimoDancers.add(dancer);
 			}
 
-			limoLight = new BGSprite('gore/coldHeartKiller', limoMetalPole.x - 180, limoMetalPole.y - 80, 0.4, 0.4);
+			limoLight = backdrop('gore/coldHeartKiller', limoMetalPole.x - 180, limoMetalPole.y - 80, 0.4, 0.4);
 			add(limoLight);
 
 			grpLimoParticles = new FlxGroup();
 			add(grpLimoParticles);
 
 			// PRECACHE BLOOD
-			var particle:BGSprite = new BGSprite('gore/stupidBlood', -400, -400, 0.4, 0.4, ['blood'], false);
+			var particle:FlxSprite = animProp('gore/stupidBlood', -400, -400, 0.4, 0.4, ['blood'], false);
 			particle.alpha = 0.01;
 			grpLimoParticles.add(particle);
 			resetLimoKill();
@@ -91,14 +91,14 @@ class Limo extends BaseStage {
 			setDefaultGF('gf-car');
 		}
 
-		fastCar = new BGSprite('limo/fastCarLol', -300, 160);
+		fastCar = backdrop('limo/fastCarLol', -300, 160);
 		fastCar.active = true;
 	}
 
 	override function createPost():Void {
 		resetFastCar();
 
-		var limo:BGSprite = new BGSprite('limo/limoDrive', -120, 550, 1, 1, ['Limo stage'], true);
+		var limo:FlxSprite = animProp('limo/limoDrive', -120, 550, 1, 1, ['Limo stage'], true);
 		addBehindDad(limo); // In front of GF (so she sits behind the limo), behind dad/bf
 
 		add(fastCar); // In front of everything (characters + limo)
@@ -133,17 +133,14 @@ class Limo extends BaseStage {
 						}
 
 						var diffStr:String = (i == 3) ? ' 2 ' : ' ';
-						var leg:BGSprite = new BGSprite('gore/noooooo', dancers[i].x + 200, dancers[i].y, 0.4, 0.4,
-							['hench leg spin' + diffStr + 'PINK'], false);
+						var leg:FlxSprite = animProp('gore/noooooo', dancers[i].x + 200, dancers[i].y, 0.4, 0.4, ['hench leg spin' + diffStr + 'PINK'], false);
 						grpLimoParticles.add(leg);
-						var arm:BGSprite = new BGSprite('gore/noooooo', dancers[i].x + 160, dancers[i].y + 200, 0.4, 0.4,
-							['hench arm spin' + diffStr + 'PINK'], false);
+						var arm:FlxSprite = animProp('gore/noooooo', dancers[i].x + 160, dancers[i].y + 200, 0.4, 0.4, ['hench arm spin' + diffStr + 'PINK'], false);
 						grpLimoParticles.add(arm);
-						var head:BGSprite = new BGSprite('gore/noooooo', dancers[i].x, dancers[i].y + 50, 0.4, 0.4,
-							['hench head spin' + diffStr + 'PINK'], false);
+						var head:FlxSprite = animProp('gore/noooooo', dancers[i].x, dancers[i].y + 50, 0.4, 0.4, ['hench head spin' + diffStr + 'PINK'], false);
 						grpLimoParticles.add(head);
 
-						var blood:BGSprite = new BGSprite('gore/stupidBlood', dancers[i].x - 110, dancers[i].y + 20, 0.4, 0.4, ['blood'], false);
+						var blood:FlxSprite = animProp('gore/stupidBlood', dancers[i].x - 110, dancers[i].y + 20, 0.4, 0.4, ['blood'], false);
 						blood.flipX = true;
 						blood.angle = -57.5;
 						grpLimoParticles.add(blood);
@@ -271,5 +268,33 @@ class Limo extends BaseStage {
 
 		var kills:Float = Achievements.addScore('roadkill_enthusiast');
 		FlxG.log.add('Henchmen kills: ' + kills);
+	}
+
+	/**
+		A static backdrop at a scroll factor, inert because it never animates. This is what the
+		engine's old `BGSprite` constructor did; the class is gone, so each stage does it itself.
+	**/
+	function backdrop(image:String, x:Float, y:Float, scrollX:Float = 1, scrollY:Float = 1):FlxSprite {
+		var spr:FlxSprite = new FlxSprite(x, y);
+		if (image != null) {
+			spr.loadGraphic(Paths.image(image));
+		}
+		spr.scrollFactor.set(scrollX, scrollY);
+		spr.active = false;
+		spr.antialiasing = ClientPrefs.data.antialiasing;
+		return spr;
+	}
+
+	/** An animated backdrop: one animation per prefix, the first playing as the idle. **/
+	function animProp(image:String, x:Float, y:Float, scrollX:Float, scrollY:Float, anims:Array<String>, loop:Bool = false):FlxSprite {
+		var spr:FlxSprite = new FlxSprite(x, y);
+		spr.frames = Paths.getSparrowAtlas(image);
+		for (anim in anims) {
+			spr.animation.addByPrefix(anim, anim, 24, loop);
+		}
+		spr.animation.play(anims[0]);
+		spr.scrollFactor.set(scrollX, scrollY);
+		spr.antialiasing = ClientPrefs.data.antialiasing;
+		return spr;
 	}
 }

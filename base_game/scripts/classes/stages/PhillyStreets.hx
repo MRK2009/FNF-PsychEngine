@@ -14,7 +14,6 @@ import flixel.tweens.FlxEase;
 import flixel.tweens.FlxTween;
 import flixel.util.FlxColor;
 import flixel.util.FlxTimer;
-import objects.BGSprite;
 import openfl.display.BlendMode;
 import states.PlayState;
 import flixel.addons.display.FlxTiledSprite;
@@ -66,14 +65,14 @@ class PhillyStreets extends BaseStage {
 	var rainShaderEndIntensity:Float = 0;
 
 	var scrollingSky:FlxTiledSprite;
-	var phillyTraffic:BGSprite;
+	var phillyTraffic:FlxSprite;
 
-	var phillyCars:BGSprite;
-	var phillyCars2:BGSprite;
+	var phillyCars:FlxSprite;
+	var phillyCars2:FlxSprite;
 
 	var picoFade:FlxSprite;
 	var spraycan:SpraycanAtlasSprite;
-	var spraycanPile:BGSprite;
+	var spraycanPile:FlxSprite;
 
 	var darkenable:Array<FlxSprite> = [];
 	var abot:ABotSpeaker;
@@ -115,42 +114,42 @@ class PhillyStreets extends BaseStage {
 			add(scrollingSky);
 			darkenable.push(scrollingSky);
 
-			var phillySkyline:BGSprite = new BGSprite('phillyStreets/phillySkyline', -545, -273, 0.2, 0.2);
+			var phillySkyline:FlxSprite = backdrop('phillyStreets/phillySkyline', -545, -273, 0.2, 0.2);
 			add(phillySkyline);
 			darkenable.push(phillySkyline);
 
-			var phillyForegroundCity:BGSprite = new BGSprite('phillyStreets/phillyForegroundCity', 625, 94, 0.3, 0.3);
+			var phillyForegroundCity:FlxSprite = backdrop('phillyStreets/phillyForegroundCity', 625, 94, 0.3, 0.3);
 			add(phillyForegroundCity);
 			darkenable.push(phillyForegroundCity);
 		}
 
-		var phillyConstruction:BGSprite = new BGSprite('phillyStreets/phillyConstruction', 1800, 364, 0.7, 1);
+		var phillyConstruction:FlxSprite = backdrop('phillyStreets/phillyConstruction', 1800, 364, 0.7, 1);
 		add(phillyConstruction);
 		darkenable.push(phillyConstruction);
 
-		var phillyHighwayLights:BGSprite = new BGSprite('phillyStreets/phillyHighwayLights', 284, 305, 1, 1);
+		var phillyHighwayLights:FlxSprite = backdrop('phillyStreets/phillyHighwayLights', 284, 305, 1, 1);
 		add(phillyHighwayLights);
 		darkenable.push(phillyHighwayLights);
 
 		if (!ClientPrefs.data.lowQuality) {
-			var phillyHighwayLightsLightmap:BGSprite = new BGSprite('phillyStreets/phillyHighwayLights_lightmap', 284, 305, 1, 1);
+			var phillyHighwayLightsLightmap:FlxSprite = backdrop('phillyStreets/phillyHighwayLights_lightmap', 284, 305, 1, 1);
 			phillyHighwayLightsLightmap.blend = BlendMode.ADD;
 			phillyHighwayLightsLightmap.alpha = 0.6;
 			add(phillyHighwayLightsLightmap);
 			darkenable.push(phillyHighwayLightsLightmap);
 		}
 
-		var phillyHighway:BGSprite = new BGSprite('phillyStreets/phillyHighway', 139, 209, 1, 1);
+		var phillyHighway:FlxSprite = backdrop('phillyStreets/phillyHighway', 139, 209, 1, 1);
 		add(phillyHighway);
 		darkenable.push(phillyHighway);
 
 		if (!ClientPrefs.data.lowQuality) {
-			var phillySmog:BGSprite = new BGSprite('phillyStreets/phillySmog', -6, 245, 0.8, 1);
+			var phillySmog:FlxSprite = backdrop('phillyStreets/phillySmog', -6, 245, 0.8, 1);
 			add(phillySmog);
 			darkenable.push(phillySmog);
 
 			for (i in 0...2) {
-				var car:BGSprite = new BGSprite('phillyStreets/phillyCars', 1200, 818, 0.9, 1, ['car1', 'car2', 'car3', 'car4'], false);
+				var car:FlxSprite = animProp('phillyStreets/phillyCars', 1200, 818, 0.9, 1, ['car1', 'car2', 'car3', 'car4'], false);
 				add(car);
 				if (i == 0) {
 					phillyCars = car;
@@ -161,18 +160,18 @@ class PhillyStreets extends BaseStage {
 			}
 			phillyCars2.flipX = true;
 
-			phillyTraffic = new BGSprite('phillyStreets/phillyTraffic', 1840, 608, 0.9, 1, ['redtogreen', 'greentored'], false);
+			phillyTraffic = animProp('phillyStreets/phillyTraffic', 1840, 608, 0.9, 1, ['redtogreen', 'greentored'], false);
 			add(phillyTraffic);
 			darkenable.push(phillyTraffic);
 
-			var phillyTrafficLightmap:BGSprite = new BGSprite('phillyStreets/phillyTraffic_lightmap', 1840, 608, 0.9, 1);
+			var phillyTrafficLightmap:FlxSprite = backdrop('phillyStreets/phillyTraffic_lightmap', 1840, 608, 0.9, 1);
 			phillyTrafficLightmap.blend = BlendMode.ADD;
 			phillyTrafficLightmap.alpha = 0.6;
 			add(phillyTrafficLightmap);
 			darkenable.push(phillyTrafficLightmap);
 		}
 
-		var phillyForeground:BGSprite = new BGSprite('phillyStreets/phillyForeground', 88, 317, 1, 1);
+		var phillyForeground:FlxSprite = backdrop('phillyStreets/phillyForeground', 88, 317, 1, 1);
 		add(phillyForeground);
 		darkenable.push(phillyForeground);
 
@@ -238,7 +237,7 @@ class PhillyStreets extends BaseStage {
 			}
 		}
 
-		spraycanPile = new BGSprite('SpraycanPile', 920, 1045, 1, 1);
+		spraycanPile = backdrop('SpraycanPile', 920, 1045, 1, 1);
 		precache();
 		add(spraycanPile);
 		darkenable.push(spraycanPile);
@@ -676,7 +675,7 @@ class PhillyStreets extends BaseStage {
 		return p;
 	}
 
-	function finishCarLights(sprite:BGSprite):Void {
+	function finishCarLights(sprite:FlxSprite):Void {
 		carWaiting = false;
 		var duration:Float = FlxG.random.float(1.8, 3);
 		var rotations:Array<Int> = [-5, 18];
@@ -699,7 +698,7 @@ class PhillyStreets extends BaseStage {
 		});
 	}
 
-	function driveCarLights(sprite:BGSprite):Void {
+	function driveCarLights(sprite:FlxSprite):Void {
 		carInterruptable = false;
 		FlxTween.cancelTweensOf(sprite);
 		var variant:Int = FlxG.random.int(1, 4);
@@ -742,7 +741,7 @@ class PhillyStreets extends BaseStage {
 		});
 	}
 
-	function driveCar(sprite:BGSprite):Void {
+	function driveCar(sprite:FlxSprite):Void {
 		carInterruptable = false;
 		FlxTween.cancelTweensOf(sprite);
 		var variant:Int = FlxG.random.int(1, 4);
@@ -1034,5 +1033,33 @@ class PhillyStreets extends BaseStage {
 				FlxTween.color(target, 1.4, 0xFF222222, 0xFFFFFFFF);
 			});
 		}
+	}
+
+	/**
+		A static backdrop at a scroll factor, inert because it never animates. This is what the
+		engine's old `BGSprite` constructor did; the class is gone, so each stage does it itself.
+	**/
+	function backdrop(image:String, x:Float, y:Float, scrollX:Float = 1, scrollY:Float = 1):FlxSprite {
+		var spr:FlxSprite = new FlxSprite(x, y);
+		if (image != null) {
+			spr.loadGraphic(Paths.image(image));
+		}
+		spr.scrollFactor.set(scrollX, scrollY);
+		spr.active = false;
+		spr.antialiasing = ClientPrefs.data.antialiasing;
+		return spr;
+	}
+
+	/** An animated backdrop: one animation per prefix, the first playing as the idle. **/
+	function animProp(image:String, x:Float, y:Float, scrollX:Float, scrollY:Float, anims:Array<String>, loop:Bool = false):FlxSprite {
+		var spr:FlxSprite = new FlxSprite(x, y);
+		spr.frames = Paths.getSparrowAtlas(image);
+		for (anim in anims) {
+			spr.animation.addByPrefix(anim, anim, 24, loop);
+		}
+		spr.animation.play(anims[0]);
+		spr.scrollFactor.set(scrollX, scrollY);
+		spr.antialiasing = ClientPrefs.data.antialiasing;
+		return spr;
 	}
 }

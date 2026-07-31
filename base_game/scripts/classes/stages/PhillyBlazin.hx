@@ -9,7 +9,6 @@ import flixel.addons.transition.FlxTransitionableState;
 import flixel.math.FlxMath;
 import flixel.tweens.FlxTween;
 import flixel.util.FlxColor;
-import objects.BGSprite;
 import openfl.display.BlendMode;
 import states.PlayState;
 import flixel.addons.display.FlxTiledSprite;
@@ -26,9 +25,9 @@ class PhillyBlazin extends BaseStage {
 	var rainTimeScale:Float = 1;
 
 	var scrollingSky:FlxTiledSprite;
-	var skyAdditive:BGSprite;
-	var lightning:BGSprite;
-	var foregroundMultiply:BGSprite;
+	var skyAdditive:FlxSprite;
+	var lightning:FlxSprite;
+	var foregroundMultiply:FlxSprite;
 	var additionalLighten:FlxSprite;
 
 	var lightningTimer:Float = 3.0;
@@ -50,23 +49,23 @@ class PhillyBlazin extends BaseStage {
 			scrollingSky.scrollFactor.set(0, 0);
 			add(scrollingSky);
 
-			skyAdditive = new BGSprite('phillyBlazin/skyBlur', -600, -175, 0.0, 0.0);
+			skyAdditive = backdrop('phillyBlazin/skyBlur', -600, -175, 0.0, 0.0);
 			setupScale(skyAdditive);
 			skyAdditive.visible = false;
 			add(skyAdditive);
 
-			lightning = new BGSprite('phillyBlazin/lightning', -50, -300, 0.0, 0.0, ['lightning0'], false);
+			lightning = animProp('phillyBlazin/lightning', -50, -300, 0.0, 0.0, ['lightning0'], false);
 			setupScale(lightning);
 			lightning.visible = false;
 			add(lightning);
 		}
 
-		var phillyForegroundCity:BGSprite = new BGSprite('phillyBlazin/streetBlur', -600, -175, 0.0, 0.0);
+		var phillyForegroundCity:FlxSprite = backdrop('phillyBlazin/streetBlur', -600, -175, 0.0, 0.0);
 		setupScale(phillyForegroundCity);
 		add(phillyForegroundCity);
 
 		if (!ClientPrefs.data.lowQuality) {
-			foregroundMultiply = new BGSprite('phillyBlazin/streetBlur', -600, -175, 0.0, 0.0);
+			foregroundMultiply = backdrop('phillyBlazin/streetBlur', -600, -175, 0.0, 0.0);
 			setupScale(foregroundMultiply);
 			foregroundMultiply.blend = BlendMode.MULTIPLY;
 			foregroundMultiply.visible = false;
@@ -120,7 +119,7 @@ class PhillyBlazin extends BaseStage {
 		}
 	}
 
-	function setupScale(spr:BGSprite):Void {
+	function setupScale(spr:FlxSprite):Void {
 		spr.scale.set(1.75, 1.75);
 		spr.updateHitbox();
 	}
@@ -259,5 +258,33 @@ class PhillyBlazin extends BaseStage {
 	override function opponentNoteHit(note:Dynamic):Void {
 		picoFight.noteMiss(note);
 		darnellFight.noteMiss(note);
+	}
+
+	/**
+		A static backdrop at a scroll factor, inert because it never animates. This is what the
+		engine's old `BGSprite` constructor did; the class is gone, so each stage does it itself.
+	**/
+	function backdrop(image:String, x:Float, y:Float, scrollX:Float = 1, scrollY:Float = 1):FlxSprite {
+		var spr:FlxSprite = new FlxSprite(x, y);
+		if (image != null) {
+			spr.loadGraphic(Paths.image(image));
+		}
+		spr.scrollFactor.set(scrollX, scrollY);
+		spr.active = false;
+		spr.antialiasing = ClientPrefs.data.antialiasing;
+		return spr;
+	}
+
+	/** An animated backdrop: one animation per prefix, the first playing as the idle. **/
+	function animProp(image:String, x:Float, y:Float, scrollX:Float, scrollY:Float, anims:Array<String>, loop:Bool = false):FlxSprite {
+		var spr:FlxSprite = new FlxSprite(x, y);
+		spr.frames = Paths.getSparrowAtlas(image);
+		for (anim in anims) {
+			spr.animation.addByPrefix(anim, anim, 24, loop);
+		}
+		spr.animation.play(anims[0]);
+		spr.scrollFactor.set(scrollX, scrollY);
+		spr.antialiasing = ClientPrefs.data.antialiasing;
+		return spr;
 	}
 }

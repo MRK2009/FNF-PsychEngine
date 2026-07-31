@@ -4,30 +4,41 @@ import states.stages.objects.*;
 import objects.Character;
 
 class StageWeek1 extends BaseStage {
-	var dadbattleBlack:BGSprite;
-	var dadbattleLight:BGSprite;
+	var dadbattleBlack:FlxSprite;
+	var dadbattleLight:FlxSprite;
 	var dadbattleFog:DadBattleFog;
 
-	override function create() {
-		var bg:BGSprite = new BGSprite('stageback', -600, -200, 0.9, 0.9);
-		add(bg);
+	/**
+		A static backdrop at a scroll factor: what the engine's old `BGSprite` constructor did, now
+		that the class lives with the base-game modpack instead of here.
+	**/
+	inline function backdrop(image:String, x:Float, y:Float, scrollX:Float = 1, scrollY:Float = 1):FlxSprite {
+		var spr:FlxSprite = new FlxSprite(x, y).loadGraphic(Paths.image(image));
+		spr.scrollFactor.set(scrollX, scrollY);
+		spr.active = false;
+		spr.antialiasing = ClientPrefs.data.antialiasing;
+		return spr;
+	}
 
-		var stageFront:BGSprite = new BGSprite('stagefront', -650, 600, 0.9, 0.9);
+	override function create() {
+		add(backdrop('stageback', -600, -200, 0.9, 0.9));
+
+		var stageFront:FlxSprite = backdrop('stagefront', -650, 600, 0.9, 0.9);
 		stageFront.setGraphicSize(Std.int(stageFront.width * 1.1));
 		stageFront.updateHitbox();
 		add(stageFront);
 		if (!ClientPrefs.data.lowQuality) {
-			var stageLight:BGSprite = new BGSprite('stage_light', -125, -100, 0.9, 0.9);
+			var stageLight:FlxSprite = backdrop('stage_light', -125, -100, 0.9, 0.9);
 			stageLight.setGraphicSize(Std.int(stageLight.width * 1.1));
 			stageLight.updateHitbox();
 			add(stageLight);
-			var stageLight:BGSprite = new BGSprite('stage_light', 1225, -100, 0.9, 0.9);
+			var stageLight:FlxSprite = backdrop('stage_light', 1225, -100, 0.9, 0.9);
 			stageLight.setGraphicSize(Std.int(stageLight.width * 1.1));
 			stageLight.updateHitbox();
 			stageLight.flipX = true;
 			add(stageLight);
 
-			var stageCurtains:BGSprite = new BGSprite('stagecurtains', -500, -300, 1.3, 1.3);
+			var stageCurtains:FlxSprite = backdrop('stagecurtains', -500, -300, 1.3, 1.3);
 			stageCurtains.setGraphicSize(Std.int(stageCurtains.width * 0.9));
 			stageCurtains.updateHitbox();
 			add(stageCurtains);
@@ -37,13 +48,16 @@ class StageWeek1 extends BaseStage {
 	override function eventPushed(event:objects.Note.EventNote) {
 		switch (event.event) {
 			case "Dadbattle Spotlight":
-				dadbattleBlack = new BGSprite(null, -800, -400, 0, 0);
+				dadbattleBlack = new FlxSprite(-800, -400);
 				dadbattleBlack.makeGraphic(Std.int(FlxG.width * 2), Std.int(FlxG.height * 2), FlxColor.BLACK);
+				dadbattleBlack.scrollFactor.set(0, 0);
+				dadbattleBlack.active = false;
+				dadbattleBlack.antialiasing = ClientPrefs.data.antialiasing;
 				dadbattleBlack.alpha = 0.25;
 				dadbattleBlack.visible = false;
 				add(dadbattleBlack);
 
-				dadbattleLight = new BGSprite('spotlight', 400, -400);
+				dadbattleLight = backdrop('spotlight', 400, -400);
 				dadbattleLight.alpha = 0.375;
 				dadbattleLight.blend = ADD;
 				dadbattleLight.visible = false;

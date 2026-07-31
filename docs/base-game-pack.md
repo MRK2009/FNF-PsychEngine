@@ -38,10 +38,14 @@ letter capitalised, extending `BaseStage`:
 package stages;
 
 class Spooky extends BaseStage {
-    var halloweenBG:BGSprite;
+    var halloweenBG:FlxSprite;
 
     override function create():Void {
-        halloweenBG = new BGSprite('halloween_bg', -200, -100, 1, 1, ['halloweem bg0']);
+        halloweenBG = new FlxSprite(-200, -100);
+        halloweenBG.frames = Paths.getSparrowAtlas('halloween_bg');
+        halloweenBG.animation.addByPrefix('idle', 'halloweem bg0', 24, false);
+        halloweenBG.animation.play('idle');
+        halloweenBG.antialiasing = ClientPrefs.data.antialiasing;
         add(halloweenBG);
     }
 
@@ -67,13 +71,16 @@ over it.
 Helper props live in `stages.objects` beside them, and subclass whatever fits: `FlxSprite`,
 `FlxSpriteGroup`, or nothing at all for a plain logic class.
 
-Do not subclass `BGSprite` for now. It is in `ScriptedBridgeMacro.BASES` and constructing one
-directly works, but a *scripted subclass* of it has thrown "Null Function Pointer" from its
-constructor for two of the three props that tried (`BackgroundTank`, `PhillyTrain`), while the third
-(`MallCrowd`) ran fine on the same build, and none of it reproduces against a stand-in base. All
-three now extend `FlxSprite` and open with the four lines `BGSprite`'s constructor would have run
-(`loadGraphic` or `frames`/`addByPrefix`, `scrollFactor.set`, `active`, `antialiasing`), which is
-what the compiled props did anyway. `FlxSprite` and `FlxSpriteGroup` subclasses have never shown it.
+There is no engine-side prop base. `objects.BGSprite`, which every compiled stage was built out of,
+is gone: a stage sets its props up itself, which is four lines (`loadGraphic` or
+`frames`/`addByPrefix`, `scrollFactor.set`, `active`, `antialiasing`). The stages here keep a private
+`backdrop`/`animProp` helper for the ones they build repeatedly.
+
+That also retires a bug worth remembering: a *scripted subclass* of a bridged base threw
+"Null Function Pointer" from its constructor for two of the three props that tried it
+(`BackgroundTank`, `PhillyTrain`), while the third (`MallCrowd`) ran fine on the same build, and none
+of it reproduced against a stand-in base. Direct `FlxSprite` and `FlxSpriteGroup` subclasses have
+never shown it.
 
 ## What the interpreter does not do for you
 
@@ -81,8 +88,9 @@ Every one of these cost a play test during the port, and they are the whole diff
 compiled stage and a scripted one:
 
 - **Optional arguments are never skipped or defaulted.** Haxe lets
-  `new BGSprite('bg', x, y, ['anim'])` land the array on `animArray`; a script must write
-  `new BGSprite('bg', x, y, 1, 1, ['anim'])`. Same for `scrollFactor.set()`, which needs `set(0, 0)`.
+  `animProp('bg', x, y, ['anim'])` land the array on the first optional parameter; a script must
+  write `animProp('bg', x, y, 1, 1, ['anim'])`. Same for `scrollFactor.set()`, which needs
+  `set(0, 0)`.
 - **Enum abstracts are not inferred from the field.** Write `blend = BlendMode.ADD`, never a bare
   `ADD`. Reaching the abstract at all needs a generated wrapper, which
   `macros.ScriptedAbstractMacro` produces for every abstract in the engine, Flixel and SmidrUI --
@@ -102,7 +110,7 @@ compiled stage and a scripted one:
   the iteration (`PhillyStreets.darkenStageProps`).
 - **A bridged base's constructor is re-emitted from its typed form**, and a loop there carries
   compiler temporaries that cannot be printed back as syntax. Keep loops out of the constructor of
-  anything in `ScriptedBridgeMacro.BASES`; `objects.BGSprite.addAnims` exists for that reason.
+  anything in `ScriptedBridgeMacro.BASES` -- put it in a method the constructor calls instead.
 - **Method bodies need braces.** A brace-less one-liner does not survive.
 - **To reach a type declared inside another module, import the MODULE** and use the type as a bare
   name. `import flixel.math.FlxPoint;` makes `FlxBasePoint` available, because a plain module import

@@ -35,7 +35,6 @@ import backend.Mods;
 import backend.Language;
 import backend.ui.*; // Psych-UI
 import objects.Alphabet;
-import objects.BGSprite;
 import states.PlayState;
 import states.LoadingState;
 #if flixel_animate

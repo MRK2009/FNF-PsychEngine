@@ -10,12 +10,8 @@ import states.PlayState;
 /**
 	The train that crosses Philly, dragging gf's hair with it. Ported from the compiled version.
 
-	Extends `FlxSprite` and does inline what `BGSprite`'s constructor would, rather than extending
-	`BGSprite` like the compiled one did. Through the bridge that constructor threw "Null Function
-	Pointer" here, the same way it did for `BackgroundTank`, and neither reproduces against a stand-in
-	base: a scripted subclass calling `super` with a subset of its arguments, a nested static chain in
-	the constructor and a typed field with no initialiser all behave correctly in isolation. Whatever
-	it is needs the real bridge over `FlxSprite`'s hierarchy. The behaviour below is identical.
+	Sets itself up in its own constructor rather than inheriting a prop base, like every other stage
+	object here.
 **/
 class PhillyTrain extends FlxSprite {
 	public var sound:FlxSound;

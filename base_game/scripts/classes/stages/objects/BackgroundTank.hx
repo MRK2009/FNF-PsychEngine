@@ -8,12 +8,8 @@ import flixel.FlxSprite;
 /**
 	The tank rolling along the horizon. Ported from the compiled version.
 
-	Extends `FlxSprite` and does inline what `BGSprite`'s constructor would, rather than extending
-	`BGSprite` like the compiled one did: through the bridge, that constructor threw
-	"Null Function Pointer" here for reasons I could not reproduce in isolation -- a zero-argument
-	scripted constructor passing all seven of `BGSprite`'s arguments works fine against a shallow
-	stand-in base, and `MallCrowd`/`PhillyTrain` extend `BGSprite` happily. Worth another look; the
-	behaviour below is identical either way.
+	Sets itself up in its own constructor rather than inheriting a prop base, like every other stage
+	object here.
 **/
 class BackgroundTank extends FlxSprite {
 	public var offsetX:Float = 400;
@@ -36,7 +32,7 @@ class BackgroundTank extends FlxSprite {
 		antialiasing = ClientPrefs.data.antialiasing;
 	}
 
-	/** Matches `BGSprite.dance`, which the compiled version inherited. **/
+	/** Replays the idle. `forceplay` restarts it even when it is already the current animation. **/
 	public function dance(forceplay:Bool = false):Void {
 		animation.play(idleAnim, forceplay);
 	}

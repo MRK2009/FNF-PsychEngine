@@ -4,13 +4,13 @@ import backend.BaseStage;
 import backend.ClientPrefs;
 import backend.Conductor;
 import backend.Paths;
+import flixel.FlxBasic;
 import flixel.FlxG;
 import flixel.FlxSprite;
 import flixel.group.FlxGroup;
 import flixel.sound.FlxSound;
 import flixel.tweens.FlxEase;
 import flixel.tweens.FlxTween;
-import objects.BGSprite;
 import objects.Character;
 import states.PlayState;
 import backend.PsychFlxAnimate;
@@ -30,7 +30,7 @@ import substates.GameOverSubstate;
 	  on `TankmenBG`, which is what let `objects.Character` stop reaching into a stage helper.
 **/
 class Tank extends BaseStage {
-	var tankWatchtower:BGSprite;
+	var tankWatchtower:FlxSprite;
 	var tankGround:BackgroundTank;
 	var tankmanRun:FlxGroup;
 	var tankmanPool:Array<TankmenBG> = [];
@@ -44,38 +44,38 @@ class Tank extends BaseStage {
 	var audioPlaying:FlxSound;
 
 	override function create():Void {
-		var sky:BGSprite = new BGSprite('tankSky', -400, -400, 0, 0);
+		var sky:FlxSprite = backdrop('tankSky', -400, -400, 0, 0);
 		add(sky);
 
 		if (!ClientPrefs.data.lowQuality) {
-			var clouds:BGSprite = new BGSprite('tankClouds', FlxG.random.int(-700, -100), FlxG.random.int(-20, 20), 0.1, 0.1);
+			var clouds:FlxSprite = backdrop('tankClouds', FlxG.random.int(-700, -100), FlxG.random.int(-20, 20), 0.1, 0.1);
 			clouds.active = true;
 			clouds.velocity.x = FlxG.random.float(5, 15);
 			add(clouds);
 
-			var mountains:BGSprite = new BGSprite('tankMountains', -300, -20, 0.2, 0.2);
+			var mountains:FlxSprite = backdrop('tankMountains', -300, -20, 0.2, 0.2);
 			mountains.setGraphicSize(Std.int(1.2 * mountains.width));
 			mountains.updateHitbox();
 			add(mountains);
 
-			var buildings:BGSprite = new BGSprite('tankBuildings', -200, 0, 0.3, 0.3);
+			var buildings:FlxSprite = backdrop('tankBuildings', -200, 0, 0.3, 0.3);
 			buildings.setGraphicSize(Std.int(1.1 * buildings.width));
 			buildings.updateHitbox();
 			add(buildings);
 		}
 
-		var ruins:BGSprite = new BGSprite('tankRuins', -200, 0, 0.35, 0.35);
+		var ruins:FlxSprite = backdrop('tankRuins', -200, 0, 0.35, 0.35);
 		ruins.setGraphicSize(Std.int(1.1 * ruins.width));
 		ruins.updateHitbox();
 		add(ruins);
 
 		if (!ClientPrefs.data.lowQuality) {
-			var smokeLeft:BGSprite = new BGSprite('smokeLeft', -200, -100, 0.4, 0.4, ['SmokeBlurLeft'], true);
+			var smokeLeft:FlxSprite = animProp('smokeLeft', -200, -100, 0.4, 0.4, ['SmokeBlurLeft'], true);
 			add(smokeLeft);
-			var smokeRight:BGSprite = new BGSprite('smokeRight', 1100, -100, 0.4, 0.4, ['SmokeRight'], true);
+			var smokeRight:FlxSprite = animProp('smokeRight', 1100, -100, 0.4, 0.4, ['SmokeRight'], true);
 			add(smokeRight);
 
-			tankWatchtower = new BGSprite('tankWatchtower', 100, 50, 0.5, 0.5, ['watchtower gradient color']);
+			tankWatchtower = animProp('tankWatchtower', 100, 50, 0.5, 0.5, ['watchtower gradient color']);
 			add(tankWatchtower);
 		}
 
@@ -85,23 +85,23 @@ class Tank extends BaseStage {
 		tankmanRun = new FlxGroup();
 		add(tankmanRun);
 
-		var ground:BGSprite = new BGSprite('tankGround', -420, -150);
+		var ground:FlxSprite = backdrop('tankGround', -420, -150);
 		ground.setGraphicSize(Std.int(1.15 * ground.width));
 		ground.updateHitbox();
 		add(ground);
 
 		foregroundSprites = new FlxGroup();
-		foregroundSprites.add(new BGSprite('tank0', -500, 650, 1.7, 1.5, ['fg']));
+		foregroundSprites.add(animProp('tank0', -500, 650, 1.7, 1.5, ['fg']));
 		if (!ClientPrefs.data.lowQuality) {
-			foregroundSprites.add(new BGSprite('tank1', -300, 750, 2, 0.2, ['fg']));
+			foregroundSprites.add(animProp('tank1', -300, 750, 2, 0.2, ['fg']));
 		}
-		foregroundSprites.add(new BGSprite('tank2', 450, 940, 1.5, 1.5, ['foreground']));
+		foregroundSprites.add(animProp('tank2', 450, 940, 1.5, 1.5, ['foreground']));
 		if (!ClientPrefs.data.lowQuality) {
-			foregroundSprites.add(new BGSprite('tank4', 1300, 900, 1.5, 1.5, ['fg']));
+			foregroundSprites.add(animProp('tank4', 1300, 900, 1.5, 1.5, ['fg']));
 		}
-		foregroundSprites.add(new BGSprite('tank5', 1620, 700, 1.5, 1.5, ['fg']));
+		foregroundSprites.add(animProp('tank5', 1620, 700, 1.5, 1.5, ['fg']));
 		if (!ClientPrefs.data.lowQuality) {
-			foregroundSprites.add(new BGSprite('tank3', 1300, 1200, 3.5, 2.5, ['fg']));
+			foregroundSprites.add(animProp('tank3', 1300, 1200, 3.5, 2.5, ['fg']));
 		}
 
 		// Default GFs
@@ -197,10 +197,14 @@ class Tank extends BaseStage {
 
 	function everyoneDance():Void {
 		if (!ClientPrefs.data.lowQuality) {
-			tankWatchtower.dance();
+			tankWatchtower.animation.play('watchtower gradient color');
 		}
-		foregroundSprites.forEach(function(spr:Dynamic):Void {
-			spr.dance();
+		foregroundSprites.forEach(function(basic:FlxBasic):Void {
+			// Each prop has exactly one animation, so replaying curAnim is what dance() did.
+			var spr:FlxSprite = cast basic;
+			if (spr.animation.curAnim != null) {
+				spr.animation.play(spr.animation.curAnim.name);
+			}
 		});
 	}
 
@@ -462,5 +466,33 @@ class Tank extends BaseStage {
 				spr.y -= 100;
 			});
 		}
+	}
+
+	/**
+		A static backdrop at a scroll factor, inert because it never animates. This is what the
+		engine's old `BGSprite` constructor did; the class is gone, so each stage does it itself.
+	**/
+	function backdrop(image:String, x:Float, y:Float, scrollX:Float = 1, scrollY:Float = 1):FlxSprite {
+		var spr:FlxSprite = new FlxSprite(x, y);
+		if (image != null) {
+			spr.loadGraphic(Paths.image(image));
+		}
+		spr.scrollFactor.set(scrollX, scrollY);
+		spr.active = false;
+		spr.antialiasing = ClientPrefs.data.antialiasing;
+		return spr;
+	}
+
+	/** An animated backdrop: one animation per prefix, the first playing as the idle. **/
+	function animProp(image:String, x:Float, y:Float, scrollX:Float, scrollY:Float, anims:Array<String>, loop:Bool = false):FlxSprite {
+		var spr:FlxSprite = new FlxSprite(x, y);
+		spr.frames = Paths.getSparrowAtlas(image);
+		for (anim in anims) {
+			spr.animation.addByPrefix(anim, anim, 24, loop);
+		}
+		spr.animation.play(anims[0]);
+		spr.scrollFactor.set(scrollX, scrollY);
+		spr.antialiasing = ClientPrefs.data.antialiasing;
+		return spr;
 	}
 }

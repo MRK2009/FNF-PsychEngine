@@ -7,10 +7,8 @@ import flixel.FlxSprite;
 /**
 	The mall's bopping crowd, which can throw a "hey". Ported from the compiled version.
 
-	On `FlxSprite` rather than `BGSprite` for the same reason as `PhillyTrain` and `BackgroundTank`:
-	subclassing `BGSprite` through the bridge has failed with "Null Function Pointer" in the
-	constructor. This one had not failed yet, but it is the same path, and a prop that works only
-	sometimes is worse than one that does not use the path at all.
+	Sets itself up in its own constructor rather than inheriting a prop base, like every other stage
+	object here.
 **/
 class MallCrowd extends FlxSprite {
 	public var heyTimer:Float = 0;

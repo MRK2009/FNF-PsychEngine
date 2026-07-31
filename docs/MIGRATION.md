@@ -19,6 +19,7 @@ change gets listed with its replacement rather than just being removed.
   - [Notes, callbacks and skins](#notes-callbacks-and-skins)
   - [Script hooks](#script-hooks)
   - [Older Lua callback renames](#older-lua-callback-renames)
+  - [objects.BGSprite is gone](#objectsbgsprite-is-gone)
   - [Data and folder layout](#data-and-folder-layout)
 - [1.1](#11)
   - [Modpack metadata](#modpack-metadata)
@@ -147,6 +148,7 @@ New hooks, none of which break anything - they exist so a script can stop pollin
 | `onResults` | the results screen is about to open |
 | `onAchievementUnlocked` | an achievement unlocked |
 | `onModSwitched` | the active mod changed |
+| `onStageChanged` | the `Change Stage` event swapped the stage |
 
 Full list with arguments: [script hooks and dispatch](script-hooks-and-dispatch.md).
 
@@ -171,6 +173,45 @@ Long-deprecated Lua callbacks that still worked through a compatibility shim. Al
 | `musicFadeIn` | `soundFadeIn` |
 | `musicFadeOut` | `soundFadeOut` |
 | `updateHitboxFromGroup` | `updateHitbox` |
+
+### objects.BGSprite is gone
+
+Every compiled stage was built out of `BGSprite`, so it lived in the engine and was a global import.
+The base game is a modpack now and its stages set their props up themselves, which left the engine
+carrying a class only mods used.
+
+It is **not** auto-fixed. There is no drop-in replacement, because `BGSprite` was a constructor
+rather than a name: what it did was four lines on a plain `FlxSprite`.
+
+```haxe
+// before
+var bg:BGSprite = new BGSprite('sky', -100, 0, 0.3, 0.3);
+
+// after
+var bg:FlxSprite = new FlxSprite(-100, 0);
+bg.loadGraphic(Paths.image('sky'));
+bg.scrollFactor.set(0.3, 0.3);
+bg.active = false;                                   // it never animates
+bg.antialiasing = ClientPrefs.data.antialiasing;
+```
+
+With an animation array, swap the `loadGraphic` line for the atlas and its prefixes, and drop the
+`active = false`:
+
+```haxe
+bg.frames = Paths.getSparrowAtlas('sky');
+bg.animation.addByPrefix('idle', 'sky idle', 24, false);
+bg.animation.play('idle');
+```
+
+`dance()` came from `BGSprite` too; it replayed the first animation added, so it becomes
+`animation.play(idleName, forceplay)`.
+
+A stage that builds many props is better off with a private helper than with the four lines repeated
+-- that is what the base-game stages do, and why this is not simply a rename.
+
+Subclassing it is also gone, and that is a small mercy: a scripted subclass of `BGSprite` threw
+"Null Function Pointer" from its constructor for two of the three base-game props that tried it.
 
 ### Data and folder layout
 
