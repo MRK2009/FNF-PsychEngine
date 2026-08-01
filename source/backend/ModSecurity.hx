@@ -188,6 +188,48 @@ class ModSecurity {
 		return Type.resolveClass(name);
 	}
 
+	/**
+	 * Why `safeResolveClass` gave back null, phrased for a script author.
+	 *
+	 * The three causes look identical from a script -- blocked by policy, misspelt, or simply not
+	 * compiled into this build -- and a bare "class not found" sends people hunting for the wrong one.
+	 * Reporting sites pass the same name here to say which it was.
+	 *
+	 * @param name The class name that failed to resolve.
+	 * @return The reason, or null when the name resolves fine.
+	 */
+	public static function resolveFailure(name:String):Null<String> {
+		if (name == null || name.length < 1)
+			return 'no class name was given';
+
+		if (BLOCKED_CLASSES.exists(name))
+			return '`$name` is blocked: mod scripts are not allowed to reach it';
+
+		for (pack in BLOCKED_PACKAGES)
+			if (name.startsWith(pack))
+				return 'the `${pack.substr(0, pack.length - 1)}` package is blocked for mod scripts, so `$name` cannot be reached';
+
+		if (Type.resolveClass(name) != null)
+			return null;
+
+		if (name.indexOf('.') < 0)
+			return '`$name` was not found -- reflection needs the FULL path (e.g. `flixel.addons.effects.FlxSkewedSprite`, not `FlxSkewedSprite`)';
+
+		return '`$name` was not found -- check the spelling, or it is not compiled into this build';
+	}
+
+	/**
+	 * `resolveFailure`, but never null, for the places that have already failed and just need
+	 * something to print. Without it a name that resolves on the second look prints as "null".
+	 *
+	 * @param name The class name that failed to resolve.
+	 * @return The reason, or a generic one.
+	 */
+	public static function resolveError(name:String):String {
+		var why:String = resolveFailure(name);
+		return why != null ? why : '`$name` could not be resolved';
+	}
+
 	public static var records:Map<String, ModSecurityRecord> = new Map();
 	static var loaded:Bool = false;
 	// Per-session cache: once we've validated a mod's hash this run, don't

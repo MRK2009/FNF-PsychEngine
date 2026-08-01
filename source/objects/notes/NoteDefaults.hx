@@ -54,7 +54,30 @@ class NoteDefaults {
 		'No Animation'
 	];
 
-	public static var defaultNoteSkin(default, never):String = 'noteSkins/NOTE_assets';
+	/** The pre-folder-skin sheet path. Nothing ships here any more, but a mod still may. **/
+	public static inline var CLASSIC_SHEET:String = 'noteSkins/NOTE_assets';
+
+	/** Where the base game's copy of that sheet moved to when the folder skins took over `noteSkins/`. **/
+	public static inline var CLASSIC_SHEET_BASE:String = 'noteSkins/Legacy/NOTE_assets';
+
+	/**
+		The classic (pre-folder-skin) note sheet, resolved rather than fixed.
+
+		`noteSkins/` became the folder-skin root and the flat `noteSkins/NOTE_assets` was deleted from
+		the base game, so a hardcoded path resolved to nothing and every classic fallback rendered
+		Flixel's placeholder graphic. The old path still wins when something provides it -- a mod
+		shipping its own `noteSkins/NOTE_assets` is the case `NoteSkinConfig.modProvidesClassicDefault`
+		exists for -- and only otherwise does this point at the relocated base sheet.
+	**/
+	public static var defaultNoteSkin(get, never):String;
+
+	static function get_defaultNoteSkin():String {
+		// Probed against the root the caller will actually load from. The pixel sheet still exists at
+		// the old flat path while the non-pixel one does not, so testing both together would answer
+		// "old path" and leave every non-pixel strum on a missing image.
+		var root:String = states.PlayState.isPixelStage ? 'images/pixelUI/' : 'images/';
+		return Paths.fileExists('$root$CLASSIC_SHEET.png', IMAGE) ? CLASSIC_SHEET : CLASSIC_SHEET_BASE;
+	}
 
 	public static var SUSTAIN_SIZE:Int = 44;
 

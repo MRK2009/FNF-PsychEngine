@@ -45,7 +45,11 @@ class ReflectionFunctions {
 		Lua_helper.add_callback(lua, "getPropertyFromClass", function(classVar:String, variable:String, ?allowMaps:Bool = false) {
 			var myClass:Dynamic = #if MODS_ALLOWED backend.ModSecurity.safeResolveClass(classVar) #else Type.resolveClass(classVar) #end;
 			if (myClass == null) {
+				#if MODS_ALLOWED
+				FunkinLua.luaTrace('getPropertyFromClass: ' + backend.ModSecurity.resolveError(classVar), false, false, FlxColor.RED);
+				#else
 				FunkinLua.luaTrace('getPropertyFromClass: Class $classVar not found', false, false, FlxColor.RED);
+				#end
 				return null;
 			}
 			return PropertyPath.get(myClass, variable, allowMaps);
@@ -54,7 +58,11 @@ class ReflectionFunctions {
 			function(classVar:String, variable:String, value:Dynamic, ?allowMaps:Bool = false, ?allowInstances:Bool = false) {
 				var myClass:Dynamic = #if MODS_ALLOWED backend.ModSecurity.safeResolveClass(classVar) #else Type.resolveClass(classVar) #end;
 				if (myClass == null) {
+					#if MODS_ALLOWED
+					FunkinLua.luaTrace('setPropertyFromClass: ' + backend.ModSecurity.resolveError(classVar), false, false, FlxColor.RED);
+					#else
 					FunkinLua.luaTrace('setPropertyFromClass: Class $classVar not found', false, false, FlxColor.RED);
+					#end
 					return null;
 				}
 				PropertyPath.set(myClass, variable, allowInstances ? parseInstances(value) : value, allowMaps);
@@ -259,7 +267,11 @@ class ReflectionFunctions {
 				var myType:Dynamic = #if MODS_ALLOWED backend.ModSecurity.safeResolveClass(className) #else Type.resolveClass(className) #end;
 
 				if (myType == null) {
+					#if MODS_ALLOWED
+					FunkinLua.luaTrace('createInstance: ' + backend.ModSecurity.resolveError(className), false, false, FlxColor.RED);
+					#else
 					FunkinLua.luaTrace('createInstance: Class $className not found', false, false, FlxColor.RED);
+					#end
 					return false;
 				}
 
