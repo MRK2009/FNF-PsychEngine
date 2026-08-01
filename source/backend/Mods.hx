@@ -344,9 +344,12 @@ class Mods {
 		return pack != null && pack.nativeMobile == true;
 	}
 
-	/** pack.json compat flag: when true the mod runs on the legacy note/strum script API (the `notes` /
-	 *  `unspawnNotes` / strum groups + callback object identity) over the v2 runtime. Set either
-	 *  `"compatibilityMode": true` or the alias `"legacyMode": true` in pack.json. */
+	/** pack.json compat flag: when true the mod runs on the legacy surfaces over the v2 runtime. Set
+	 *  either `"compatibilityMode": true` or the alias `"legacyMode": true` in pack.json.
+	 *
+	 *  Two things hang off it. The legacy note/strum SCRIPT API (the `notes` / `unspawnNotes` /
+	 *  strum groups + callback object identity), and the legacy ASSET paths -- currently the
+	 *  pre-skin `pixelUI/` prefix, see `backend.skins.Pixel.legacyPrefix`. */
 	public static function noteCompatibilityMode(?folder:String = null):Bool {
 		var pack:Dynamic = getPack(folder);
 		if (pack == null)

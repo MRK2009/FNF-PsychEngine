@@ -1,5 +1,6 @@
 package backend;
 
+import backend.skins.Pixel;
 import flixel.graphics.FlxGraphic;
 import flixel.graphics.frames.FlxAtlasFrames;
 import flixel.math.FlxRect;
@@ -223,7 +224,7 @@ class NoteSkinConfig {
 		The atlas base key (to pass to `Paths.getSparrowAtlas`) for a CLASSIC skin `name`, or null when
 		no sparrow sheet resolves. Tries, in order: a config-declared `sheet` inside the folder, a loose
 		`noteSkins/<X>.png`, a foldered `noteSkins/<X>/<X>.png`, then `noteSkins/<X>/NOTE_assets.png`.
-		Non-pixel base key; the classic renderer's pixel branch prepends `pixelUI/`. Cached.
+		Non-pixel base key; for a legacy pack the classic renderer prepends `pixelUI/`. Cached.
 	**/
 	public static function classicSheet(name:String):Null<String> {
 		if (name == null || name.length < 1)
@@ -292,16 +293,22 @@ class NoteSkinConfig {
 		to `pixelScale`. Set from the active skin's `pixelMode` (an editor may force it for previewing).
 		This is a RENDER flag, not the skin's declared mode: see `pixelModeOf` for that.
 	**/
-	public static var pixelRender:Bool = false;
+	public static var pixelRender(get, set):Bool;
+
+	static inline function get_pixelRender():Bool
+		return Pixel.render;
+
+	static inline function set_pixelRender(v:Bool):Bool
+		return Pixel.render = v;
 
 	/** `pixelMode`: never pixel. **/
-	public static inline var PIXEL_NONE:String = 'none';
+	public static inline var PIXEL_NONE:String = Pixel.NONE;
 
 	/** `pixelMode`: the skin IS pixel art and always renders as such. **/
-	public static inline var PIXEL_ALWAYS:String = 'always';
+	public static inline var PIXEL_ALWAYS:String = Pixel.ALWAYS;
 
 	/** `pixelMode`: HD by default, with pixel art that takes over on a pixel stage. **/
-	public static inline var PIXEL_VARIANT:String = 'variant';
+	public static inline var PIXEL_VARIANT:String = Pixel.VARIANT;
 
 	/**
 		A skin's declared pixel mode. Reads the explicit `pixelMode` field, falling back to the older
@@ -309,38 +316,20 @@ class NoteSkinConfig {
 		@param cfg the skin config (null-safe)
 		@return one of `PIXEL_NONE` / `PIXEL_ALWAYS` / `PIXEL_VARIANT`
 	**/
-	public static function pixelModeOf(cfg:NoteSkinData):String {
-		if (cfg == null)
-			return PIXEL_NONE;
-		if (cfg.pixelMode != null) {
-			var m:String = cfg.pixelMode.toLowerCase();
-			if (m == PIXEL_ALWAYS || m == PIXEL_VARIANT || m == PIXEL_NONE)
-				return m;
-		}
-		if (cfg.pixel == true)
-			return PIXEL_ALWAYS;
-		if (cfg.pixelVariant == true)
-			return PIXEL_VARIANT;
-		return PIXEL_NONE;
-	}
+	public static function pixelModeOf(cfg:NoteSkinData):String
+		return (cfg == null) ? Pixel.NONE : Pixel.modeOf(cfg.pixelMode, cfg.pixel, cfg.pixelVariant);
 
 	/**
 		Whether a skin renders pixel art right now: `always` unconditionally, `variant` only on a pixel
 		stage. The single decision every skin builder should use.
 		@param cfg the skin config
 	**/
-	public static function pixelRenderFor(cfg:NoteSkinData):Bool {
-		var m:String = pixelModeOf(cfg);
-		if (m == PIXEL_ALWAYS)
-			return true;
-		if (m == PIXEL_VARIANT)
-			return PlayState.isPixelStage;
-		return false;
-	}
+	public static function pixelRenderFor(cfg:NoteSkinData):Bool
+		return Pixel.activeFor(pixelModeOf(cfg));
 
 	/** Whether a skin ships pixel art at all (`always` or `variant`). **/
 	public static inline function hasPixelArt(cfg:NoteSkinData):Bool
-		return pixelModeOf(cfg) != PIXEL_NONE;
+		return Pixel.ships(pixelModeOf(cfg));
 
 	public static function setConfig(name:String, data:NoteSkinData) {
 		configCache.set(name, data);
@@ -450,7 +439,7 @@ class NoteSkinConfig {
 
 		// On a pixel stage, swap a non-pixel folder skin (or the classic default) for a skin flagged
 		// `pixelVariant: true` so its pixel art is used. A song that explicitly picked a classic
-		// `arrowSkin` is left alone -- it brings its own `pixelUI/` sheet.
+		// `arrowSkin` is left alone -- it brings its own sheet.
 		if (PlayState.isPixelStage) {
 			var cfg:NoteSkinData = (sel != null) ? get(sel) : null;
 			var hasPixel:Bool = hasPixelArt(cfg);
@@ -515,14 +504,14 @@ class NoteSkinConfig {
 
 	// Whether a mod (the current one, when its assets are allowed, or any global mod) ships a classic
 	// default NOTE_assets sheet -- at `images/noteSkins/NOTE_assets.png` OR the `images/`-root
-	// `images/NOTE_assets.png` some mods use, plus the matching `pixelUI/` form on pixel stages. Cached;
+	// `images/NOTE_assets.png` some mods use, plus the `pixelUI/` form for a legacy pack. Cached;
 	// cleared by `reset()`.
 	static function modProvidesClassicDefault():Bool {
 		if (classicDefaultCache != null)
 			return classicDefaultCache;
 		var found:Bool = false;
 		#if (sys && MODS_ALLOWED)
-		var path:String = PlayState.isPixelStage ? 'pixelUI/' : '';
+		var path:String = Pixel.legacyPrefix();
 		var names:Array<String> = ['images/${path}noteSkins/NOTE_assets.png', 'images/${path}NOTE_assets.png'];
 		if (Mods.allowCurrentModAssets && Mods.currentModDirectory != null && Mods.currentModDirectory.length > 0)
 			found = modHasAny(Mods.currentModDirectory, names);
@@ -582,20 +571,8 @@ class NoteSkinConfig {
 			return pixelVariantCache;
 		pixelVariantComputed = true;
 
-		var def:NoteSkinData = get(DEFAULT);
-		if (pixelModeOf(def) == PIXEL_VARIANT) {
-			pixelVariantCache = DEFAULT;
-			return pixelVariantCache;
-		}
-		for (name in list()) {
-			var cfg:NoteSkinData = get(name);
-			if (pixelModeOf(cfg) == PIXEL_VARIANT) {
-				pixelVariantCache = name;
-				return pixelVariantCache;
-			}
-		}
-		pixelVariantCache = null;
-		return null;
+		pixelVariantCache = Pixel.variantSkin(DEFAULT, list(), function(name:String):String return pixelModeOf(get(name)));
+		return pixelVariantCache;
 	}
 
 	/**
@@ -1224,29 +1201,9 @@ class NoteSkinConfig {
 		return (hit == null) ? null : hit.frames;
 	}
 
-	/**
-		Every layout a pixel variant of `key` may use, in resolution order:
-
-		1. `<dir>/pixel/<name>` -- a `pixel/` subfolder with plain names
-		2. `<dir>/pixel/<name>-pixel` -- a `pixel/` subfolder with suffixed names (per-frame for sequences)
-		3. `<name>-pixel` -- suffixed alongside the base art
-
-		@param key the base art key
-		@return the candidate keys, in the order they are tried
-	**/
-	public static function pixelArtCandidates(key:String):Array<String> {
-		if (key == null || key.length < 1)
-			return [];
-		var out:Array<String> = [];
-		var slash:Int = key.lastIndexOf('/');
-		if (slash >= 0) {
-			var sub:String = key.substr(0, slash) + '/pixel' + key.substr(slash);
-			out.push(sub);
-			out.push(sub + '-pixel');
-		}
-		out.push(key + '-pixel');
-		return out;
-	}
+	/** The layouts a pixel variant of `key` may use, in resolution order. See `Pixel.candidates`. **/
+	public static function pixelArtCandidates(key:String):Array<String>
+		return Pixel.candidates(key);
 
 	/**
 		Resolves the pixel variant of `key`, returning BOTH the frames and the key they came from.

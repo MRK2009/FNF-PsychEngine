@@ -228,6 +228,32 @@ Nothing breaks; these are additions.
 
 See [UI skinning guidelines](ui-skinning-guidelines.md) for what makes a skin and the precedence order.
 
+### `pixelUI/` is now legacy-only
+
+Pixel art lives **inside the skin**: `noteSkins/<skin>/pixel/` and `uiSkins/<skin>/pixel/`. That is
+unchanged and is how you should ship it.
+
+What changed is the older convention, where pixel art was found by prefixing `pixelUI/` to the
+asset name whenever the stage was pixel. The engine no longer consults that folder unless the
+pack opts in with `"compatibilityMode": true` (or `"legacyMode": true`) in pack.json, in which
+case it resolves from the old location exactly as before.
+
+- **Shipping pixel art in `<skin>/pixel/`?** Nothing to do.
+- **Relying on `images/pixelUI/...`?** Either move the art into your skin's `pixel/` folder, or
+  set the compatibility flag. Without one of the two, a pixel stage renders your non-pixel art
+  through the normal path rather than pixel-framing a sheet that is not pixel art.
+
+UI skins also accept **`pixelMode`** (`none` / `always` / `variant`) now, which note skins already
+had; the older `pixel` / `pixelVariant` booleans keep working on both.
+
+`PlayState.isPixelStage`, `daPixelZoom` and pixel stages themselves are untouched.
+
+The base game moved its own week-6 dialogue art out of the name at the same time:
+`weeb/pixelUI/` is now `weeb/dialogue/`, and all seven files live in the `base_game` pack
+rather than being split between the pack and the engine. It was never part of the `pixelUI`
+convention -- it only shared the folder name -- but the name now means something specific.
+If you forked base_game and load those sheets, repoint them.
+
 ### Data and folder layout
 
 Neither of these needs anything from a script - both migrate existing installs on their own - but

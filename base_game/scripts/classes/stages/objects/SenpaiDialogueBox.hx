@@ -71,15 +71,15 @@ class SenpaiDialogueBox extends FlxSpriteGroup {
 		var hasDialog:Bool = true;
 		switch (songName) {
 			case 'senpai':
-				box.frames = Paths.getSparrowAtlas('weeb/pixelUI/dialogueBox-pixel');
+				box.frames = Paths.getSparrowAtlas('weeb/dialogue/dialogueBox-pixel');
 				box.animation.addByPrefix('normalOpen', 'Text Box Appear', 24, false);
 				box.animation.addByIndices('normal', 'Text Box Appear instance 1', [4], '', 24);
 			case 'roses':
-				box.frames = Paths.getSparrowAtlas('weeb/pixelUI/dialogueBox-senpaiMad');
+				box.frames = Paths.getSparrowAtlas('weeb/dialogue/dialogueBox-senpaiMad');
 				box.animation.addByPrefix('normalOpen', 'SENPAI ANGRY IMPACT SPEECH', 24, false);
 				box.animation.addByIndices('normal', 'SENPAI ANGRY IMPACT SPEECH instance 1', [4], '', 24);
 			case 'thorns':
-				box.frames = Paths.getSparrowAtlas('weeb/pixelUI/dialogueBox-evil');
+				box.frames = Paths.getSparrowAtlas('weeb/dialogue/dialogueBox-evil');
 				box.animation.addByPrefix('normalOpen', 'Spirit Textbox spawn', 24, false);
 				box.animation.addByIndices('normal', 'Spirit Textbox spawn instance 1', [11], '', 24);
 
@@ -132,7 +132,7 @@ class SenpaiDialogueBox extends FlxSpriteGroup {
 		portraitLeft.screenCenter(FlxAxes.X);
 
 		handSelect = new FlxSprite(1042, 590);
-		handSelect.loadGraphic(Paths.image('weeb/pixelUI/hand_textbox'));
+		handSelect.loadGraphic(Paths.image('weeb/dialogue/hand_textbox'));
 		handSelect.setGraphicSize(Std.int(handSelect.width * PlayState.daPixelZoom * 0.9));
 		handSelect.updateHitbox();
 		handSelect.antialiasing = false;

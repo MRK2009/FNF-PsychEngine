@@ -1,5 +1,6 @@
 package editors.noteskin;
 
+import backend.skins.Pixel;
 import backend.NoteSkinConfig;
 import backend.NoteSkinConfig.NoteSkinData;
 import openfl.display.BitmapData;
@@ -58,8 +59,8 @@ class PixelArtBaker {
 
 		// Resolve the splash frames the same way the renderer does, off the BASE art (never a pixel
 		// variant -- baking from an already-baked frame would compound the block size).
-		var prevRender:Bool = NoteSkinConfig.pixelRender;
-		NoteSkinConfig.pixelRender = false;
+		var prevRender:Bool = Pixel.render;
+		Pixel.render = false;
 		var prevPin:Null<String> = Paths.pinModRoot;
 		var pin:Null<String> = NoteSkinConfig.activeSkinPinRoot();
 		if (pin != null)
@@ -96,7 +97,7 @@ class PixelArtBaker {
 		}
 
 		Paths.pinModRoot = prevPin;
-		NoteSkinConfig.pixelRender = prevRender;
+		Pixel.render = prevRender;
 		NoteSkinConfig.invalidate(draft.name); // so the new frames are seen immediately
 
 		if (err == null && written < 1)
@@ -143,8 +144,8 @@ class PixelArtBaker {
 		if (ratio <= 0 || ratio >= 1)
 			return {frames: 0, path: null, error: 'Pixel scale must be larger than Scale to downscale'};
 
-		var prevRender:Bool = NoteSkinConfig.pixelRender;
-		NoteSkinConfig.pixelRender = false; // always bake from the BASE art, never a previous bake
+		var prevRender:Bool = Pixel.render;
+		Pixel.render = false; // always bake from the BASE art, never a previous bake
 		var prevPin:Null<String> = Paths.pinModRoot;
 		var pin:Null<String> = NoteSkinConfig.activeSkinPinRoot();
 		if (pin != null)
@@ -188,7 +189,7 @@ class PixelArtBaker {
 			err = Std.string(e);
 
 		Paths.pinModRoot = prevPin;
-		NoteSkinConfig.pixelRender = prevRender;
+		Pixel.render = prevRender;
 		NoteSkinConfig.invalidate(draft.name);
 
 		if (err == null && written < 1)

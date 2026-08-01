@@ -1,5 +1,6 @@
 package legacy;
 
+import backend.skins.Pixel;
 import backend.animation.PsychAnimationController;
 import backend.NoteTypesConfig;
 import backend.NoteSkinConfig;
@@ -506,7 +507,7 @@ class LegacyNote extends FlxSprite {
 			return false;
 
 		if (NoteSkinConfig.editorOverride == null)
-			NoteSkinConfig.pixelRender = NoteSkinConfig.pixelRenderFor(cfg);
+			Pixel.render = NoteSkinConfig.pixelRenderFor(cfg);
 
 		var base:String = NoteSkinConfig.folder(skinName);
 		var col:Int = noteData;
@@ -576,7 +577,7 @@ class LegacyNote extends FlxSprite {
 			if (cfg.splash != null)
 				noteSplashData.useRGBShader = colorable;
 		}
-		antialiasing = NoteSkinConfig.pixelRender ? false : NoteSkinConfig.boolForColumn(cfg.antialiasing, col,
+		antialiasing = Pixel.render ? false : NoteSkinConfig.boolForColumn(cfg.antialiasing, col,
 			ClientPrefs.data.antialiasing);
 		if (isSustainNote && cfg.holdAntialiasing != null)
 			antialiasing = cfg.holdAntialiasing;

@@ -1,5 +1,6 @@
 package legacy;
 
+import backend.skins.Pixel;
 import legacy.LegacyNote;
 import legacy.LegacyStrumNote;
 
@@ -30,8 +31,8 @@ class LegacyNoteSkin {
 		var texture:String = strum.texture;
 		var noteData:Int = strum.noteData;
 
-		if (PlayState.isPixelStage) {
-			final pixelGraphic = Paths.image('pixelUI/' + texture);
+		if (Pixel.legacySheets()) {
+			final pixelGraphic = Paths.image(Pixel.legacyPrefix() + texture);
 			if (pixelGraphic == null) {
 				FlxG.log.error('LegacyStrumNote: pixel skin missing -- could not load "images/pixelUI/$texture.png"');
 				return;
@@ -140,16 +141,16 @@ class LegacyNoteSkin {
 		var lastScaleY:Float = note.scale.y;
 		var skinPostfix:String = LegacyNote.getNoteSkinPostfix();
 		var customSkin:String = skin + skinPostfix;
-		var path:String = PlayState.isPixelStage ? 'pixelUI/' : '';
+		var path:String = Pixel.legacyPrefix();
 		if (customSkin == LegacyNote._lastValidChecked || Paths.fileExists('images/' + path + customSkin + '.png', IMAGE)) {
 			skin = customSkin;
 			LegacyNote._lastValidChecked = customSkin;
 		} else
 			skinPostfix = '';
 
-		if (PlayState.isPixelStage) {
+		if (Pixel.legacySheets()) {
 			if (note.isSustainNote) {
-				var graphic = Paths.image('pixelUI/' + skinPixel + 'ENDS' + skinPostfix);
+				var graphic = Paths.image(Pixel.legacyPrefix() + skinPixel + 'ENDS' + skinPostfix);
 				if (graphic == null) {
 					FlxG.log.error('LegacyNote: missing pixel sustain skin "images/pixelUI/${skinPixel}ENDS${skinPostfix}.png"');
 					return;
@@ -157,7 +158,7 @@ class LegacyNoteSkin {
 				note.loadGraphic(graphic, true, Math.floor(graphic.width / 4), Math.floor(graphic.height / 2));
 				note.originalHeight = graphic.height / 2;
 			} else {
-				var graphic = Paths.image('pixelUI/' + skinPixel + skinPostfix);
+				var graphic = Paths.image(Pixel.legacyPrefix() + skinPixel + skinPostfix);
 				if (graphic == null) {
 					FlxG.log.error('LegacyNote: missing pixel skin "images/pixelUI/${skinPixel}${skinPostfix}.png"');
 					return;

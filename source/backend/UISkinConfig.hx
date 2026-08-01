@@ -1,5 +1,6 @@
 package backend;
 
+import backend.skins.Pixel;
 import flixel.tweens.FlxEase;
 import backend.NoteSkinConfig.SkinImage;
 import backend.NoteSkinConfig.LocatedSkin;
@@ -25,8 +26,9 @@ typedef UISkinData = {
 	@:optional var judgements:Dynamic; // visual tier name -> {image, window, ...}
 	@:optional var tween:Dynamic; // global + per-element (rating/combo/numbers) motion
 	@:optional var placement:Dynamic; // anchorX/numSpacing + per-element [x,y] base positions
-	@:optional var pixel:Bool;
-	@:optional var pixelVariant:Bool;
+	@:optional var pixelMode:String; // 'none' | 'always' | 'variant'; supersedes the two booleans below
+	@:optional var pixel:Bool; // LEGACY: equivalent to pixelMode 'always'
+	@:optional var pixelVariant:Bool; // LEGACY: equivalent to pixelMode 'variant'
 	@:optional var pixelScale:Dynamic;
 	@:optional var antialiasing:Dynamic;
 }
@@ -328,7 +330,7 @@ class UISkinConfig {
 			return modDefaultCache;
 		var found:Bool = false;
 		#if (sys && MODS_ALLOWED)
-		var path:String = PlayState.isPixelStage ? 'pixelUI/' : '';
+		var path:String = Pixel.legacyPrefix();
 		// The legacy pixel assets carry a `-pixel` suffix, so probing the plain names on a pixel
 		// stage never matched and a mod's pixel art went unnoticed.
 		var suffix:String = PlayState.isPixelStage ? '-pixel' : '';
@@ -359,26 +361,19 @@ class UISkinConfig {
 		return false;
 	}
 
+	/** The first skin declaring `variant`, Default preferred. Cached; cleared by `reset()`. **/
 	public static function pixelVariantSkin():Null<String> {
 		if (pixelVariantComputed)
 			return pixelVariantCache;
 		pixelVariantComputed = true;
 
-		var def:UISkinData = get(DEFAULT);
-		if (def != null && def.pixelVariant == true) {
-			pixelVariantCache = DEFAULT;
-			return pixelVariantCache;
-		}
-		for (name in list()) {
-			var cfg:UISkinData = get(name);
-			if (cfg != null && cfg.pixelVariant == true) {
-				pixelVariantCache = name;
-				return pixelVariantCache;
-			}
-		}
-		pixelVariantCache = null;
-		return null;
+		pixelVariantCache = Pixel.variantSkin(DEFAULT, list(), function(name:String):String return pixelModeOf(get(name)));
+		return pixelVariantCache;
 	}
+
+	/** A UI skin's declared pixel mode, normalised the same way note skins are. **/
+	public static function pixelModeOf(cfg:UISkinData):String
+		return (cfg == null) ? Pixel.NONE : Pixel.modeOf(cfg.pixelMode, cfg.pixel, cfg.pixelVariant);
 
 	/**
 		Resolves a logical UI element to a skin image, or null when there's no active skin / the image is
@@ -418,13 +413,11 @@ class UISkinConfig {
 	}
 
 	static function pixelImage(base:String, key:String):Null<SkinImage> {
-		var slash:Int = key.lastIndexOf('/');
-		var sub:String = (slash >= 0) ? base + key.substr(0, slash) + '/pixel' + key.substr(slash) : base + 'pixel/' + key;
-		if (imageExists(sub))
-			return NoteSkinConfig.resolveImage(sub);
-		var suf:String = base + key + '-pixel';
-		if (imageExists(suf))
-			return NoteSkinConfig.resolveImage(suf);
+		// The same candidate order note skins use, so a `pixel/` folder means one thing engine-wide.
+		for (candidate in Pixel.candidates(base + key))
+			if (imageExists(candidate))
+				return NoteSkinConfig.resolveImage(candidate);
+
 		return null;
 	}
 

@@ -1,5 +1,6 @@
 package editors.noteskin;
 
+import backend.skins.Pixel;
 import backend.NoteSkinConfig;
 import backend.noteskin.NoteSkinService;
 import editors.content.DockFlow;
@@ -127,7 +128,7 @@ class NoteSkinEditorState extends MusicBeatState {
 
 	override function destroy() {
 		NoteSkinConfig.editorOverride = null;
-		NoteSkinConfig.pixelRender = false;
+		Pixel.render = false;
 		NoteSkinConfig.reset();
 		NoteSkinService.reset();
 		Mania.apply(Mania.DEFAULT);
@@ -603,7 +604,7 @@ class NoteSkinEditorState extends MusicBeatState {
 		NoteSkinConfig.setConfig(draft.name, draft.config);
 		NoteSkinConfig.invalidate(draft.name);
 		NoteSkinService.reset();
-		NoteSkinConfig.pixelRender = pixelPreview || NoteSkinConfig.pixelModeOf(draft.config) == NoteSkinConfig.PIXEL_ALWAYS;
+		Pixel.render = pixelPreview || NoteSkinConfig.pixelModeOf(draft.config) == NoteSkinConfig.PIXEL_ALWAYS;
 	}
 
 	/**

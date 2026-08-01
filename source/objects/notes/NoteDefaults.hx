@@ -72,10 +72,10 @@ class NoteDefaults {
 	public static var defaultNoteSkin(get, never):String;
 
 	static function get_defaultNoteSkin():String {
-		// Probed against the root the caller will actually load from. The pixel sheet still exists at
-		// the old flat path while the non-pixel one does not, so testing both together would answer
-		// "old path" and leave every non-pixel strum on a missing image.
-		var root:String = states.PlayState.isPixelStage ? 'images/pixelUI/' : 'images/';
+		// Probed against the root the caller will actually load from, which for a legacy pack on a
+		// pixel stage is `pixelUI/`. Testing both roots together would answer "old path" whenever the
+		// pixel sheet exists and leave every non-pixel strum on a missing image.
+		var root:String = 'images/' + backend.skins.Pixel.legacyPrefix();
 		return Paths.fileExists('$root$CLASSIC_SHEET.png', IMAGE) ? CLASSIC_SHEET : CLASSIC_SHEET_BASE;
 	}
 

@@ -1,5 +1,6 @@
 package legacy;
 
+import backend.skins.Pixel;
 import objects.Note;
 import backend.animation.PsychAnimationController;
 import backend.NoteSkinConfig;
@@ -150,7 +151,7 @@ class LegacyStrumNote extends FlxSprite {
 			return false;
 
 		if (NoteSkinConfig.editorOverride == null)
-			NoteSkinConfig.pixelRender = NoteSkinConfig.pixelRenderFor(cfg);
+			Pixel.render = NoteSkinConfig.pixelRenderFor(cfg);
 
 		var base:String = NoteSkinConfig.folder(skinName);
 		var c:Int = Std.int(Math.abs(noteData));
@@ -214,7 +215,7 @@ class LegacyStrumNote extends FlxSprite {
 		staticColorable = NoteSkinConfig.colorableFor(cfg, 'strums');
 		pressedColorable = NoteSkinConfig.colorableFor(cfg, 'pressed');
 		confirmColorable = NoteSkinConfig.colorableFor(cfg, 'confirm');
-		antialiasing = NoteSkinConfig.pixelRender ? false : NoteSkinConfig.boolForColumn(cfg.antialiasing, c,
+		antialiasing = Pixel.render ? false : NoteSkinConfig.boolForColumn(cfg.antialiasing, c,
 			ClientPrefs.data.antialiasing);
 		var soff:Array<Float> = NoteSkinConfig.offsetFor(cfg.strumOffsets, c);
 		skinOffsetX = soff[0];

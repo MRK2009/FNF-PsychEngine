@@ -1,5 +1,6 @@
 package backend.noteskin;
 
+import backend.skins.Pixel;
 import flixel.FlxSprite;
 import flixel.graphics.frames.FlxAtlasFrames;
 import shaders.RGBPalette.RGBShaderReference;
@@ -10,7 +11,8 @@ import backend.NoteSkinConfig.NoteSkinData;
 using StringTools;
 
 /**
-	The classic (pre-folder) note skin: NOTE_assets sparrow sheets, `pixelUI/` pixel sheets, and the
+	The classic (pre-folder) note skin: NOTE_assets sparrow sheets, the legacy-only `pixelUI/` pixel
+	sheets (see `backend.skins.Pixel`), and the
 	multikey square-atlas merge. A faithful port of the old `Note`/`StrumNote` building (and
 	`legacy.LegacyNoteSkin`) retargeted onto bare `FlxSprite`s with standardized anim names
 	(`note`/`hold`/`end` and `static`/`pressed`/`confirm`). Used by the new drawables when no folder
@@ -108,7 +110,7 @@ class ClassicNoteSkin implements INoteSkin {
 		@return the resolved skin image base name
 	**/
 	function resolveSkin():String {
-		var path:String = PlayState.isPixelStage ? 'pixelUI/' : '';
+		var path:String = Pixel.legacyPrefix();
 		if (activeName != null && activeName.length > 0) {
 			var sheet:String = NoteSkinConfig.classicSheet(activeName);
 			if (sheet != null)
@@ -133,15 +135,15 @@ class ClassicNoteSkin implements INoteSkin {
 		return skin;
 	}
 
-	/** Builds the note head from the classic sparrow sheet, or the `pixelUI/` sheet on a pixel stage. **/
+	/** Builds the note head from the classic sparrow sheet, or a legacy pack's `pixelUI/` sheet. **/
 	public function applyNote(spr:FlxSprite, rgb:RGBShaderReference, column:Int, keyCount:Int, animName:String):NoteVisual {
 		var v:NoteVisual = new NoteVisual();
 		var skin:String = resolveSkin();
 		var nd:Int = column % Mania.colArray.length;
 		var kc:Int = Mania.clamp(keyCount);
 
-		if (PlayState.isPixelStage) {
-			var graphic = Paths.image('pixelUI/' + skin);
+		if (Pixel.legacySheets()) {
+			var graphic = Paths.image(Pixel.legacyPrefix() + skin);
 			if (graphic == null)
 				return v;
 			spr.loadGraphic(graphic, true, Math.floor(graphic.width / 4), Math.floor(graphic.height / 5));
@@ -199,10 +201,10 @@ class ClassicNoteSkin implements INoteSkin {
 		var nd:Int = column % Mania.colArray.length;
 		var kc:Int = Mania.clamp(keyCount);
 
-		if (PlayState.isPixelStage) {
-			if (!Paths.fileExists('images/pixelUI/' + texture + '.png', IMAGE))
+		if (Pixel.legacySheets()) {
+			if (!Paths.fileExists('images/' + Pixel.legacyPrefix() + texture + '.png', IMAGE))
 				return;
-			var graphic = Paths.image('pixelUI/' + texture);
+			var graphic = Paths.image(Pixel.legacyPrefix() + texture);
 			if (graphic == null)
 				return;
 			spr.loadGraphic(graphic, true, Math.floor(graphic.width / 4), Math.floor(graphic.height / 5));
@@ -244,8 +246,8 @@ class ClassicNoteSkin implements INoteSkin {
 		var nd:Int = column % Mania.colArray.length;
 		var kc:Int = Mania.clamp(keyCount);
 
-		if (PlayState.isPixelStage) {
-			var ends = Paths.image('pixelUI/' + skin + 'ENDS');
+		if (Pixel.legacySheets()) {
+			var ends = Paths.image(Pixel.legacyPrefix() + skin + 'ENDS');
 			if (ends == null)
 				return v;
 			body.loadGraphic(ends, true, Math.floor(ends.width / 4), Math.floor(ends.height / 2));
@@ -371,10 +373,10 @@ class ClassicNoteSkin implements INoteSkin {
 		var nd:Int = column % Mania.colArray.length;
 		var kc:Int = Mania.clamp(keyCount);
 
-		if (PlayState.isPixelStage) {
-			if (!Paths.fileExists('images/pixelUI/' + texture + 'ENDS.png', IMAGE))
+		if (Pixel.legacySheets()) {
+			if (!Paths.fileExists('images/' + Pixel.legacyPrefix() + texture + 'ENDS.png', IMAGE))
 				return;
-			var ends = Paths.image('pixelUI/' + texture + 'ENDS');
+			var ends = Paths.image(Pixel.legacyPrefix() + texture + 'ENDS');
 			if (ends == null)
 				return;
 			body.loadGraphic(ends, true, Math.floor(ends.width / 4), Math.floor(ends.height / 2));
@@ -482,8 +484,8 @@ class ClassicNoteSkin implements INoteSkin {
 		// the chart/mod skin and could point at a sheet whose XML was missing (crash) or wrong.
 		var skin:String = resolveSkin();
 
-		if (PlayState.isPixelStage) {
-			var graphic = Paths.image('pixelUI/' + skin);
+		if (Pixel.legacySheets()) {
+			var graphic = Paths.image(Pixel.legacyPrefix() + skin);
 			if (graphic == null)
 				return v;
 			spr.loadGraphic(graphic);
