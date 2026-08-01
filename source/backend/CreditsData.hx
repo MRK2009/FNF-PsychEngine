@@ -95,7 +95,7 @@ class CreditsData {
 			]),
 			section('Special Thanks', [
 				person('Vortex2Oblivion', '', 'hxhardware and multikey code inspiration', '', '888888'),
-				person('Inky03', '', 'HScript Insanity', '', '888888'),
+				person('Inky03', '', 'HScript hxScript', '', '888888'),
 				person('MCO7', '', 'For the "fixed" note assets', [
 					{
 						label: 'Social',

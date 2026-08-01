@@ -1,21 +1,21 @@
 package scripting;
 
 #if HSCRIPT_ALLOWED
-import insanity.syntax.Expr.ImportMode;
-import insanity.types.TypeCollection;
+import hxscript.syntax.Expr.ImportMode;
+import hxscript.types.TypeCollection;
 
 /**
  * The single definition of what a script can see without setting anything up.
  *
  * Two halves:
- *  - `TYPE_IMPORTS` are registered as insanity global imports, so every script -- a plain
+ *  - `TYPE_IMPORTS` are registered as hxscript global imports, so every script -- a plain
  *    `.hx` mod script, a scripted state, a scripted class -- resolves these names the same
  *    way, with no per-context injection list to keep in sync.
  *  - `inject()` supplies the values and helper functions a scripted class needs
  *    (`controls`, `getVar`, `switchToState`, ...).
  *
  * Types NOT listed here are still reachable: `import` resolves against every type compiled
- * into the engine (`insanity.types.TypeCollection`), which is how real Haxe behaves.
+ * into the engine (`hxscript.types.TypeCollection`), which is how real Haxe behaves.
  */
 class ScriptGlobals {
 	/**
@@ -132,7 +132,7 @@ class ScriptGlobals {
 	];
 
 	/**
-	 * Registers `TYPE_IMPORTS` with insanity. Called once from `HScript.setupConfig()`.
+	 * Registers `TYPE_IMPORTS` with hxscript. Called once from `HScript.setupConfig()`.
 	 * Entries that aren't in the build are skipped rather than left to fail at import
 	 * time, where an unknown type aborts the whole script.
 	 */
@@ -151,7 +151,7 @@ class ScriptGlobals {
 				continue;
 			#end
 
-			insanity.Config.globalImports.set(path, ImportMode.INormal);
+			hxscript.Config.globalImports.set(path, ImportMode.INormal);
 		}
 	}
 

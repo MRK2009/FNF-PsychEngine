@@ -1,11 +1,11 @@
 package scripting.hscript;
 
 #if HSCRIPT_ALLOWED
-import insanity.runtime.Interp;
-import insanity.runtime.Error;
+import hxscript.runtime.Interp;
+import hxscript.runtime.Error;
 
 /**
- * insanity interpreter with one Psych-specific addition: bare-identifier
+ * hxscript interpreter with one Psych-specific addition: bare-identifier
  * resolution against a "parent instance" (the state that created the script).
  *
  * This restores the old hscript-iris `CustomInterp` behaviour so existing mod
@@ -14,7 +14,7 @@ import insanity.runtime.Error;
  *
  * Installed globally via `HScript.setupConfig()` (`Config.interpClass`).
  */
-@:access(insanity.runtime.Interp)
+@:access(hxscript.runtime.Interp)
 class PsychInterp extends Interp {
 	public var parentInstance(default, set):Dynamic = null;
 
@@ -41,7 +41,7 @@ class PsychInterp extends Interp {
 		return inst;
 	}
 
-	public function new(?environment:insanity.Environment, ?parent:Dynamic) {
+	public function new(?environment:hxscript.Environment, ?parent:Dynamic) {
 		super(environment, parent);
 	}
 
@@ -61,7 +61,7 @@ class PsychInterp extends Interp {
 	// same way reads of it do. Only fires for a genuine instance field that isn't
 	// shadowed by an import or script variable; everything else (Mirror
 	// properties, the strict undeclared-variable error for non-fields like a
-	// typo'd local) defers to insanity unchanged.
+	// typo'd local) defers to hxscript unchanged.
 	override function setVar(name:String, v:Dynamic):Dynamic {
 		if (!imports.exists(name) && !variables.exists(name) && parentInstance != null && _instanceFields.exists(name)) {
 			Reflect.setProperty(parentInstance, name, v);

@@ -7,9 +7,9 @@ import haxe.macro.Expr;
 /**
 	Generates the scriptable bridges that let mod scripts write `class X extends <Base>`.
 
-	hscript-insanity registers a scriptable class by its BASE class: for every entry below it
+	hxscript registers a scriptable class by its BASE class: for every entry below it
 	emits an otherwise empty `scripting.bridges.Scripted<Name> extends <Base> implements
-	insanity.IScripted`, whose `@:autoBuild` macro generates, for each inherited method, an
+	hxscript.IScripted`, whose `@:autoBuild` macro generates, for each inherited method, an
 	override that dispatches to the loaded script when it defines that method and falls through
 	to `super` otherwise. Scripts therefore extend the REAL base, and the engine instantiates the
 	bridge for them.
@@ -74,7 +74,7 @@ class ScriptedBridgeMacro {
 			var superPath:TypePath = toTypePath(entry.base);
 			var name:String = 'Scripted' + superPath.name;
 
-			var interfaces:Array<TypePath> = [{pack: ['insanity'], name: 'IScripted'}];
+			var interfaces:Array<TypePath> = [{pack: ['hxscript'], name: 'IScripted'}];
 			if (entry.interfaces != null)
 				for (i in entry.interfaces)
 					interfaces.push(toTypePath(i));

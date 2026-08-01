@@ -13,13 +13,13 @@ import flixel.sound.FlxSound;
  *
  * Each shim is a compiled closure keyed by `<owner class>.<method>`; the interpreter looks it
  * up (walking the receiver's superclasses) when a call finds no runtime method. See
- * `insanity.Config.callShims` and `Interp.resolveCallShim`.
+ * `hxscript.Config.callShims` and `Interp.resolveCallShim`.
  *
  * Registered once at boot from `HScript.setupConfig`.
  */
 class ScriptShims {
 	public static function register():Void {
-		var shims = insanity.Config.callShims;
+		var shims = hxscript.Config.callShims;
 
 		// flixel 6.2: FlxG.sound.playMusic is now an `inline extern` overload. Rebuild it the
 		// reflectable way -- stop any current track, then load + play the new one as

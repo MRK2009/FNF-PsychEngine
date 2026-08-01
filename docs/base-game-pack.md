@@ -123,7 +123,7 @@ compiled stage and a scripted one:
   statics live on the class interpreter, which only the scope methods are built with received, so
   `var state:Int = WAITING;` failed as an unknown identifier while `state = WAITING` inside a method
   worked, and a class could not name itself to qualify (`MyClass.WAITING`). Both are fixed in
-  hscript-insanity's `ScriptedMacro.__construct`, sharing the statics by reference so a mutable one
+  hxscript's `ScriptedMacro.__construct`, sharing the statics by reference so a mutable one
   stays a single value for the class. The ported state machines still use instance fields, which is
   simply what they were written against.
 - **A capitalised identifier in a `case` pattern is a pattern variable**, not a constant, so

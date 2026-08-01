@@ -3,8 +3,8 @@ package scripting;
 #if HSCRIPT_ALLOWED
 import backend.BaseStage;
 import backend.Mods;
-import insanity.types.IScriptedType;
-import insanity.types.ScriptedClass;
+import hxscript.types.IScriptedType;
+import hxscript.types.ScriptedClass;
 import scripting.hscript.HScript;
 import scripting.hscript.HScript.HScriptInfos;
 import scripting.ScriptedStates.ResolveScope;
@@ -26,7 +26,7 @@ import scripting.ScriptedStates.ResolveScope;
 	    }
 
 	`BaseStage`'s constructor registers the stage with `PlayState` and calls `create()` itself, so
-	building the instance is the whole job. That ordering is safe here: hscript-insanity binds the
+	building the instance is the whole job. That ordering is safe here: hxscript binds the
 	script's fields and methods BEFORE it runs the constructor chain, so the `create()` fired from
 	inside `BaseStage.new` already dispatches to the script's override.
 

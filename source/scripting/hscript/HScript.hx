@@ -9,10 +9,10 @@ import scripting.lua.CustomSubstate;
 import scripting.lua.FunkinLua;
 #end
 #if HSCRIPT_ALLOWED
-import insanity.Script;
-import insanity.runtime.Interp;
-import insanity.Config.ConfigBlacklistKind;
-import insanity.syntax.Expr.ImportMode;
+import hxscript.Script;
+import hxscript.runtime.Interp;
+import hxscript.Config.ConfigBlacklistKind;
+import hxscript.syntax.Expr.ImportMode;
 
 typedef HScriptInfos = {
 	> haxe.PosInfos,
@@ -31,7 +31,7 @@ typedef HScriptCall = {
 	var returnValue:Dynamic;
 }
 
-// Wraps an insanity.Script (formerly extended crowplexus.iris.Iris).
+// Wraps an hxscript.Script (formerly extended crowplexus.iris.Iris).
 // The public surface (preset() globals, call/set/exists, the runHaxeCode
 // Lua bridge, the `instances` registry and the static error/warn loggers)
 // is kept identical so the rest of the engine doesn't need to know which
@@ -71,28 +71,28 @@ class HScript {
 	public static var instances:Map<String, HScript> = new Map();
 
 	/**
-	 * One-time setup of insanity's global scripting config. Mirrors
-	 * ModSecurity.BLOCKED_CLASSES into insanity's type blacklist so that scripts
+	 * One-time setup of hxscript's global scripting config. Mirrors
+	 * ModSecurity.BLOCKED_CLASSES into hxscript's type blacklist so that scripts
 	 * resolving them through the Type/Reflect/Std proxies get null back -- the
 	 * defense-in-depth equivalent of the old PatchIris macro. The primary gate
 	 * (per-mod trust + source pattern scanning) still lives in ModSecurity and
-	 * is interpreter-agnostic, so it is unaffected by the Iris -> insanity swap.
+	 * is interpreter-agnostic, so it is unaffected by the Iris -> hxscript swap.
 	 *
 	 * Call once at boot (see Main.setupGame).
 	 */
 	public static function setupConfig():Void {
 		// Use our interpreter so scripts can reference the creating state's
 		// fields as bare identifiers (hscript-iris CustomInterp back-compat).
-		insanity.Config.interpClass = PsychInterp;
+		hxscript.Config.interpClass = PsychInterp;
 
 		// Auto-import every extendable base so scripts can write `class MyThing extends
-		// FlxSprite` without an explicit import. insanity makes a class scriptable by
+		// FlxSprite` without an explicit import. hxscript makes a class scriptable by
 		// registering its BASE class (backend.MusicBeatState -> the generated
 		// ScriptedMusicBeatState bridge), so scripts extend the real base, not the
 		// bridge. Bare names resolve through imports and these are all packaged, so
 		// each has to be imported explicitly -- a package IAll import skips them.
 		for (base in scripting.bridges.Bridges.bases)
-			insanity.Config.globalImports.set(base, INormal);
+			hxscript.Config.globalImports.set(base, INormal);
 
 		// One shared list of engine types every script resolves unqualified. Everything
 		// else is reachable by explicit `import`, resolved against the compiled type set.
@@ -100,36 +100,36 @@ class HScript {
 
 		// Script-declared `private` members are enforced (native fields carry no access
 		// information at runtime and are unaffected).
-		insanity.Config.strictAccess = true;
+		hxscript.Config.strictAccess = true;
 
 		// Emulate methods flixel/openfl leave without a runtime form (inline extern), e.g.
 		// FlxG.sound.playMusic, so scripts can call them like normal Haxe.
 		scripting.ScriptShims.register();
 
 		#if MODS_ALLOWED
-		var byType:Array<String> = insanity.Config.blacklist.get(ByType);
+		var byType:Array<String> = hxscript.Config.blacklist.get(ByType);
 		if (byType == null) {
 			byType = [];
-			insanity.Config.blacklist.set(ByType, byType);
+			hxscript.Config.blacklist.set(ByType, byType);
 		}
 		for (name => _ in backend.ModSecurity.BLOCKED_CLASSES)
 			if (name.indexOf('.') >= 0 && !byType.contains(name)) // fully-qualified names only
 				byType.push(name);
 
 		/**
-			`import` is a wider surface than resolution by name: it goes through insanity's own type
+			`import` is a wider surface than resolution by name: it goes through hxscript's own type
 			collection, so `ModSecurity.safeResolveClass` never sees it. The packages that are
 			dangerous wholesale are mirrored here so both surfaces agree.
 
-			`insanity` itself must NOT be listed. `Std`, `Type` and `Reflect` inside a script resolve
-			to `insanity.proxy.*` and scripted abstracts run on `insanity.types.*`, so blocking the
+			`hxscript` itself must NOT be listed. `Std`, `Type` and `Reflect` inside a script resolve
+			to `hxscript.proxy.*` and scripted abstracts run on `hxscript.types.*`, so blocking the
 			package blacklists the interpreter's own machinery: every script using `Std` dies with
-			"Unknown identifier: Std". `insanity.Config` is in `BLOCKED_CLASSES` by name instead.
+			"Unknown identifier: Std". `hxscript.Config` is in `BLOCKED_CLASSES` by name instead.
 		**/
-		var byPackage:Array<String> = insanity.Config.blacklist.get(ByPackage(true));
+		var byPackage:Array<String> = hxscript.Config.blacklist.get(ByPackage(true));
 		if (byPackage == null) {
 			byPackage = [];
-			insanity.Config.blacklist.set(ByPackage(true), byPackage);
+			hxscript.Config.blacklist.set(ByPackage(true), byPackage);
 		}
 		for (pack in backend.ModSecurity.BLOCKED_PACKAGES) {
 			var name:String = pack.substr(0, pack.length - 1); // "sys." -> "sys"
@@ -210,7 +210,7 @@ class HScript {
 		// Bare-identifier access to the creating state's fields (back-compat).
 		if (interp != null && (interp is PsychInterp))
 			cast(interp, PsychInterp).parentInstance = FlxG.state;
-		// insanity.Script parses in its constructor with the default (trace)
+		// hxscript.Script parses in its constructor with the default (trace)
 		// handler; re-parse so parse errors reach our debug-console logger.
 		if (script.program == null)
 			script.parse(scriptThing);
@@ -234,7 +234,7 @@ class HScript {
 	var _presetDone:Bool = false;
 
 	/**
-	 * Executes the parsed program. We deliberately bypass `insanity.Script.start()`
+	 * Executes the parsed program. We deliberately bypass `hxscript.Script.start()`
 	 * because it calls `interp.setDefaults()` which WIPES the variables map -- that
 	 * would erase every global we inject in `preset()`.
 	 *

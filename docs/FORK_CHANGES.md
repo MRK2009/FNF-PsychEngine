@@ -39,8 +39,8 @@ This document covers distinct eras of work, and is split accordingly:
 | `flixel`             | 5.6.1              | **6.2.0**       | **Major** upgrade                                                                              |
 | `flixel-addons`      | 3.2.2              | **4.0.1**       | **Major** upgrade                                                                              |
 | `flixel-tools`       | 1.5.1              | 1.5.1           | unchanged                                                                                      |
-| `hscript-iris`       | 1.1.3              | **removed**     | Replaced by `hscript-insanity` to gain class-based scripted states                              |
-| `hscript-insanity`   | —                  | **git (pinned)**| New: [`inky03/hscript-insanity`](https://github.com/inky03/hscript-insanity); the script interpreter, supports scripting whole classes/states |
+| `hscript-iris`       | 1.1.3              | **removed**     | Replaced by `hxscript` to gain class-based scripted states                              |
+| `hxscript`           | —                  | **dev (fork)**  | New: **hxScript**, our fork of [`inky03/hscript-insanity`](https://github.com/inky03/hscript-insanity); the script interpreter, supports scripting whole classes/states |
 | `hscript`            | (transitive)       | 2.7.0           | Still a transitive dep; no longer the script interpreter                                        |
 | `tjson`              | 1.4.0              | 1.4.0           | unchanged                                                                                      |
 | `hxdiscord_rpc`      | 1.2.4              | **1.3.0**       | Minor upgrade                                                                                  |
@@ -298,7 +298,7 @@ the history.
   fixes: object access and method-lookup caching, backwards-compatibility fixes across both Lua and
   HScript.
 - [`12d1c9b`](https://github.com/MeguminBOT/FNF-PsychEngine/commit/12d1c9b) -- Switched
-  `hscript-insanity` to a personal fork to unblock class-based scripted-state fixes upstream hadn't
+  `hxscript` to a personal fork (now **hxScript**) to unblock class-based scripted-state fixes upstream hadn't
   merged yet.
 - [`df31fc2`](https://github.com/MeguminBOT/FNF-PsychEngine/commit/df31fc2) -- Scripted states keep
   scope to the launched modpack (a scripted state from one mod can no longer reach into another's

@@ -124,7 +124,7 @@ class MusicBeatSubstate extends FlxSubState {
 
 	override function update(elapsed:Float) {
 		#if (mobile && HSCRIPT_ALLOWED)
-		if (!defaultTouchPadTried && touchPad == null && hitbox == null && (this is insanity.IScripted)) {
+		if (!defaultTouchPadTried && touchPad == null && hitbox == null && (this is hxscript.IScripted)) {
 			defaultTouchPadTried = true;
 			if (!Mods.isNativeMobile())
 				addTouchPad('FULL', 'A_B');

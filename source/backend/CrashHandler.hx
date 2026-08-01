@@ -181,7 +181,7 @@ class CrashHandler {
 	static var systemInfo:String = "";
 
 	/**
-		Ring buffer of recent non-fatal script errors (HScript / hscript-insanity and LuaProxy),
+		Ring buffer of recent non-fatal script errors (HScript / hxscript and LuaProxy),
 		newest last. These are caught and don't kill the game on their own, but a bad script
 		frequently corrupts state that hard-crashes later,
 		so we fold the recent history into every crash report as context. 

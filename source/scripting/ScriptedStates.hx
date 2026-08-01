@@ -5,8 +5,8 @@ import flixel.FlxState;
 import flixel.FlxSubState;
 import backend.MusicBeatState;
 import backend.MusicBeatSubstate;
-import insanity.types.ScriptedClass;
-import insanity.types.IScriptedType;
+import hxscript.types.ScriptedClass;
+import hxscript.types.IScriptedType;
 import backend.Mods;
 import backend.Mods.StateSourceMode;
 import scripting.hscript.HScript;
@@ -22,7 +22,7 @@ enum ResolveScope {
 
 /**
  * Loads and instantiates class-based scripted states/substates written with
- * hscript-insanity.
+ * hxscript.
  *
  * A scripted state lives in `states/<Name>.hx` (inside a mod folder or the
  * shared assets) and must declare a class named exactly `<Name>` that extends
@@ -40,7 +40,7 @@ enum ResolveScope {
  */
 class ScriptedStates {
 	#if HSCRIPT_ALLOWED
-	// The generated bridges are only ever created reflectively (through the insanity
+	// The generated bridges are only ever created reflectively (through the hxscript
 	// scripted-class registry), so nothing references them as types. Referencing the
 	// generated registry forces all of them to be typed -- which runs their @:autoBuild
 	// macro and registers each base as extendable. Without it, `extends FlxSprite` and

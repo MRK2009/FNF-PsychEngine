@@ -153,8 +153,8 @@ class ModSecurity {
 		"DebugPrefs" => true,
 		"backend.DebugPrefs" => true,
 		// The interpreter's own config, which holds the type blacklist mirrored below. Blocked by
-		// name rather than by package: the rest of `insanity` is the machinery scripts run ON.
-		"insanity.Config" => true,
+		// name rather than by package: the rest of `hxscript` is the machinery scripts run ON.
+		"hxscript.Config" => true,
 	];
 
 	/**
@@ -166,10 +166,10 @@ class ModSecurity {
 	 * (`hxluajit`). Naming them here means a new class under any of them is not reachable
 	 * without having to enumerate engine classes a mod is expected to use.
 	 *
-	 * `insanity` is deliberately NOT here. It is the interpreter itself: `Std`, `Type` and
-	 * `Reflect` inside a script ARE `insanity.proxy.*`, and scripted abstracts run on
-	 * `insanity.types.*`, so blocking the package breaks the machinery scripts are written
-	 * against. `insanity.Config`, which holds the type blacklist, is blocked by name instead.
+	 * `hxscript` is deliberately NOT here. It is the interpreter itself: `Std`, `Type` and
+	 * `Reflect` inside a script ARE `hxscript.proxy.*`, and scripted abstracts run on
+	 * `hxscript.types.*`, so blocking the package breaks the machinery scripts are written
+	 * against. `hxscript.Config`, which holds the type blacklist, is blocked by name instead.
 	 */
 	public static final BLOCKED_PACKAGES:Array<String> = ["sys.", "cpp.", "neko.", "java.", "hxluajit."];
 

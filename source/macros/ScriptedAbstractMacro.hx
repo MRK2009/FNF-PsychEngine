@@ -12,7 +12,7 @@ import sys.io.File;
 
 	An abstract has no runtime representation, so a script handed one sees nothing: no instance
 	members, no operators, no implicit conversions, and for an `enum abstract` none of its constants
-	(`sprite.blend = BlendMode.ADD` fails as an unknown identifier). hscript-insanity fixes that with
+	(`sprite.blend = BlendMode.ADD` fails as an unknown identifier). hxscript fixes that with
 	a build macro that emits a reflectable wrapper, but the macro has to be applied to the abstract,
 	and these abstracts live in libraries we do not own. This applies it from outside.
 
@@ -81,7 +81,7 @@ class ScriptedAbstractMacro {
 			if (EXCLUDE.contains(path))
 				continue;
 
-			Compiler.addMetadata('@:build(insanity.macro.AbstractMacro.build())', path);
+			Compiler.addMetadata('@:build(hxscript.macro.AbstractMacro.build())', path);
 			wrapped.push(path);
 		}
 

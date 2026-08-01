@@ -185,7 +185,7 @@ folder, built on `onMoveCamera`, and any song can do the same.
     memory alongside the stack. All of it is machine-generic (nothing that identifies
     the user), gathered once at startup, and every lookup is guarded so collecting that
     context can never crash on top of the original error.
-  - **Script errors are recorded**: HScript / hscript-insanity and LuaProxy errors are
+  - **Script errors are recorded**: HScript / hxscript and LuaProxy errors are
     fed into a rolling history that is folded into the next crash report. A bad script
     frequently corrupts state that hard-crashes a few frames later, so the report now
     shows the script activity that led up to it.

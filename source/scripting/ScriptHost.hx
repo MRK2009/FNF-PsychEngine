@@ -216,7 +216,7 @@ class ScriptHost {
 	}
 
 	public function initHScript(file:String):Void {
-		// insanity.Script reports parse/exec errors through HScript's static
+		// hxscript.Script reports parse/exec errors through HScript's static
 		// loggers instead of throwing, so we check `failed` rather than catch.
 		var newScript:HScript = new HScript(null, file);
 		if (newScript.failed) {

@@ -157,7 +157,7 @@ at runtime rather than by reading source:
 - **Resolving a class by name** -- `import('pkg.Class')`, `createInstance`, `getPropertyFromClass`,
   `callMethodFromClass`, `addHaxeLibrary` -- goes through `ModSecurity.safeResolveClass`. It returns
   `null` for anything on `BLOCKED_CLASSES` (individual engine classes: `ModSecurity` itself,
-  `DebugPrefs`, `Main`, the FPS counter, `insanity.Config`) or under a blocked **package**:
+  `DebugPrefs`, `Main`, the FPS counter, `hxscript.Config`) or under a blocked **package**:
   `sys`, `cpp`, `neko`, `java` and `llua`. Those five are where the danger is the package rather than
   any one type -- the process and filesystem, native handles, and the raw Lua state sitting behind
   the script's own interpreter -- so a new class under any of them is unreachable without anyone
@@ -168,10 +168,10 @@ at runtime rather than by reading source:
 - **`File` and `FileSystem`** are bound to Psych-specific replacements scoped to the mod's own
   folders, not to `sys.io`.
 
-> **`insanity` is not blocked as a package, on purpose.** It is the interpreter itself: `Std`, `Type`
-> and `Reflect` inside a script resolve to `insanity.proxy.*`, and scripted abstracts run on
-> `insanity.types.*`. Blocking the package blacklists the machinery scripts are written against, and
-> every script that touches `Std` dies with `Unknown identifier: Std`. `insanity.Config`, which holds
+> **`hxscript` is not blocked as a package, on purpose.** It is the interpreter itself: `Std`, `Type`
+> and `Reflect` inside a script resolve to `hxscript.proxy.*`, and scripted abstracts run on
+> `hxscript.types.*`. Blocking the package blacklists the machinery scripts are written against, and
+> every script that touches `Std` dies with `Unknown identifier: Std`. `hxscript.Config`, which holds
 > the blacklist, is blocked by name instead.
 
 ### What this does not claim

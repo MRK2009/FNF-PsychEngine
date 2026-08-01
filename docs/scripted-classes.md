@@ -1,4 +1,4 @@
-# Scripted classes (hscript-insanity)
+# Scripted classes (hxscript)
 
 Scripted **states** ([SCRIPTED_STATES.md](SCRIPTED_STATES.md)) let a mod script a whole
 menu. Scripted **classes** go further: a mod can ship its own class library under

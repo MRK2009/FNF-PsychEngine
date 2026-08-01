@@ -1,12 +1,12 @@
 package scripting;
 
 #if HSCRIPT_ALLOWED
-import insanity.Module;
-import insanity.Environment;
-import insanity.syntax.Expr;
-import insanity.types.ScriptedClass;
-import insanity.types.IScriptedType;
-import insanity.types.TypeCollection;
+import hxscript.Module;
+import hxscript.Environment;
+import hxscript.syntax.Expr;
+import hxscript.types.ScriptedClass;
+import hxscript.types.IScriptedType;
+import hxscript.types.TypeCollection;
 import scripting.hscript.HScript;
 import scripting.hscript.HScript.HScriptInfos;
 import scripting.ScriptedStates.ResolveScope;
@@ -25,7 +25,7 @@ import scripting.ScriptedStates.ResolveScope;
  * `ScriptedStates` and are reloaded on every state entry (so `create()` starts clean), but they
  * share their mod's world, which is what lets a state and a song script pass objects to each other.
  *
- * **One world per mod.** Every module a mod loads joins that mod's `insanity.Environment`, which is
+ * **One world per mod.** Every module a mod loads joins that mod's `hxscript.Environment`, which is
  * what lets its scripts `import` each other: import resolution consults the environment's type
  * collection alongside the engine's compiled types. Keeping worlds separate means two mods can both
  * ship `rhythm.ScoreKeeper` without colliding, and a mod's statics die with the mod rather than
@@ -254,7 +254,7 @@ class ScriptRegistry {
 		if (failed)
 			return null;
 
-		return env.resolve(insanity.tools.Tools.pathToString(name, pack));
+		return env.resolve(hxscript.tools.Tools.pathToString(name, pack));
 	}
 
 	static function resolveType(world:ScriptWorld, path:String, scope:ResolveScope):IScriptedType {

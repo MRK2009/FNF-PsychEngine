@@ -1,7 +1,7 @@
-# Class-based scripted states (hscript-insanity)
+# Class-based scripted states (hxScript)
 
 This fork swaps the HScript interpreter from **hscript-iris** to
-**[hscript-insanity](https://github.com/inky03/hscript-insanity)** so that mods
+**hxScript** (our fork of [hscript-insanity](https://github.com/inky03/hscript-insanity)) so that mods
 can script **whole classes** — most usefully, entire game **states** (custom
 menus, etc.), not just `onCreate`/`onUpdate` callback hooks.
 
@@ -242,13 +242,13 @@ The interpreter changed, so a few behaviours differ:
   stage/character/event/notetype `.hx` files) keep working unchanged — the
   `runHaxeCode`/`runHaxeFunction`/`addHaxeLibrary` Lua bridge and all PlayState
   hooks are preserved.
-- `Type`, `Reflect` and `Std` inside scripts now resolve to insanity's
+- `Type`, `Reflect` and `Std` inside scripts now resolve to hxScript's
   proxied versions (which honour the security blacklist). Their common API
   (`Type.resolveClass`, `Reflect.field`, …) is unchanged.
 - The old convenience where a stage/character script could reference the parent
   `PlayState`'s fields as bare identifiers (e.g. `curStage` instead of
   `game.curStage`) is **gone**. Use the injected `game` global, or `import`/`PlayState.instance`.
-- insanity adds Haxe features Iris lacked: map literals, string interpolation,
+- hxScript adds Haxe features Iris lacked: map literals, string interpolation,
   full pattern matching, regex literals, null-coalescing (`??`, `??=`),
   abstracts (incl. `FlxColor`). These are supersets — existing scripts are
   unaffected. For which abstracts are available and how to write them, see

@@ -44,6 +44,6 @@ Fired at mutation points, never per-frame unless you opt in:
 
 ## Notes for HScript
 
-Always put braces on function bodies, even one-liners -- `hscript-insanity` (the interpreter behind
+Always put braces on function bodies, even one-liners -- `hxscript` (the interpreter behind
 editor scripting) doesn't parse a brace-less single statement the way Haxe itself does. Sub-type
 imports aren't supported either; import the top-level class.
