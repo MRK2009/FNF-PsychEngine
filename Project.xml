@@ -16,6 +16,12 @@
 	<define name="HSCRIPT_ALLOWED" if="desktop || mobile" />
 	<define name="LUA_ALLOWED"     if="desktop || mobile" />
 
+	<!-- Compiles scripted classes to cppia and JIT-compiles them at load instead of interpreting.
+	     Anything the compiler cannot express keeps being interpreted, so this only ever changes
+	     speed. Needs `scriptable`, which keeps reflection data for every exposed class and so
+	     costs binary size. Off by default: turn it on with `lime build windows -DSCRIPT_COMPILER`. -->
+	<define name="SCRIPT_COMPILER" if="SCRIPT_COMPILER HSCRIPT_ALLOWED" />
+
 	<!-- Core features -->
 	<define name="ACHIEVEMENTS_ALLOWED" />
 	<define name="TRANSLATIONS_ALLOWED" />
@@ -235,8 +241,18 @@
 	<haxeflag name="--macro" value="macros.ScriptedBridgeMacro.generate()" if="HSCRIPT_ALLOWED" />
 	<haxeflag name="--macro" value="macros.ScriptedAbstractMacro.generate()" if="HSCRIPT_ALLOWED" />
 
+	<!-- `scriptable` exposes the host's classes to loaded bytecode; `hxscript_cppia` builds the
+	     emitter that produces it. Both belong to SCRIPT_COMPILER and neither is set without it.
+	     DCE is turned off with them: compiled bytecode links against host classes by NAME, and DCE
+	     only keeps what the engine itself references, so a class a script links to would otherwise
+	     be stripped and the module would fail to load. hxcpp's own cppia host does the same. -->
+	<haxedef name="scriptable"      if="SCRIPT_COMPILER" />
+	<haxedef name="hxscript_cppia"  if="SCRIPT_COMPILER" />
+	<haxeflag name="--dce" value="no" if="SCRIPT_COMPILER" />
+
+
 	<!-- The osu! storyboard runtime is import()-only; scripting.lua.LuaProxy._importAnchors is what forces it
-	     into the build. A `--macro keep()` used to sit here, but keep() ONLY adds @:keep metadata -- it
+	     into the build. A `macro keep()` used to sit here, but keep() ONLY adds @:keep metadata, it
 	     never compiles an unreferenced module, so it did nothing (and the class already has @:keep). -->
 
 	<!-- PsychUI stays compiled for Lua/HScript mods even though the engine's own menus moved to

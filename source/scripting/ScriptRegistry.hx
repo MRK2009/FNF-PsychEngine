@@ -132,6 +132,10 @@ class ScriptRegistry {
 		for (world in worlds)
 			world.dispose();
 		worlds.clear();
+
+		#if SCRIPT_COMPILER
+		ScriptCompiler.dispose();
+		#end
 	}
 
 	/** True if any parsed file in any world has changed on disk since it was loaded. */
@@ -170,18 +174,55 @@ class ScriptRegistry {
 		if (cls == null)
 			return null;
 
+		#if SCRIPT_COMPILER
+		var native:Class<Dynamic> = ScriptCompiler.resolve(path);
+		if (native != null) {
+			try {
+				return Type.createInstance(native, args != null ? args : []);
+			} catch (e:haxe.Exception) {
+				HScript.error('Compiled "$path" failed to instantiate, falling back: ${e.message}', errPos(path));
+			}
+		}
+		#end
+
 		return build(cls, path, args);
 	}
 
 	/**
 	 * Constructs an already-resolved scripted class, routing runtime errors in its methods
 	 * to the debug console instead of letting them take the game down.
+	 *
+	 * A class whose world runs compiled is built as its compiled self, states included. Before this,
+	 * a state was the one class the engine still built scripted, and that split every static it owned
+	 * in two: another class writing `MyState.thing` reached the compiled copy, while the state's own
+	 * methods read the scripted one, so the write was never seen. Redirecting reads could not close
+	 * that, because compiled classes reach a compiled static by linkage, not through anything the
+	 * interpreter can intercept. Building the state compiled leaves one copy in the world.
+	 *
+	 * The compiled class is taken from the class's own world rather than the compiler's global table,
+	 * since two mods may both declare `states.Menu` and the global table holds whichever compiled
+	 * last. The cost is error routing: a compiled instance's method errors are real exceptions
+	 * rather than debug-console entries, which is part of what `compileScripts` opts a pack into.
 	 */
 	public static function build(cls:ScriptedClass, name:String, ?args:Array<Dynamic>):Dynamic {
 		if (cls.failed || !cls.initialized) {
 			HScript.error('Scripted class "$name" failed to initialize', errPos(name));
 			return null;
 		}
+
+		#if SCRIPT_COMPILER
+		var env:hxscript.Environment = (cls.interp != null) ? cls.interp.environment : null;
+		if (env != null && env.substituting) {
+			var native:Class<Dynamic> = env.compiled.get(cls.path);
+			if (native != null) {
+				try {
+					return Type.createInstance(native, args != null ? args : []);
+				} catch (e:haxe.Exception) {
+					HScript.error('Compiled "$name" failed to instantiate, falling back: ${e.message}', errPos(name));
+				}
+			}
+		}
+		#end
 
 		makeSafe(cls);
 
@@ -234,9 +275,18 @@ class ScriptRegistry {
 
 		var failed:Bool = false;
 		var module:Module = new Module(File.getContent(file), name, pack, file);
-		module.onParsingError = function(e:haxe.Exception) { failed = true; HScript.error('${e.message}', errPos(name)); };
-		module.onProgramError = function(e:haxe.Exception) { failed = true; HScript.error('${e.message}', errPos(name)); };
-		module.onTypeError = function(e:haxe.Exception, t:IScriptedType) { failed = true; HScript.error('${e.message}', errPos(name)); };
+		module.onParsingError = function(e:haxe.Exception) {
+			failed = true;
+			HScript.error('${e.message}', errPos(name));
+		};
+		module.onProgramError = function(e:haxe.Exception) {
+			failed = true;
+			HScript.error('${e.message}', errPos(name));
+		};
+		module.onTypeError = function(e:haxe.Exception, t:IScriptedType) {
+			failed = true;
+			HScript.error('${e.message}', errPos(name));
+		};
 
 		if (failed)
 			return null;
@@ -314,9 +364,18 @@ class ScriptRegistry {
 
 		var failed:Bool = false;
 		var module:Module = new Module(File.getContent(file), name, parts, file);
-		module.onParsingError = function(e:haxe.Exception) { failed = true; HScript.error('${e.message}', errPos(path)); };
-		module.onProgramError = function(e:haxe.Exception) { failed = true; HScript.error('${e.message}', errPos(path)); };
-		module.onTypeError = function(e:haxe.Exception, t:IScriptedType) { failed = true; HScript.error('${e.message}', errPos(path)); };
+		module.onParsingError = function(e:haxe.Exception) {
+			failed = true;
+			HScript.error('${e.message}', errPos(path));
+		};
+		module.onProgramError = function(e:haxe.Exception) {
+			failed = true;
+			HScript.error('${e.message}', errPos(path));
+		};
+		module.onTypeError = function(e:haxe.Exception, t:IScriptedType) {
+			failed = true;
+			HScript.error('${e.message}', errPos(path));
+		};
 
 		if (failed)
 			return false;
@@ -390,7 +449,34 @@ class ScriptRegistry {
 			for (type in module.types)
 				if (type is ScriptedClass)
 					makeSafe(cast type);
+
+		#if SCRIPT_COMPILER
+		// Per pack, never engine-wide. Compiling is not transparent -- it changes how a host property
+		// with an inline getter reads, how an array literal is typed, and whether a static on a state
+		// is one value or two -- so a pack that was written against the interpreter keeps getting it
+		// until it says otherwise. `Mods.compileScripts` documents what changes.
+		if (compilerWanted(world))
+			ScriptCompiler.compile(modules, env);
+		#end
 	}
+
+	#if SCRIPT_COMPILER
+	/**
+	 * Whether this world's owner asked for its scripts to be compiled.
+	 *
+	 * The shared world holds classes that belong to no mod, and there is no pack.json to consult for
+	 * them, so they keep being interpreted.
+	 *
+	 * @param world The world about to be started.
+	 * @return Whether to compile it.
+	 */
+	static function compilerWanted(world:ScriptWorld):Bool {
+		if (world.mod == null || world.mod == SHARED_WORLD)
+			return false;
+
+		return backend.Mods.compileScripts(world.mod);
+	}
+	#end
 
 	/** Puts a class into safe mode and funnels its instance errors to the debug console. */
 	static function makeSafe(cls:ScriptedClass):Void {

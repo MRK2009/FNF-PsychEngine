@@ -12,6 +12,14 @@ package scripting;
 
 	Aliasing happens once per script at load, not per dispatch, so it costs nothing per frame.
 **/
+/**
+	`@:unreflective` because `bindLua` takes a raw `lua_State*`. Under `-D scriptable` hxcpp writes
+	script-callable glue for every field, and that glue hands each argument over as `Dynamic`, which
+	has no conversion to a native pointer -- so the generated C++ does not compile. The metadata only
+	suppresses that glue at CLASS level; on the field alone it has no effect. Nothing resolves this
+	class by name, and its one raw-pointer caller is a direct Haxe call.
+**/
+@:unreflective
 class ScriptHooks {
 	// --------------------------------------------------------------------------
 	// EVERY STATE

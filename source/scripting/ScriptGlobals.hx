@@ -19,6 +19,31 @@ import hxscript.types.TypeCollection;
  */
 class ScriptGlobals {
 	/**
+	 * Forces `ScriptDraw` into the build.
+	 *
+	 * Nothing in the engine calls it; only scripts do, and only by name. The compiler types the
+	 * modules something reaches, so without a real reference here that module is never typed,
+	 * never recorded in the type collection, and every script asking for it is told the
+	 * identifier is unknown. `@:keep` does not help: it stops a type in the build from being
+	 * eliminated, it does not put one in the build.
+	 *
+	 * Listing the path in `TYPE_IMPORTS` is not enough either, because that is a string and
+	 * `register` skips paths the collection does not know.
+	 */
+	static var keepScriptDraw:Class<ScriptDraw> = ScriptDraw;
+
+	/** Same reasoning as `keepScriptDraw`: only scripts name it, so only a real reference keeps it. */
+	static var keepScriptBytes:Class<ScriptBytes> = ScriptBytes;
+
+	/**
+	 * Same reasoning again, and it matters most when the compiler is OFF: `ScriptRegistry` only
+	 * names `ScriptCompiler` inside `#if SCRIPT_COMPILER`, so without this a build without the flag
+	 * would never type it and a script asking whether it is compiled would fail to resolve the class
+	 * rather than simply hearing "no".
+	 */
+	static var keepScriptCompiler:Class<ScriptCompiler> = ScriptCompiler;
+
+	/**
 	 * Names every script resolves unqualified. Mirrors `source/import.hx` -- what engine
 	 * code itself sees -- plus the gameplay and UI types scripts reach for.
 	 *
@@ -60,7 +85,6 @@ class ScriptGlobals {
 		'flixel.tweens.FlxTween',
 		'flixel.group.FlxSpriteGroup',
 		'flixel.addons.transition.FlxTransitionableState',
-
 		// Engine types scripts build things out of.
 		'backend.PsychCamera',
 		'backend.Song',
@@ -86,7 +110,13 @@ class ScriptGlobals {
 		'objects.NoteSplash',
 		'objects.ABotSpectrum',
 		'scripting.lua.CustomSubstate',
-
+		// Bulk geometry upload for scripts driving FlxStrip themselves. A script cannot construct
+		// an openfl.Vector, so without this its only way in is one `push` per float.
+		'scripting.ScriptDraw',
+		// Bulk byte access: every haxe.io.Bytes accessor is inline, so a script cannot reach one
+		// without a shim, and even shimmed it costs a call per byte.
+		'scripting.ScriptBytes',
+		'scripting.ScriptCompiler',
 		// Flixel types the engine itself rarely names but scripts do.
 		'flixel.FlxBasic',
 		'flixel.FlxObject',
@@ -97,7 +127,6 @@ class ScriptGlobals {
 		'flixel.effects.FlxFlicker',
 		'flixel.util.FlxSort',
 		'flixel.util.FlxStringUtil',
-
 		// OpenFL -- display, filters/shaders, geometry, assets. What a script reaches for when
 		// it drops below Flixel (custom rendering, blend modes, filters, matrices). Entries not
 		// compiled into this build are skipped at register() time, so listing extra is harmless.
@@ -122,7 +151,6 @@ class ScriptGlobals {
 		'openfl.media.Sound',
 		'openfl.events.Event',
 		'openfl.events.MouseEvent',
-
 		// Lime -- system, app, assets, low-level math.
 		'lime.app.Application',
 		'lime.system.System',
@@ -130,6 +158,16 @@ class ScriptGlobals {
 		'lime.math.Rectangle',
 		'lime.math.Vector2',
 	];
+
+	/**
+	 * The platform name a script reads as `buildTarget`.
+	 *
+	 * A static rather than the call result inlined below, so the compiler can be told where the name
+	 * lives. A binding names a static, and `getBuildTarget` is a function: pointing at it would hand
+	 * a compiled script the function where an interpreted one gets the string. Holding the value here
+	 * makes both read the same thing.
+	 */
+	public static final buildTarget:String = scripting.lua.LuaUtils.getBuildTarget();
 
 	/**
 	 * Registers `TYPE_IMPORTS` with hxscript. Called once from `HScript.setupConfig()`.
@@ -179,7 +217,7 @@ class ScriptGlobals {
 		set('FileSystem', FileSystem);
 		#end
 		set('controls', Controls.instance);
-		set('buildTarget', scripting.lua.LuaUtils.getBuildTarget());
+		set('buildTarget', buildTarget);
 
 		// Static references, not inline closures. An anonymous closure allocates every time the
 		// expression is evaluated -- once per binding per script load, so a modpack with a dozen
@@ -249,16 +287,16 @@ class ScriptGlobals {
 		set('keyReleased', keyReleased);
 	}
 
-	static function getVar(name:String):Dynamic {
+	public static function getVar(name:String):Dynamic {
 		return MusicBeatState.getVariables().get(name);
 	}
 
-	static function setVar(name:String, value:Dynamic):Dynamic {
+	public static function setVar(name:String, value:Dynamic):Dynamic {
 		MusicBeatState.getVariables().set(name, value);
 		return value;
 	}
 
-	static function removeVar(name:String):Bool {
+	public static function removeVar(name:String):Bool {
 		if (MusicBeatState.getVariables().exists(name)) {
 			MusicBeatState.getVariables().remove(name);
 			return true;
@@ -266,69 +304,69 @@ class ScriptGlobals {
 		return false;
 	}
 
-	static function debugPrint(text:String, ?color:flixel.util.FlxColor):Void {
+	public static function debugPrint(text:String, ?color:flixel.util.FlxColor):Void {
 		ScriptError.show(text, color == null ? flixel.util.FlxColor.WHITE : color);
 	}
 
 	// Wrappers rather than direct references: the engine functions take a further `scope`/state
 	// argument that is not part of the script-facing signature.
-	static function switchToState(name:String, ?args:Array<Dynamic>):Bool
+	public static function switchToState(name:String, ?args:Array<Dynamic>):Bool
 		return ScriptedStates.switchToState(name, args);
 
-	static function openScriptedSubstate(name:String, ?args:Array<Dynamic>):Bool
+	public static function openScriptedSubstate(name:String, ?args:Array<Dynamic>):Bool
 		return ScriptedStates.openSubstate(name, args);
 
-	static function switchState(state:flixel.FlxState):Void
+	public static function switchState(state:flixel.FlxState):Void
 		MusicBeatState.switchState(state);
 
 	// Wrappers, not direct references: `FlxGamepadManager`'s `any*` are `inline`, so they have no
 	// runtime form to take a closure on -- hxcpp would emit a call to a `_dyn` it never declares,
 	// which only shows up at C++ compile time. They also declare `FlxGamepadInputID`, and the
 	// script-facing signature has always been a plain String.
-	static function anyGamepadJustPressed(name:String):Bool
+	public static function anyGamepadJustPressed(name:String):Bool
 		return flixel.FlxG.gamepads.anyJustPressed(name);
 
-	static function anyGamepadPressed(name:String):Bool
+	public static function anyGamepadPressed(name:String):Bool
 		return flixel.FlxG.gamepads.anyPressed(name);
 
-	static function anyGamepadReleased(name:String):Bool
+	public static function anyGamepadReleased(name:String):Bool
 		return flixel.FlxG.gamepads.anyJustReleased(name);
 
-	static function keyboardJustPressed(name:String):Dynamic
+	public static function keyboardJustPressed(name:String):Dynamic
 		return Reflect.getProperty(flixel.FlxG.keys.justPressed, name);
 
-	static function keyboardPressed(name:String):Dynamic
+	public static function keyboardPressed(name:String):Dynamic
 		return Reflect.getProperty(flixel.FlxG.keys.pressed, name);
 
-	static function keyboardReleased(name:String):Dynamic
+	public static function keyboardReleased(name:String):Dynamic
 		return Reflect.getProperty(flixel.FlxG.keys.justReleased, name);
 
-	static function gamepadAnalogX(id:Int, ?leftStick:Bool = true):Float {
+	public static function gamepadAnalogX(id:Int, ?leftStick:Bool = true):Float {
 		var controller = flixel.FlxG.gamepads.getByID(id);
 		return controller == null ? 0.0 : controller.getXAxis(leftStick ? LEFT_ANALOG_STICK : RIGHT_ANALOG_STICK);
 	}
 
-	static function gamepadAnalogY(id:Int, ?leftStick:Bool = true):Float {
+	public static function gamepadAnalogY(id:Int, ?leftStick:Bool = true):Float {
 		var controller = flixel.FlxG.gamepads.getByID(id);
 		return controller == null ? 0.0 : controller.getYAxis(leftStick ? LEFT_ANALOG_STICK : RIGHT_ANALOG_STICK);
 	}
 
-	static function gamepadJustPressed(id:Int, name:String):Bool {
+	public static function gamepadJustPressed(id:Int, name:String):Bool {
 		var controller = flixel.FlxG.gamepads.getByID(id);
 		return controller != null && Reflect.getProperty(controller.justPressed, name) == true;
 	}
 
-	static function gamepadPressed(id:Int, name:String):Bool {
+	public static function gamepadPressed(id:Int, name:String):Bool {
 		var controller = flixel.FlxG.gamepads.getByID(id);
 		return controller != null && Reflect.getProperty(controller.pressed, name) == true;
 	}
 
-	static function gamepadReleased(id:Int, name:String):Bool {
+	public static function gamepadReleased(id:Int, name:String):Bool {
 		var controller = flixel.FlxG.gamepads.getByID(id);
 		return controller != null && Reflect.getProperty(controller.justReleased, name) == true;
 	}
 
-	static function keyJustPressed(name:String = ''):Bool {
+	public static function keyJustPressed(name:String = ''):Bool {
 		return switch (name.toLowerCase()) {
 			case 'left': Controls.instance.NOTE_LEFT_P;
 			case 'down': Controls.instance.NOTE_DOWN_P;
@@ -338,7 +376,7 @@ class ScriptGlobals {
 		}
 	}
 
-	static function keyPressed(name:String = ''):Bool {
+	public static function keyPressed(name:String = ''):Bool {
 		return switch (name.toLowerCase()) {
 			case 'left': Controls.instance.NOTE_LEFT;
 			case 'down': Controls.instance.NOTE_DOWN;
@@ -348,7 +386,7 @@ class ScriptGlobals {
 		}
 	}
 
-	static function keyReleased(name:String = ''):Bool {
+	public static function keyReleased(name:String = ''):Bool {
 		return switch (name.toLowerCase()) {
 			case 'left': Controls.instance.NOTE_LEFT_R;
 			case 'down': Controls.instance.NOTE_DOWN_R;
