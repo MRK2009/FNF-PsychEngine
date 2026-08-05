@@ -344,6 +344,25 @@ class Mods {
 		return pack != null && pack.nativeMobile == true;
 	}
 
+	/** pack.json "compileScripts": when true the mod's scripted classes are compiled to native code
+	 *  instead of interpreted, which is far faster but not transparent, so a pack opts in per pack.
+	 *
+	 *  What changes. A compiled class reaches a host field by name, so a property whose getter is
+	 *  `inline` -- `FlxG.keys.pressed.W` and friends -- has nothing to find and reads as false; use
+	 *  the engine's `keyboardPressed` and its neighbours instead. An array literal takes its type from
+	 *  what it is assigned to, so one pushed straight into an `Array<Array<T>>` is built untyped and
+	 *  crashes when read back through the annotation; bind it to a typed local first. A scripted
+	 *  static on a STATE exists twice, because states are engine-built and never substituted, so a
+	 *  value written from another class is not the value the state reads; keep shared statics on an
+	 *  ordinary class.
+	 *
+	 *  Off unless asked for, since a pack written against the interpreter may rely on any of the
+	 *  above without knowing it. */
+	public static function compileScripts(?folder:String = null):Bool {
+		var pack:Dynamic = getPack(folder);
+		return pack != null && pack.compileScripts == true;
+	}
+
 	/** pack.json compat flag: when true the mod runs on the legacy surfaces over the v2 runtime. Set
 	 *  either `"compatibilityMode": true` or the alias `"legacyMode": true` in pack.json.
 	 *
