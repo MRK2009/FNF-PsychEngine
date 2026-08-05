@@ -3482,8 +3482,7 @@ class ChartingState extends MusicBeatState {
 		model.setEditorVisible(idx, visible);
 		rebuildStrumlineUI();
 
-		// `rebuildStrumlineUI` only redraws the docks. Without this the checkbox moved and the grid
-		// did not, which reads as the eye doing nothing.
+		// rebuildStrumlineUI only redraws the docks, not the grid.
 		if (noteField != null)
 			noteField.refreshLayout();
 	}

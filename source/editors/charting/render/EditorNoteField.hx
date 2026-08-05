@@ -596,9 +596,7 @@ final class EditorNoteField {
 		var li:Int = 0;
 		while (li < lines.length) {
 			var line:StrumLineData = lines[li];
-			// The editor's own filter decides this, and nothing else. `line.visible` is the GAMEPLAY
-			// property: a lane hidden in the song is still a lane that needs charting, so letting it
-			// gate the grid put the coupling back, just pointing the other way.
+			// Editor filter only; `line.visible` is the gameplay property.
 			if (model.isEditorVisible(li)) {
 				var kc:Int = (line.keyCount == model.chart.keyCount) ? effKc : line.keyCount;
 				var c:Int = 0;

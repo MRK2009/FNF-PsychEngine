@@ -306,10 +306,7 @@ class CutsceneRunner {
 			onComplete: function(twn:FlxTween) {
 				game.remove(spr);
 
-				// Clear the field as well as destroying the sprite. A script reaching `countdownGo`
-				// after the fade otherwise finds a DESTROYED sprite rather than nothing, and touching
-				// its freed graphic is a native crash instead of the "doesn't exist" it could handle.
-				// Guarded on identity so a countdown restarted mid-fade does not clear its new sprite.
+				// Or a script reaching it later gets a destroyed sprite instead of nothing.
 				switch (logical) {
 					case 'ready':
 						if (game.countdownReady == spr)
