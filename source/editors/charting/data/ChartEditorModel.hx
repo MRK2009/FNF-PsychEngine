@@ -1004,6 +1004,28 @@ final class ChartEditorModel {
 		editorHidden[idx] = !visible;
 	}
 
+	/**
+		Sets every lane's editor filter from the chart's gameplay visibility.
+
+		The "Show Hidden Lines" option, which used to be a live gate on the grid and is now the thing
+		that decides where the per-lane filter STARTS. Off, a lane the song does not render starts
+		hidden here too, which is what a charter opening an unfamiliar chart expects to see. On,
+		everything starts shown so a silent auto-sing lane can be charted.
+
+		Applied on open and whenever the option is toggled. It is a bulk action and deliberately
+		overwrites whatever the eye icons were set to, since that is what asking for it means.
+
+		@param reveal Whether lanes hidden in gameplay should start visible in the editor.
+	**/
+	public function revealHiddenLines(reveal:Bool):Void {
+		var n:Int = chart.strumLines.length;
+		while (editorHidden.length < n)
+			editorHidden.push(false);
+
+		for (i in 0...n)
+			editorHidden[i] = reveal ? false : !chart.strumLines[i].visible;
+	}
+
 	public function setLineVisible(idx:Int, visible:Bool):Void {
 		if (idx < 0 || idx >= chart.strumLines.length)
 			return;

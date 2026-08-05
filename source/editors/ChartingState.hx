@@ -328,7 +328,7 @@ class ChartingState extends MusicBeatState {
 		noteField.waveEnabled = EditorPrefs.waveform;
 		applyWaveConfig();
 		noteField.vortexEnabled = EditorPrefs.vortex;
-		noteField.showHiddenLines = EditorPrefs.showHiddenLines;
+		model.revealHiddenLines(EditorPrefs.showHiddenLines);
 		add(noteField.group);
 		add(noteField.overlay);
 
@@ -1608,10 +1608,10 @@ class ChartingState extends MusicBeatState {
 					noteField.setDownscroll(value);
 			case 6:
 				EditorPrefs.showHiddenLines = value;
-				if (noteField != null) {
-					noteField.showHiddenLines = value;
+				model.revealHiddenLines(value);
+				rebuildStrumlineUI();
+				if (noteField != null)
 					noteField.refreshLayout();
-				}
 		}
 	}
 
@@ -3481,6 +3481,11 @@ class ChartingState extends MusicBeatState {
 	function toggleLineVisible(idx:Int, visible:Bool):Void {
 		model.setEditorVisible(idx, visible);
 		rebuildStrumlineUI();
+
+		// `rebuildStrumlineUI` only redraws the docks. Without this the checkbox moved and the grid
+		// did not, which reads as the eye doing nothing.
+		if (noteField != null)
+			noteField.refreshLayout();
 	}
 
 	function applyAudioVolumes():Void {
