@@ -406,6 +406,13 @@ class PlayState extends MusicBeatState {
 
 	override public function create() {
 		// trace('Playback Rate: ' + playbackRate);
+
+		// A `Change Character` event writes its swap into SONG so scripts see the live character.
+		// SONG is a static and a restart does not reload it, so put the chart back before anything
+		// reads it -- otherwise the swapped character became the song's default for every retry.
+		if (SONG != null)
+			SONG.restoreLineCharacters();
+
 		events = new states.play.EventRunner(this);
 		cutscenes = new states.play.CutsceneRunner(this);
 		Mods.allowCurrentModAssets = true; // gameplay: ensure the active mod's assets resolve
@@ -4598,7 +4605,34 @@ class PlayState extends MusicBeatState {
 			boyfriend.dance();
 		if (dad != null && beat % dad.danceEveryNumBeats == 0 && !dad.getAnimationName().startsWith('sing') && !dad.stunned)
 			dad.dance();
+
+		// Characters an EXTRA strumline brought with it were never bopped -- only the three primary
+		// slots were -- so a line fronting its own character stood frozen between its notes.
+		// Deduped because one character may be bound to several lines, and dancing it twice in a
+		// beat restarts the idle mid-play.
+		if (strumLines != null) {
+			_boppedThisBeat.resize(0);
+
+			for (sl in strumLines) {
+				if (sl == null || sl.characters == null)
+					continue;
+
+				for (char in sl.characters) {
+					if (char == null || char == gf || char == boyfriend || char == dad)
+						continue;
+					if (_boppedThisBeat.indexOf(char) >= 0)
+						continue;
+
+					_boppedThisBeat.push(char);
+					if (beat % char.danceEveryNumBeats == 0 && !char.getAnimationName().startsWith('sing') && !char.stunned)
+						char.dance();
+				}
+			}
+		}
 	}
+
+	/** Scratch list for `characterBopper` so a shared character only idles once per beat. **/
+	var _boppedThisBeat:Array<Character> = [];
 
 	public function playerDance():Void {
 		var anim:String = boyfriend.getAnimationName();

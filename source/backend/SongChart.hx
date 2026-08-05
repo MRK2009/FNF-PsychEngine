@@ -278,6 +278,34 @@ class SongChart {
 	}
 
 	/**
+		The strumline characters this chart was loaded with, or null before the first swap.
+	
+		A `Change Character` event writes the swap into the live chart so scripts and the legacy
+		mirrors see the character that is actually on screen. `PlayState.SONG` is a static that a
+		restart does NOT reload, though, so without this a swapped character silently became the
+		song's default for every later attempt.
+	**/
+	var pristineLineCharacters:Array<Array<String>> = null;
+
+	/**
+		Restores the strumline characters the chart was loaded with.
+	
+		Called when a song (re)starts. A no-op until something has actually swapped a character, so
+		charts that never fire the event pay nothing.
+	**/
+	public function restoreLineCharacters():Void {
+		if (pristineLineCharacters == null)
+			return;
+
+		for (i in 0...strumLines.length) {
+			if (i < pristineLineCharacters.length && strumLines[i] != null)
+				strumLines[i].characters = pristineLineCharacters[i].copy();
+		}
+
+		syncPrimaryFromLines();
+	}
+
+	/**
 		Points a strumline at a character, keeping the legacy mirrors in sync.
 		@param line the strumline (no-op when `null`)
 		@param character the character name
@@ -285,6 +313,11 @@ class SongChart {
 	public function setLineCharacter(line:StrumLineData, character:String):Void {
 		if (line == null)
 			return;
+
+		// Snapshot before the first swap, so a restart can put the chart's own characters back.
+		if (pristineLineCharacters == null)
+			pristineLineCharacters = [for (l in strumLines) (l != null && l.characters != null) ? l.characters.copy() : []];
+
 		line.characters = [character];
 		syncPrimaryFromLines();
 	}
