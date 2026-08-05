@@ -95,15 +95,28 @@ class Language {
 	}
 	#end
 
-	#if LUA_ALLOWED
+}
+
+#if LUA_ALLOWED
+/**
+	Registers this class's Lua callbacks.
+
+	Separate from `Language` and `@:unreflective` because it takes a raw `lua_State*`. Under
+	`-D scriptable` the compiler writes a script-callable wrapper for every member of a reflective
+	class, and that wrapper hands each argument over as `Dynamic`, which has no conversion to a
+	native pointer. Keeping this apart leaves `Language` itself fully reflective, which it has to be:
+	scripts reach it by name.
+**/
+@:unreflective
+class LanguageLua {
 	public static function addLuaCallbacks(lua:cpp.RawPointer<Lua_State>) {
 		Lua_helper.add_callback(lua, "getTranslationPhrase", function(key:String, ?defaultPhrase:String, ?values:Array<Dynamic> = null) {
-			return getPhrase(key, defaultPhrase, values);
+			return Language.getPhrase(key, defaultPhrase, values);
 		});
 
 		Lua_helper.add_callback(lua, "getFileTranslation", function(key:String) {
-			return getFileTranslation(key);
+			return Language.getFileTranslation(key);
 		});
 	}
-	#end
 }
+#end

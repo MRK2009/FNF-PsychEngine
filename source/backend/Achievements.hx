@@ -133,7 +133,7 @@ class Achievements {
 	static var _lastUnlock:Int = -999;
 
 	public static function unlock(name:String, autoStartPopup:Bool = true):String {
-		if (!achievements.exists(name)) {
+		if (!Achievements.achievements.exists(name)) {
 			FlxG.log.error('Achievement "$name" does not exists!');
 			throw new Exception('Achievement "$name" does not exists!');
 			return null;
@@ -284,45 +284,57 @@ class Achievements {
 	}
 	#end
 
-	#if LUA_ALLOWED
+}
+
+#if LUA_ALLOWED
+/**
+	Registers this class's Lua callbacks.
+
+	Separate from `Achievements` and `@:unreflective` because it takes a raw `lua_State*`. Under
+	`-D scriptable` the compiler writes a script-callable wrapper for every member of a reflective
+	class, and that wrapper hands each argument over as `Dynamic`, which has no conversion to a
+	native pointer. Keeping this apart leaves `Achievements` itself fully reflective for scripts.
+**/
+@:unreflective
+class AchievementsLua {
 	public static function addLuaCallbacks(lua:cpp.RawPointer<Lua_State>) {
 		Lua_helper.add_callback(lua, "getAchievementScore", function(name:String):Float {
-			if (!achievements.exists(name)) {
+			if (!Achievements.achievements.exists(name)) {
 				FunkinLua.luaTrace('getAchievementScore: Couldnt find achievement: $name', false, false, FlxColor.RED);
 				return -1;
 			}
-			return getScore(name);
+			return Achievements.getScore(name);
 		});
 		Lua_helper.add_callback(lua, "setAchievementScore", function(name:String, ?value:Float = 0, ?saveIfNotUnlocked:Bool = true):Float {
-			if (!achievements.exists(name)) {
+			if (!Achievements.achievements.exists(name)) {
 				FunkinLua.luaTrace('setAchievementScore: Couldnt find achievement: $name', false, false, FlxColor.RED);
 				return -1;
 			}
-			return setScore(name, value, saveIfNotUnlocked);
+			return Achievements.setScore(name, value, saveIfNotUnlocked);
 		});
 		Lua_helper.add_callback(lua, "addAchievementScore", function(name:String, ?value:Float = 1, ?saveIfNotUnlocked:Bool = true):Float {
-			if (!achievements.exists(name)) {
+			if (!Achievements.achievements.exists(name)) {
 				FunkinLua.luaTrace('addAchievementScore: Couldnt find achievement: $name', false, false, FlxColor.RED);
 				return -1;
 			}
-			return addScore(name, value, saveIfNotUnlocked);
+			return Achievements.addScore(name, value, saveIfNotUnlocked);
 		});
 		Lua_helper.add_callback(lua, "unlockAchievement", function(name:String):Dynamic {
-			if (!achievements.exists(name)) {
+			if (!Achievements.achievements.exists(name)) {
 				FunkinLua.luaTrace('unlockAchievement: Couldnt find achievement: $name', false, false, FlxColor.RED);
 				return null;
 			}
-			return unlock(name);
+			return Achievements.unlock(name);
 		});
 		Lua_helper.add_callback(lua, "isAchievementUnlocked", function(name:String):Dynamic {
-			if (!achievements.exists(name)) {
+			if (!Achievements.achievements.exists(name)) {
 				FunkinLua.luaTrace('isAchievementUnlocked: Couldnt find achievement: $name', false, false, FlxColor.RED);
 				return null;
 			}
-			return isUnlocked(name);
+			return Achievements.isUnlocked(name);
 		});
-		Lua_helper.add_callback(lua, "achievementExists", function(name:String) return achievements.exists(name));
+		Lua_helper.add_callback(lua, "achievementExists", function(name:String) return Achievements.achievements.exists(name));
 	}
-	#end
 }
+#end
 #end

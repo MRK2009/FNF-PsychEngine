@@ -9,6 +9,7 @@ import hxdiscord_rpc.Discord;
 import hxdiscord_rpc.Types;
 import flixel.util.FlxStringUtil;
 
+@:allow(backend.DiscordCallbacks)
 class DiscordClient {
 	public static var isInitialized:Bool = false;
 	private inline static final _defaultID:String = "863222024192262205";
@@ -39,33 +40,11 @@ class DiscordClient {
 		Discord.Shutdown();
 	}
 
-	private static function onReady(request:cpp.RawConstPointer<DiscordUser>):Void {
-		final user = cast(request[0].username, String);
-		final discriminator = cast(request[0].discriminator, String);
-
-		var message = '(Discord) Connected to User ';
-		if (discriminator != '0') // Old discriminators
-			message += '($user#$discriminator)';
-		else // New Discord IDs/Discriminator system
-			message += '($user)';
-
-		trace(message);
-		changePresence();
-	}
-
-	private static function onError(errorCode:Int, message:cpp.ConstCharStar):Void {
-		trace('Discord: Error ($errorCode: ${cast (message, String)})');
-	}
-
-	private static function onDisconnected(errorCode:Int, message:cpp.ConstCharStar):Void {
-		trace('Discord: Disconnected ($errorCode: ${cast (message, String)})');
-	}
-
 	public static function initialize() {
 		var handlers:DiscordEventHandlers = new DiscordEventHandlers();
-		handlers.ready = cpp.Function.fromStaticFunction(onReady);
-		handlers.disconnected = cpp.Function.fromStaticFunction(onDisconnected);
-		handlers.errored = cpp.Function.fromStaticFunction(onError);
+		handlers.ready = cpp.Function.fromStaticFunction(DiscordCallbacks.onReady);
+		handlers.disconnected = cpp.Function.fromStaticFunction(DiscordCallbacks.onDisconnected);
+		handlers.errored = cpp.Function.fromStaticFunction(DiscordCallbacks.onError);
 		Discord.Initialize(clientID, cpp.RawPointer.addressOf(handlers), true, null);
 		if (!isInitialized)
 			trace("Discord Client initialized");
@@ -140,12 +119,48 @@ class DiscordClient {
 	#end
 
 	#if LUA_ALLOWED
+	#end
+}
+
+/**
+	Holds the native callbacks Discord and Lua hand to C.
+
+	Separate from `DiscordClient` and `@:unreflective` because these take raw pointers. Under
+	`-D scriptable` the compiler writes a script-callable wrapper for every member of a reflective
+	class, and that wrapper hands each argument over as `Dynamic`, which has no conversion to a
+	native pointer. Keeping them apart leaves `DiscordClient` itself fully reflective for scripts.
+**/
+@:unreflective
+class DiscordCallbacks {
+	public static function onReady(request:cpp.RawConstPointer<DiscordUser>):Void {
+		final user = cast(request[0].username, String);
+		final discriminator = cast(request[0].discriminator, String);
+
+		var message = '(Discord) Connected to User ';
+		if (discriminator != '0') // Old discriminators
+			message += '($user#$discriminator)';
+		else // New Discord IDs/Discriminator system
+			message += '($user)';
+
+		trace(message);
+		DiscordClient.changePresence();
+	}
+
+	public static function onError(errorCode:Int, message:cpp.ConstCharStar):Void {
+		trace('Discord: Error ($errorCode: ${cast (message, String)})');
+	}
+
+	public static function onDisconnected(errorCode:Int, message:cpp.ConstCharStar):Void {
+		trace('Discord: Disconnected ($errorCode: ${cast (message, String)})');
+	}
+
+	#if LUA_ALLOWED
 	public static function addLuaCallbacks(lua:cpp.RawPointer<Lua_State>) {
-		Lua_helper.add_callback(lua, "changeDiscordPresence", changePresence);
+		Lua_helper.add_callback(lua, "changeDiscordPresence", DiscordClient.changePresence);
 		Lua_helper.add_callback(lua, "changeDiscordClientID", function(?newID:String) {
 			if (newID == null)
-				newID = _defaultID;
-			clientID = newID;
+				newID = DiscordClient._defaultID;
+			DiscordClient.clientID = newID;
 		});
 	}
 	#end

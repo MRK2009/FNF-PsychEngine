@@ -1673,9 +1673,9 @@ class FunkinLua {
 			return closed;
 		});
 
-		#if DISCORD_ALLOWED DiscordClient.addLuaCallbacks(lua); #end
-		#if ACHIEVEMENTS_ALLOWED Achievements.addLuaCallbacks(lua); #end
-		#if TRANSLATIONS_ALLOWED Language.addLuaCallbacks(lua); #end
+		#if DISCORD_ALLOWED DiscordCallbacks.addLuaCallbacks(lua); #end
+		#if ACHIEVEMENTS_ALLOWED AchievementsLua.addLuaCallbacks(lua); #end
+		#if TRANSLATIONS_ALLOWED LanguageLua.addLuaCallbacks(lua); #end
 		HScript.implement(this);
 		#if flixel_animate FlxAnimateFunctions.implement(this); #end
 		ReflectionFunctions.implement(this);
