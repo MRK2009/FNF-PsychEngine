@@ -353,8 +353,8 @@ class CharacterEditorState extends MusicBeatState {
 			if (!character.isAnimationNull()) {
 				var myAnim = anims[curAnim];
 				if (!character.isAnimateAtlas) {
-					ghost.loadGraphic(character.graphic);
-					ghost.frames.frames = character.frames.frames;
+					// Whole collection: a multi-atlas character's frames span several graphics.
+					ghost.frames = character.frames;
 					ghost.animation.copyFrom(character.animation);
 					ghost.animation.play(character.animation.curAnim.name, true, false, character.animation.curAnim.curFrame);
 					ghost.animation.pause();
