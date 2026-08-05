@@ -454,7 +454,7 @@ class MobileChartingState extends MobileEditorBase {
 				pane.content.addChild(kc);
 				y += 54;
 
-				var vis:UICheckbox = new UICheckbox('Render arrows in gameplay', w, line.visible, function(checked:Bool):Void {
+				var vis:UICheckbox = new UICheckbox('Render strumline in gameplay', w, line.visible, function(checked:Bool):Void {
 					if (checked && !line.visible && model.visibleLineCount() >= editors.ChartingState.MAX_VISIBLE_LINES) {
 						UIToast.show('At most ${editors.ChartingState.MAX_VISIBLE_LINES} strumlines can be visible');
 						openStrumlinesPage();
@@ -1503,7 +1503,7 @@ class MobileChartingState extends MobileEditorBase {
 					pane.content.addChild(roleDrop);
 					y += 44;
 
-					var vis:UICheckbox = new UICheckbox('Render arrows in gameplay', w, line.visible, function(checked:Bool):Void line.visible = checked);
+					var vis:UICheckbox = new UICheckbox('Render strumline in gameplay', w, line.visible, function(checked:Bool):Void line.visible = checked);
 					vis.y = y;
 					pane.content.addChild(vis);
 					y += 46;

@@ -3355,8 +3355,8 @@ class ChartingState extends MusicBeatState {
 		kcStep.y = 92;
 		modal.body.addChild(kcStep);
 
-		var visChk:UICheckbox = new UICheckbox("Render arrows in gameplay", cw, line.visible, function(_:Bool):Void {});
-		visChk.tooltip = "Off = silent auto-sing line (like GF)";
+		var visChk:UICheckbox = new UICheckbox("Render strumline in gameplay", cw, line.visible, function(_:Bool):Void {});
+		visChk.tooltip = "Off = silent auto-sing line (like GF). Separate from the eye icon, which only hides the lane while charting.";
 		visChk.x = pad;
 		visChk.y = 132;
 		modal.body.addChild(visChk);
@@ -3471,16 +3471,16 @@ class ChartingState extends MusicBeatState {
 	}
 
 	/** Shows/hides a lane in the grid (enforces the visible-lines cap). **/
+	/**
+		Shows or hides a lane IN THE EDITOR. Nothing here touches the chart.
+	
+		No undo entry and no dirty flag: this is a view filter, not an edit. The gameplay
+		property lives on the strumline modal as "Render strumline in gameplay", which is where
+		the visible-line budget is enforced.
+	**/
 	function toggleLineVisible(idx:Int, visible:Bool):Void {
-		if (visible && model.visibleLineCount() >= MAX_VISIBLE_LINES) {
-			UIToast.show('At most $MAX_VISIBLE_LINES strumlines can be visible');
-			rebuildStrumlineUI();
-			return;
-		}
-		undoStack.snapshot(model, 'Lane Visibility');
-		model.setLineVisible(idx, visible);
+		model.setEditorVisible(idx, visible);
 		rebuildStrumlineUI();
-		warnOnColumnBudget();
 	}
 
 	function applyAudioVolumes():Void {
@@ -3744,8 +3744,8 @@ class ChartingState extends MusicBeatState {
 		subLabel.x = UITheme.px(14);
 		subLabel.y = UITheme.px(25);
 		card.addChild(subLabel);
-		var eye:UICheckbox = new UICheckbox("", UITheme.px(20), line.visible, function(v:Bool):Void toggleLineVisible(idx, v));
-		eye.tooltip = "Render this lane's arrows in gameplay (off = silent auto-sing, like GF)";
+		var eye:UICheckbox = new UICheckbox("", UITheme.px(20), model.isEditorVisible(idx), function(v:Bool):Void toggleLineVisible(idx, v));
+		eye.tooltip = "Show this lane while charting. Editor only -- it does not change what the song renders.";
 		eye.x = colW - UITheme.px(30);
 		eye.y = (UITheme.px(46) - eye.h) / 2;
 		card.addChild(eye);

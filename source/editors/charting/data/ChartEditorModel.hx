@@ -976,6 +976,34 @@ final class ChartEditorModel {
 		@param idx the strumline index
 		@param visible the new state
 	**/
+	/**
+		Lanes the CHART EDITOR is hiding, by strumline index.
+	
+		A view filter so a charter can work on a few lanes at a time. It is NOT part of the chart
+		and is never saved. `StrumLineData.visible` is the separate GAMEPLAY property behind
+		"Render strumline in gameplay"; the two used to be the same field, so hiding a lane to see
+		the grid also stopped it rendering in the song.
+	**/
+	public var editorHidden:Array<Bool> = [];
+
+	/** Whether the editor grid should draw this lane. **/
+	public function isEditorVisible(idx:Int):Bool
+		return !(idx >= 0 && idx < editorHidden.length && editorHidden[idx]);
+
+	/**
+		Shows or hides a lane in the editor only. Does not touch the chart or mark it dirty.
+	
+		@param idx The strumline index.
+		@param visible Whether the grid should draw it.
+	**/
+	public function setEditorVisible(idx:Int, visible:Bool):Void {
+		if (idx < 0)
+			return;
+		while (editorHidden.length <= idx)
+			editorHidden.push(false);
+		editorHidden[idx] = !visible;
+	}
+
 	public function setLineVisible(idx:Int, visible:Bool):Void {
 		if (idx < 0 || idx >= chart.strumLines.length)
 			return;
@@ -1007,6 +1035,14 @@ final class ChartEditorModel {
 		chart.strumLines[b] = tmp;
 		chart.strumLines[a].index = a;
 		chart.strumLines[b].index = b;
+
+		// The editor filter is indexed by line, so it has to follow a reorder or the wrong lane
+		// ends up hidden.
+		while (editorHidden.length < n)
+			editorHidden.push(false);
+		var hidden:Bool = editorHidden[a];
+		editorHidden[a] = editorHidden[b];
+		editorHidden[b] = hidden;
 		for (note in chart.noteList) {
 			if (note.strumLine == a)
 				note.strumLine = b;

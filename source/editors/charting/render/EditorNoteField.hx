@@ -600,7 +600,9 @@ final class EditorNoteField {
 		var li:Int = 0;
 		while (li < lines.length) {
 			var line:StrumLineData = lines[li];
-			if (line.visible || showHiddenLines) {
+			// Two independent things: the chart says whether the lane renders in GAMEPLAY, and the
+			// editor keeps its own per-lane filter so a charter can work on a few lanes at a time.
+			if ((line.visible || showHiddenLines) && model.isEditorVisible(li)) {
 				var kc:Int = (line.keyCount == model.chart.keyCount) ? effKc : line.keyCount;
 				var c:Int = 0;
 				while (c < kc) {
