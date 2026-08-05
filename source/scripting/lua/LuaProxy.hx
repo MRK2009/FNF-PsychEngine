@@ -91,7 +91,13 @@ class ProxyState {
  *
  * A miss (unknown id, or an object of another type) returns false and the caller falls back to the
  * reflective path, so this is purely a shortcut and never the only way through.
+ *
+ * `@:unreflective` because these take a raw `lua_State*`. Under `-D scriptable` hxcpp writes
+ * script-callable glue for every static, and that glue hands each argument over as `Dynamic`, which
+ * has no conversion to a native pointer -- so the generated C++ does not compile. Nothing reflects
+ * on this class: Lua reaches it through `LuaProxy`, and the engine calls it directly.
  */
+@:unreflective
 class ProxyFields {
 	/** Not a fast field. **/
 	public static inline final NONE:Int = -1;
@@ -117,9 +123,24 @@ class ProxyFields {
 	static inline final FRAME_HEIGHT:Int = 17;
 
 	static final IDS:Map<String, Int> = [
-		'x' => X, 'y' => Y, 'angle' => ANGLE, 'width' => WIDTH, 'height' => HEIGHT, 'visible' => VISIBLE, 'active' => ACTIVE, 'alive' => ALIVE,
-		'exists' => EXISTS, 'moves' => MOVES, 'immovable' => IMMOVABLE, 'alpha' => ALPHA, 'color' => COLOR, 'flipX' => FLIP_X, 'flipY' => FLIP_Y,
-		'antialiasing' => ANTIALIASING, 'frameWidth' => FRAME_WIDTH, 'frameHeight' => FRAME_HEIGHT
+		'x' => X,
+		'y' => Y,
+		'angle' => ANGLE,
+		'width' => WIDTH,
+		'height' => HEIGHT,
+		'visible' => VISIBLE,
+		'active' => ACTIVE,
+		'alive' => ALIVE,
+		'exists' => EXISTS,
+		'moves' => MOVES,
+		'immovable' => IMMOVABLE,
+		'alpha' => ALPHA,
+		'color' => COLOR,
+		'flipX' => FLIP_X,
+		'flipY' => FLIP_Y,
+		'antialiasing' => ANTIALIASING,
+		'frameWidth' => FRAME_WIDTH,
+		'frameHeight' => FRAME_HEIGHT
 	];
 
 	/** The accessor id for a member name, or `NONE`. Consulted once, when the name is interned. */
@@ -227,19 +248,24 @@ class ProxyFields {
 			var s:FlxSprite = cast obj;
 			switch (id) {
 				case ALPHA:
-					if (type != Lua.TNUMBER) return false;
+					if (type != Lua.TNUMBER)
+						return false;
 					s.alpha = Lua.tonumber(L, 3);
 				case COLOR:
-					if (type != Lua.TNUMBER) return false;
+					if (type != Lua.TNUMBER)
+						return false;
 					s.color = Lua.tointeger(L, 3);
 				case FLIP_X:
-					if (type != Lua.TBOOLEAN) return false;
+					if (type != Lua.TBOOLEAN)
+						return false;
 					s.flipX = Lua.toboolean(L, 3) != 0;
 				case FLIP_Y:
-					if (type != Lua.TBOOLEAN) return false;
+					if (type != Lua.TBOOLEAN)
+						return false;
 					s.flipY = Lua.toboolean(L, 3) != 0;
 				case ANTIALIASING:
-					if (type != Lua.TBOOLEAN) return false;
+					if (type != Lua.TBOOLEAN)
+						return false;
 					s.antialiasing = Lua.toboolean(L, 3) != 0;
 				default:
 					return setObject(L, id, s, type); // FRAME_* are read-only and fall through there
@@ -259,37 +285,48 @@ class ProxyFields {
 	static function setObject(L:cpp.RawPointer<Lua_State>, id:Int, o:FlxObject, type:Int):Bool {
 		switch (id) {
 			case X:
-				if (type != Lua.TNUMBER) return false;
+				if (type != Lua.TNUMBER)
+					return false;
 				o.x = Lua.tonumber(L, 3);
 			case Y:
-				if (type != Lua.TNUMBER) return false;
+				if (type != Lua.TNUMBER)
+					return false;
 				o.y = Lua.tonumber(L, 3);
 			case ANGLE:
-				if (type != Lua.TNUMBER) return false;
+				if (type != Lua.TNUMBER)
+					return false;
 				o.angle = Lua.tonumber(L, 3);
 			case WIDTH:
-				if (type != Lua.TNUMBER) return false;
+				if (type != Lua.TNUMBER)
+					return false;
 				o.width = Lua.tonumber(L, 3);
 			case HEIGHT:
-				if (type != Lua.TNUMBER) return false;
+				if (type != Lua.TNUMBER)
+					return false;
 				o.height = Lua.tonumber(L, 3);
 			case VISIBLE:
-				if (type != Lua.TBOOLEAN) return false;
+				if (type != Lua.TBOOLEAN)
+					return false;
 				o.visible = Lua.toboolean(L, 3) != 0;
 			case ACTIVE:
-				if (type != Lua.TBOOLEAN) return false;
+				if (type != Lua.TBOOLEAN)
+					return false;
 				o.active = Lua.toboolean(L, 3) != 0;
 			case ALIVE:
-				if (type != Lua.TBOOLEAN) return false;
+				if (type != Lua.TBOOLEAN)
+					return false;
 				o.alive = Lua.toboolean(L, 3) != 0;
 			case EXISTS:
-				if (type != Lua.TBOOLEAN) return false;
+				if (type != Lua.TBOOLEAN)
+					return false;
 				o.exists = Lua.toboolean(L, 3) != 0;
 			case MOVES:
-				if (type != Lua.TBOOLEAN) return false;
+				if (type != Lua.TBOOLEAN)
+					return false;
 				o.moves = Lua.toboolean(L, 3) != 0;
 			case IMMOVABLE:
-				if (type != Lua.TBOOLEAN) return false;
+				if (type != Lua.TBOOLEAN)
+					return false;
 				o.immovable = Lua.toboolean(L, 3) != 0;
 			default:
 				return false;
@@ -335,7 +372,11 @@ class ProxyFields {
  * therefore misses every lookup, re-runs whatever the entry was meant to do once per frame, and pins
  * each frame's proxy in the table forever. Key by something stable off the object instead (a note's
  * time and column, an id field).
+ *
+ * `@:unreflective` for the same reason as `ProxyFields`: most of these take a raw `lua_State*`, and
+ * the script-callable glue `-D scriptable` generates cannot convert `Dynamic` to a native pointer.
  */
+@:unreflective
 class LuaProxy {
 	/**
 	 * Anchors runtime classes that scripts reach ONLY through `import()`.
@@ -376,6 +417,7 @@ class LuaProxy {
 
 	/** Distinctive enough that a foreign metatable with something at slot 1 cannot be mistaken for ours. */
 	static inline final MARK_VALUE:Int = 0x48585052;
+
 	static inline final CACHE_KEY:String = "hxproxy_cache"; // registry: { [handle] = userdata }
 	static inline final SID_KEY:String = "hxproxy_sid"; // registry: this state's id
 
@@ -430,7 +472,7 @@ class LuaProxy {
 		// Let wrapped Lua callbacks (Convert's TFUNCTION path) check their state is still open before
 		// firing, so a tween/timer outliving the script can't call into a freed Lua state.
 		Convert.stateIdOf = cpp.Callable.fromStaticFunction(sidHook);
-		Convert.stateAlive = isStateAlive;
+		Convert.stateAlive = (sid:Int) -> isStateAlive(sid);
 	}
 
 	/**
@@ -586,7 +628,8 @@ __hxisproxy, __hxproxykeys = nil, nil
 	/** Drops this state's registry. Call BEFORE Lua.close(). */
 	public static function dispose(L:cpp.RawPointer<Lua_State>):Void {
 		var sid:Int = stateId(L);
-		if (sid > 0) states.remove(sid);
+		if (sid > 0)
+			states.remove(sid);
 	}
 
 	static inline function setMeta(L:cpp.RawPointer<Lua_State>, name:String, fn:Lua_CFunction):Void {
@@ -614,7 +657,8 @@ __hxisproxy, __hxproxykeys = nil, nil
 
 	static inline function objAt(L:cpp.RawPointer<Lua_State>, idx:Int):Dynamic {
 		var raw:cpp.RawPointer<cpp.Void> = Lua.touserdata(L, idx);
-		if (raw == null) return null;
+		if (raw == null)
+			return null;
 		var ptr:cpp.Pointer<Int> = cast cpp.Pointer.fromRaw(raw);
 		var st:ProxyState = states.get(ptr[0]);
 		return (st == null) ? null : st.handleToObj.get(ptr[1]);
@@ -622,7 +666,8 @@ __hxisproxy, __hxproxykeys = nil, nil
 
 	static inline function stAt(L:cpp.RawPointer<Lua_State>, idx:Int):ProxyState {
 		var raw:cpp.RawPointer<cpp.Void> = Lua.touserdata(L, idx);
-		if (raw == null) return null;
+		if (raw == null)
+			return null;
 		var ptr:cpp.Pointer<Int> = cast cpp.Pointer.fromRaw(raw);
 		return states.get(ptr[0]);
 	}
@@ -730,8 +775,10 @@ __hxisproxy, __hxproxykeys = nil, nil
 	}
 
 	public static inline function pushClass(L:cpp.RawPointer<Lua_State>, cls:Dynamic):Void {
-		if (cls == null) Lua.pushnil(L);
-		else pushObject(L, stateOf(L), cls, CLASS_META, true);
+		if (cls == null)
+			Lua.pushnil(L);
+		else
+			pushObject(L, stateOf(L), cls, CLASS_META, true);
 	}
 
 	static function pushObject(L:cpp.RawPointer<Lua_State>, st:ProxyState, obj:Dynamic, metaName:String, cached:Bool):Void {
@@ -1167,10 +1214,12 @@ __hxisproxy, __hxproxykeys = nil, nil
 	static function methodCallFast(L:cpp.RawPointer<Lua_State>):Int {
 		var self:Int = Lua.upvalueindex(1);
 		var st:ProxyState = stAt(L, self);
-		if (st == null) return 0;
+		if (st == null)
+			return 0;
 		var obj:Dynamic = st.handleToObj.get(ptrAt(L, self)[1]);
 		var f:Dynamic = st.funcs.get(Lua.tointeger(L, Lua.upvalueindex(2)));
-		if (obj == null || f == null) return 0;
+		if (obj == null || f == null)
+			return 0;
 
 		var nargs:Int = Lua.gettop(L);
 		var start:Int = (nargs >= 1 && Lua.rawequal(L, 1, self) == 1) ? 2 : 1;
@@ -1336,7 +1385,8 @@ __hxisproxy, __hxproxykeys = nil, nil
 
 	static function proxyGc(L:cpp.RawPointer<Lua_State>):Int {
 		var raw:cpp.RawPointer<cpp.Void> = Lua.touserdata(L, 1);
-		if (raw == null) return 0;
+		if (raw == null)
+			return 0;
 		var ptr:cpp.Pointer<Int> = cast cpp.Pointer.fromRaw(raw);
 		var st:ProxyState = states.get(ptr[0]);
 		if (st != null) {
