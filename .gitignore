@@ -33,3 +33,14 @@ signing.local.xml
 
 # TEMP ignore
 art/example-osu-skins/*
+
+# DOOM game data. The scripted DOOM port ships no IWAD; these are local dev copies
+# of user-supplied data and must never be committed.
+*.wad
+*.WAD
+\[Scripted Games\]/\[Scripted Game\] Doom/DOOM/
+\[Scripted Games\]/\[Scripted Game\] Doom/wadext.exe
+
+# Written by the build under `-D scriptable`: the list of classes exposed to loaded bytecode.
+# Regenerated every time, so it only ever shows up as noise in a diff.
+export_classes.info
