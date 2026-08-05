@@ -581,7 +581,7 @@ class FunkinLua {
 			var leObj:FlxBasic = LuaUtils.getObjectLoop(obj);
 			if (leObj != null) {
 				if (group != null) {
-					var groupOrArray:Dynamic = Reflect.getProperty(LuaUtils.getTargetInstance(), group);
+					var groupOrArray:Dynamic = LuaUtils.groupOf(group);
 					if (groupOrArray != null) {
 						switch (Type.typeof(groupOrArray)) {
 							case TClass(Array): // Is Array
@@ -604,7 +604,7 @@ class FunkinLua {
 			var leObj:FlxBasic = LuaUtils.getObjectLoop(obj);
 			if (leObj != null) {
 				if (group != null) {
-					var groupOrArray:Dynamic = Reflect.getProperty(LuaUtils.getTargetInstance(), group);
+					var groupOrArray:Dynamic = LuaUtils.groupOf(group);
 					if (groupOrArray != null) {
 						switch (Type.typeof(groupOrArray)) {
 							case TClass(Array): // Is Array
@@ -617,9 +617,17 @@ class FunkinLua {
 					} else
 						luaTrace('setObjectOrder: Group $group doesn\'t exist!', false, false, FlxColor.RED);
 				} else {
-					var groupOrArray:Dynamic = CustomSubstate.instance != null ? CustomSubstate.instance : LuaUtils.getTargetInstance();
-					groupOrArray.remove(leObj, true);
-					groupOrArray.insert(position, leObj);
+					// Reorder inside whatever actually holds the object. This used to remove from the state
+					// and insert there unconditionally, so anything living in a sub-group -- a character on
+					// a stage anchor, say -- was never removed (it is not a direct member) but WAS inserted,
+					// leaving it in two containers at once.
+					var host:Dynamic = CustomSubstate.instance != null ? CustomSubstate.instance : LuaUtils.getTargetInstance();
+					var owner:Dynamic = LuaUtils.containerOf(leObj, host);
+					if (owner == null)
+						owner = host;
+
+					owner.remove(leObj, true);
+					owner.insert(position, leObj);
 				}
 				return;
 			}

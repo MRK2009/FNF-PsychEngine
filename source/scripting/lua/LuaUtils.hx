@@ -1,6 +1,9 @@
 package scripting.lua;
 
 import hxluajit.Lua;
+import flixel.FlxBasic;
+import flixel.group.FlxGroup.FlxTypedGroup;
+import flixel.group.FlxSpriteGroup;
 import backend.WeekData;
 import objects.Character;
 import backend.StageData;
@@ -262,6 +265,63 @@ class LuaUtils {
 		for (i in 1...end)
 			obj = PropertyPath.get(obj, split[i], allowMaps);
 		return obj;
+	}
+
+	/**
+		The container a `group`-taking callback means.
+	
+		These callbacks used to resolve their group with `Reflect.getProperty(getTargetInstance(),
+		name)`, which only ever sees a FIELD of the state. `dadGroup` is a field so it worked, but a
+		stage-declared anchor group is registered as a script VARIABLE like every other stage
+		object, so it resolved to null -- even though `getProperty("rooftop.x")` finds it, because
+		object paths go through `PropertyPath.root`, which checks variables first. Group arguments
+		now resolve the same way, so custom stage anchors work wherever `dadGroup` does.
+	
+		@param name The group name a script passed.
+		@return The group, or null when nothing of that name exists.
+	**/
+	/**
+		The container that actually holds `obj`: `host` itself, or the group inside it that does.
+	
+		Flixel members carry no parent backpointer, so this is a one-level search of the state and
+		its immediate groups -- which is where the engine puts characters (`dadGroup`, and the
+		stage anchor groups). Deeper nesting is not covered; pass the group explicitly for that.
+	
+		@param obj The object to locate.
+		@param host The state or substate to search.
+		@return The container holding it, or null when nothing does.
+	**/
+	public static function containerOf(obj:FlxBasic, host:Dynamic):Dynamic {
+		if (obj == null || host == null)
+			return null;
+
+		var members:Array<FlxBasic> = cast Reflect.getProperty(host, 'members');
+		if (members == null)
+			return null;
+		if (members.indexOf(obj) >= 0)
+			return host;
+
+		for (member in members) {
+			var group:FlxTypedGroup<FlxBasic> = Std.downcast(member, FlxTypedGroup);
+			if (group != null && group.members.indexOf(obj) >= 0)
+				return group;
+
+			var sprites:FlxSpriteGroup = Std.downcast(member, FlxSpriteGroup);
+			if (sprites != null && sprites.members.indexOf(cast obj) >= 0)
+				return sprites;
+		}
+
+		return null;
+	}
+
+	public static function groupOf(name:Dynamic, ?allowMaps:Bool = false):Dynamic {
+		// Lua is untyped, so a `?group:String` slot can arrive holding anything -- a mod copying the
+		// `addLuaSprite(tag, front)` shape writes `setObjectOrder(tag, pos, false)`, and the Bool
+		// lands here and stringifies as "false". Anything that is not a name means "no group".
+		if (name == null || !Std.isOfType(name, String))
+			return null;
+
+		return tagToObject(cast name, allowMaps);
 	}
 
 	/** The object a path starts from: `this`/`game`, a script variable, or a field of the state. **/

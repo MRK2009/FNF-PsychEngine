@@ -113,7 +113,7 @@ class ReflectionFunctions {
 			if (split.length > 1)
 				realObject = LuaUtils.getPropertyLoop(split, false, allowMaps);
 			else
-				realObject = Reflect.getProperty(LuaUtils.getTargetInstance(), group);
+				realObject = LuaUtils.groupOf(group);
 
 			var groupOrArray:Dynamic = realObject;
 			if (groupOrArray != null) {
@@ -128,7 +128,12 @@ class ReflectionFunctions {
 								result = LuaUtils.getGroupStuff(leArray, variable, allowMaps);
 							return result;
 						}
-						FunkinLua.luaTrace('getPropertyFromGroup: Object #$index from group: $group doesn\'t exist!', false, false, FlxColor.RED);
+						// Returning here matters: this used to fall through and ALSO report
+						// `Group/Array $group does not exist!`, so one bad index logged two errors and the
+						// second was a lie -- the group was found, it just had no such entry.
+						var len:Int = realObject.length;
+						FunkinLua.luaTrace('getPropertyFromGroup: $group has no #$index (length $len)', false, false, FlxColor.RED);
+						return null;
 
 					default: // Is Group
 						var result:Dynamic = LuaUtils.getGroupStuff(Reflect.getProperty(realObject, 'members')[index], variable, allowMaps);
@@ -159,7 +164,7 @@ class ReflectionFunctions {
 				if (split.length > 1)
 					realObject = LuaUtils.getPropertyLoop(split, false, allowMaps);
 				else
-					realObject = Reflect.getProperty(LuaUtils.getTargetInstance(), group);
+					realObject = LuaUtils.groupOf(group);
 
 				if (realObject != null) {
 					switch (Type.typeof(realObject)) {
@@ -171,6 +176,11 @@ class ReflectionFunctions {
 									return value;
 								}
 								LuaUtils.setGroupStuff(leArray, variable, allowInstances ? parseInstances(value) : value, allowMaps);
+							} else {
+								// The getter reports a missing index; the setter used to swallow it, so a write to an
+								// index that does not exist looked like it had worked.
+								var len:Int = realObject.length;
+								FunkinLua.luaTrace('setPropertyFromGroup: $group has no #$index (length $len)', false, false, FlxColor.RED);
 							}
 
 						default: // Is Group
@@ -187,7 +197,7 @@ class ReflectionFunctions {
 				return;
 			}
 
-			var groupOrArray:Dynamic = Reflect.getProperty(LuaUtils.getTargetInstance(), group);
+			var groupOrArray:Dynamic = LuaUtils.groupOf(group);
 			if (groupOrArray == null) {
 				FunkinLua.luaTrace('addToGroup: Group/Array $group is not valid!', false, false, FlxColor.RED);
 				return;
@@ -214,7 +224,7 @@ class ReflectionFunctions {
 				}
 			}
 
-			var groupOrArray:Dynamic = Reflect.getProperty(LuaUtils.getTargetInstance(), group);
+			var groupOrArray:Dynamic = LuaUtils.groupOf(group);
 			if (groupOrArray == null) {
 				FunkinLua.luaTrace('removeFromGroup: Group/Array $group is not valid!', false, false, FlxColor.RED);
 				return;
