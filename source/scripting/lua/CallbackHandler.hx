@@ -71,9 +71,14 @@ class CallbackHandler {
 				LuaProxy.pushHaxe(L, ret, true, false);
 				return 1;
 			}
-		} catch (e:haxe.Exception) {
+		} catch (e:Dynamic) {
+			// `Dynamic`, not `haxe.Exception`: on hxcpp a null dereference inside a callback throws a
+			// NATIVE exception, which `catch (e:haxe.Exception)` does not match. Those escaped this
+			// handler, unwound past the hook and surfaced as a bare `C++ exception` naming no callback
+			// -- which is what a script that reaches a missing object reports today.
+			var detail:String = (e is haxe.Exception) ? cast(e, haxe.Exception).details() : Std.string(e);
 			if (Lua_helper.sendErrorsToLua) {
-				LuaL.error(L, '%s', 'CALLBACK ERROR! ${e.details()}');
+				LuaL.error(L, '%s', 'CALLBACK ERROR ($fname)! $detail');
 				return 0;
 			}
 			throw e;
