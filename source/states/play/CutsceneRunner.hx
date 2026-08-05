@@ -305,6 +305,24 @@ class CutsceneRunner {
 			ease: FlxEase.cubeInOut,
 			onComplete: function(twn:FlxTween) {
 				game.remove(spr);
+
+				// Clear the field as well as destroying the sprite. A script reaching `countdownGo`
+				// after the fade otherwise finds a DESTROYED sprite rather than nothing, and touching
+				// its freed graphic is a native crash instead of the "doesn't exist" it could handle.
+				// Guarded on identity so a countdown restarted mid-fade does not clear its new sprite.
+				switch (logical) {
+					case 'ready':
+						if (game.countdownReady == spr)
+							game.countdownReady = null;
+					case 'set':
+						if (game.countdownSet == spr)
+							game.countdownSet = null;
+					case 'go':
+						if (game.countdownGo == spr)
+							game.countdownGo = null;
+					default:
+				}
+
 				spr.destroy();
 			}
 		});
