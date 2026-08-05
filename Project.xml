@@ -260,17 +260,25 @@
 	     class a script constructs via import()/reflection. -->
 	<haxeflag name="--macro" value="keep('backend.ui')" />
 
-	<!-- Scripts can construct ANY Flixel / flixel-addons class by name (import()/reflection), but DCE
-	     only keeps types the engine itself references, so an unreferenced one (e.g.
-	     flixel.addons.effects.FlxSkewedSprite) resolves to nil in a script. keep() does not help: it
-	     only tags already-compiled types, it does not pull an unreferenced module into the build.
-	     include() force-compiles AND keeps every module, and one recursive include covers flixel core
-	     AND flixel-addons (both live under the `flixel` package namespace across all classpaths). The
-	     ignore list skips modules that can't be compiled as runtime code: the addon integrations
-	     needing libraries we don't ship (nape physics, spine editor), the FlxRayCastTilemap deprecation
-	     stub (removed in flixel-addons 5.9.0), and flixel's macro-only classes (they use
-	     haxe.macro.Context and are meaningless at runtime). -->
+	<!-- Scripts can construct ANY Flixel / flixel-addons class by name (import()/reflection), and that
+	     needs BOTH of these. They do different jobs and neither is enough alone:
+
+	     include() force-compiles a module nothing references, which keep() cannot do -- keep() only
+	     tags types already in the build. One recursive include covers flixel core AND flixel-addons,
+	     since both live under the `flixel` package namespace across all classpaths. The ignore list
+	     skips modules that can't be compiled as runtime code: the addon integrations needing
+	     libraries we don't ship (nape physics, spine editor), the FlxRayCastTilemap deprecation stub
+	     (removed in flixel-addons 5.9.0), and flixel's macro-only classes (they use haxe.macro.Context
+	     and are meaningless at runtime).
+
+	     keep() then stops DCE removing what the include just added. include() does NOT imply keep:
+	     it only calls Context.getModule, so the module is compiled and then eliminated again for
+	     want of a reference, and `Type.resolveClass` hands the script a null. That is what made
+	     `createInstance('flixel.addons.effects.FlxSkewedSprite')` fail while the file sat on disk.
+	     Tagging the ignored packages costs nothing, since metadata on a type that was never compiled
+	     does nothing. -->
 	<haxeflag name="--macro" value="include('flixel', true, ['flixel.addons.nape', 'flixel.addons.editors.spine', 'flixel.addons.tile.FlxRayCastTilemap', 'flixel.system.macros'])" />
+	<haxeflag name="--macro" value="keep('flixel')" />
 
 	<!-- ================================ Icons ================================== -->
 
