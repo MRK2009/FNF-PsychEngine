@@ -611,16 +611,19 @@ class FunkinLua {
 								groupOrArray.remove(leObj);
 								groupOrArray.insert(position, leObj);
 							default: // Is Group
+								// Naming another group means MOVE, so leave the current one or it is in both.
+								var host:Dynamic = CustomSubstate.instance != null ? CustomSubstate.instance : LuaUtils.getTargetInstance();
+								var owner:Dynamic = LuaUtils.containerOf(leObj, host);
+								if (owner != null && owner != groupOrArray)
+									owner.remove(leObj, true);
+
 								groupOrArray.remove(leObj, true);
 								groupOrArray.insert(position, leObj);
 						}
 					} else
 						luaTrace('setObjectOrder: Group $group doesn\'t exist!', false, false, FlxColor.RED);
 				} else {
-					// Reorder inside whatever actually holds the object. This used to remove from the state
-					// and insert there unconditionally, so anything living in a sub-group -- a character on
-					// a stage anchor, say -- was never removed (it is not a direct member) but WAS inserted,
-					// leaving it in two containers at once.
+					// Reorder inside whatever actually holds it, not the state.
 					var host:Dynamic = CustomSubstate.instance != null ? CustomSubstate.instance : LuaUtils.getTargetInstance();
 					var owner:Dynamic = LuaUtils.containerOf(leObj, host);
 					if (owner == null)

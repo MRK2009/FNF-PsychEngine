@@ -28,8 +28,8 @@ class PropertyPath {
 	/**
 		Resolves the object a path starts from.
 
-		@param name The first segment: `this`/`game`/`instance`, a script variable, or a field of
-		            the active state.
+		@param name The first segment: `this`/`game`/`instance`, a script variable, a field of the
+		            active state, or a character on stage named by its chart name.
 		@return The object, or null.
 	**/
 	public static function root(name:String, allowMaps:Bool = false):Dynamic {
@@ -42,6 +42,11 @@ class PropertyPath {
 				if (obj == null)
 					// `get`, not `member`: a root segment can still be indexed (`myArray[2].x`).
 					obj = get(LuaUtils.getTargetInstance(), name, allowMaps);
+
+				// Last, so a script variable or a state field always wins.
+				if (obj == null && PlayState.instance != null)
+					obj = PlayState.instance.characterNamed(name);
+
 				return obj;
 		}
 	}

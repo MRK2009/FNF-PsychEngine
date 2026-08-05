@@ -3449,6 +3449,25 @@ class PlayState extends MusicBeatState {
 	var strumCharacters:Map<String, Character> = new Map<String, Character>();
 
 	/**
+		The live character playing a chart character name, for scripts.
+
+		Every character on stage is in this index, the three built-ins included, so it is the one
+		lookup that answers for an EXTRA strumline's character too. Those do not sit in
+		`dadGroup`/`gfGroup`/`boyfriendGroup` and are not fields of the state, so a script had no way
+		to name one at all: `dad`, `gf` and `boyfriend` are the only names that resolve as fields, and
+		an anchored character has neither a field nor a group a script knows about.
+
+		@param name the chart character name, e.g. what a strumline's `characters` entry says
+		@return the live character, or null when nothing on stage is playing that name
+	**/
+	public function characterNamed(name:String):Character {
+		if (name == null || name.length == 0)
+			return null;
+
+		return strumCharacters.get(name);
+	}
+
+	/**
 		Binds a chart character name to a live character so the strumlines can resolve it.
 		@param name the name the chart asked for
 		@param char the built character (no-op when `null`)
