@@ -42,7 +42,7 @@ call :installGit grig.audio       https://gitlab.com/haxe-grig/grig.audio
 call :installGit hxluajit         https://github.com/MAJigsaw77/hxluajit
 call :installGit hxluajit-wrapper https://github.com/MAJigsaw77/hxluajit-wrapper
 rem Script interpreter (replaces hscript-iris); pinned to match hmm.json.
-call :installGit hscript-insanity https://github.com/MeguminBOT/hscript-insanity
+call :installGit hxscript https://github.com/MeguminBOT/hxscript
 call :installGit smidr            https://github.com/MeguminBOT/SmidrUI
 rem CPU/GPU/memory metrics for the FPS counter (HARDWARE_ALLOWED); native C++, not on haxelib.
 call :installGit hxhardware       https://github.com/Vortex2Oblivion/hxhardware
