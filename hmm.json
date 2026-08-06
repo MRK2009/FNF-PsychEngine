@@ -49,10 +49,10 @@
 			"url": "https://gitlab.com/haxe-grig/grig.audio"
 		},
 		{
-			"name": "hscript-insanity",
+			"name": "hxscript",
 			"type": "git",
 			"dir": null,
-			"url": "https://github.com/MeguminBOT/hscript-insanity"
+			"url": "https://github.com/MeguminBOT/hxscript"
 		},
 		{
 			"name": "hxcpp-debug-server",
