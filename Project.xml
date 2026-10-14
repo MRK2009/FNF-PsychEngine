@@ -201,6 +201,8 @@
 	<haxedef name="HXCPP_CLANG_CL" if="windows clang" />          <!-- clang-cl + lld (setup/hxcpp-clang-cl.xml): lime build windows -Dclang -->
 	<haxedef name="HXCPP_CFLAGS" value="-Wno-all -w" if="android" /> <!-- Silence NDK warning flood from C++ externs -->
 
+	<haxedef name="HXCPP_CPP20"/>
+
 	<!-- Crash handler (Izzy Engine) -->
 	<haxedef name="HXCPP_CHECK_POINTER" if="CRASH_HANDLER" />
 	<haxedef name="HXCPP_STACK_LINE"    if="CRASH_HANDLER" />
