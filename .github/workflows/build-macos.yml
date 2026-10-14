@@ -10,9 +10,9 @@ jobs:
   buildMac-Intel:
     runs-on: macos-26
     steps:
-      - uses: actions/checkout@v7.0.1
+      - uses: actions/checkout@v7
 
-      - uses: krdlab/setup-haxe@v2.1.0
+      - uses: krdlab/setup-haxe@v2
         with:
           haxe-version: 4.3.7
 
@@ -29,7 +29,7 @@ jobs:
         run: haxelib run lime build mac -64 --app-version="1.1.0-${{ github.run_id }}"
 
       - name: Publish artifact
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@v7
         with:
           name: macBuild-Intel
           path: export/release/macos/bin
@@ -37,9 +37,9 @@ jobs:
   buildMac-ARM:
     runs-on: macos-26
     steps:
-      - uses: actions/checkout@v7.0.1
+      - uses: actions/checkout@v7
 
-      - uses: krdlab/setup-haxe@v2.1.0
+      - uses: krdlab/setup-haxe@v2
         with:
           haxe-version: 4.3.7
 
@@ -56,7 +56,7 @@ jobs:
         run: haxelib run lime build mac --app-version="1.1.0-${{ github.run_id }}"
 
       - name: Publish artifact
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@v7
         with:
           name: macBuild-ARM
           path: export/release/macos/bin
@@ -68,13 +68,13 @@ jobs:
       - buildMac-ARM
     steps:
       - name: Download Intel build
-        uses: actions/download-artifact@v8.0.1
+        uses: actions/download-artifact@v8
         with:
           name: macBuild-Intel
           path: intel
 
       - name: Download ARM build
-        uses: actions/download-artifact@v8.0.1
+        uses: actions/download-artifact@v8
         with:
           name: macBuild-ARM
           path: arm
@@ -95,7 +95,7 @@ jobs:
           lipo -create "$INTEL/lime.ndll" "$ARM/lime.ndll" -output "$BIN/lime.ndll"
 
       - name: Upload Universal Mac bundle
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@v7
         with:
           name: macBuild-Universal
           path: PsychEngine.app
