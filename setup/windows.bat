@@ -12,7 +12,7 @@ echo.
 echo Installing hxcpp from git first (so no haxelib installs outdated versions)...
 echo.
 
-call :installGit hxcpp https://github.com/HaxeFoundation/hxcpp v4.3.148
+call :installGit hxcpp https://github.com/MRK-Stuff/hxcpp add-cpp20
 
 echo.
 echo Installing haxelib dependencies (--skip-dependencies, all transitive deps are manually asserted)...
