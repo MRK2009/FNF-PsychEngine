@@ -10,9 +10,9 @@ jobs:
   buildLinux:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7.0.1
+      - uses: actions/checkout@v7
 
-      - uses: krdlab/setup-haxe@v2.1.0
+      - uses: krdlab/setup-haxe@v2
         with:
           haxe-version: 4.3.7
 
@@ -34,7 +34,7 @@ jobs:
         run: haxelib run lime build Project.xml linux --app-version="1.1.0-${{ github.run_id }}"
 
       - name: Publish artifact
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@v7
         with:
           name: linuxBuild
           path: export/release/linux/bin
